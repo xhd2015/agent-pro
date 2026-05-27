@@ -1,0 +1,364 @@
+.kp-tool-call-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 8px;
+  color: var(--text2);
+  line-height: 1.4;
+  background: var(--surface2);
+  border-radius: 6px;
+  border-left: 2px solid var(--accent);
+  align-self: flex-start;
+  max-width: 70%;
+}
+.kp-tool-call-file-change-item {
+  max-width: min(84%, 720px);
+  padding: 8px 10px;
+  gap: 8px;
+}
+.kp-tool-call-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.kp-tool-call-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.kp-tool-call-name {
+  flex-shrink: 0;
+  color: var(--accent);
+  font-weight: 500;
+  font-size: 12px;
+}
+.kp-tool-call-kind,
+.kp-tool-call-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.kp-tool-call-kind {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.kp-tool-call-status {
+  background: rgba(15, 23, 42, 0.08);
+  color: var(--text2);
+}
+.kp-tool-call-status-failed {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+}
+.kp-tool-call-status-warning {
+  background: rgba(245, 158, 11, 0.14);
+  color: #d97706;
+}
+.kp-tool-call-summary {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  color: var(--text2);
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.5;
+}
+.kp-tool-call-running-item {
+  border-left-color: #f59e0b;
+}
+.kp-tool-call-warning-item {
+  border-left-color: #f59e0b;
+}
+.kp-tool-call-running {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: #f59e0b;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.kp-tool-call-running-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f59e0b;
+  animation: kp-running-pulse 1s ease-in-out infinite;
+}
+@keyframes kp-running-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.kp-tool-call-toggle {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 4px;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 10px;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity 0.15s;
+}
+.kp-tool-call-file-change-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.kp-tool-call-file-change-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.kp-tool-call-file-change-count {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.kp-tool-call-file-change-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.kp-tool-call-file-change-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 76%, var(--surface2) 24%);
+  text-align: left;
+}
+.kp-tool-call-file-change-entry-button {
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s, background 0.15s;
+}
+.kp-tool-call-file-change-entry-button:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--surface2) 78%, var(--accent) 6%);
+  transform: translateY(-1px);
+}
+.kp-tool-call-file-change-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 78px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.kp-tool-call-file-change-kind-add {
+  color: #22c55e;
+  background: color-mix(in srgb, #22c55e 14%, transparent);
+}
+.kp-tool-call-file-change-kind-modify {
+  color: #60a5fa;
+  background: color-mix(in srgb, #60a5fa 14%, transparent);
+}
+.kp-tool-call-file-change-kind-delete {
+  color: #f87171;
+  background: color-mix(in srgb, #f87171 14%, transparent);
+}
+.kp-tool-call-file-change-kind-rename {
+  color: #f59e0b;
+  background: color-mix(in srgb, #f59e0b 14%, transparent);
+}
+.kp-tool-call-file-change-kind-other {
+  color: var(--accent2);
+  background: color-mix(in srgb, var(--accent2) 14%, transparent);
+}
+.kp-tool-call-file-change-symbol {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 11px;
+}
+.kp-tool-call-file-change-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+.kp-tool-call-file-change-name {
+  color: var(--text);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-all;
+}
+.kp-tool-call-file-change-path,
+.kp-tool-call-file-change-notes,
+.kp-tool-call-file-change-empty {
+  color: var(--text2);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+.kp-tool-call-file-change-toggle {
+  margin-left: 0;
+  align-self: flex-start;
+}
+.kp-tool-call-file-change-empty {
+  padding: 2px 0 4px;
+}
+.kp-tool-call-toggle:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.kp-file-link {
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+.kp-file-link:hover {
+  text-decoration-style: solid;
+  opacity: 0.9;
+}
+
+@media (max-width: 720px) {
+  .kp-tool-call-item,
+  .kp-tool-call-file-change-item {
+    max-width: 100%;
+  }
+  .kp-tool-call-file-change-entry {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .kp-tool-call-file-change-kind {
+    min-width: 0;
+  }
+}
+
+.kp-file-viewer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.kp-file-viewer-modal {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: min(90vw, 800px);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.3);
+}
+.kp-file-viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+.kp-file-viewer-path {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.kp-file-viewer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.kp-file-viewer-toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.kp-file-viewer-toggle button {
+  padding: 4px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text2);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.kp-file-viewer-toggle button:not(:last-child) {
+  border-right: 1px solid var(--border);
+}
+.kp-file-viewer-toggle button.active {
+  background: var(--accent);
+  color: white;
+}
+.kp-file-viewer-toggle button:not(.active):hover {
+  background: var(--surface2);
+}
+.kp-file-viewer-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text2);
+  font-size: 18px;
+  cursor: pointer;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.kp-file-viewer-close:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+.kp-file-viewer-markdown {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.kp-file-viewer-markdown img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  margin: 8px 0;
+}
+.kp-file-viewer-body {
+  overflow: auto;
+  flex: 1;
+  padding: 12px 16px;
+}
+.kp-file-viewer-loading,
+.kp-file-viewer-error {
+  padding: 24px;
+  text-align: center;
+  color: var(--text2);
+  font-size: 13px;
+}
+.kp-file-viewer-error {
+  color: #ef4444;
+}
+.kp-file-viewer-content {
+  margin: 0;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-all;
+}

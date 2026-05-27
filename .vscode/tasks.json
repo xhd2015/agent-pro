@@ -1,0 +1,29 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Create dev terminals",
+            "dependsOn": [
+                "cd agent-traces-react && bun run dev",
+            ],
+            // Mark as the default build task so cmd/ctrl+shift+b will create them
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "runOptions": {}
+        },
+        {
+            "label": "cd agent-traces-react && bun run dev",
+            "type": "process", // available "shell"
+            "command": "bash",
+            "args": [
+                "-c",
+                "echo 'cd agent-traces-react && bun run dev' | bash --login -i"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}",
+            }
+        }
+    ]
+}
