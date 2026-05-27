@@ -1,62 +1,64 @@
-package agent_trace
+package codex
 
 import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/xhd2015/agent-traces/agent_trace/types"
 )
 
 type codexTraceAdapter struct{}
 
 func init() {
-	RegisterAgentTraceAdapter(10, codexTraceAdapter{})
+	types.RegisterAgentTraceAdapter(10, codexTraceAdapter{})
 }
 
 func (codexTraceAdapter) Name() string {
 	return "codex"
 }
 
-func (codexTraceAdapter) Parse(raw json.RawMessage) (AgentTraceParsedEvent, bool) {
-	var event traceEvent
+func (codexTraceAdapter) Parse(raw json.RawMessage) (types.AgentTraceParsedEvent, bool) {
+	var event types.TraceEvent
 	if err := json.Unmarshal(raw, &event); err != nil {
-		return AgentTraceParsedEvent{}, false
+		return types.AgentTraceParsedEvent{}, false
 	}
 	if event.Item == nil {
-		return AgentTraceParsedEvent{}, false
+		return types.AgentTraceParsedEvent{}, false
 	}
 	if text := traceCodexAssistantText(event); text != "" {
-		return AgentTraceParsedEvent{Message: &AgentTraceMessage{
-			Role:    "assistant",
+		return types.AgentTraceParsedEvent{Message: &types.AgentTraceMessage{
+			Role:    types.RoleAssistant,
 			Content: text,
 		}}, true
 	}
 	if activity := traceCodexActivity(event); activity != nil {
-		return AgentTraceParsedEvent{Activity: activity}, true
+		return types.AgentTraceParsedEvent{Activity: activity}, true
 	}
-	return AgentTraceParsedEvent{}, false
+	return types.AgentTraceParsedEvent{}, false
 }
 
-func traceCodexAssistantText(event traceEvent) string {
-	if event.Type != "item.completed" || event.Item == nil || !traceIsAssistantItem(event.Item.Type) {
+func traceCodexAssistantText(event types.TraceEvent) string {
+	if event.Type != "item.completed" || event.Item == nil || !types.TraceIsAssistantItem(event.Item.Type) {
 		return ""
 	}
-	return traceItemText(event.Item)
+	return types.TraceItemText(event.Item)
 }
 
 const traceCodexHooksDeprecatedPrefix = "`[features].codex_hooks` is deprecated."
 
-func traceCodexActivity(event traceEvent) *AgentTraceActivity {
-	if event.Item == nil || traceIsAssistantItem(event.Item.Type) {
+func traceCodexActivity(event types.TraceEvent) *types.AgentTraceActivity {
+	if event.Item == nil || types.TraceIsAssistantItem(event.Item.Type) {
 		return nil
 	}
-	subtype := ""
+	var subtype types.ActivitySubtype
 	switch event.Type {
 	case "item.started":
-		subtype = "started"
+		subtype = types.SubtypeStarted
 	case "item.updated":
-		subtype = "updated"
+		subtype = types.SubtypeUpdated
 	case "item.completed":
-		subtype = "completed"
+		subtype = types.SubtypeCompleted
 	default:
 		return nil
 	}
@@ -67,7 +69,7 @@ func traceCodexActivity(event traceEvent) *AgentTraceActivity {
 		kind = "warning"
 		toolName = "Config Warning"
 	}
-	return &AgentTraceActivity{
+	return &types.AgentTraceActivity{
 		Subtype:        subtype,
 		CallID:         event.Item.ID,
 		ToolName:       toolName,
@@ -79,63 +81,63 @@ func traceCodexActivity(event traceEvent) *AgentTraceActivity {
 	}
 }
 
-func traceCodexStatus(item *traceItem, subtype, summary string) string {
+func traceCodexStatus(item *types.TraceItem, subtype types.ActivitySubtype, summary string) types.ActivityStatus {
 	if item == nil {
 		return ""
 	}
 	if status := strings.TrimSpace(item.Status); status != "" {
-		return status
+		return types.ActivityStatus(status)
 	}
 	if item.Type == "error" {
 		if isTraceCodexHooksDeprecation(summary) {
-			return "warning"
+			return types.StatusWarning
 		}
-		return "failed"
+		return types.StatusFailed
 	}
-	if subtype == "completed" {
+	if subtype == types.SubtypeCompleted {
 		if item.ExitCode != nil && *item.ExitCode != 0 {
-			return "failed"
+			return types.StatusFailed
 		}
-		return "completed"
+		return types.StatusCompleted
 	}
-	return "in_progress"
+	return types.StatusInProgress
 }
 
 func isTraceCodexHooksDeprecation(summary string) bool {
 	return strings.HasPrefix(strings.TrimSpace(summary), traceCodexHooksDeprecatedPrefix)
 }
 
-func traceCodexSummary(item *traceItem, subtype string) (string, bool) {
+func traceCodexSummary(item *types.TraceItem, subtype types.ActivitySubtype) (string, bool) {
 	switch item.Type {
 	case "command_execution":
-		if subtype == "started" {
+		if subtype == types.SubtypeStarted {
 			return item.Command, false
 		}
 		return summarizeTraceCommandOutput(item), true
 	case "reasoning":
-		return traceItemText(item), subtype != "started"
+		return types.TraceItemText(item), subtype != types.SubtypeStarted
 	case "todo_list", "todo_write":
-		return summarizeTraceTodoList(item.Items), subtype != "started"
+		return summarizeTraceTodoList(item.Items), subtype != types.SubtypeStarted
 	case "plan_update":
-		return summarizeTracePlanUpdate(item), subtype != "started"
+		return summarizeTracePlanUpdate(item), subtype != types.SubtypeStarted
 	case "file_change":
-		return summarizeTraceFileChanges(item.Changes), subtype != "started"
+		return summarizeTraceFileChanges(item.Changes), subtype != types.SubtypeStarted
 	default:
-		text := traceItemText(item)
+		text := types.TraceItemText(item)
 		if text != "" {
-			return text, subtype != "started"
+			return text, subtype != types.SubtypeStarted
 		}
 		if item.Command != "" {
-			return item.Command, subtype != "started"
+			return item.Command, subtype != types.SubtypeStarted
 		}
 		if item.Status != "" {
-			return item.Status, subtype != "started"
+			return item.Status, subtype != types.SubtypeStarted
 		}
-		return "", subtype != "started"
+		return "", subtype != types.SubtypeStarted
 	}
 }
 
-func summarizeTraceCommandOutput(item *traceItem) string {
+func summarizeTraceCommandOutput(item *types.TraceItem) string {
 	var b strings.Builder
 	if item.Command != "" {
 		b.WriteString(item.Command)
@@ -151,12 +153,12 @@ func summarizeTraceCommandOutput(item *traceItem) string {
 		if b.Len() > 0 {
 			b.WriteString("\n")
 		}
-		b.WriteString(compactTraceOutput(output))
+		b.WriteString(types.CompactTraceOutput(output))
 	}
 	return b.String()
 }
 
-func summarizeTraceTodoList(items []traceTodoItem) string {
+func summarizeTraceTodoList(items []types.TraceTodoItem) string {
 	if len(items) == 0 {
 		return ""
 	}
@@ -177,7 +179,7 @@ func summarizeTraceTodoList(items []traceTodoItem) string {
 	return strings.Join(lines, "\n")
 }
 
-func summarizeTracePlanUpdate(item *traceItem) string {
+func summarizeTracePlanUpdate(item *types.TraceItem) string {
 	var lines []string
 	if explanation := strings.TrimSpace(item.Explanation); explanation != "" {
 		lines = append(lines, explanation)
@@ -197,7 +199,7 @@ func summarizeTracePlanUpdate(item *traceItem) string {
 	return strings.Join(lines, "\n")
 }
 
-func summarizeTraceFileChanges(changes []FileChange) string {
+func summarizeTraceFileChanges(changes []types.FileChange) string {
 	if len(changes) == 0 {
 		return ""
 	}
@@ -252,5 +254,5 @@ func traceCodexToolName(itemType string) string {
 	if name := traceCodexToolNames[itemType]; name != "" {
 		return name
 	}
-	return titleFromIdentifier(itemType)
+	return types.TitleFromIdentifier(itemType)
 }

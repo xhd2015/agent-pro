@@ -2,75 +2,19 @@ package agent_trace
 
 import (
 	"encoding/json"
-	"strings"
 	"time"
+
+	"github.com/xhd2015/agent-traces/agent_trace/types"
 )
 
-type traceEvent struct {
-	Type     string                     `json:"type"`
-	Subtype  string                     `json:"subtype,omitempty"`
-	CallID   string                     `json:"call_id,omitempty"`
-	Message  *traceMessage              `json:"message,omitempty"`
-	Result   string                     `json:"result,omitempty"`
-	Item     *traceItem                 `json:"item,omitempty"`
-	ToolCall map[string]json.RawMessage `json:"tool_call,omitempty"`
-	Delta    string                     `json:"delta,omitempty"`
-	Text     string                     `json:"text,omitempty"`
-}
+func isSubtypeStarted(s types.ActivitySubtype) bool { return s == types.SubtypeStarted }
+func isSubtypeCompleted(s types.ActivitySubtype) bool { return s == types.SubtypeCompleted }
 
-type traceMessage struct {
-	Content []traceContent `json:"content"`
-}
-
-type traceContent struct {
-	Type string `json:"type,omitempty"`
-	Text string `json:"text,omitempty"`
-}
-
-type traceItem struct {
-	ID               string          `json:"id,omitempty"`
-	Type             string          `json:"type,omitempty"`
-	Text             string          `json:"text,omitempty"`
-	Message          string          `json:"message,omitempty"`
-	Content          []traceContent  `json:"content,omitempty"`
-	Command          string          `json:"command,omitempty"`
-	AggregatedOutput string          `json:"aggregated_output,omitempty"`
-	ExitCode         *int            `json:"exit_code,omitempty"`
-	Status           string          `json:"status,omitempty"`
-	Items            []traceTodoItem `json:"items,omitempty"`
-	Plan             []tracePlanItem `json:"plan,omitempty"`
-	Explanation      string          `json:"explanation,omitempty"`
-	Changes          []FileChange    `json:"changes,omitempty"`
-	Raw              json.RawMessage `json:"-"`
-}
-
-type traceTodoItem struct {
-	Text      string `json:"text,omitempty"`
-	Completed bool   `json:"completed,omitempty"`
-	Status    string `json:"status,omitempty"`
-}
-
-type tracePlanItem struct {
-	Step   string `json:"step,omitempty"`
-	Status string `json:"status,omitempty"`
-}
-
-func (i *traceItem) UnmarshalJSON(data []byte) error {
-	type alias traceItem
-	var parsed alias
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		return err
-	}
-	*i = traceItem(parsed)
-	i.Raw = append(i.Raw[:0], data...)
-	return nil
-}
-
-func ParseMessages(lines []string, createdAt string) []Message {
+func ParseMessages(lines []string, createdAt string) []types.Message {
 	baseMs := parseTraceCreatedAtMs(createdAt)
-	messages := make([]Message, 0, len(lines))
+	messages := make([]types.Message, 0, len(lines))
 	for i, line := range lines {
-		parsed, ok := parseAgentTraceLine(json.RawMessage(line))
+		parsed, ok := types.ParseAgentTraceLine(json.RawMessage(line))
 		if !ok {
 			continue
 		}
@@ -97,10 +41,10 @@ func parseTraceCreatedAtMs(createdAt string) int64 {
 	return time.Now().UnixMilli()
 }
 
-func appendTraceToolMessage(messages *[]Message, event AgentTraceActivity, ts int64) {
-	if event.Subtype == "started" {
-		*messages = append(*messages, Message{
-			Role:      "tool_call",
+func appendTraceToolMessage(messages *[]types.Message, event types.AgentTraceActivity, ts int64) {
+	if isSubtypeStarted(event.Subtype) {
+		*messages = append(*messages, types.Message{
+			Role:      types.RoleToolCall,
 			Content:   "",
 			ToolCall:  &event,
 			StartedAt: &ts,
@@ -109,7 +53,7 @@ func appendTraceToolMessage(messages *[]Message, event AgentTraceActivity, ts in
 	}
 	for i := len(*messages) - 1; i >= 0; i-- {
 		msg := &(*messages)[i]
-		if msg.Role != "tool_call" || msg.ToolCall == nil || msg.FinishedAt != nil {
+		if msg.Role != types.RoleToolCall || msg.ToolCall == nil || msg.FinishedAt != nil {
 			continue
 		}
 		existing := msg.ToolCall
@@ -139,61 +83,20 @@ func appendTraceToolMessage(messages *[]Message, event AgentTraceActivity, ts in
 				existing.Summary = event.Summary
 			}
 		}
-		if event.Subtype == "completed" {
+		if isSubtypeCompleted(event.Subtype) {
 			msg.FinishedAt = &ts
 		}
 		return
 	}
 	finishedAt := (*int64)(nil)
-	if event.Subtype == "completed" {
+	if isSubtypeCompleted(event.Subtype) {
 		finishedAt = &ts
 	}
-	*messages = append(*messages, Message{
-		Role:       "tool_call",
+	*messages = append(*messages, types.Message{
+		Role:       types.RoleToolCall,
 		Content:    "",
 		ToolCall:   &event,
 		StartedAt:  &ts,
 		FinishedAt: finishedAt,
 	})
-}
-
-func traceIsAssistantItem(itemType string) bool {
-	switch itemType {
-	case "", "agent_message", "message", "assistant_message", "output_text":
-		return true
-	default:
-		return false
-	}
-}
-
-func traceItemText(item *traceItem) string {
-	if item == nil {
-		return ""
-	}
-	if strings.TrimSpace(item.Text) != "" {
-		return item.Text
-	}
-	if strings.TrimSpace(item.Message) != "" {
-		return item.Message
-	}
-	var b strings.Builder
-	for _, part := range item.Content {
-		if part.Text != "" {
-			b.WriteString(part.Text)
-		}
-	}
-	return strings.TrimSpace(b.String())
-}
-
-func traceMessageText(message *traceMessage) string {
-	if message == nil {
-		return ""
-	}
-	var b strings.Builder
-	for _, part := range message.Content {
-		if part.Type == "" || part.Type == "text" {
-			b.WriteString(part.Text)
-		}
-	}
-	return strings.TrimSpace(b.String())
 }

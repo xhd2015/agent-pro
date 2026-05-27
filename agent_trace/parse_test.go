@@ -3,6 +3,8 @@ package agent_trace
 import (
 	"strings"
 	"testing"
+
+	"github.com/xhd2015/agent-traces/agent_trace/types"
 )
 
 func TestAgentTraceParsesPlanAndFileChangeDetails(t *testing.T) {
@@ -56,7 +58,7 @@ func TestAgentTraceParsesCodexHooksDeprecationAsWarning(t *testing.T) {
 	if toolCall.Kind != "warning" {
 		t.Fatalf("kind = %q, want warning", toolCall.Kind)
 	}
-	if toolCall.Status != "warning" {
+	if toolCall.Status != types.StatusWarning {
 		t.Fatalf("status = %q, want warning", toolCall.Status)
 	}
 	if toolCall.Summary != warning {
@@ -84,7 +86,7 @@ func TestAgentTraceParsesCursorToolCallViaAdapter(t *testing.T) {
 	if toolCall.ToolName != "Shell" {
 		t.Fatalf("tool name = %q, want Shell", toolCall.ToolName)
 	}
-	if toolCall.Status != "completed" {
+	if toolCall.Status != types.StatusCompleted {
 		t.Fatalf("status = %q, want completed", toolCall.Status)
 	}
 	if messages[0].FinishedAt == nil {
