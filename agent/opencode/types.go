@@ -28,6 +28,12 @@ type SessionOpts struct {
 	Command  string   `json:"command,omitempty"`
 	Variant  string   `json:"variant,omitempty"`
 	NoSubAgents bool `json:"noSubAgents,omitempty"`
+	Thinking    bool `json:"thinking,omitempty"`
+}
+
+type StreamEventTime struct {
+	Start int64 `json:"start"`
+	End   int64 `json:"end"`
 }
 
 type StreamEvent struct {
@@ -35,12 +41,13 @@ type StreamEvent struct {
 	Timestamp int64  `json:"timestamp,omitempty"`
 	SessionID string `json:"sessionID,omitempty"`
 
-	Text      string         `json:"text,omitempty"`
-	ToolUse   *ToolUseEvent  `json:"toolUse,omitempty"`
-	Error     string         `json:"error,omitempty"`
-	Reasoning string         `json:"reasoning,omitempty"`
-	File      *FileChange    `json:"file,omitempty"`
-	Done      bool           `json:"done,omitempty"`
+	Text          string            `json:"text,omitempty"`
+	ToolUse       *ToolUseEvent     `json:"toolUse,omitempty"`
+	Error         string            `json:"error,omitempty"`
+	Reasoning     string            `json:"reasoning,omitempty"`
+	ReasoningTime *StreamEventTime  `json:"reasoningTime,omitempty"`
+	File          *FileChange       `json:"file,omitempty"`
+	Done          bool              `json:"done,omitempty"`
 }
 
 type ToolUseEvent struct {

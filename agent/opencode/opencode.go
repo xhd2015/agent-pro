@@ -201,6 +201,9 @@ func (a *OpencodeAgent) runSession(ctx context.Context, prompt string, sessionID
 		if opts.Variant != "" {
 			args = append(args, "--variant", opts.Variant)
 		}
+		if opts.Thinking {
+			args = append(args, "--thinking")
+		}
 		for _, f := range opts.File {
 			args = append(args, "--file", f)
 		}
@@ -374,9 +377,19 @@ func parseStreamEvent(line string, onEvent StreamCallback) StreamEvent {
 	case "reasoning":
 		var part struct {
 			Text string `json:"text"`
+			Time *struct {
+				Start int64 `json:"start"`
+				End   int64 `json:"end"`
+			} `json:"time,omitempty"`
 		}
 		if json.Unmarshal(raw.Part, &part) == nil {
 			event.Reasoning = part.Text
+			if part.Time != nil {
+				event.ReasoningTime = &StreamEventTime{
+					Start: part.Time.Start,
+					End:   part.Time.End,
+				}
+			}
 		}
 	}
 
