@@ -1,0 +1,74 @@
+package agentprovider
+
+import (
+	"fmt"
+	"strings"
+
+	codexagent "github.com/xhd2015/agent-traces/agent/cli/codex"
+	cursoragent "github.com/xhd2015/agent-traces/agent/cli/cursor"
+	opencodeagent "github.com/xhd2015/agent-traces/agent/cli/opencode"
+	"github.com/xhd2015/agent-traces/agent/cli/registry"
+	"github.com/xhd2015/agent-traces/agent/exec"
+)
+
+func Build(providerID, settingsPath, workspace string, env *exec.Env) (registry.AgentProvider, error) {
+	id := strings.TrimSpace(providerID)
+	if id == "" {
+		return registry.AgentProvider{}, fmt.Errorf("provider id is required")
+	}
+	switch id {
+	case "cursor":
+		cursorPath, err := registry.ResolveConfiguredCLIPath(settingsPath, registry.CursorCLIPathSettingKey, "", func() (string, error) {
+			return cursoragent.FindAgentPath(env)
+		})
+		if err != nil {
+			return registry.AgentProvider{}, fmt.Errorf("cursor-agent not found: %w (install it or add it to PATH)", err)
+		}
+		return registry.AgentProvider{
+			ID:   "cursor",
+			Name: "Cursor",
+			Agent: &cursoragent.CursorAgent{
+				AgentPath:    cursorPath,
+				SettingsPath: settingsPath,
+				Workspace:    workspace,
+				Env:          env,
+			},
+		}, nil
+	case "codex":
+		codexPath, err := registry.ResolveConfiguredCLIPath(settingsPath, registry.CodexCLIPathSettingKey, "", func() (string, error) {
+			return codexagent.FindAgentPath(env)
+		})
+		if err != nil {
+			return registry.AgentProvider{}, fmt.Errorf("codex not found: %w (install it or add it to PATH)", err)
+		}
+		return registry.AgentProvider{
+			ID:   "codex",
+			Name: "Codex",
+			Agent: &codexagent.CodexAgent{
+				AgentPath:    codexPath,
+				SettingsPath: settingsPath,
+				Workspace:    workspace,
+				Env:          env,
+			},
+		}, nil
+	case "opencode":
+		opencodePath, err := registry.ResolveConfiguredCLIPath(settingsPath, registry.OpencodeCLIPathSettingKey, "", func() (string, error) {
+			return opencodeagent.FindAgentPath(env)
+		})
+		if err != nil {
+			return registry.AgentProvider{}, fmt.Errorf("opencode not found: %w (install it or add it to PATH)", err)
+		}
+		return registry.AgentProvider{
+			ID:   "opencode",
+			Name: "Opencode",
+			Agent: &opencodeagent.OpencodeAgent{
+				AgentPath:    opencodePath,
+				SettingsPath: settingsPath,
+				Workspace:    workspace,
+				Env:          env,
+			},
+		}, nil
+	default:
+		return registry.AgentProvider{}, fmt.Errorf("unknown provider id: %s", id)
+	}
+}
