@@ -1,4 +1,4 @@
-package opencode
+package websocket
 
 import (
 	"context"
@@ -10,9 +10,10 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
+	"github.com/xhd2015/agent-traces/agent/opencode"
 )
 
-type wsMessage struct {
+type message struct {
 	Type      string `json:"type"`
 	SessionID string `json:"sessionID,omitempty"`
 	Prompt    string `json:"prompt,omitempty"`
@@ -22,15 +23,15 @@ type wsMessage struct {
 	Variant   string `json:"variant,omitempty"`
 }
 
-type StreamServer struct {
-	agent *OpencodeAgent
+type Server struct {
+	agent *opencode.OpencodeAgent
 }
 
-func NewStreamServer(agent *OpencodeAgent) *StreamServer {
-	return &StreamServer{agent: agent}
+func NewServer(agent *opencode.OpencodeAgent) *Server {
+	return &Server{agent: agent}
 }
 
-func (s *StreamServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		InsecureSkipVerify: true,
 	})
@@ -61,7 +62,7 @@ func (s *StreamServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		var msg wsMessage
+		var msg message
 		if err := json.Unmarshal(msgBytes, &msg); err != nil {
 			writeJSON(map[string]string{"type": "error", "error": fmt.Sprintf("invalid message: %v", err)})
 			continue
@@ -69,7 +70,7 @@ func (s *StreamServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		switch msg.Type {
 		case "start_session":
-			opts := &SessionOpts{}
+			opts := &opencode.SessionOpts{}
 			if msg.Model != "" {
 				opts.Model = msg.Model
 			}
@@ -83,7 +84,7 @@ func (s *StreamServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				opts.Variant = msg.Variant
 			}
 
-			onEvent := func(event StreamEvent) {
+			onEvent := func(event opencode.StreamEvent) {
 				writeJSON(event)
 			}
 
@@ -100,7 +101,7 @@ func (s *StreamServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			opts := &SessionOpts{}
+			opts := &opencode.SessionOpts{}
 			if msg.Model != "" {
 				opts.Model = msg.Model
 			}
@@ -114,7 +115,7 @@ func (s *StreamServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				opts.Variant = msg.Variant
 			}
 
-			onEvent := func(event StreamEvent) {
+			onEvent := func(event opencode.StreamEvent) {
 				writeJSON(event)
 			}
 

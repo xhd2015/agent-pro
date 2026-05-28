@@ -61,7 +61,7 @@ func FindAgentPath() (string, error) {
 	return "", fmt.Errorf("opencode not found in PATH")
 }
 
-func (a *OpencodeAgent) resolvePath() (string, error) {
+func (a *OpencodeAgent) ResolvePath() (string, error) {
 	if a.AgentPath != "" {
 		if _, err := os.Stat(a.AgentPath); err == nil {
 			return a.AgentPath, nil
@@ -79,13 +79,13 @@ func (a *OpencodeAgent) workspace() string {
 }
 
 func (a *OpencodeAgent) ListModels(ctx context.Context) ([]Model, error) {
-	agentPath, err := a.resolvePath()
+	agentPath, err := a.ResolvePath()
 	if err != nil {
 		return nil, err
 	}
 
 	cmd := exec.CommandContext(ctx, agentPath, "models")
-	cmd.Env = a.buildEnv()
+	cmd.Env = a.BuildEnv()
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("list models: %w", err)
@@ -116,13 +116,13 @@ func (a *OpencodeAgent) ListModels(ctx context.Context) ([]Model, error) {
 }
 
 func (a *OpencodeAgent) ListSessions(ctx context.Context) ([]Session, error) {
-	agentPath, err := a.resolvePath()
+	agentPath, err := a.ResolvePath()
 	if err != nil {
 		return nil, err
 	}
 
 	cmd := exec.CommandContext(ctx, agentPath, "session", "list", "--format", "json")
-	cmd.Env = a.buildEnv()
+	cmd.Env = a.BuildEnv()
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("list sessions: %w", err)
@@ -166,7 +166,7 @@ func (a *OpencodeAgent) ResumeSession(ctx context.Context, sessionID string, pro
 }
 
 func (a *OpencodeAgent) runSession(ctx context.Context, prompt string, sessionID string, opts *SessionOpts, onEvent StreamCallback) (string, error) {
-	agentPath, err := a.resolvePath()
+	agentPath, err := a.ResolvePath()
 	if err != nil {
 		return "", err
 	}
@@ -214,7 +214,7 @@ func (a *OpencodeAgent) runSession(ctx context.Context, prompt string, sessionID
 
 	cmd := exec.CommandContext(ctx, agentPath, args...)
 	cmd.Dir = a.workspace()
-	cmd.Env = a.buildEnv()
+	cmd.Env = a.BuildEnv()
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -289,7 +289,7 @@ func (a *OpencodeAgent) runSession(ctx context.Context, prompt string, sessionID
 	return sessionIDResult, nil
 }
 
-func (a *OpencodeAgent) buildEnv() []string {
+func (a *OpencodeAgent) BuildEnv() []string {
 	if len(a.Env) > 0 {
 		return a.Env
 	}
