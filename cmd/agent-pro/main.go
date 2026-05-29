@@ -5,51 +5,39 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/tidwall/jsonc"
+	"github.com/xhd2015/agent-pro/agent/opencode/commands"
 	"github.com/xhd2015/agent-pro/agent/opencode/config"
-	"github.com/xhd2015/agent-pro/agent/opencode/hooks"
 	"github.com/xhd2015/agent-pro/agent/opencode/permissions"
 	"github.com/xhd2015/agent-pro/agent/opencode/plugins"
 	"github.com/xhd2015/less-gen/flags"
 )
 
 const help = `
-Usage: agent-hooks <command> [ARGS]
+Usage: agent-pro <command> [ARGS]
 
 Commands:
   opencode          manage opencode hooks and permissions
 
-Run agent-hooks <command> --help for command-specific options.
+Run agent-pro <command> --help for command-specific options.
 `
 
 const opencodeHelp = `
-Usage: agent-hooks opencode <command> [ARGS]
+Usage: agent-pro opencode <command> [ARGS]
 
 Commands:
-  hooks             manage opencode hooks
+  commands          list opencode slash commands
   permissions       manage opencode permissions
   plugins           manage opencode plugins
 
-Run agent-hooks opencode <command> --help for command-specific options.
-`
-
-const hooksHelp = `
-Usage: agent-hooks opencode hooks <command> [ARGS]
-
-Commands:
-  list [--dir DIR]  list installed hooks (global and local)
-
-Options:
-  --dir <dir>       project directory for local hooks (default: current directory)
-  -h,--help         show help
+Run agent-pro opencode <command> --help for command-specific options.
 `
 
 func main() {
 	if err := handle(os.Args[1:]); err != nil {
-		fmt.Fprintf(os.Stderr, "agent-hooks: %v\n", err)
+		fmt.Fprintf(os.Stderr, "agent-pro: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -75,38 +63,49 @@ func handleOpenCode(args []string) error {
 	}
 
 	switch args[0] {
-	case "hooks":
-		return handleHooks(args[1:])
 	case "permissions":
 		return handlePermissions(args[1:])
 	case "plugins":
 		return handlePlugins(args[1:])
+	case "commands":
+		return handleCommands(args[1:])
 	default:
 		return fmt.Errorf("unknown opencode command: %s", args[0])
 	}
 }
 
-func handleHooks(args []string) error {
+const commandsHelp = `
+Usage: agent-pro opencode commands <command> [ARGS]
+
+Commands:
+  list [--dir DIR]  list slash commands (global and local)
+
+Options:
+  --dir <dir>       project directory for local commands (default: current directory)
+  -h,--help         show help
+`
+
+func handleCommands(args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
-		fmt.Print(strings.TrimPrefix(hooksHelp, "\n"))
+		fmt.Print(strings.TrimPrefix(commandsHelp, "\n"))
 		return nil
 	}
 
 	switch args[0] {
 	case "list":
-		return handleHooksList(args[1:])
+		return handleCommandsList(args[1:])
 	default:
-		return fmt.Errorf("unknown hooks command: %s", args[0])
+		return fmt.Errorf("unknown commands command: %s", args[0])
 	}
 }
 
-func handleHooksList(args []string) error {
+func handleCommandsList(args []string) error {
 	var dirFlag *string
 	_, err := flags.String("--dir", &dirFlag).
 		Help("-h,--help", `
-Usage: agent-hooks opencode hooks list [--dir DIR]
+Usage: agent-pro opencode commands list [--dir DIR]
 
-List installed hooks from command/ and commands/ markdown files.
+List slash commands from opencode config and markdown files.
 
 Options:
   --dir <dir>   project directory (default: current directory)
@@ -131,52 +130,41 @@ Options:
 		return fmt.Errorf("find home dir: %w", err)
 	}
 
-	printHookLocation("Global", filepath.Join(home, ".config", "opencode"), dir)
-	printHookLocation("Local", filepath.Join(dir, ".opencode"), dir)
+	printCommandsLocation("Global", filepath.Join(home, ".config", "opencode"), dir)
+	printCommandsLocation("Local", filepath.Join(dir, ".opencode"), dir)
 
 	return nil
 }
 
-func printHookLocation(label, opencodeDir, baseDir string) {
+func printCommandsLocation(label, opencodeDir, baseDir string) {
 	fmt.Printf("%s (%s):\n", label, opencodeDir)
-	fmt.Printf("  scanned: command/*.md, commands/*.md\n")
+	fmt.Printf("  sources: opencode.jsonc command field, {command,commands}/**/*.md\n")
 
-	var hookFiles []string
-	for _, sub := range []string{"command", "commands"} {
-		subDir := filepath.Join(opencodeDir, sub)
-		filepath.WalkDir(subDir, func(path string, d os.DirEntry, err error) error {
-			if err != nil {
-				return nil
-			}
-			if !d.IsDir() && strings.HasSuffix(d.Name(), ".md") {
-				hookFiles = append(hookFiles, path)
-			}
-			return nil
-		})
-	}
-	sort.Strings(hookFiles)
-
-	if len(hookFiles) == 0 {
-		fmt.Println("  No hooks found\n")
+	cmds, err := commands.List(opencodeDir)
+	if err != nil {
+		fmt.Printf("  (error: %v)\n\n", err)
 		return
 	}
 
-	fmt.Printf("  Found %d hook(s):\n", len(hookFiles))
-	for _, path := range hookFiles {
-		entry, err := hooks.ParseTemplate(path)
-		rel, _ := filepath.Rel(baseDir, path)
-		if err != nil {
-			fmt.Printf("    %s  (error: %v)\n", rel, err)
-			continue
+	if len(cmds) == 0 {
+		fmt.Println("  No commands found")
+		return
+	}
+
+	fmt.Printf("  Found %d command(s):\n", len(cmds))
+	for _, c := range cmds {
+		if c.Path != "" {
+			rel, _ := filepath.Rel(baseDir, c.Path)
+			fmt.Printf("    %-35s %s\n      file: %s  source: %s\n", c.Name, c.Description, rel, c.Source)
+		} else {
+			fmt.Printf("    %-35s %s  source: %s\n", c.Name, c.Description, c.Source)
 		}
-		fmt.Printf("    %-35s %s\n", entry.Name, entry.Description)
-		fmt.Printf("      file: %s\n", rel)
 	}
 	fmt.Println()
 }
 
 const pluginsHelp = `
-Usage: agent-hooks opencode plugins <command> [ARGS]
+Usage: agent-pro opencode plugins <command> [ARGS]
 
 Commands:
   list [--dir DIR]    list installed plugins (global and local)
@@ -208,7 +196,7 @@ func handlePluginsList(args []string) error {
 	var dirFlag *string
 	_, err := flags.String("--dir", &dirFlag).
 		Help("-h,--help", `
-Usage: agent-hooks opencode plugins list [--dir DIR]
+Usage: agent-pro opencode plugins list [--dir DIR]
 
 List installed plugins from auto-discovered plugin directories.
 
@@ -252,7 +240,7 @@ func printPluginLocation(label, opencodeDir, baseDir string) {
 	}
 
 	if len(result) == 0 {
-		fmt.Println("  No plugins found\n")
+		fmt.Println("  No plugins found")
 		return
 	}
 
@@ -271,7 +259,7 @@ func handlePluginsAdd(args []string) error {
 	var globalFlag bool
 	remaining, err := flags.Bool("--global", &globalFlag).
 		Help("-h,--help", `
-Usage: agent-hooks opencode plugins add <plugin.ts> [--global]
+Usage: agent-pro opencode plugins add <plugin.ts> [--global]
 
 Install a plugin file to the opencode auto-discovered plugins directory.
 Without --global, installs to .opencode/plugins/ in the current project.
@@ -319,7 +307,7 @@ Options:
 }
 
 const permissionsHelp = `
-Usage: agent-hooks opencode permissions <command> [ARGS]
+Usage: agent-pro opencode permissions <command> [ARGS]
 
 Commands:
   list [--dir DIR]  list configured permission (deny) rules (global and local)
@@ -347,7 +335,7 @@ func handlePermissionsList(args []string) error {
 	var dirFlag *string
 	_, err := flags.String("--dir", &dirFlag).
 		Help("-h,--help", `
-Usage: agent-hooks opencode permissions list [--dir DIR]
+Usage: agent-pro opencode permissions list [--dir DIR]
 
 List configured permission (deny) rules from the opencode config.
 
@@ -421,19 +409,19 @@ func readConfigDir(opencodeDir string) (*config.Config, error) {
 func printPermissionRules(cfg *config.Config) {
 	bashPerm := permissions.GetBash(cfg.Data)
 	if bashPerm == nil {
-		fmt.Println("  No deny rules configured\n")
+		fmt.Println("  No deny rules configured")
 		return
 	}
 
 	obj, ok := bashPerm.(map[string]interface{})
 	if !ok {
-		fmt.Println("  No deny rules configured\n")
+		fmt.Println("  No deny rules configured")
 		return
 	}
 
 	keys := config.SortedKeys(obj)
 	if len(keys) == 0 {
-		fmt.Println("  No deny rules configured\n")
+		fmt.Println("  No deny rules configured")
 		return
 	}
 
