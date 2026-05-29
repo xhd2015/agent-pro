@@ -9,8 +9,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/xhd2015/agent-traces/agent/cli/registry"
-	"github.com/xhd2015/agent-traces/agent/exec"
+	"github.com/xhd2015/agent-pro/agent/cli/registry"
+	"github.com/xhd2015/agent-pro/agent/exec"
 )
 
 type CursorAgent struct {

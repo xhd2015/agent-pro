@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/xhd2015/agent-traces/agent_trace/types"
+	"github.com/xhd2015/agent-pro/agent_trace/types"
 )
 
 type opencodeTraceAdapter struct{}
@@ -26,11 +26,11 @@ type opencodeRunLine struct {
 }
 
 type opencodeRunPart struct {
-	ID     string            `json:"id"`
-	Type   string            `json:"type"`
-	Tool   string            `json:"tool,omitempty"`
-	Text   string            `json:"text,omitempty"`
-	CallID string            `json:"callID,omitempty"`
+	ID     string             `json:"id"`
+	Type   string             `json:"type"`
+	Tool   string             `json:"tool,omitempty"`
+	Text   string             `json:"text,omitempty"`
+	CallID string             `json:"callID,omitempty"`
 	State  *opencodePartState `json:"state,omitempty"`
 }
 

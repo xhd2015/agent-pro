@@ -3,7 +3,7 @@ package hooks
 import (
 	"sort"
 
-	"github.com/xhd2015/agent-traces/agent/opencode/config"
+	"github.com/xhd2015/agent-pro/agent/opencode/config"
 )
 
 type Entry struct {

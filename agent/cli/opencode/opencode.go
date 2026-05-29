@@ -9,8 +9,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/xhd2015/agent-traces/agent/cli/registry"
-	"github.com/xhd2015/agent-traces/agent/exec"
+	"github.com/xhd2015/agent-pro/agent/cli/registry"
+	"github.com/xhd2015/agent-pro/agent/exec"
 )
 
 type OpencodeAgent struct {
@@ -192,27 +192,27 @@ func (a *OpencodeAgent) resolveAgentPath() (string, error) {
 }
 
 type opencodeRunEvent struct {
-	Type        string                   `json:"type"`
-	Timestamp   int64                    `json:"timestamp,omitempty"`
-	SessionID   string                   `json:"sessionID,omitempty"`
-	Part        *opencodeRunEventPart    `json:"part,omitempty"`
-	Error       map[string]any           `json:"error,omitempty"`
+	Type      string                `json:"type"`
+	Timestamp int64                 `json:"timestamp,omitempty"`
+	SessionID string                `json:"sessionID,omitempty"`
+	Part      *opencodeRunEventPart `json:"part,omitempty"`
+	Error     map[string]any        `json:"error,omitempty"`
 }
 
 type opencodeRunEventPart struct {
-	ID     string `json:"id"`
-	Type   string `json:"type"`
-	Tool   string `json:"tool,omitempty"`
-	Text   string `json:"text,omitempty"`
-	CallID string `json:"callID,omitempty"`
+	ID     string             `json:"id"`
+	Type   string             `json:"type"`
+	Tool   string             `json:"tool,omitempty"`
+	Text   string             `json:"text,omitempty"`
+	CallID string             `json:"callID,omitempty"`
 	State  *opencodePartState `json:"state,omitempty"`
 }
 
 type opencodePartState struct {
-	Status string `json:"status"`
-	Error  string `json:"error,omitempty"`
-	Title  string `json:"title,omitempty"`
-	Output string `json:"output,omitempty"`
+	Status string         `json:"status"`
+	Error  string         `json:"error,omitempty"`
+	Title  string         `json:"title,omitempty"`
+	Output string         `json:"output,omitempty"`
 	Input  map[string]any `json:"input,omitempty"`
 }
 
@@ -284,29 +284,29 @@ func mapOpencodeToolEvent(part *opencodeRunEventPart) *registry.ToolCallEvent {
 }
 
 var opencodeFriendlyToolNames = map[string]string{
-	"bash":             "Shell",
-	"Read":             "Read File",
-	"read":             "Read File",
-	"Edit":             "Edit File",
-	"edit":             "Edit File",
-	"Write":            "Write File",
-	"write":            "Write File",
-	"Glob":             "Glob",
-	"glob":             "Glob",
-	"Grep":             "Grep",
-	"grep":             "Grep",
-	"WebSearch":        "Web Search",
-	"websearch":        "Web Search",
-	"WebFetch":         "Web Fetch",
-	"webfetch":         "Web Fetch",
-	"Task":             "Sub-Agent",
-	"task":             "Sub-Agent",
-	"TodoWrite":        "Plan",
-	"todowrite":        "Plan",
-	"LSP":              "LSP",
-	"lsp":              "LSP",
-	"Skill":            "Skill",
-	"skill":            "Skill",
+	"bash":      "Shell",
+	"Read":      "Read File",
+	"read":      "Read File",
+	"Edit":      "Edit File",
+	"edit":      "Edit File",
+	"Write":     "Write File",
+	"write":     "Write File",
+	"Glob":      "Glob",
+	"glob":      "Glob",
+	"Grep":      "Grep",
+	"grep":      "Grep",
+	"WebSearch": "Web Search",
+	"websearch": "Web Search",
+	"WebFetch":  "Web Fetch",
+	"webfetch":  "Web Fetch",
+	"Task":      "Sub-Agent",
+	"task":      "Sub-Agent",
+	"TodoWrite": "Plan",
+	"todowrite": "Plan",
+	"LSP":       "LSP",
+	"lsp":       "LSP",
+	"Skill":     "Skill",
+	"skill":     "Skill",
 }
 
 func friendlyOpencodeToolName(tool string) string {

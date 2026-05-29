@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/xhd2015/agent-traces/run"
-	"github.com/xhd2015/agent-traces/server"
+	"github.com/xhd2015/agent-pro/run"
+	"github.com/xhd2015/agent-pro/server"
 )
 
 //go:embed frontend/dist

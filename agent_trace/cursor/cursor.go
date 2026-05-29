@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/xhd2015/agent-traces/agent_trace/types"
+	"github.com/xhd2015/agent-pro/agent_trace/types"
 )
 
 type cursorTraceAdapter struct{}

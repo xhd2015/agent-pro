@@ -8,8 +8,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/xhd2015/agent-traces/server"
-	"github.com/xhd2015/agent-traces/trace"
+	"github.com/xhd2015/agent-pro/server"
+	"github.com/xhd2015/agent-pro/trace"
 
 	"github.com/xhd2015/less-gen/flags"
 )

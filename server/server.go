@@ -21,7 +21,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/xhd2015/agent-traces/trace"
+	"github.com/xhd2015/agent-pro/trace"
 )
 
 var distFS embed.FS

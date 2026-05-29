@@ -1,6 +1,6 @@
 package permissions
 
-import "github.com/xhd2015/agent-traces/agent/opencode/config"
+import "github.com/xhd2015/agent-pro/agent/opencode/config"
 
 type DenyRule struct {
 	Pattern string

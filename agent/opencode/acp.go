@@ -6,7 +6,7 @@ import (
 	"os"
 	"sync"
 
-	agentacp "github.com/xhd2015/agent-traces/agent/acp"
+	agentacp "github.com/xhd2015/agent-pro/agent/acp"
 )
 
 type ACPAdapter struct {

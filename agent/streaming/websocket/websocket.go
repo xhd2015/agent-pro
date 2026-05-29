@@ -10,7 +10,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
-	"github.com/xhd2015/agent-traces/agent/opencode"
+	"github.com/xhd2015/agent-pro/agent/opencode"
 )
 
 type message struct {

@@ -3,7 +3,7 @@ package hooks
 import (
 	"fmt"
 
-	"github.com/xhd2015/agent-traces/markdown"
+	"github.com/xhd2015/agent-pro/markdown"
 )
 
 func ParseTemplate(path string) (*Entry, error) {

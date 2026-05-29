@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	codexagent "github.com/xhd2015/agent-traces/agent/cli/codex"
-	cursoragent "github.com/xhd2015/agent-traces/agent/cli/cursor"
-	opencodeagent "github.com/xhd2015/agent-traces/agent/cli/opencode"
-	"github.com/xhd2015/agent-traces/agent/cli/registry"
-	"github.com/xhd2015/agent-traces/agent/exec"
+	codexagent "github.com/xhd2015/agent-pro/agent/cli/codex"
+	cursoragent "github.com/xhd2015/agent-pro/agent/cli/cursor"
+	opencodeagent "github.com/xhd2015/agent-pro/agent/cli/opencode"
+	"github.com/xhd2015/agent-pro/agent/cli/registry"
+	"github.com/xhd2015/agent-pro/agent/exec"
 )
 
 func Build(providerID, settingsPath, workspace string, env *exec.Env) (registry.AgentProvider, error) {

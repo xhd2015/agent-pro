@@ -1,6 +1,6 @@
 package trace
 
-import agenttrace "github.com/xhd2015/agent-traces/agent_trace"
+import agenttrace "github.com/xhd2015/agent-pro/agent_trace"
 
 type AgentTraceMetadata = agenttrace.AgentTraceMetadata
 type AgentTraceSummary = agenttrace.AgentTraceSummary

@@ -3,7 +3,7 @@ package codex
 import (
 	"testing"
 
-	"github.com/xhd2015/agent-traces/agent/cli/registry"
+	"github.com/xhd2015/agent-pro/agent/cli/registry"
 )
 
 func TestExtractFileChanges(t *testing.T) {

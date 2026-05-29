@@ -1,4 +1,4 @@
-module github.com/xhd2015/agent-traces
+module github.com/xhd2015/agent-pro
 
 go 1.24.0
 

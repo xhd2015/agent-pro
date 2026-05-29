@@ -1,11 +1,11 @@
 package agent_trace
 
 import (
-	"github.com/xhd2015/agent-traces/agent_trace/types"
+	"github.com/xhd2015/agent-pro/agent_trace/types"
 
-	_ "github.com/xhd2015/agent-traces/agent_trace/codex"
-	_ "github.com/xhd2015/agent-traces/agent_trace/cursor"
-	_ "github.com/xhd2015/agent-traces/agent_trace/opencode"
+	_ "github.com/xhd2015/agent-pro/agent_trace/codex"
+	_ "github.com/xhd2015/agent-pro/agent_trace/cursor"
+	_ "github.com/xhd2015/agent-pro/agent_trace/opencode"
 )
 
 type AgentTraceMetadata = types.AgentTraceMetadata

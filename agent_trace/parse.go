@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/xhd2015/agent-traces/agent_trace/types"
+	"github.com/xhd2015/agent-pro/agent_trace/types"
 )
 
-func isSubtypeStarted(s types.ActivitySubtype) bool { return s == types.SubtypeStarted }
+func isSubtypeStarted(s types.ActivitySubtype) bool   { return s == types.SubtypeStarted }
 func isSubtypeCompleted(s types.ActivitySubtype) bool { return s == types.SubtypeCompleted }
 
 func ParseMessages(lines []string, createdAt string) []types.Message {

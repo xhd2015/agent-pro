@@ -8,7 +8,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/xhd2015/agent-traces/agent/opencode"
+	"github.com/xhd2015/agent-pro/agent/opencode"
 )
 
 func Export(ctx context.Context, agent *opencode.OpencodeAgent, sessionID string) (*opencode.SessionExport, error) {
