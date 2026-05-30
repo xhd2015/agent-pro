@@ -1,13 +1,11 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/tidwall/jsonc"
 	"github.com/xhd2015/agent-pro/agent/opencode/commands"
 	"github.com/xhd2015/agent-pro/agent/opencode/config"
 	"github.com/xhd2015/agent-pro/agent/opencode/permissions"
@@ -205,14 +203,14 @@ Options:
 		return fmt.Errorf("find home dir: %w", err)
 	}
 
-	printCommandsLocation("Global", filepath.Join(home, ".config", "opencode"), dir)
-	printCommandsLocation("Local", filepath.Join(dir, ".opencode"), dir)
+	printCommandsLocation("Global", filepath.Join(home, ".config", "opencode"), dir, home)
+	printCommandsLocation("Local", filepath.Join(dir, ".opencode"), dir, home)
 
 	return nil
 }
 
-func printCommandsLocation(label, opencodeDir, baseDir string) {
-	fmt.Printf("%s (%s):\n", label, opencodeDir)
+func printCommandsLocation(label, opencodeDir, baseDir, home string) {
+	fmt.Printf("%s (%s):\n", label, shortenHome(opencodeDir, home))
 	fmt.Printf("  sources: opencode.jsonc command field, {command,commands}/**/*.md\n")
 
 	cmds, err := commands.List(opencodeDir)
@@ -228,11 +226,11 @@ func printCommandsLocation(label, opencodeDir, baseDir string) {
 
 	fmt.Printf("  Found %d command(s):\n", len(cmds))
 	for _, c := range cmds {
-		if c.Path != "" {
-			rel, _ := filepath.Rel(baseDir, c.Path)
-			fmt.Printf("    %-35s %s\n      file: %s  source: %s\n", c.Name, c.Description, rel, c.Source)
+		loc := formatLocation(c.Path, c.Line, home)
+		if c.Description != "" {
+			fmt.Printf("    %-35s %s\n      %s\n", c.Name, c.Description, loc)
 		} else {
-			fmt.Printf("    %-35s %s  source: %s\n", c.Name, c.Description, c.Source)
+			fmt.Printf("    %-35s %s\n", c.Name, loc)
 		}
 	}
 	fmt.Println()
@@ -387,14 +385,14 @@ Options:
 		return fmt.Errorf("find home dir: %w", err)
 	}
 
-	printPluginLocation("Global", filepath.Join(home, ".config", "opencode"), dir)
-	printPluginLocation("Local", filepath.Join(dir, ".opencode"), dir)
+	printPluginLocation("Global", filepath.Join(home, ".config", "opencode"), dir, home)
+	printPluginLocation("Local", filepath.Join(dir, ".opencode"), dir, home)
 
 	return nil
 }
 
-func printPluginLocation(label, opencodeDir, baseDir string) {
-	fmt.Printf("%s (%s):\n", label, opencodeDir)
+func printPluginLocation(label, opencodeDir, baseDir, home string) {
+	fmt.Printf("%s (%s):\n", label, shortenHome(opencodeDir, home))
 	fmt.Printf("  scanned: plugins/*.ts, plugins/*.js, plugin/*.ts, plugin/*.js\n")
 
 	result, err := plugins.List(opencodeDir)
@@ -410,11 +408,7 @@ func printPluginLocation(label, opencodeDir, baseDir string) {
 
 	fmt.Printf("  Found %d plugin(s):\n", len(result))
 	for _, p := range result {
-		rel, _ := filepath.Rel(baseDir, p.Path)
-		if rel == "" {
-			rel = p.Path
-		}
-		fmt.Printf("    %s  (%s)\n", p.Name, rel)
+		fmt.Printf("    %s  (%s)\n", p.Name, shortenHome(p.Path, home))
 	}
 	fmt.Println()
 }
@@ -621,51 +615,26 @@ Options:
 		return fmt.Errorf("find home dir: %w", err)
 	}
 
-	printPermissionLocation("Global", filepath.Join(home, ".config", "opencode"))
-	printPermissionLocation("Local", filepath.Join(dir, ".opencode"))
+	printPermissionLocation("Global", filepath.Join(home, ".config", "opencode"), home)
+	printPermissionLocation("Local", filepath.Join(dir, ".opencode"), home)
 
 	return nil
 }
 
-func printPermissionLocation(label, opencodeDir string) {
-	fmt.Printf("%s (%s):\n", label, opencodeDir)
+func printPermissionLocation(label, opencodeDir, home string) {
+	fmt.Printf("%s (%s):\n", label, shortenHome(opencodeDir, home))
 	fmt.Printf("  scanned: opencode.jsonc, opencode.json\n")
 
-	cfg, err := readConfigDir(opencodeDir)
+	cfg, err := config.ReadDir(opencodeDir)
 	if err != nil {
 		fmt.Printf("  (error: %v)\n\n", err)
 		return
 	}
 
-	printPermissionRules(cfg)
+	printPermissionRules(cfg, home)
 }
 
-func readConfigDir(opencodeDir string) (*config.Config, error) {
-	var configPath string
-	var raw []byte
-	for _, name := range []string{"opencode.jsonc", "opencode.json"} {
-		p := filepath.Join(opencodeDir, name)
-		data, err := os.ReadFile(p)
-		if err == nil {
-			configPath = p
-			raw = data
-			break
-		}
-	}
-	if configPath == "" {
-		configPath = filepath.Join(opencodeDir, "opencode.json")
-		return &config.Config{Path: configPath, Data: config.Data{}}, nil
-	}
-
-	cleaned := jsonc.ToJSON(raw)
-	var data config.Data
-	if err := json.Unmarshal(cleaned, &data); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", configPath, err)
-	}
-	return &config.Config{Path: configPath, Data: data}, nil
-}
-
-func printPermissionRules(cfg *config.Config) {
+func printPermissionRules(cfg *config.Config, home string) {
 	bashPerm := permissions.GetBash(cfg.Data)
 	if bashPerm == nil {
 		fmt.Println("  No deny rules configured")
@@ -687,7 +656,23 @@ func printPermissionRules(cfg *config.Config) {
 	fmt.Printf("  Found %d rule(s):\n", len(keys))
 	for _, key := range keys {
 		action, _ := obj[key].(string)
-		fmt.Printf("    %-40s %s\n", key, action)
+		loc := formatLocation(cfg.Path, config.FindKeyLine(cfg.Path, key), home)
+		fmt.Printf("    %-40s %s  (%s)\n", key, action, loc)
 	}
 	fmt.Println()
+}
+
+func shortenHome(path string, home string) string {
+	if strings.HasPrefix(path, home+string(os.PathSeparator)) {
+		return "~" + path[len(home):]
+	}
+	return path
+}
+
+func formatLocation(filePath string, line int, home string) string {
+	s := shortenHome(filePath, home)
+	if line > 0 {
+		s = fmt.Sprintf("%s:%d", s, line)
+	}
+	return s
 }

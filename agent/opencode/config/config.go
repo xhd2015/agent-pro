@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/tidwall/jsonc"
 )
@@ -19,7 +20,10 @@ type Config struct {
 
 func Read(dir string) (*Config, error) {
 	opencodeDir := filepath.Join(dir, ".opencode")
+	return ReadDir(opencodeDir)
+}
 
+func ReadDir(opencodeDir string) (*Config, error) {
 	var configPath string
 	var raw []byte
 
@@ -87,4 +91,18 @@ func SortedKeys(m map[string]interface{}) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+func FindKeyLine(filePath string, key string) int {
+	raw, err := os.ReadFile(filePath)
+	if err != nil {
+		return 0
+	}
+	search := fmt.Sprintf(`"%s"`, key)
+	for i, line := range strings.Split(string(raw), "\n") {
+		if strings.Contains(line, search) {
+			return i + 1
+		}
+	}
+	return 0
 }

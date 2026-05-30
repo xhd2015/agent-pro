@@ -20,6 +20,7 @@ type Command struct {
 	Template    string `json:"template,omitempty"`
 	Source      string `json:"source,omitempty"`
 	Path        string `json:"path,omitempty"`
+	Line        int    `json:"line,omitempty"`
 }
 
 func List(opencodeDir string) ([]Command, error) {
@@ -153,7 +154,7 @@ func getCommandMap(data config.Data) map[string]interface{} {
 }
 
 func listFromConfigData(opencodeDir string) []Command {
-	cfg, err := config.Read(filepath.Dir(opencodeDir))
+	cfg, err := config.ReadDir(opencodeDir)
 	if err != nil {
 		return nil
 	}
@@ -165,10 +166,11 @@ func listFromConfigData(opencodeDir string) []Command {
 
 	var result []Command
 	for name, val := range cmdMap {
-		c := Command{Name: name, Source: "config"}
+		c := Command{Name: name, Source: "config", Path: cfg.Path}
 		if obj, ok := val.(map[string]interface{}); ok {
 			fillFromConfigObj(&c, obj)
 		}
+		c.Line = config.FindKeyLine(cfg.Path, name)
 		result = append(result, c)
 	}
 	return result
