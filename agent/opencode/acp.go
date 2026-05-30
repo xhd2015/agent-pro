@@ -149,7 +149,7 @@ func (a *ACPAdapter) Prompt(req agentacp.PromptRequest, onUpdate func(agentacp.S
 		onUpdate = func(agentacp.SessionUpdate) {}
 	}
 
-	_, err := a.agent.runSession(ctx, req.Content, string(req.SessionID), opts, func(event StreamEvent) {
+	_, _, err := a.agent.runSession(ctx, req.Content, string(req.SessionID), opts, func(event StreamEvent) {
 		update := agentacp.SessionUpdate{}
 		switch {
 		case event.Text != "":

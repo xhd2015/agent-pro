@@ -4,10 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
+	codexcfg "github.com/xhd2015/agent-pro/agent/codex/config"
+	codexskills "github.com/xhd2015/agent-pro/agent/codex/skills"
 	"github.com/xhd2015/agent-pro/agent/opencode/commands"
-	"github.com/xhd2015/agent-pro/agent/opencode/config"
+	opencodecfg "github.com/xhd2015/agent-pro/agent/opencode/config"
+	openskills "github.com/xhd2015/agent-pro/agent/opencode/skills"
 	"github.com/xhd2015/agent-pro/agent/opencode/permissions"
 	"github.com/xhd2015/agent-pro/agent/opencode/plugins"
 	"github.com/xhd2015/less-gen/flags"
@@ -18,6 +22,7 @@ Usage: agent-pro <command> [ARGS]
 
 Commands:
   opencode          manage opencode hooks and permissions
+  codex             manage codex configuration
 
 Run agent-pro <command> --help for command-specific options.
 `
@@ -29,6 +34,7 @@ Commands:
   commands          list opencode slash commands
   permissions       manage opencode permissions
   plugins           manage opencode plugins
+  skills            list installed skills
 
 Run agent-pro opencode <command> --help for command-specific options.
 `
@@ -49,6 +55,8 @@ func handle(args []string) error {
 	switch args[0] {
 	case "opencode":
 		return handleOpenCode(args[1:])
+	case "codex":
+		return handleCodex(args[1:])
 	default:
 		return fmt.Errorf("unknown command: %s", args[0])
 	}
@@ -67,6 +75,8 @@ func handleOpenCode(args []string) error {
 		return handlePlugins(args[1:])
 	case "commands":
 		return handleCommands(args[1:])
+	case "skills":
+		return handleOpenCodeSkills(args[1:])
 	default:
 		return fmt.Errorf("unknown opencode command: %s", args[0])
 	}
@@ -625,7 +635,7 @@ func printPermissionLocation(label, opencodeDir, home string) {
 	fmt.Printf("%s (%s):\n", label, shortenHome(opencodeDir, home))
 	fmt.Printf("  scanned: opencode.jsonc, opencode.json\n")
 
-	cfg, err := config.ReadDir(opencodeDir)
+	cfg, err := opencodecfg.ReadDir(opencodeDir)
 	if err != nil {
 		fmt.Printf("  (error: %v)\n\n", err)
 		return
@@ -634,7 +644,7 @@ func printPermissionLocation(label, opencodeDir, home string) {
 	printPermissionRules(cfg, home)
 }
 
-func printPermissionRules(cfg *config.Config, home string) {
+func printPermissionRules(cfg *opencodecfg.Config, home string) {
 	bashPerm := permissions.GetBash(cfg.Data)
 	if bashPerm == nil {
 		fmt.Println("  No deny rules configured")
@@ -647,7 +657,7 @@ func printPermissionRules(cfg *config.Config, home string) {
 		return
 	}
 
-	keys := config.SortedKeys(obj)
+	keys := opencodecfg.SortedKeys(obj)
 	if len(keys) == 0 {
 		fmt.Println("  No deny rules configured")
 		return
@@ -656,7 +666,7 @@ func printPermissionRules(cfg *config.Config, home string) {
 	fmt.Printf("  Found %d rule(s):\n", len(keys))
 	for _, key := range keys {
 		action, _ := obj[key].(string)
-		loc := formatLocation(cfg.Path, config.FindKeyLine(cfg.Path, key), home)
+		loc := formatLocation(cfg.Path, opencodecfg.FindKeyLine(cfg.Path, key), home)
 		fmt.Printf("    %-40s %s  (%s)\n", key, action, loc)
 	}
 	fmt.Println()
@@ -675,4 +685,810 @@ func formatLocation(filePath string, line int, home string) string {
 		s = fmt.Sprintf("%s:%d", s, line)
 	}
 	return s
+}
+
+// --- codex ---
+
+const codexHelp = `
+Usage: agent-pro codex <command> [ARGS]
+
+Commands:
+  model             show configured model settings
+  model-providers   list custom model providers
+  mcp               list MCP server configurations
+  projects          list trusted project paths
+  plugins           list installed plugins
+  skills            list installed skills
+  features          show enabled/disabled feature flags
+  doc               show codex config.toml reference documentation
+
+Run agent-pro codex <command> --help for command-specific options.
+`
+
+func handleCodex(args []string) error {
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(strings.TrimPrefix(codexHelp, "\n"))
+		return nil
+	}
+
+	switch args[0] {
+	case "model":
+		return handleCodexModel(args[1:])
+	case "model-providers":
+		return handleCodexModelProviders(args[1:])
+	case "mcp":
+		return handleCodexMCP(args[1:])
+	case "projects":
+		return handleCodexProjects(args[1:])
+	case "plugins":
+		return handleCodexPlugins(args[1:])
+	case "skills":
+		return handleCodexSkills(args[1:])
+	case "features":
+		return handleCodexFeatures(args[1:])
+	case "doc":
+		return handleCodexDoc(args[1:])
+	default:
+		return fmt.Errorf("unknown codex command: %s", args[0])
+	}
+}
+
+func loadCodexConfig() (*codexcfg.Config, error) {
+	return codexcfg.ReadDefault()
+}
+
+// --- codex model ---
+
+const codexModelHelp = `
+Usage: agent-pro codex model
+
+Show the configured model and reasoning settings from ~/.codex/config.toml.
+
+Options:
+  -h,--help     show help
+`
+
+func handleCodexModel(args []string) error {
+	_, err := flags.
+		Help("-h,--help", codexModelHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+
+	cfg, err := loadCodexConfig()
+	if err != nil {
+		return fmt.Errorf("read config: %w", err)
+	}
+
+	fmt.Printf("Config: %s\n\n", shortenHome(cfg.Path, homeDir()))
+
+	if cfg.Model != "" {
+		fmt.Printf("  model:                         %s\n", cfg.Model)
+	}
+	if cfg.ModelReasoningEffort != "" {
+		fmt.Printf("  model_reasoning_effort:        %s\n", cfg.ModelReasoningEffort)
+	}
+	if cfg.ModelReasoningSummary != "" {
+		fmt.Printf("  model_reasoning_summary:       %s\n", cfg.ModelReasoningSummary)
+	}
+	if cfg.ModelVerbosity != "" {
+		fmt.Printf("  model_verbosity:               %s\n", cfg.ModelVerbosity)
+	}
+	if cfg.ModelProvider != "" {
+		fmt.Printf("  model_provider:                %s\n", cfg.ModelProvider)
+	}
+	if cfg.DefaultPermissions != "" {
+		fmt.Printf("  default_permissions:           %s\n", cfg.DefaultPermissions)
+	}
+	if cfg.WebSearch != "" {
+		fmt.Printf("  web_search:                    %s\n", cfg.WebSearch)
+	}
+	if cfg.Personality != "" {
+		fmt.Printf("  personality:                   %s\n", cfg.Personality)
+	}
+	if cfg.ApprovalPolicy != "" {
+		fmt.Printf("  approval_policy:               %s\n", cfg.ApprovalPolicy)
+	}
+	if cfg.SandboxMode != "" {
+		fmt.Printf("  sandbox_mode:                  %s\n", cfg.SandboxMode)
+	}
+	if cfg.ModelInstructionsFile != "" {
+		fmt.Printf("  model_instructions_file:       %s\n", cfg.ModelInstructionsFile)
+	}
+	if cfg.DeveloperInstructions != "" {
+		fmt.Printf("  developer_instructions:        %s\n", truncate(cfg.DeveloperInstructions, 80))
+	}
+
+	return nil
+}
+
+// --- codex model-providers ---
+
+const codexModelProvidersHelp = `
+Usage: agent-pro codex model-providers [list]
+
+List custom model providers from ~/.codex/config.toml.
+
+Options:
+  -h,--help     show help
+`
+
+func handleCodexModelProviders(args []string) error {
+	_, err := flags.
+		Help("-h,--help", codexModelProvidersHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+
+	cfg, err := loadCodexConfig()
+	if err != nil {
+		return fmt.Errorf("read config: %w", err)
+	}
+
+	fmt.Printf("Config: %s\n\n", shortenHome(cfg.Path, homeDir()))
+
+	if len(cfg.ModelProviders) == 0 {
+		fmt.Println("No custom model providers configured.")
+		return nil
+	}
+
+	fmt.Printf("Found %d provider(s):\n\n", len(cfg.ModelProviders))
+	for _, entry := range sortedModelProviders(cfg.ModelProviders) {
+		mp := entry.ModelProvider
+		fmt.Printf("  [%s]\n", entry.ID)
+		if mp.Name != "" {
+			fmt.Printf("    name:                %s\n", mp.Name)
+		}
+		if mp.BaseURL != "" {
+			fmt.Printf("    base_url:            %s\n", mp.BaseURL)
+		}
+		if mp.RequiresOpenAIAuth != nil {
+			fmt.Printf("    requires_openai_auth: %v\n", *mp.RequiresOpenAIAuth)
+		}
+		if mp.WireAPI != "" {
+			fmt.Printf("    wire_api:            %s\n", mp.WireAPI)
+		}
+		if mp.EnvKey != "" {
+			fmt.Printf("    env_key:             %s\n", mp.EnvKey)
+		}
+		fmt.Println()
+	}
+	return nil
+}
+
+// --- codex mcp ---
+
+const codexMCPHelp = `
+Usage: agent-pro codex mcp [list]
+
+List MCP server configurations from ~/.codex/config.toml.
+
+Options:
+  -h,--help     show help
+`
+
+func handleCodexMCP(args []string) error {
+	_, err := flags.
+		Help("-h,--help", codexMCPHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+
+	cfg, err := loadCodexConfig()
+	if err != nil {
+		return fmt.Errorf("read config: %w", err)
+	}
+
+	fmt.Printf("Config: %s\n\n", shortenHome(cfg.Path, homeDir()))
+
+	if len(cfg.MCPServers) == 0 {
+		fmt.Println("No MCP servers configured.")
+		return nil
+	}
+
+	fmt.Printf("Found %d MCP server(s):\n\n", len(cfg.MCPServers))
+	for _, entry := range sortedMCPServers(cfg.MCPServers) {
+		srv := entry.MCPServer
+		fmt.Printf("  [%s]\n", entry.ID)
+		if srv.Command != "" {
+			fmt.Printf("    command:  %s\n", srv.Command)
+			if len(srv.Args) > 0 {
+				fmt.Printf("    args:     %s\n", strings.Join(srv.Args, " "))
+			}
+		}
+		if srv.URL != "" {
+			fmt.Printf("    url:      %s\n", srv.URL)
+		}
+		if srv.Enabled != nil {
+			fmt.Printf("    enabled:  %v\n", *srv.Enabled)
+		}
+		fmt.Println()
+	}
+	return nil
+}
+
+// --- codex projects ---
+
+const codexProjectsHelp = `
+Usage: agent-pro codex projects [list]
+
+List trusted project paths from ~/.codex/config.toml.
+
+Options:
+  -h,--help     show help
+`
+
+func handleCodexProjects(args []string) error {
+	_, err := flags.
+		Help("-h,--help", codexProjectsHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+
+	cfg, err := loadCodexConfig()
+	if err != nil {
+		return fmt.Errorf("read config: %w", err)
+	}
+
+	fmt.Printf("Config: %s\n\n", shortenHome(cfg.Path, homeDir()))
+
+	if len(cfg.Projects) == 0 {
+		fmt.Println("No projects configured.")
+		return nil
+	}
+
+	home := homeDir()
+	fmt.Printf("Found %d project(s):\n\n", len(cfg.Projects))
+	for _, p := range sortedProjects(cfg.Projects) {
+		fmt.Printf("  %-60s trust_level = %s\n", shortenHome(p.Path, home), p.TrustLevel)
+	}
+	return nil
+}
+
+// --- codex plugins ---
+
+const codexPluginsHelp = `
+Usage: agent-pro codex plugins [list]
+
+List installed plugins from ~/.codex/config.toml.
+
+Options:
+  -h,--help     show help
+`
+
+func handleCodexPlugins(args []string) error {
+	_, err := flags.
+		Help("-h,--help", codexPluginsHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+
+	cfg, err := loadCodexConfig()
+	if err != nil {
+		return fmt.Errorf("read config: %w", err)
+	}
+
+	fmt.Printf("Config: %s\n\n", shortenHome(cfg.Path, homeDir()))
+
+	if len(cfg.Plugins) == 0 {
+		fmt.Println("No plugins configured.")
+		return nil
+	}
+
+	fmt.Printf("Found %d plugin(s):\n\n", len(cfg.Plugins))
+	for _, entry := range sortedPlugins(cfg.Plugins) {
+		p := entry.Plugin
+		status := "enabled"
+		if p.Enabled != nil && !*p.Enabled {
+			status = "disabled"
+		}
+		fmt.Printf("  %-50s %s\n", entry.ID, status)
+	}
+	return nil
+}
+
+// --- codex features ---
+
+const codexFeaturesHelp = `
+Usage: agent-pro codex features [list]
+
+Show enabled/disabled feature flags from ~/.codex/config.toml.
+
+Options:
+  -h,--help     show help
+`
+
+func handleCodexFeatures(args []string) error {
+	_, err := flags.
+		Help("-h,--help", codexFeaturesHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+
+	cfg, err := loadCodexConfig()
+	if err != nil {
+		return fmt.Errorf("read config: %w", err)
+	}
+
+	fmt.Printf("Config: %s\n\n", shortenHome(cfg.Path, homeDir()))
+
+	f := cfg.Features
+	features := []struct {
+		name    string
+		enabled *bool
+	}{
+		{"apps", f.Apps},
+		{"codex_git_commit", f.CodexGitCommit},
+		{"fast_mode", f.FastMode},
+		{"hooks", f.Hooks},
+		{"memories", f.Memories},
+		{"multi_agent", f.MultiAgent},
+		{"personality", f.Personality},
+		{"shell_snapshot", f.ShellSnapshot},
+		{"shell_tool", f.ShellTool},
+		{"unified_exec", f.UnifiedExec},
+		{"undo", f.Undo},
+		{"prevent_idle_sleep", f.PreventIdleSleep},
+		{"skill_mcp_dependency_install", f.SkillMCPDependencyInstall},
+	}
+
+	fmt.Printf("Feature flags:\n\n")
+	for _, feat := range features {
+		status := "default"
+		if feat.enabled != nil {
+			if *feat.enabled {
+				status = "enabled"
+			} else {
+				status = "disabled"
+			}
+		}
+		fmt.Printf("  %-35s %s\n", feat.name, status)
+	}
+	return nil
+}
+
+// --- codex doc ---
+
+const codexDoc = `
+Codex config.toml Reference
+============================
+
+Codex stores user-level configuration at ~/.codex/config.toml.
+Project overrides go in .codex/config.toml (trusted projects only).
+
+Config precedence (highest first):
+  1. CLI flags and --config overrides
+  2. Project .codex/config.toml
+  3. Profile files (~/.codex/<name>.config.toml)
+  4. User config (~/.codex/config.toml)
+  5. System config (/etc/codex/config.toml)
+  6. Built-in defaults
+
+Key top-level settings:
+
+  model                      Model to use (e.g. "gpt-5.5")
+  model_reasoning_effort     Reasoning effort (minimal|low|medium|high|xhigh)
+  model_reasoning_summary    Summary detail (auto|concise|detailed|none)
+  model_verbosity            Verbosity (low|medium|high)
+  default_permissions        Named permissions profile name
+  web_search                 Web search mode (cached|live|disabled)
+  personality                Communication style
+  approval_policy            When to pause for approval
+  sandbox_mode               Filesystem/network access level
+  notify                     Notification commands
+  log_dir                    Log output directory
+
+Sections:
+
+  [model_providers.<id>]     Custom model provider definition
+  [mcp_servers.<id>]         MCP server (stdio or HTTP)
+  [projects."<path>"]        Per-project trust level
+  [plugins."<name>"]         Plugin enable/disable
+  [marketplaces.<id>]        Plugin marketplace registry
+  [features]                 Feature flag toggles
+  [permissions.<name>]       Named permission profiles
+  [hooks]                    Lifecycle hook definitions
+  [agents.<name>]            Subagent definitions
+  [tui]                      TUI keymap settings
+  [windows]                  Windows-specific settings
+
+For full reference: https://developers.openai.com/codex/config-reference
+`
+
+func handleCodexDoc(args []string) error {
+	fmt.Print(strings.TrimPrefix(codexDoc, "\n"))
+	return nil
+}
+
+// --- codex skills ---
+
+const codexSkillsHelp = `
+Usage: agent-pro codex skills <command> [ARGS]
+
+Commands:
+  list              list installed skills
+  doc               show codex skills reference documentation
+
+Options:
+  -h,--help         show help
+`
+
+func handleCodexSkills(args []string) error {
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(strings.TrimPrefix(codexSkillsHelp, "\n"))
+		return nil
+	}
+
+	switch args[0] {
+	case "list":
+		return handleCodexSkillsList(args[1:])
+	case "doc":
+		return handleCodexSkillsDoc(args[1:])
+	default:
+		return fmt.Errorf("unknown codex skills command: %s", args[0])
+	}
+}
+
+func handleCodexSkillsList(args []string) error {
+	var dirFlag *string
+	_, err := flags.String("--dir", &dirFlag).
+		Help("-h,--help", `
+Usage: agent-pro codex skills list [--dir DIR]
+
+List installed skills from Codex and agent skills standard locations.
+
+Searches:
+  Global: ~/.codex/skills/, ~/.agents/skills/
+  Local:  .agents/skills/ (project-specific)
+
+Options:
+  --dir <dir>   project directory for local skills (default: current directory)
+  -h,--help     show help
+`).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+
+	dir := "."
+	if dirFlag != nil && strings.TrimSpace(*dirFlag) != "" {
+		dir = strings.TrimSpace(*dirFlag)
+	}
+	dir, err = filepath.Abs(filepath.Clean(dir))
+	if err != nil {
+		return fmt.Errorf("resolve dir: %w", err)
+	}
+
+	result, err := codexskills.List(dir)
+	if err != nil {
+		return fmt.Errorf("list skills: %w", err)
+	}
+
+	home := homeDir()
+	printCodexSkillGroup("Global", result.Global, home)
+	printCodexSkillGroup("Local", result.Local, home)
+
+	return nil
+}
+
+func printCodexSkillGroup(label string, skills []codexskills.SkillInfo, home string) {
+	fmt.Printf("%s:\n", label)
+	fmt.Printf("  scanned: ~/.codex/skills/, ~/.agents/skills/ for global, .agents/skills/ for local\n")
+
+	if len(skills) == 0 {
+		fmt.Println("  No skills found")
+		fmt.Println()
+		return
+	}
+
+	fmt.Printf("  Found %d skill(s):\n", len(skills))
+	for _, s := range skills {
+		loc := shortenHome(s.Path, home)
+		if s.Description != "" {
+			fmt.Printf("    %-30s %s\n      %s\n", s.Name, s.Description, loc)
+		} else {
+			fmt.Printf("    %-30s %s\n", s.Name, loc)
+		}
+	}
+	fmt.Println()
+}
+
+const codexSkillsDoc = `
+Codex Skills Reference
+======================
+
+Codex uses the open agent skills standard: https://agentskills.io/home
+
+Skills are auto-discovered from these locations:
+
+  ~/.codex/skills/          Codex legacy directory
+  ~/.agents/skills/         Open agent skills standard (user-level)
+  .agents/skills/           Open agent skills standard (project-level)
+
+Each skill is a directory containing a SKILL.md file with YAML frontmatter.
+
+Directory structure:
+
+  ~/.codex/skills/
+  ├── my-skill/
+  │   ├── SKILL.md          # Required: name + description in YAML frontmatter
+  │   ├── agents/           # Optional: openai.yaml for UI metadata
+  │   ├── scripts/          # Optional: executable code
+  │   ├── references/       # Optional: reference docs loaded on demand
+  │   └── assets/           # Optional: template files
+
+SKILL.md format:
+
+  ---
+  name: my-skill             # Required, kebab-case, ≤64 chars
+  description: >-            # Required, explains what + when to trigger
+    Description text here.
+  metadata:                  # Optional
+    short-description: ...   # Optional subfield
+  license: MIT               # Optional
+  ---
+  # Markdown body (skill instructions for the AI)
+
+Specification: https://agentskills.io/specification
+Codex docs: https://developers.openai.com/codex/skills
+`
+
+func handleCodexSkillsDoc(args []string) error {
+	fmt.Print(strings.TrimPrefix(codexSkillsDoc, "\n"))
+	return nil
+}
+
+// --- opencode skills ---
+
+const opencodeSkillsDoc = `
+OpenCode Skills Reference
+==========================
+
+OpenCode uses the open agent skills standard: https://agentskills.io/home
+
+Skills are auto-discovered from skill directories containing SKILL.md files.
+OpenCode searches these locations (global and project-local):
+
+  OpenCode-native:
+    Global: ~/.config/opencode/skills/<name>/SKILL.md
+    Local:  .opencode/skills/<name>/SKILL.md
+
+  Claude-compatible:
+    Global: ~/.claude/skills/<name>/SKILL.md
+    Local:  .claude/skills/<name>/SKILL.md
+
+  Agent-compatible:
+    Global: ~/.agents/skills/<name>/SKILL.md
+    Local:  .agents/skills/<name>/SKILL.md
+
+For project-local paths, OpenCode walks up from the current working directory
+to the git worktree root, loading all matching skills along the way.
+
+SKILL.md format:
+
+  ---
+  name: git-release              # Required, must match directory name
+  description: Create consistent releases...  # Required, 1-1024 chars
+  license: MIT                   # Optional
+  compatibility: opencode        # Optional
+  metadata:                      # Optional, string-to-string map
+    audience: maintainers
+  ---
+  # Markdown body (skill instructions for the AI)
+
+Naming rules: ^[a-z0-9]+(-[a-z0-9]+)*$ (lowercase kebab-case), 1-64 chars,
+must match the directory name.
+
+Skills are loaded on-demand via the skill tool: skill({ name: "skill-name" }).
+
+Specification: https://agentskills.io/specification
+OpenCode docs: https://opencode.ai/docs/skills/
+`
+
+const opencodeSkillsHelp = `
+Usage: agent-pro opencode skills <command> [ARGS]
+
+Commands:
+  list [--dir DIR]  list installed skills (global and local)
+  doc               show opencode skills reference documentation
+
+Options:
+  --dir <dir>       project directory for local skills (default: current directory)
+  -h,--help         show help
+`
+
+func handleOpenCodeSkills(args []string) error {
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(strings.TrimPrefix(opencodeSkillsHelp, "\n"))
+		return nil
+	}
+
+	switch args[0] {
+	case "list":
+		return handleOpenCodeSkillsList(args[1:])
+	case "doc":
+		return handleOpenCodeSkillsDoc(args[1:])
+	default:
+		return fmt.Errorf("unknown opencode skills command: %s", args[0])
+	}
+}
+
+func handleOpenCodeSkillsList(args []string) error {
+	var dirFlag *string
+	_, err := flags.String("--dir", &dirFlag).
+		Help("-h,--help", `
+Usage: agent-pro opencode skills list [--dir DIR]
+
+List installed skills from opencode auto-discovered skill directories.
+
+Searches:
+  Global: ~/.config/opencode/skills/
+  Local:  .opencode/skills/ (project-specific)
+
+Options:
+  --dir <dir>   project directory for local skills (default: current directory)
+  -h,--help     show help
+`).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+
+	dir := "."
+	if dirFlag != nil && strings.TrimSpace(*dirFlag) != "" {
+		dir = strings.TrimSpace(*dirFlag)
+	}
+	dir, err = filepath.Abs(filepath.Clean(dir))
+	if err != nil {
+		return fmt.Errorf("resolve dir: %w", err)
+	}
+
+	result, err := openskills.List(dir)
+	if err != nil {
+		return fmt.Errorf("list skills: %w", err)
+	}
+
+	home := homeDir()
+	printSkillGroup("Global", result.Global, home)
+	printSkillGroup("Local", result.Local, home)
+
+	return nil
+}
+
+func handleOpenCodeSkillsDoc(args []string) error {
+	fmt.Print(strings.TrimPrefix(opencodeSkillsDoc, "\n"))
+	return nil
+}
+
+func printSkillGroup(label string, skills []openskills.SkillInfo, home string) {
+	fmt.Printf("%s:\n", label)
+	fmt.Printf("  scanned: .opencode/skills/, .claude/skills/, .agents/skills/\n")
+
+	if len(skills) == 0 {
+		fmt.Println("  No skills found")
+		fmt.Println()
+		return
+	}
+
+	fmt.Printf("  Found %d skill(s):\n", len(skills))
+	for _, s := range skills {
+		loc := shortenHome(s.Path, home)
+		if s.Description != "" {
+			fmt.Printf("    %-30s %s\n      %s\n", s.Name, s.Description, loc)
+		} else {
+			fmt.Printf("    %-30s %s\n", s.Name, loc)
+		}
+	}
+	fmt.Println()
+}
+
+// --- helpers ---
+
+func homeDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "~"
+	}
+	return home
+}
+
+func truncate(s string, maxLen int) string {
+	firstLine := s
+	if idx := strings.IndexByte(s, '\n'); idx >= 0 {
+		firstLine = s[:idx]
+	}
+	if len(firstLine) > maxLen {
+		return firstLine[:maxLen] + "..."
+	}
+	return firstLine
+}
+
+type projectEntry struct {
+	Path       string
+	TrustLevel string
+}
+
+func sortedProjects(m map[string]codexcfg.Project) []projectEntry {
+	var keys []string
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var result []projectEntry
+	for _, k := range keys {
+		result = append(result, projectEntry{Path: k, TrustLevel: m[k].TrustLevel})
+	}
+	return result
+}
+
+func sortedModelProviders(m map[string]codexcfg.ModelProvider) []struct {
+	ID string
+	codexcfg.ModelProvider
+} {
+	var keys []string
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var result []struct {
+		ID string
+		codexcfg.ModelProvider
+	}
+	for _, k := range keys {
+		result = append(result, struct {
+			ID string
+			codexcfg.ModelProvider
+		}{ID: k, ModelProvider: m[k]})
+	}
+	return result
+}
+
+func sortedMCPServers(m map[string]codexcfg.MCPServer) []struct {
+	ID string
+	codexcfg.MCPServer
+} {
+	var keys []string
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var result []struct {
+		ID string
+		codexcfg.MCPServer
+	}
+	for _, k := range keys {
+		result = append(result, struct {
+			ID string
+			codexcfg.MCPServer
+		}{ID: k, MCPServer: m[k]})
+	}
+	return result
+}
+
+func sortedPlugins(m map[string]codexcfg.Plugin) []struct {
+	ID string
+	codexcfg.Plugin
+} {
+	var keys []string
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var result []struct {
+		ID string
+		codexcfg.Plugin
+	}
+	for _, k := range keys {
+		result = append(result, struct {
+			ID string
+			codexcfg.Plugin
+		}{ID: k, Plugin: m[k]})
+	}
+	return result
 }

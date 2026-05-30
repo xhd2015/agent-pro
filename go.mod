@@ -10,3 +10,5 @@ require (
 	github.com/xhd2015/xgo v1.1.14
 	gopkg.in/yaml.v3 v3.0.1
 )
+
+require github.com/BurntSushi/toml v1.6.0
