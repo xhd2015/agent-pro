@@ -141,9 +141,8 @@ func Generate(dir string, options GenerateOptions) (string, error) {
 Git diff:
 %s
 
-Respond with ONLY the commit message in this format:
-Title: <short title>
-Description: <optional short description>`, stagedDiff)
+Respond with ONLY a JSON object in this exact format (no other text):
+{"title": "<short title>", "description": "<optional short description>"}`, stagedDiff)
 
 	logger.Log("$ opencode models")
 	freeModels, preferredModel, err := models.ListFree()
@@ -175,12 +174,15 @@ Description: <optional short description>`, stagedDiff)
 		return "", fmt.Errorf("agent failed: %w", err)
 	}
 
-	commitMessage := parseOpencodeJSONOutput(output)
-	if commitMessage == "" {
+	rawText := parseOpencodeJSONOutput(output)
+	if rawText == "" {
 		return "", fmt.Errorf("failed to parse commit message from opencode output")
 	}
 
-	commitMessage = stripCommitHeaders(commitMessage)
+	commitMessage := parseCommitMsgFromText(rawText)
+	if commitMessage == "" {
+		return "", fmt.Errorf("failed to extract commit message from agent response")
+	}
 
 	return commitMessage, nil
 }
@@ -311,6 +313,64 @@ func unstageFiles(files []string) error {
 		return fmt.Errorf("git restore --staged failed: %s: %w", string(output), err)
 	}
 	return nil
+}
+
+type CommitMsg struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
+}
+
+func (m CommitMsg) format() string {
+	if m.Title == "" {
+		return ""
+	}
+	if m.Description == "" {
+		return m.Title
+	}
+	return m.Title + "\n\n" + m.Description
+}
+
+func parseCommitMsgFromText(text string) string {
+	jsonText := extractJSONFromText(text)
+	if jsonText != "" {
+		var msg CommitMsg
+		if err := json.Unmarshal([]byte(jsonText), &msg); err == nil && msg.Title != "" {
+			return msg.format()
+		}
+	}
+	return stripCommitHeaders(text)
+}
+
+func extractJSONFromText(text string) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	if text[0] == '{' && text[len(text)-1] == '}' {
+		if json.Valid([]byte(text)) {
+			return text
+		}
+	}
+	if idx := strings.Index(text, "```"); idx >= 0 {
+		rest := text[idx+3:]
+		rest = strings.TrimPrefix(rest, "json")
+		rest = strings.TrimSpace(rest)
+		if endIdx := strings.Index(rest, "```"); endIdx >= 0 {
+			candidate := strings.TrimSpace(rest[:endIdx])
+			if json.Valid([]byte(candidate)) {
+				return candidate
+			}
+		}
+	}
+	firstBrace := strings.Index(text, "{")
+	lastBrace := strings.LastIndex(text, "}")
+	if firstBrace >= 0 && lastBrace > firstBrace {
+		candidate := text[firstBrace : lastBrace+1]
+		if json.Valid([]byte(candidate)) {
+			return candidate
+		}
+	}
+	return ""
 }
 
 func stripCommitHeaders(msg string) string {

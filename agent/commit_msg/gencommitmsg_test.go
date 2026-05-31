@@ -296,3 +296,225 @@ func containsFile(files []string, name string) bool {
 	}
 	return false
 }
+
+func TestCommitMsgFormat(t *testing.T) {
+	tests := []struct {
+		name string
+		msg  CommitMsg
+		want string
+	}{
+		{
+			name: "title only",
+			msg:  CommitMsg{Title: "Add feature"},
+			want: "Add feature",
+		},
+		{
+			name: "title and description",
+			msg:  CommitMsg{Title: "Add feature", Description: "Implement feature X"},
+			want: "Add feature\n\nImplement feature X",
+		},
+		{
+			name: "empty title with description",
+			msg:  CommitMsg{Title: "", Description: "desc"},
+			want: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.msg.format()
+			if got != tt.want {
+				t.Errorf("format() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExtractJSONFromText(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		want string
+	}{
+		{
+			name: "clean JSON",
+			text: `{"title": "Add feature", "description": "details"}`,
+			want: `{"title": "Add feature", "description": "details"}`,
+		},
+		{
+			name: "JSON with leading whitespace",
+			text: `  {"title": "Fix bug"}  `,
+			want: `{"title": "Fix bug"}`,
+		},
+		{
+			name: "markdown code fence with json tag",
+			text: "```json\n{\"title\": \"Add feature\"}\n```",
+			want: `{"title": "Add feature"}`,
+		},
+		{
+			name: "markdown code fence without language tag",
+			text: "```\n{\"title\": \"Fix bug\"}\n```",
+			want: `{"title": "Fix bug"}`,
+		},
+		{
+			name: "JSON with extra text before and after",
+			text: `Here is the commit message: {"title": "Add feature", "description": "details"} hope that works`,
+			want: `{"title": "Add feature", "description": "details"}`,
+		},
+		{
+			name: "no JSON in text",
+			text: "just some text without braces",
+			want: "",
+		},
+		{
+			name: "empty text",
+			text: "",
+			want: "",
+		},
+		{
+			name: "JSON without closing brace",
+			text: `{"title": "Add feature"`,
+			want: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractJSONFromText(tt.text)
+			if got != tt.want {
+				t.Errorf("extractJSONFromText() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseCommitMsgFromText_JSON(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		want string
+	}{
+		{
+			name: "clean JSON with title and description",
+			text: `{"title": "Add feature", "description": "Implement feature X"}`,
+			want: "Add feature\n\nImplement feature X",
+		},
+		{
+			name: "clean JSON title only",
+			text: `{"title": "Fix bug"}`,
+			want: "Fix bug",
+		},
+		{
+			name: "JSON with description empty",
+			text: `{"title": "Refactor code", "description": ""}`,
+			want: "Refactor code",
+		},
+		{
+			name: "JSON in markdown fence",
+			text: "```json\n{\"title\": \"Update README\", \"description\": \"Add setup instructions\"}\n```",
+			want: "Update README\n\nAdd setup instructions",
+		},
+		{
+			name: "JSON with extra text",
+			text: `ok here: {"title": "Optimize query", "description": "Add index"}`,
+			want: "Optimize query\n\nAdd index",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseCommitMsgFromText(tt.text)
+			if got != tt.want {
+				t.Errorf("parseCommitMsgFromText() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseCommitMsgFromText_Fallback(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		want string
+	}{
+		{
+			name: "legacy Title: Description: format",
+			text: "Title: Add feature\nDescription: Implement feature X",
+			want: "Add feature\nImplement feature X",
+		},
+		{
+			name: "legacy lowercase prefixes",
+			text: "title: Fix bug\ndescription: Critical fix",
+			want: "Fix bug\nCritical fix",
+		},
+		{
+			name: "mixed legacy format with indentation",
+			text: "  Title:  Add login  \n  Description:  OAuth2 based  ",
+			want: "Add login\nOAuth2 based",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseCommitMsgFromText(tt.text)
+			if got != tt.want {
+				t.Errorf("parseCommitMsgFromText() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseOpencodeJSONOutput_JSONAgentResponse(t *testing.T) {
+	ndjson := `{"type":"step_start","part":{}}
+{"type":"text","part":{"text":"{\"title\": \"Add feature\", \"description\": \"Implement feature X\"}"}}
+{"type":"step_finish","part":{}}`
+
+	got := parseOpencodeJSONOutput(ndjson)
+	want := `{"title": "Add feature", "description": "Implement feature X"}`
+	if got != want {
+		t.Errorf("parseOpencodeJSONOutput() = %q, want %q", got, want)
+	}
+}
+
+func TestParseOpencodeJSONOutput_MultipleSteps(t *testing.T) {
+	ndjson := `{"type":"step_start","part":{}}
+{"type":"text","part":{"text":"first step"}}
+{"type":"step_finish","part":{}}
+{"type":"step_start","part":{}}
+{"type":"text","part":{"text":"{\"title\": \"Final msg\"}"}}
+{"type":"step_finish","part":{}}`
+
+	got := parseOpencodeJSONOutput(ndjson)
+	want := `{"title": "Final msg"}`
+	if got != want {
+		t.Errorf("parseOpencodeJSONOutput() = %q, want %q", got, want)
+	}
+}
+
+func TestParseOpencodeJSONOutput_EmptyStep(t *testing.T) {
+	ndjson := `{"type":"step_start","part":{}}
+{"type":"step_finish","part":{}}
+{"type":"step_start","part":{}}
+{"type":"text","part":{"text":"{\"title\": \"Fix bug\"}"}}
+{"type":"step_finish","part":{}}`
+
+	got := parseOpencodeJSONOutput(ndjson)
+	want := `{"title": "Fix bug"}`
+	if got != want {
+		t.Errorf("parseOpencodeJSONOutput() = %q, want %q", got, want)
+	}
+}
+
+func TestParseOpencodeJSONOutput_EmptyOutput(t *testing.T) {
+	got := parseOpencodeJSONOutput("")
+	if got != "" {
+		t.Errorf("parseOpencodeJSONOutput() = %q, want empty", got)
+	}
+}
+
+func TestParseCommitMsgFromText_EmptyJSONTitle(t *testing.T) {
+	text := `{"title": "", "description": "just desc"}`
+	got := parseCommitMsgFromText(text)
+	// Should fallback to stripCommitHeaders, which won't find Title:/Description: prefixes
+	// So the whole text goes through stripCommitHeaders which strips Title:/Description: prefixes
+	// and joins the remaining lines
+	if got == "" {
+		t.Errorf("parseCommitMsgFromText() should have fallback output, got empty")
+	}
+}
