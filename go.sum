@@ -6,6 +6,8 @@ github.com/coder/websocket v1.8.14 h1:9L0p0iKiNOibykf283eHkKUHHrpG7f65OE3BhhO7v9
 github.com/coder/websocket v1.8.14/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=
 github.com/tidwall/jsonc v0.3.3 h1:RVQqL3xFfDkKKXIDsrBiVQiEpBtxoKbmMXONb2H/y2w=
 github.com/tidwall/jsonc v0.3.3/go.mod h1:dw+3CIxqHi+t8eFSpzzMlcVYxKp08UP5CD8/uSFCyJE=
+github.com/xhd2015/dot-pkgs/go-pkgs v0.0.5 h1:zpNmKDrjb7UDasP6Jk3wCneuu8eqP3RXefdy5cgvYJ8=
+github.com/xhd2015/dot-pkgs/go-pkgs v0.0.5/go.mod h1:RX2JN+DBKCSSZB+TmU7AhBhSHkPDstZW0g3nyFXdsoM=
 github.com/xhd2015/less-gen v0.0.19 h1:JllrPhx3HzN+f2AB6cTvW9aRCpvuODJFx7affpa0zQY=
 github.com/xhd2015/less-gen v0.0.19/go.mod h1:Ym5HW/yfVnf2mgSo48QsuHAKnMTPv/u7oqty+raTnTQ=
 github.com/xhd2015/xgo v1.1.14 h1:FZ8nYSOGb3SQD6S9gP5dIFbW/9OuoGzr5hXVJC+McQc=

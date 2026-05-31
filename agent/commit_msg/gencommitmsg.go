@@ -1,14 +1,19 @@
 package commit_msg
 
 import (
+	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/xhd2015/agent-pro/agent/git_runner"
-	"github.com/xhd2015/agent-pro/agent/opencode/run"
 	"github.com/xhd2015/agent-pro/agent/opencode/models"
+	"github.com/xhd2015/agent-pro/agent/opencode/run"
+	"github.com/xhd2015/dot-pkgs/go-pkgs/file/detect"
+	"github.com/xhd2015/dot-pkgs/go-pkgs/git/submodule"
 	"github.com/xhd2015/less-gen/flags"
 )
 
@@ -102,6 +107,11 @@ type GenerateOptions struct {
 func Generate(dir string, options GenerateOptions) (string, error) {
 	logger := options.Logger
 	optionModel := options.Model
+
+	if err := detectAndUnstage(dir, logger); err != nil {
+		return "", fmt.Errorf("auto unstage failed: %w", err)
+	}
+
 	logger.Log("$ git diff --cached")
 	stagedDiffOutput, err := git_runner.DiffCached().Dir(dir).Output()
 	if err != nil {
@@ -173,6 +183,134 @@ Description: <optional short description>`, stagedDiff)
 	commitMessage = stripCommitHeaders(commitMessage)
 
 	return commitMessage, nil
+}
+
+type unstagedItem struct {
+	path string
+	desc string
+}
+
+func detectAndUnstage(dir string, logger Logger) error {
+	origDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("getwd: %w", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		return fmt.Errorf("chdir %s: %w", dir, err)
+	}
+	defer os.Chdir(origDir)
+
+	output, err := git_runner.NewCommand("diff", "--cached", "--name-only", "--diff-filter=ACMRT", "--").Output()
+	if err != nil {
+		return fmt.Errorf("failed to list staged files: %w", err)
+	}
+
+	var stagedFiles []string
+	scanner := bufio.NewScanner(strings.NewReader(string(output)))
+	for scanner.Scan() {
+		name := strings.TrimSpace(scanner.Text())
+		if name != "" {
+			stagedFiles = append(stagedFiles, name)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("failed to scan staged files: %w", err)
+	}
+	if len(stagedFiles) == 0 {
+		return nil
+	}
+
+	subModuleDirs := submodule.DetectSubModules(stagedFiles)
+
+	isInSubmodule := func(f string) bool {
+		for _, smDir := range subModuleDirs {
+			if strings.HasPrefix(f, smDir+string(filepath.Separator)) || f == smDir {
+				return true
+			}
+		}
+		return false
+	}
+
+	var binaries []unstagedItem
+	for _, f := range stagedFiles {
+		if isInSubmodule(f) {
+			continue
+		}
+		info, err := os.Stat(f)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return fmt.Errorf("stat %s: %w", f, err)
+		}
+		if info.IsDir() {
+			continue
+		}
+		desc, isBin, err := detect.DetectFileType(f)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return fmt.Errorf("detect %s: %w", f, err)
+		}
+		if isBin {
+			binaries = append(binaries, unstagedItem{path: f, desc: desc})
+		}
+	}
+
+	var toUnstage []string
+	for _, b := range binaries {
+		toUnstage = append(toUnstage, b.path)
+	}
+	for _, f := range stagedFiles {
+		if isInSubmodule(f) {
+			toUnstage = append(toUnstage, f)
+		}
+	}
+
+	if len(toUnstage) == 0 {
+		return nil
+	}
+
+	if len(binaries) > 0 {
+		fmt.Fprintf(os.Stderr, "\nAuto-unstaged binary files:\n")
+		for _, b := range binaries {
+			if b.desc != "" {
+				fmt.Fprintf(os.Stderr, "  %s (%s)\n", b.path, b.desc)
+			} else {
+				fmt.Fprintf(os.Stderr, "  %s\n", b.path)
+			}
+		}
+	}
+	if len(subModuleDirs) > 0 {
+		fmt.Fprintf(os.Stderr, "\nAuto-unstaged submodule directories:\n")
+		for _, sm := range subModuleDirs {
+			fmt.Fprintf(os.Stderr, "  %s/\n", sm)
+		}
+	}
+
+	if len(toUnstage) > 0 {
+		fmt.Fprintf(os.Stderr, "\nTo include these files back: use `git add <file> && git commit --amend --no-edit`\n")
+	}
+
+	logger.Log("Unstaging binary/submodule entries...")
+	if err := unstageFiles(toUnstage); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func unstageFiles(files []string) error {
+	if len(files) == 0 {
+		return nil
+	}
+	args := append([]string{"restore", "--staged", "--"}, files...)
+	output, err := git_runner.NewCommand(args...).Run()
+	if err != nil {
+		return fmt.Errorf("git restore --staged failed: %s: %w", string(output), err)
+	}
+	return nil
 }
 
 func stripCommitHeaders(msg string) string {
