@@ -9,10 +9,18 @@ import (
 
 type Store struct {
 	dataDir string
+	source  Source
 }
 
 func NewStore(dataDir string) *Store {
-	return &Store{dataDir: dataDir}
+	return &Store{dataDir: dataDir, source: NewDataDirSource(dataDir)}
+}
+
+func NewStoreForSource(source Source) *Store {
+	if source == nil {
+		source = NewDataDirSource("")
+	}
+	return &Store{source: source}
 }
 
 func (s *Store) HandleRoutes(w http.ResponseWriter, r *http.Request) {
@@ -68,11 +76,12 @@ func (s *Store) HandleRoutes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Store) handleList(w http.ResponseWriter) {
-	sessions, err := loadAgentTraceSummaries(s.dataDir)
+	sessions, err := s.source.List()
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	sessions = withAgentTraceRelationships(sessions)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"sessions": sessions,
@@ -80,27 +89,29 @@ func (s *Store) handleList(w http.ResponseWriter) {
 }
 
 func (s *Store) handleGet(w http.ResponseWriter, id string) {
-	detail, err := loadAgentTraceDetail(s.dataDir, id)
+	detail, err := s.source.Get(id)
 	if err != nil {
 		writeJSONError(w, http.StatusNotFound, err.Error())
 		return
 	}
+	s.hydrateTraceDetailRelationships(detail)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(detail)
 }
 
 func (s *Store) handleStop(w http.ResponseWriter, id string) {
-	detail, err := markAgentTraceStopped(s.dataDir, id)
+	detail, err := s.source.Stop(id)
 	if err != nil {
 		writeJSONError(w, http.StatusNotFound, err.Error())
 		return
 	}
+	s.hydrateTraceDetailRelationships(detail)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(detail)
 }
 
 func (s *Store) handleDelete(w http.ResponseWriter, id string) {
-	if err := deleteAgentTraceSession(s.dataDir, id); err != nil {
+	if err := s.source.Delete(id); err != nil {
 		writeJSONError(w, http.StatusNotFound, err.Error())
 		return
 	}
@@ -111,4 +122,12 @@ func writeJSONError(w http.ResponseWriter, code int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	fmt.Fprintf(w, `{"error":%q}`, msg)
+}
+
+func (s *Store) hydrateTraceDetailRelationships(detail *AgentTraceDetail) {
+	summaries, err := s.source.List()
+	if err != nil {
+		return
+	}
+	hydrateAgentTraceDetailRelationships(detail, summaries)
 }

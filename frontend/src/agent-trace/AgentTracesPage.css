@@ -126,13 +126,18 @@
 
 .agent-trace-session-time,
 .agent-trace-session-meta,
-.agent-trace-session-topic {
+.agent-trace-session-topic,
+.agent-trace-session-links {
   margin-top: 6px;
   font-size: 12px;
   color: var(--text2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.agent-trace-session-links {
+  color: var(--accent2);
 }
 
 .agent-trace-status {
@@ -351,6 +356,75 @@
   margin-top: 6px;
 }
 
+.agent-trace-links-panel {
+  display: flex;
+  gap: 1px;
+  background: var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.agent-trace-link-group {
+  min-width: 0;
+  flex: 1;
+  padding: 12px 16px;
+  background: var(--surface);
+}
+
+.agent-trace-link-group > span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text2);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.agent-trace-child-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.agent-trace-link-button {
+  max-width: 100%;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface2);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.agent-trace-link-button:hover {
+  border-color: var(--accent2);
+}
+
+.agent-trace-link-button strong,
+.agent-trace-link-button em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-trace-link-button strong {
+  font-size: 13px;
+}
+
+.agent-trace-link-button em {
+  color: var(--text2);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.agent-trace-link-button small.agent-trace-status {
+  min-height: 20px;
+  font-size: 11px;
+}
+
 .agent-trace-resume {
   width: 100%;
   max-width: 980px;
@@ -449,6 +523,10 @@
 
   .agent-trace-facts {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .agent-trace-links-panel {
+    flex-direction: column;
   }
 
   .agent-trace-actions {

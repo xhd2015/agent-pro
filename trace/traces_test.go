@@ -18,7 +18,7 @@ func TestAgentTraceSessionStoresPromptAndParsesMessages(t *testing.T) {
 	session, err := StartAgentTraceSession(dataDir, AgentTraceMetadata{
 		Command:     "find-prds",
 		CommandArgs: []string{"knowledge-portal", "find-prds", "spl/biz-scene/cashout"},
-		ProviderID:  "codex",
+		AgentRunnerID:  "codex",
 		Model:       "gpt-5.4",
 	}, "test prompt")
 	if err != nil {
@@ -107,7 +107,7 @@ func TestResumeAgentTraceSessionReopensExistingTraceAsRunning(t *testing.T) {
 		CommandArgs:   []string{"design-td", "initial"},
 		Workspace:     "/tmp/design-session",
 		ResumeCommand: "design-td --resume session 'your follow-up or clarification'",
-		ProviderID:    "codex",
+		AgentRunnerID:    "codex",
 	}, "test prompt")
 	if err != nil {
 		t.Fatalf("start trace session: %v", err)
@@ -122,7 +122,7 @@ func TestResumeAgentTraceSessionReopensExistingTraceAsRunning(t *testing.T) {
 		CommandArgs:   []string{"design-td", "--resume", "session", "option 1"},
 		Workspace:     "/tmp/design-session",
 		ResumeCommand: "design-td --resume session 'your follow-up or clarification'",
-		ProviderID:    "codex",
+		AgentRunnerID:    "codex",
 		Model:         "gpt-5",
 	})
 	if err != nil {

@@ -38,6 +38,12 @@ export interface AgentTraceMetadata {
   resume_command?: string;
   provider_id?: string;
   model?: string;
+  parent_trace_id?: string;
+  parent_trace_dir?: string;
+  parent_session_id?: string;
+  delegation_id?: string;
+  delegation_label?: string;
+  children?: AgentTraceChild[];
   status: string;
   tags?: string[];
   error?: string;
@@ -45,6 +51,18 @@ export interface AgentTraceMetadata {
   updated_at: string;
   prompt_path: string;
   log_path: string;
+}
+
+export interface AgentTraceChild {
+  id: string;
+  command: string;
+  command_line?: string;
+  status: string;
+  provider_id?: string;
+  model?: string;
+  created_at: string;
+  delegation_id?: string;
+  delegation_label?: string;
 }
 
 export interface AgentTraceSummary extends AgentTraceMetadata {
@@ -75,6 +93,7 @@ function normalizeAgentTraceMetadata<T extends AgentTraceMetadata>(metadata: T):
   return {
     ...metadata,
     tags: Array.isArray(metadata.tags) ? metadata.tags : [],
+    children: Array.isArray(metadata.children) ? metadata.children : [],
   };
 }
 

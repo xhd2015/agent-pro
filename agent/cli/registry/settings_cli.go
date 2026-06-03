@@ -12,23 +12,23 @@ const (
 	CodexCLIPathSettingKey        = "codex_cli_path"
 	OpencodeCLIPathSettingKey     = "opencode_cli_path"
 	CodexAPIKeySettingKey         = "codex_api_key"
-	ProviderIDSettingKey          = "provider_id"
-	KBDefaultProviderIDSettingKey = "kb_default_provider_id"
-	ModelSettingKey               = "model"
-	ModelsByProviderSettingKey    = "models_by_provider"
+	AgentRunnerIDSettingKey          = "agent_runner_id"
+	KBDefaultAgentRunnerIDSettingKey = "kb_default_agent_runner_id"
+	ModelSettingKey                  = "model"
+	ModelsByAgentRunnerSettingKey    = "models_by_agent_runner"
 )
 
 type Settings struct {
-	Model               string            `json:"model,omitempty"`
-	AgentID             string            `json:"agent_id,omitempty"`
-	ProviderID          string            `json:"provider_id,omitempty"`
-	KBDefaultProviderID string            `json:"kb_default_provider_id,omitempty"`
-	CursorCLIPath       string            `json:"cursor_cli_path,omitempty"`
-	CodexCLIPath        string            `json:"codex_cli_path,omitempty"`
-	OpencodeCLIPath     string            `json:"opencode_cli_path,omitempty"`
-	CodexAPIKey         string            `json:"codex_api_key,omitempty"`
-	DisableSubAgents    bool              `json:"disable_sub_agents,omitempty"`
-	ModelsByProvider    map[string]string `json:"models_by_provider,omitempty"`
+	Model                  string            `json:"model,omitempty"`
+	AgentID                string            `json:"agent_id,omitempty"`
+	AgentRunnerID          string            `json:"agent_runner_id,omitempty"`
+	KBDefaultAgentRunnerID string            `json:"kb_default_agent_runner_id,omitempty"`
+	CursorCLIPath          string            `json:"cursor_cli_path,omitempty"`
+	CodexCLIPath           string            `json:"codex_cli_path,omitempty"`
+	OpencodeCLIPath        string            `json:"opencode_cli_path,omitempty"`
+	CodexAPIKey            string            `json:"codex_api_key,omitempty"`
+	DisableSubAgents       bool              `json:"disable_sub_agents,omitempty"`
+	ModelsByAgentRunner    map[string]string `json:"models_by_agent_runner,omitempty"`
 }
 
 func ResolveConfiguredCLIPath(settingsPath string, settingKey string, defaultPath string, fallback func() (string, error)) (string, error) {
@@ -59,10 +59,10 @@ func LoadConfiguredStringSetting(settingsPath string, settingKey string) string 
 		return strings.TrimSpace(settings.OpencodeCLIPath)
 	case CodexAPIKeySettingKey:
 		return strings.TrimSpace(settings.CodexAPIKey)
-	case ProviderIDSettingKey:
-		return strings.TrimSpace(settings.ProviderID)
-	case KBDefaultProviderIDSettingKey:
-		return strings.TrimSpace(settings.KBDefaultProviderID)
+	case AgentRunnerIDSettingKey:
+		return strings.TrimSpace(settings.AgentRunnerID)
+	case KBDefaultAgentRunnerIDSettingKey:
+		return strings.TrimSpace(settings.KBDefaultAgentRunnerID)
 	case ModelSettingKey:
 		return strings.TrimSpace(settings.Model)
 	default:
@@ -72,13 +72,13 @@ func LoadConfiguredStringSetting(settingsPath string, settingKey string) string 
 
 func LoadConfiguredStringMapSetting(settingsPath string, settingKey string) map[string]string {
 	settings := LoadSettingsMap(settingsPath)
-	if settingKey != ModelsByProviderSettingKey || len(settings.ModelsByProvider) == 0 {
+	if settingKey != ModelsByAgentRunnerSettingKey || len(settings.ModelsByAgentRunner) == 0 {
 		return nil
 	}
-	out := make(map[string]string, len(settings.ModelsByProvider))
-	for providerID, model := range settings.ModelsByProvider {
+	out := make(map[string]string, len(settings.ModelsByAgentRunner))
+	for runnerID, model := range settings.ModelsByAgentRunner {
 		if trimmed := strings.TrimSpace(model); trimmed != "" {
-			out[providerID] = trimmed
+			out[runnerID] = trimmed
 		}
 	}
 	return out

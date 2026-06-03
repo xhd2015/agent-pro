@@ -311,6 +311,11 @@ export function AgentTracesPage({ routeBase = DEFAULT_ROUTE_BASE }: { routeBase?
                 <div className="agent-trace-session-meta">
                   {(session.provider_id || "agent")} / {(session.model || "default")} / {session.log_line_count} lines
                 </div>
+                {session.children && session.children.length > 0 && (
+                  <div className="agent-trace-session-links">
+                    {session.children.length} delegated trace{session.children.length === 1 ? "" : "s"}
+                  </div>
+                )}
                 <TraceTags tags={session.tags} />
                 {session.topic_path && <div className="agent-trace-session-topic">{session.topic_path}</div>}
               </button>
@@ -407,6 +412,47 @@ export function AgentTracesPage({ routeBase = DEFAULT_ROUTE_BASE }: { routeBase?
                 <strong title={visibleDetail.metadata.output_path}>{shortPath(visibleDetail.metadata.output_path)}</strong>
               </div>
             </section>
+
+            {(visibleDetail.metadata.parent_trace_id || (visibleDetail.metadata.children?.length ?? 0) > 0) && (
+              <section className="agent-trace-links-panel">
+                {visibleDetail.metadata.parent_trace_id && (
+                  <div className="agent-trace-link-group">
+                    <span>Parent</span>
+                    <button
+                      type="button"
+                      className="agent-trace-link-button"
+                      onClick={() => handleSelect(visibleDetail.metadata.parent_trace_id ?? "")}
+                    >
+                      <strong>{visibleDetail.metadata.parent_session_id || visibleDetail.metadata.parent_trace_id}</strong>
+                      {(visibleDetail.metadata.delegation_label || visibleDetail.metadata.delegation_id) && (
+                        <em>{visibleDetail.metadata.delegation_label || visibleDetail.metadata.delegation_id}</em>
+                      )}
+                    </button>
+                  </div>
+                )}
+                {(visibleDetail.metadata.children?.length ?? 0) > 0 && (
+                  <div className="agent-trace-link-group">
+                    <span>Delegated Traces</span>
+                    <div className="agent-trace-child-list">
+                      {visibleDetail.metadata.children?.map((child) => (
+                        <button
+                          key={child.id}
+                          type="button"
+                          className="agent-trace-link-button"
+                          onClick={() => handleSelect(child.id)}
+                        >
+                          <strong>{child.command || child.id}</strong>
+                          <em>{child.delegation_label || child.delegation_id || formatDate(child.created_at)}</em>
+                          <small className={`agent-trace-status agent-trace-status-${statusClass(child.status)}`}>
+                            {statusLabel(child.status)}
+                          </small>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </section>
+            )}
 
             {visibleDetail.metadata.error && (
               <div className="agent-trace-error">{visibleDetail.metadata.error}</div>

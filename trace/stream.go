@@ -83,10 +83,11 @@ func (s *Store) handleStream(w http.ResponseWriter, r *http.Request, id string) 
 }
 
 func (s *Store) loadTraceStreamSnapshot(id string) (*AgentTraceDetail, traceStreamState, error) {
-	detail, err := loadAgentTraceDetail(s.dataDir, id)
+	detail, err := s.source.Get(id)
 	if err != nil {
 		return nil, traceStreamState{}, err
 	}
+	s.hydrateTraceDetailRelationships(detail)
 	state := traceStreamState{
 		UpdatedAt: detail.Metadata.UpdatedAt,
 		Status:    detail.Metadata.Status,

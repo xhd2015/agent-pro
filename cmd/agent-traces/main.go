@@ -12,9 +12,8 @@ import (
 func main() {
 	server.Init(frontend.DistFS, frontend.TemplateHTML)
 
-	err := run.Run(os.Args[1:])
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
+	if err := run.Run(os.Args[1:]); err != nil {
+		fmt.Fprintf(os.Stderr, "agent-traces: %v\n", err)
 		os.Exit(1)
 	}
 }

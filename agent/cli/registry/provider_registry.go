@@ -5,90 +5,90 @@ import (
 	"strings"
 )
 
-type AgentProviderInfo struct {
+type AgentRunnerInfo struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 }
 
-type AgentProvider struct {
+type AgentRunner struct {
 	ID    string
 	Name  string
 	Agent Agent
 }
 
-type AgentProviderRegistry struct {
+type AgentRunnerRegistry struct {
 	defaultID string
-	ordered   []AgentProvider
-	byID      map[string]AgentProvider
+	ordered   []AgentRunner
+	byID      map[string]AgentRunner
 }
 
-func NewAgentProviderRegistry(defaultID string, providers []AgentProvider) (*AgentProviderRegistry, error) {
-	reg := &AgentProviderRegistry{
-		byID: make(map[string]AgentProvider, len(providers)),
+func NewAgentRunnerRegistry(defaultID string, runners []AgentRunner) (*AgentRunnerRegistry, error) {
+	reg := &AgentRunnerRegistry{
+		byID: make(map[string]AgentRunner, len(runners)),
 	}
-	for _, provider := range providers {
-		id := strings.TrimSpace(provider.ID)
+	for _, runner := range runners {
+		id := strings.TrimSpace(runner.ID)
 		if id == "" {
-			return nil, fmt.Errorf("agent provider id is required")
+			return nil, fmt.Errorf("agent runner id is required")
 		}
-		if provider.Agent == nil {
-			return nil, fmt.Errorf("agent provider %q is missing implementation", id)
+		if runner.Agent == nil {
+			return nil, fmt.Errorf("agent runner %q is missing implementation", id)
 		}
-		provider.ID = id
-		if strings.TrimSpace(provider.Name) == "" {
-			provider.Name = id
+		runner.ID = id
+		if strings.TrimSpace(runner.Name) == "" {
+			runner.Name = id
 		}
 		if _, exists := reg.byID[id]; exists {
-			return nil, fmt.Errorf("duplicate agent provider id: %s", id)
+			return nil, fmt.Errorf("duplicate agent runner id: %s", id)
 		}
-		reg.byID[id] = provider
-		reg.ordered = append(reg.ordered, provider)
+		reg.byID[id] = runner
+		reg.ordered = append(reg.ordered, runner)
 	}
 	if len(reg.ordered) == 0 {
-		return nil, fmt.Errorf("at least one agent provider is required")
+		return nil, fmt.Errorf("at least one agent runner is required")
 	}
 	if strings.TrimSpace(defaultID) == "" {
 		reg.defaultID = reg.ordered[0].ID
 		return reg, nil
 	}
 	if _, ok := reg.byID[defaultID]; !ok {
-		return nil, fmt.Errorf("default agent provider not found: %s", defaultID)
+		return nil, fmt.Errorf("default agent runner not found: %s", defaultID)
 	}
 	reg.defaultID = defaultID
 	return reg, nil
 }
 
-func (r *AgentProviderRegistry) DefaultID() string {
+func (r *AgentRunnerRegistry) DefaultID() string {
 	if r == nil {
 		return ""
 	}
 	return r.defaultID
 }
 
-func (r *AgentProviderRegistry) Resolve(id string) (AgentProvider, error) {
+func (r *AgentRunnerRegistry) Resolve(id string) (AgentRunner, error) {
 	if r == nil {
-		return AgentProvider{}, fmt.Errorf("agent provider registry is not configured")
+		return AgentRunner{}, fmt.Errorf("agent runner registry is not configured")
 	}
-	providerID := strings.TrimSpace(id)
-	if providerID == "" {
-		providerID = r.defaultID
+	runnerID := strings.TrimSpace(id)
+	if runnerID == "" {
+		runnerID = r.defaultID
 	}
-	provider, ok := r.byID[providerID]
+	runner, ok := r.byID[runnerID]
 	if !ok {
-		return AgentProvider{}, fmt.Errorf("agent provider not found: %s", providerID)
+		return AgentRunner{}, fmt.Errorf("agent runner not found: %s", runnerID)
 	}
-	return provider, nil
+	return runner, nil
 }
 
-func (r *AgentProviderRegistry) List() []AgentProviderInfo {
+func (r *AgentRunnerRegistry) List() []AgentRunnerInfo {
 	if r == nil {
 		return nil
 	}
-	out := make([]AgentProviderInfo, 0, len(r.ordered))
-	for _, provider := range r.ordered {
-		out = append(out, AgentProviderInfo{
-			ID:   provider.ID,
-			Name: provider.Name,
+	out := make([]AgentRunnerInfo, 0, len(r.ordered))
+	for _, runner := range r.ordered {
+		out = append(out, AgentRunnerInfo{
+			ID:   runner.ID,
+			Name: runner.Name,
 		})
 	}
 	return out

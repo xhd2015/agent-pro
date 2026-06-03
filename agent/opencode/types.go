@@ -8,9 +8,9 @@ import (
 )
 
 type Model struct {
-	ID         string `json:"id"`
-	ProviderID string `json:"providerID,omitempty"`
-	Name       string `json:"name,omitempty"`
+	ID            string `json:"id"`
+	AgentRunnerID string `json:"agentRunnerID,omitempty"`
+	Name          string `json:"name,omitempty"`
 }
 
 type Session struct {

@@ -12,6 +12,7 @@ type AgentTraceMetadata = types.AgentTraceMetadata
 type AgentTraceSummary = types.AgentTraceSummary
 type AgentTraceDetail = types.AgentTraceDetail
 type AgentTraceUpdate = types.AgentTraceUpdate
+type AgentTraceChild = types.AgentTraceChild
 type AgentTraceMessage = types.AgentTraceMessage
 type AgentTraceActivity = types.AgentTraceActivity
 type AgentTraceFileChange = types.AgentTraceFileChange

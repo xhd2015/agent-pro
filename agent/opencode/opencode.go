@@ -107,7 +107,7 @@ func (a *OpencodeAgent) ListModels(ctx context.Context) ([]Model, error) {
 			Name: line,
 		}
 		if parts := strings.SplitN(line, "/", 2); len(parts) == 2 {
-			model.ProviderID = parts[0]
+			model.AgentRunnerID = parts[0]
 			model.ID = parts[1]
 		}
 		models = append(models, model)

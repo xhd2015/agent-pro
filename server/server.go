@@ -26,7 +26,8 @@ import (
 
 var distFS embed.FS
 var templateHTML string
-var apiDataDir string
+var apiTraceSource trace.Source
+var frontendDistDir string
 
 func Init(fs embed.FS, tmpl string) {
 	distFS = fs
@@ -34,7 +35,15 @@ func Init(fs embed.FS, tmpl string) {
 }
 
 func SetDataDir(dataDir string) {
-	apiDataDir = dataDir
+	apiTraceSource = trace.NewDataDirSource(dataDir)
+}
+
+func SetTraceSource(source trace.Source) {
+	apiTraceSource = source
+}
+
+func SetFrontendDistDir(dir string) {
+	frontendDistDir = strings.TrimSpace(dir)
 }
 
 func checkPort(port int) bool {
@@ -226,8 +235,7 @@ type StaticOptions struct {
 
 func Static(mux *http.ServeMux, opts StaticOptions) error {
 	routePrefix := NormalizeRoutePrefix(opts.RoutePrefix)
-	// Serve static files from the embedded React build
-	reactFileSystem, err := fs.Sub(distFS, "frontend/dist")
+	reactFileSystem, err := reactDistFS()
 	if err != nil {
 		return fmt.Errorf("failed to create react file system: %v", err)
 	}
@@ -279,6 +287,23 @@ func Static(mux *http.ServeMux, opts StaticOptions) error {
 		w.Write(prepareFrontendHTML(content, routePrefix, true))
 	})
 	return nil
+}
+
+func reactDistFS() (fs.FS, error) {
+	if frontendDistDir != "" {
+		if _, err := os.Stat(filepath.Join(frontendDistDir, "index.html")); err == nil {
+			return os.DirFS(frontendDistDir), nil
+		}
+	}
+	for _, root := range []string{"frontend/dist", "dist"} {
+		sub, err := fs.Sub(distFS, root)
+		if err == nil {
+			if _, statErr := fs.Stat(sub, "index.html"); statErr == nil {
+				return sub, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("embedded frontend dist not found")
 }
 
 // NormalizeRoutePrefix converts values like "my-app" and "/my-app/" to
@@ -381,7 +406,7 @@ func prefixRootAbsoluteHTMLAttrs(html string, routePrefix string) string {
 func RegisterAPI(mux *http.ServeMux) error {
 	// ping
 	mux.HandleFunc("/ping", handlePing)
-	traceStore := trace.NewStore(apiDataDir)
+	traceStore := trace.NewStoreForSource(apiTraceSource)
 	mux.HandleFunc("/api/knowledge/agent-traces", traceStore.HandleRoutes)
 	mux.HandleFunc("/api/knowledge/agent-traces/", traceStore.HandleRoutes)
 

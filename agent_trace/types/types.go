@@ -8,23 +8,41 @@ import (
 )
 
 type AgentTraceMetadata struct {
-	ID            string   `json:"id"`
-	Command       string   `json:"command"`
-	CommandArgs   []string `json:"command_args,omitempty"`
-	CommandLine   string   `json:"command_line,omitempty"`
-	TopicPath     string   `json:"topic_path,omitempty"`
-	Workspace     string   `json:"workspace,omitempty"`
-	OutputPath    string   `json:"output_path,omitempty"`
-	ResumeCommand string   `json:"resume_command,omitempty"`
-	ProviderID    string   `json:"provider_id,omitempty"`
-	Model         string   `json:"model,omitempty"`
-	Status        string   `json:"status"`
-	Tags          []string `json:"tags,omitempty"`
-	Error         string   `json:"error,omitempty"`
-	CreatedAt     string   `json:"created_at"`
-	UpdatedAt     string   `json:"updated_at"`
-	PromptPath    string   `json:"prompt_path"`
-	LogPath       string   `json:"log_path"`
+	ID              string            `json:"id"`
+	Command         string            `json:"command"`
+	CommandArgs     []string          `json:"command_args,omitempty"`
+	CommandLine     string            `json:"command_line,omitempty"`
+	TopicPath       string            `json:"topic_path,omitempty"`
+	Workspace       string            `json:"workspace,omitempty"`
+	OutputPath      string            `json:"output_path,omitempty"`
+	ResumeCommand   string            `json:"resume_command,omitempty"`
+	AgentRunnerID   string            `json:"agent_runner_id,omitempty"`
+	Model           string            `json:"model,omitempty"`
+	ParentTraceID   string            `json:"parent_trace_id,omitempty"`
+	ParentTraceDir  string            `json:"parent_trace_dir,omitempty"`
+	ParentSessionID string            `json:"parent_session_id,omitempty"`
+	DelegationID    string            `json:"delegation_id,omitempty"`
+	DelegationLabel string            `json:"delegation_label,omitempty"`
+	Status          string            `json:"status"`
+	Tags            []string          `json:"tags,omitempty"`
+	Error           string            `json:"error,omitempty"`
+	CreatedAt       string            `json:"created_at"`
+	UpdatedAt       string            `json:"updated_at"`
+	PromptPath      string            `json:"prompt_path"`
+	LogPath         string            `json:"log_path"`
+	Children        []AgentTraceChild `json:"children,omitempty"`
+}
+
+type AgentTraceChild struct {
+	ID              string `json:"id"`
+	Command         string `json:"command"`
+	CommandLine     string `json:"command_line,omitempty"`
+	Status          string `json:"status"`
+	AgentRunnerID   string `json:"agent_runner_id,omitempty"`
+	Model           string `json:"model,omitempty"`
+	CreatedAt       string `json:"created_at"`
+	DelegationID    string `json:"delegation_id,omitempty"`
+	DelegationLabel string `json:"delegation_label,omitempty"`
 }
 
 type AgentTraceSummary struct {
@@ -63,11 +81,11 @@ const (
 type ActivityStatus string
 
 const (
-	StatusCompleted   ActivityStatus = "completed"
-	StatusFailed      ActivityStatus = "failed"
-	StatusInProgress  ActivityStatus = "in_progress"
-	StatusWarning     ActivityStatus = "warning"
-	StatusPending     ActivityStatus = "pending"
+	StatusCompleted  ActivityStatus = "completed"
+	StatusFailed     ActivityStatus = "failed"
+	StatusInProgress ActivityStatus = "in_progress"
+	StatusWarning    ActivityStatus = "warning"
+	StatusPending    ActivityStatus = "pending"
 )
 
 type AgentTraceMessage struct {

@@ -207,8 +207,8 @@ func applyAgentTraceMetadataUpdates(meta *AgentTraceMetadata, updates AgentTrace
 	if strings.TrimSpace(updates.ResumeCommand) != "" {
 		meta.ResumeCommand = updates.ResumeCommand
 	}
-	if strings.TrimSpace(updates.ProviderID) != "" {
-		meta.ProviderID = updates.ProviderID
+	if strings.TrimSpace(updates.AgentRunnerID) != "" {
+		meta.AgentRunnerID = updates.AgentRunnerID
 	}
 	if strings.TrimSpace(updates.Model) != "" {
 		meta.Model = updates.Model
@@ -315,6 +315,10 @@ func loadAgentTraceSummaries(dataDir string) ([]AgentTraceSummary, error) {
 	if err != nil {
 		return nil, err
 	}
+	return loadAgentTraceSummariesFromRoot(root)
+}
+
+func loadAgentTraceSummariesFromRoot(root string) ([]AgentTraceSummary, error) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -328,16 +332,11 @@ func loadAgentTraceSummaries(dataDir string) ([]AgentTraceSummary, error) {
 		if !entry.IsDir() {
 			continue
 		}
-		meta, err := readAgentTraceMetadata(filepath.Join(root, entry.Name()))
+		summary, err := loadAgentTraceSummaryFromDir(filepath.Join(root, entry.Name()), now)
 		if err != nil {
 			continue
 		}
-		lineCount := countFileLines(meta.LogPath)
-		meta = withAgentTraceRuntimeTags(meta, lineCount, now)
-		summaries = append(summaries, AgentTraceSummary{
-			AgentTraceMetadata: meta,
-			LogLineCount:       lineCount,
-		})
+		summaries = append(summaries, summary)
 	}
 	sort.Slice(summaries, func(i, j int) bool {
 		return summaries[i].CreatedAt > summaries[j].CreatedAt
@@ -345,12 +344,29 @@ func loadAgentTraceSummaries(dataDir string) ([]AgentTraceSummary, error) {
 	return summaries, nil
 }
 
+func loadAgentTraceSummaryFromDir(dir string, now time.Time) (AgentTraceSummary, error) {
+	meta, err := readAgentTraceMetadataOrDefault(dir)
+	if err != nil {
+		return AgentTraceSummary{}, err
+	}
+	lineCount := countFileLines(meta.LogPath)
+	meta = withAgentTraceRuntimeTags(meta, lineCount, now)
+	return AgentTraceSummary{
+		AgentTraceMetadata: meta,
+		LogLineCount:       lineCount,
+	}, nil
+}
+
 func loadAgentTraceDetail(dataDir, id string) (*AgentTraceDetail, error) {
 	dir, err := agentTraceDirForIDInRoot(dataDir, id)
 	if err != nil {
 		return nil, err
 	}
-	meta, err := readAgentTraceMetadata(dir)
+	return loadAgentTraceDetailFromDir(dir)
+}
+
+func loadAgentTraceDetailFromDir(dir string) (*AgentTraceDetail, error) {
+	meta, err := readAgentTraceMetadataOrDefault(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -376,20 +392,27 @@ func markAgentTraceStopped(dataDir, id string) (*AgentTraceDetail, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := markAgentTraceDirStopped(dir); err != nil {
+		return nil, err
+	}
+	return loadAgentTraceDetail(dataDir, id)
+}
+
+func markAgentTraceDirStopped(dir string) error {
 	metaPath := filepath.Join(dir, traceMetaFileName)
 	meta, err := readAgentTraceMetadata(dir)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if isTraceRunning(meta.Status) {
 		meta.Status = traceStatusStopped
 		meta.UpdatedAt = time.Now().Format(time.RFC3339Nano)
 		meta.Tags = withoutAgentTraceRuntimeTags(meta.Tags)
 		if err := writeAgentTraceMetadata(metaPath, meta); err != nil {
-			return nil, err
+			return err
 		}
 	}
-	return loadAgentTraceDetail(dataDir, id)
+	return nil
 }
 
 func deleteAgentTraceSession(dataDir, id string) error {
@@ -397,6 +420,10 @@ func deleteAgentTraceSession(dataDir, id string) error {
 	if err != nil {
 		return err
 	}
+	return deleteAgentTraceDir(dir)
+}
+
+func deleteAgentTraceDir(dir string) error {
 	info, err := os.Stat(dir)
 	if err != nil {
 		return err
@@ -423,6 +450,14 @@ func agentTraceDirForIDInRoot(dataDir, id string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return agentTraceDirForIDInTraceRoot(root, id)
+}
+
+func agentTraceDirForIDInTraceRoot(root, id string) (string, error) {
+	id = strings.TrimSpace(id)
+	if id == "" || strings.Contains(id, "..") || strings.Contains(id, "/") || strings.Contains(id, "\\") {
+		return "", fmt.Errorf("invalid trace session id")
+	}
 	return filepath.Join(root, id), nil
 }
 
@@ -439,6 +474,29 @@ func readAgentTraceMetadata(dir string) (AgentTraceMetadata, error) {
 		meta.ID = filepath.Base(dir)
 	}
 	return meta, nil
+}
+
+func readAgentTraceMetadataOrDefault(dir string) (AgentTraceMetadata, error) {
+	meta, err := readAgentTraceMetadata(dir)
+	if err == nil {
+		return meta, nil
+	}
+	logPath := filepath.Join(dir, traceLogFile)
+	info, statErr := os.Stat(logPath)
+	if statErr != nil || info.IsDir() {
+		return AgentTraceMetadata{}, err
+	}
+	createdAt := info.ModTime().Format(time.RFC3339Nano)
+	return AgentTraceMetadata{
+		ID:          sanitizeTraceID(filepath.Base(dir)),
+		Command:     "agent-events",
+		CommandLine: filepath.Base(dir),
+		Status:      "completed",
+		CreatedAt:   createdAt,
+		UpdatedAt:   createdAt,
+		PromptPath:  filepath.Join(dir, tracePromptFile),
+		LogPath:     logPath,
+	}, nil
 }
 
 func withAgentTraceRuntimeTags(meta AgentTraceMetadata, rawLineCount int, now time.Time) AgentTraceMetadata {

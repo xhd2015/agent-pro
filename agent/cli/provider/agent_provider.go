@@ -11,10 +11,10 @@ import (
 	"github.com/xhd2015/agent-pro/agent/exec"
 )
 
-func Build(providerID, settingsPath, workspace string, env *exec.Env) (registry.AgentProvider, error) {
-	id := strings.TrimSpace(providerID)
+func Build(runnerID, settingsPath, workspace string, env *exec.Env) (registry.AgentRunner, error) {
+	id := strings.TrimSpace(runnerID)
 	if id == "" {
-		return registry.AgentProvider{}, fmt.Errorf("provider id is required")
+		return registry.AgentRunner{}, fmt.Errorf("agent runner id is required")
 	}
 	switch id {
 	case "cursor":
@@ -22,9 +22,9 @@ func Build(providerID, settingsPath, workspace string, env *exec.Env) (registry.
 			return cursoragent.FindAgentPath(env)
 		})
 		if err != nil {
-			return registry.AgentProvider{}, fmt.Errorf("cursor-agent not found: %w (install it or add it to PATH)", err)
+			return registry.AgentRunner{}, fmt.Errorf("cursor-agent not found: %w (install it or add it to PATH)", err)
 		}
-		return registry.AgentProvider{
+		return registry.AgentRunner{
 			ID:   "cursor",
 			Name: "Cursor",
 			Agent: &cursoragent.CursorAgent{
@@ -39,9 +39,9 @@ func Build(providerID, settingsPath, workspace string, env *exec.Env) (registry.
 			return codexagent.FindAgentPath(env)
 		})
 		if err != nil {
-			return registry.AgentProvider{}, fmt.Errorf("codex not found: %w (install it or add it to PATH)", err)
+			return registry.AgentRunner{}, fmt.Errorf("codex not found: %w (install it or add it to PATH)", err)
 		}
-		return registry.AgentProvider{
+		return registry.AgentRunner{
 			ID:   "codex",
 			Name: "Codex",
 			Agent: &codexagent.CodexAgent{
@@ -56,9 +56,9 @@ func Build(providerID, settingsPath, workspace string, env *exec.Env) (registry.
 			return opencodeagent.FindAgentPath(env)
 		})
 		if err != nil {
-			return registry.AgentProvider{}, fmt.Errorf("opencode not found: %w (install it or add it to PATH)", err)
+			return registry.AgentRunner{}, fmt.Errorf("opencode not found: %w (install it or add it to PATH)", err)
 		}
-		return registry.AgentProvider{
+		return registry.AgentRunner{
 			ID:   "opencode",
 			Name: "Opencode",
 			Agent: &opencodeagent.OpencodeAgent{
@@ -69,6 +69,6 @@ func Build(providerID, settingsPath, workspace string, env *exec.Env) (registry.
 			},
 		}, nil
 	default:
-		return registry.AgentProvider{}, fmt.Errorf("unknown provider id: %s", id)
+		return registry.AgentRunner{}, fmt.Errorf("unknown agent runner id: %s", id)
 	}
 }
