@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	agenttrace "github.com/xhd2015/agent-pro/agent_trace"
@@ -374,6 +375,70 @@ func (e combinedSourceEntry) externalID(id string) string {
 	return e.prefix + ":" + id
 }
 
+type DynamicRootSource struct {
+	base    string
+	mu      sync.Mutex
+	entries []dynamicSourceEntry
+}
+
+type dynamicSourceEntry struct {
+	path   string
+	prefix string
+}
+
+func NewDynamicRootSource(base string) Source {
+	return &DynamicRootSource{base: filepath.Clean(base)}
+}
+
+func (s *DynamicRootSource) refresh() CombinedSource {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	roots := discoverNestedTraceRoots(s.base)
+	existingByPath := map[string]int{}
+	for i, e := range s.entries {
+		existingByPath[e.path] = i
+	}
+
+	var entries []combinedSourceEntry
+	for _, root := range roots {
+		if idx, ok := existingByPath[root]; ok {
+			entries = append(entries, combinedSourceEntry{
+				prefix: s.entries[idx].prefix,
+				source: NewRootSource(root),
+			})
+		} else {
+			prefix := fmt.Sprintf("s%d", len(s.entries)+1)
+			s.entries = append(s.entries, dynamicSourceEntry{path: root, prefix: prefix})
+			entries = append(entries, combinedSourceEntry{
+				prefix: prefix,
+				source: NewRootSource(root),
+			})
+		}
+	}
+	return CombinedSource{sources: entries}
+}
+
+func (s *DynamicRootSource) List() ([]AgentTraceSummary, error) {
+	return s.refresh().List()
+}
+
+func (s *DynamicRootSource) Get(id string) (*AgentTraceDetail, error) {
+	return s.refresh().Get(id)
+}
+
+func (s *DynamicRootSource) Stop(id string) (*AgentTraceDetail, error) {
+	return s.refresh().Stop(id)
+}
+
+func (s *DynamicRootSource) Delete(id string) error {
+	return s.refresh().Delete(id)
+}
+
+func (s *DynamicRootSource) Describe() []string {
+	return s.refresh().Describe()
+}
+
 func SourceForPath(path string) (Source, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
@@ -394,11 +459,7 @@ func SourceForPath(path string) (Source, error) {
 	}
 	roots := discoverNestedTraceRoots(abs)
 	if len(roots) > 0 {
-		sources := make([]Source, 0, len(roots))
-		for _, root := range roots {
-			sources = append(sources, NewRootSource(root))
-		}
-		return NewCombinedSource(sources), nil
+		return NewDynamicRootSource(abs), nil
 	}
 	return NewRootSource(abs), nil
 }

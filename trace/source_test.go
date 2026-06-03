@@ -289,3 +289,89 @@ func (s staticSource) Delete(string) error {
 func (s staticSource) Describe() []string {
 	return nil
 }
+
+func TestDynamicRootSourceDiscoversNewRoots(t *testing.T) {
+	base := t.TempDir()
+
+	source := NewDynamicRootSource(base)
+
+	summaries, err := source.List()
+	if err != nil {
+		t.Fatalf("initial list: %v", err)
+	}
+	if len(summaries) != 0 {
+		t.Fatalf("expected 0 summaries initially, got %d", len(summaries))
+	}
+
+	roundDir := filepath.Join(base, "session-1", "rounds", "0001-round")
+	session, err := StartAgentTraceSession(roundDir, AgentTraceMetadata{
+		Command: "codenn",
+	}, "prompt")
+	if err != nil {
+		t.Fatalf("start trace: %v", err)
+	}
+	session.Finish(nil)
+
+	summaries, err = source.List()
+	if err != nil {
+		t.Fatalf("list after new trace: %v", err)
+	}
+	if len(summaries) != 1 {
+		t.Fatalf("expected 1 summary after adding trace, got %d", len(summaries))
+	}
+	if summaries[0].Command != "codenn" {
+		t.Fatalf("expected codenn command, got %q", summaries[0].Command)
+	}
+
+	detail, err := source.Get(summaries[0].ID)
+	if err != nil {
+		t.Fatalf("get detail: %v", err)
+	}
+	if detail.Metadata.ID != summaries[0].ID {
+		t.Fatalf("detail ID mismatch")
+	}
+}
+
+func TestDynamicRootSourceKeepsConsistentPrefixes(t *testing.T) {
+	base := t.TempDir()
+
+	source := NewDynamicRootSource(base)
+
+	roundDir1 := filepath.Join(base, "session-a", "rounds", "0001-round")
+	session1, _ := StartAgentTraceSession(roundDir1, AgentTraceMetadata{Command: "codenn"}, "p1")
+	session1.Finish(nil)
+
+	summaries1, _ := source.List()
+	if len(summaries1) != 1 {
+		t.Fatalf("expected 1 summary, got %d", len(summaries1))
+	}
+	id1 := summaries1[0].ID
+	if !strings.HasPrefix(id1, "s1:") {
+		t.Fatalf("expected s1: prefix, got %q", id1)
+	}
+
+	roundDir2 := filepath.Join(base, "session-b", "rounds", "0001-round")
+	session2, _ := StartAgentTraceSession(roundDir2, AgentTraceMetadata{Command: "codenn"}, "p2")
+	session2.Finish(nil)
+
+	summaries2, _ := source.List()
+	if len(summaries2) != 2 {
+		t.Fatalf("expected 2 summaries, got %d", len(summaries2))
+	}
+
+	var id1Again, id2 string
+	for _, s := range summaries2 {
+		switch s.ID {
+		case id1:
+			id1Again = s.ID
+		default:
+			id2 = s.ID
+		}
+	}
+	if id1Again != id1 {
+		t.Fatalf("first root prefix changed: %q -> %q", id1, id1Again)
+	}
+	if !strings.HasPrefix(id2, "s2:") {
+		t.Fatalf("expected s2: prefix for new root, got %q", id2)
+	}
+}
