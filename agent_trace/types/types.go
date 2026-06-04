@@ -23,6 +23,7 @@ type AgentTraceMetadata struct {
 	ParentSessionID string            `json:"parent_session_id,omitempty"`
 	DelegationID    string            `json:"delegation_id,omitempty"`
 	DelegationLabel string            `json:"delegation_label,omitempty"`
+	CodexThreadID   string            `json:"codex_thread_id,omitempty"`
 	Status          string            `json:"status"`
 	Tags            []string          `json:"tags,omitempty"`
 	Error           string            `json:"error,omitempty"`

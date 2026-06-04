@@ -99,28 +99,34 @@ func opencodeToolActivity(part *opencodeRunPart) *types.AgentTraceActivity {
 			status = types.StatusFailed
 		}
 
-		if part.State.Title != "" {
-			summary = part.State.Title
-		}
-		if part.State.Output != "" {
-			if summary != "" {
-				summary = summary + "\n" + types.CompactTraceOutput(part.State.Output)
-			} else {
-				summary = types.CompactTraceOutput(part.State.Output)
+		var parts []string
+
+		if part.State.Input != nil {
+			if cmd, ok := part.State.Input["command"].(string); ok && cmd != "" {
+				parts = append(parts, cmd)
 			}
 		}
+
+		if part.State.Title != "" {
+			parts = append(parts, part.State.Title)
+		}
+
+		if part.State.Output != "" {
+			parts = append(parts, types.CompactTraceOutput(part.State.Output))
+		}
+
 		if part.State.Error != "" {
 			summary = types.CompactTraceOutput(part.State.Error)
-		}
-		if summary == "" && part.State.Input != nil {
-			if cmd, ok := part.State.Input["command"].(string); ok {
-				summary = cmd
-			} else if path, ok := part.State.Input["path"].(string); ok {
-				summary = path
-			} else if pattern, ok := part.State.Input["pattern"].(string); ok {
-				summary = pattern
-			} else if query, ok := part.State.Input["query"].(string); ok {
-				summary = query
+		} else {
+			summary = strings.Join(parts, "\n")
+			if summary == "" && part.State.Input != nil {
+				if path, ok := part.State.Input["path"].(string); ok {
+					summary = path
+				} else if pattern, ok := part.State.Input["pattern"].(string); ok {
+					summary = pattern
+				} else if query, ok := part.State.Input["query"].(string); ok {
+					summary = query
+				}
 			}
 		}
 	}

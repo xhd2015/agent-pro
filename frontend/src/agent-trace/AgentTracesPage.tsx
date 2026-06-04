@@ -461,7 +461,9 @@ export function AgentTracesPage({ routeBase = DEFAULT_ROUTE_BASE }: { routeBase?
             <div className="agent-trace-log" ref={logRef} onScroll={handleLogScroll}>
               {messageCount === 0 && (
                 <div className="agent-trace-main-empty">
-                  No normalized trace messages yet. Raw log lines: {visibleDetail.raw_lines.length}.
+                  {selectedIsRunning
+                    ? "Agent is working…"
+                    : `No normalized trace messages yet. Raw log lines: ${visibleDetail.raw_lines.length}.`}
                 </div>
               )}
               {visibleDetail.messages.map((msg, index) => (
