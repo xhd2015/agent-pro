@@ -21,6 +21,7 @@ type Command struct {
 	Source      string `json:"source,omitempty"`
 	Path        string `json:"path,omitempty"`
 	Line        int    `json:"line,omitempty"`
+	NameAuto    bool   `json:"nameAuto,omitempty"`
 }
 
 func List(opencodeDir string) ([]Command, error) {
@@ -29,15 +30,16 @@ func List(opencodeDir string) ([]Command, error) {
 	jsonCmds := listFromConfigData(opencodeDir)
 	all = append(all, jsonCmds...)
 
-	mdCmds, err := listFromMarkdown(opencodeDir)
-	if err != nil {
-		return nil, fmt.Errorf("list markdown commands: %w", err)
-	}
-
 	seen := make(map[string]bool)
 	for _, c := range all {
 		seen[c.Name] = true
 	}
+
+	mdCmds, err := listFromMarkdown(opencodeDir, seen)
+	if err != nil {
+		return nil, fmt.Errorf("list markdown commands: %w", err)
+	}
+
 	for _, c := range mdCmds {
 		if !seen[c.Name] {
 			all = append(all, c)
@@ -100,7 +102,7 @@ func RemoveFromMap(cmdMap map[string]interface{}, commands []Command) (removed i
 	return
 }
 
-func ParseTemplate(path string) (*Command, error) {
+func ParseTemplate(path string, fallbackName string) (*Command, error) {
 	doc, err := markdown.ParseWithMeta(path)
 	if err != nil {
 		return nil, err
@@ -121,7 +123,12 @@ func ParseTemplate(path string) (*Command, error) {
 	}
 
 	if c.Name == "" {
-		return nil, fmt.Errorf("frontmatter missing required field: name")
+		if fallbackName != "" {
+			c.Name = fallbackName
+			c.NameAuto = true
+		} else {
+			return nil, fmt.Errorf("frontmatter missing required field: name")
+		}
 	}
 
 	return c, nil
@@ -176,7 +183,7 @@ func listFromConfigData(opencodeDir string) []Command {
 	return result
 }
 
-func listFromMarkdown(opencodeDir string) ([]Command, error) {
+func listFromMarkdown(opencodeDir string, seenNames map[string]bool) ([]Command, error) {
 	var result []Command
 
 	for _, sub := range []string{"command", "commands"} {
@@ -188,8 +195,17 @@ func listFromMarkdown(opencodeDir string) ([]Command, error) {
 			if d.IsDir() || !strings.HasSuffix(d.Name(), ".md") {
 				return nil
 			}
-			cmd, parseErr := ParseTemplate(path)
+			rel, relErr := filepath.Rel(subDir, path)
+			if relErr != nil {
+				rel = d.Name()
+			}
+			fallbackName := strings.TrimSuffix(rel, ".md")
+
+			cmd, parseErr := ParseTemplate(path, fallbackName)
 			if parseErr != nil {
+				if !seenNames[fallbackName] {
+					fmt.Fprintf(os.Stderr, "Warning: skipping %s: %v\n", path, parseErr)
+				}
 				return nil
 			}
 			cmd.Source = "markdown"

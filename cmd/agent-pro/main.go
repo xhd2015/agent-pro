@@ -237,10 +237,14 @@ func printCommandsLocation(label, opencodeDir, baseDir, home string) {
 	fmt.Printf("  Found %d command(s):\n", len(cmds))
 	for _, c := range cmds {
 		loc := formatLocation(c.Path, c.Line, home)
+		name := c.Name
+		if c.NameAuto {
+			name += " [auto]"
+		}
 		if c.Description != "" {
-			fmt.Printf("    %-35s %s\n      %s\n", c.Name, c.Description, loc)
+			fmt.Printf("    %-35s %s\n      %s\n", name, c.Description, loc)
 		} else {
-			fmt.Printf("    %-35s %s\n", c.Name, loc)
+			fmt.Printf("    %-35s %s\n", name, loc)
 		}
 	}
 	fmt.Println()
