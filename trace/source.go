@@ -381,6 +381,9 @@ func SourceForPath(path string) (Source, error) {
 	}
 	info, err := os.Stat(abs)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return NewRootSource(abs), nil
+		}
 		return nil, err
 	}
 	if !info.IsDir() {
