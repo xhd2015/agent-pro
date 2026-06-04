@@ -52,6 +52,7 @@ func Run(args []string) error {
 	var staticDir string
 	var focusCommand string
 	var includeLinked bool
+	var noPrintSources bool
 	var printMode bool
 	var printMessages int
 	var routePrefix string
@@ -65,6 +66,7 @@ func Run(args []string) error {
 		String("--static-dir", &staticDir).
 		String("--focus-command", &focusCommand).
 		Bool("--include-linked", &includeLinked).
+		Bool("--no-print-sources", &noPrintSources).
 		Bool("--print", &printMode).
 		Int("--print-messages", &printMessages).
 		String("--route-prefix", &routePrefix).
@@ -121,7 +123,9 @@ func Run(args []string) error {
 		}
 	}
 
-	printTraceSources(sourceDescriptions)
+	if !noPrintSources {
+		printTraceSources(sourceDescriptions)
+	}
 
 	if openBrowser {
 		go openLocalURL(port, routePrefix)
