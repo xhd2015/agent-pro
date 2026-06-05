@@ -1,111 +1,169 @@
 package run
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
+	"github.com/xhd2015/agent-pro/agent_trace/types"
 	"github.com/xhd2015/agent-pro/trace"
 )
 
-func printTraceReport(source trace.Source, descriptions []string, messageLimit int) error {
-	return writeTraceReport(os.Stdout, source, descriptions, messageLimit)
+func printHumanReport(source trace.Source, descriptions []string) error {
+	return writeHumanReport(os.Stdout, source, descriptions)
 }
 
-func writeTraceReport(w io.Writer, source trace.Source, descriptions []string, messageLimit int) error {
-	if messageLimit < 0 {
-		messageLimit = 0
-	}
-	fmt.Fprintln(w, "Agent trace sources:")
-	if len(descriptions) == 0 {
-		fmt.Fprintln(w, "  none discovered")
-	} else {
-		for _, desc := range descriptions {
-			fmt.Fprintf(w, "  %s\n", desc)
-		}
-	}
+func writeHumanReport(w io.Writer, source trace.Source, descriptions []string) error {
 	summaries, err := source.List()
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Traces:")
-	if len(summaries) == 0 {
-		fmt.Fprintln(w, "  none")
-		return nil
-	}
+
 	for _, summary := range summaries {
-		writeTraceSummary(w, summary)
-		if messageLimit == 0 {
-			continue
-		}
 		detail, err := source.Get(summary.ID)
 		if err != nil {
 			fmt.Fprintf(w, "  detail_error: %v\n", err)
 			continue
 		}
-		writeRecentMessages(w, detail, messageLimit)
+		writeHumanTrace(w, summary, detail)
 	}
+
 	return nil
 }
 
-func writeTraceSummary(w io.Writer, summary trace.AgentTraceSummary) {
-	fmt.Fprintf(w, "- %s %s %s", summary.ID, emptyDefault(summary.Command, "agent"), emptyDefault(summary.Status, "unknown"))
-	if summary.AgentRunnerID != "" || summary.Model != "" {
-		fmt.Fprintf(w, " %s/%s", emptyDefault(summary.AgentRunnerID, "agent"), emptyDefault(summary.Model, "default"))
-	}
-	fmt.Fprintln(w)
-	if summary.DelegationLabel != "" || summary.DelegationID != "" {
-		fmt.Fprintf(w, "  delegation: %s\n", emptyDefault(firstNonEmpty(summary.DelegationLabel, summary.DelegationID), "-"))
-	}
-	if summary.ParentTraceID != "" {
-		fmt.Fprintf(w, "  parent: %s\n", summary.ParentTraceID)
-	}
-	if summary.Workspace != "" {
-		fmt.Fprintf(w, "  workspace: %s\n", summary.Workspace)
-	}
-	fmt.Fprintf(w, "  lines: %d\n", summary.LogLineCount)
-	if len(summary.Children) > 0 {
-		fmt.Fprintln(w, "  children:")
-		for _, child := range summary.Children {
-			label := firstNonEmpty(child.DelegationLabel, child.DelegationID)
-			if label != "" {
-				label = " label=" + label
-			}
-			fmt.Fprintf(w, "    - %s %s %s%s\n", child.ID, emptyDefault(child.Command, "agent"), emptyDefault(child.Status, "unknown"), label)
-		}
-	}
-}
+func writeHumanTrace(w io.Writer, summary trace.AgentTraceSummary, detail *trace.AgentTraceDetail) {
+	sessionID := extractSessionID(detail)
+	runner := emptyDefault(summary.AgentRunnerID, "agent")
+	lines := summary.LogLineCount
 
-func writeRecentMessages(w io.Writer, detail *trace.AgentTraceDetail, limit int) {
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "═══════════════════════════════════════════════════════════════\n")
+	if sessionID != "" {
+		fmt.Fprintf(w, "  Session: %s\n", sessionID)
+	}
+	fmt.Fprintf(w, "  Events:  %d lines  ·  %s  ·  %s status\n", lines, runner, summary.Status)
+	fmt.Fprintf(w, "═══════════════════════════════════════════════════════════════\n")
+	fmt.Fprintln(w)
+
 	if detail == nil || len(detail.Messages) == 0 {
+		fmt.Fprintln(w, "  (no messages)")
 		return
 	}
-	start := len(detail.Messages) - limit
-	if start < 0 {
-		start = 0
+
+	for i, msg := range detail.Messages {
+		writeHumanMessage(w, i+1, msg)
 	}
-	fmt.Fprintln(w, "  recent_messages:")
-	for _, msg := range detail.Messages[start:] {
-		switch {
-		case msg.ToolCall != nil:
-			fmt.Fprintf(w, "    tool_call: %s\n", trimOneLine(msg.ToolCall.Summary, 160))
-		default:
-			fmt.Fprintf(w, "    %s: %s\n", emptyDefault(string(msg.Role), "message"), trimOneLine(msg.Content, 220))
+
+	fmt.Fprintln(w, "───────────────────────────────────────────────────────────────")
+	if summary.Status == "completed" && summary.Error == "" {
+		fmt.Fprintln(w, "  ✓ Done")
+	} else if summary.Status == "failed" {
+		fmt.Fprintf(w, "  ✗ Failed: %s\n", summary.Error)
+	} else {
+		fmt.Fprintf(w, "  ○ Status: %s\n", summary.Status)
+	}
+	fmt.Fprintln(w, "───────────────────────────────────────────────────────────────")
+}
+
+func writeHumanMessage(w io.Writer, n int, msg types.AgentTraceMessage) {
+	if msg.ToolCall != nil {
+		tc := msg.ToolCall
+		tool := strings.ToLower(tc.ToolName)
+		summary := strings.TrimSpace(tc.Summary)
+
+		icon, label := toolIcon(tool)
+		fmt.Fprintf(w, "[%d]  %-4s %s\n", n, icon, label)
+
+		// show summary
+		for _, line := range strings.Split(summary, "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			fmt.Fprintf(w, "     %s\n", truncateLine(line, 70))
 		}
+
+		// show file changes
+		if len(tc.FileChanges) > 0 {
+			for _, fc := range tc.FileChanges {
+				fmt.Fprintf(w, "     →  %s %s\n", fc.Kind, shortPath(fc.Path))
+			}
+		}
+
+		if tc.Status == types.StatusFailed {
+			fmt.Fprintf(w, "     ✗  FAILED\n")
+		}
+		fmt.Fprintln(w)
+	} else {
+		text := strings.TrimSpace(msg.Content)
+		if text == "" {
+			return
+		}
+		fmt.Fprintf(w, "[%d]  💬   ASSISTANT\n", n)
+		for _, line := range strings.Split(text, "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			fmt.Fprintf(w, "     %s\n", truncateLine(line, 70))
+		}
+		fmt.Fprintln(w)
 	}
 }
 
-func trimOneLine(value string, limit int) string {
-	value = strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
-	if limit > 0 && len(value) > limit {
-		return value[:limit] + "..."
+func toolIcon(tool string) (string, string) {
+	switch tool {
+	case "bash", "shell", "execute", "exec", "run":
+		return "⚡", "RUN"
+	case "read", "read_file", "read file":
+		return "📖", "READ"
+	case "write", "edit", "write_file", "write file", "patch":
+		return "✏️", "EDIT"
+	case "list", "ls", "list_files", "list files":
+		return "🔍", "LIST"
+	case "glob", "search":
+		return "🔎", "SEARCH"
+	case "grep":
+		return "🔎", "GREP"
+	case "task":
+		return "🤖", "TASK"
+	case "todowrite", "todo":
+		return "📋", "TODO"
+	default:
+		return "🔧", strings.ToUpper(tool)
 	}
-	if value == "" {
-		return "-"
+}
+
+func extractSessionID(detail *trace.AgentTraceDetail) string {
+	if detail == nil {
+		return ""
 	}
-	return value
+	for _, raw := range detail.RawLines {
+		var m struct {
+			SessionID string `json:"sessionID"`
+		}
+		if err := json.Unmarshal(raw, &m); err == nil && m.SessionID != "" {
+			return m.SessionID
+		}
+	}
+	return ""
+}
+
+func truncateLine(s string, max int) string {
+	if len(s) > max {
+		return s[:max-3] + "..."
+	}
+	return s
+}
+
+func shortPath(path string) string {
+	parts := strings.Split(path, string(os.PathSeparator))
+	if len(parts) > 2 {
+		parts = parts[len(parts)-2:]
+	}
+	return strings.Join(parts, "/")
 }
 
 func emptyDefault(value, fallback string) string {
@@ -113,13 +171,4 @@ func emptyDefault(value, fallback string) string {
 		return fallback
 	}
 	return value
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
 }

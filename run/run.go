@@ -28,8 +28,7 @@ Options:
   --static-dir DIR         frontend dist directory to serve instead of embedded dist
   --focus-command COMMAND  foreground traces for a command, e.g. murphy or codenn
   --include-linked         include linked parent/child traces with focused traces
-  --print                  print trace summary to terminal and exit
-  --print-messages N       number of recent normalized messages to print (default: 3)
+  --print                  print full human-readable trace to terminal and exit
   --json                   print trace summaries as JSON and exit
   --trace-id ID            with --json, include only one trace id
   --command COMMAND        with --json, filter traces by command
@@ -58,8 +57,7 @@ func Run(args []string) error {
 	var focusCommand string
 	var includeLinked bool
 	var noPrintSources bool
-	var printMode bool
-	var printMessages int
+	var humanMode bool
 	var jsonMode bool
 	var filterTraceID string
 	var filterCommand string
@@ -77,8 +75,7 @@ func Run(args []string) error {
 		String("--focus-command", &focusCommand).
 		Bool("--include-linked", &includeLinked).
 		Bool("--no-print-sources", &noPrintSources).
-		Bool("--print", &printMode).
-		Int("--print-messages", &printMessages).
+		Bool("--print", &humanMode).
 		Bool("--json", &jsonMode).
 		String("--trace-id", &filterTraceID).
 		String("--command", &filterCommand).
@@ -121,11 +118,8 @@ func Run(args []string) error {
 		server.SetFrontendDistDir(staticDir)
 	}
 
-	if printMode {
-		if printMessages == 0 {
-			printMessages = 3
-		}
-		return printTraceReport(source, sourceDescriptions, printMessages)
+	if humanMode {
+		return printHumanReport(source, sourceDescriptions)
 	}
 	if jsonMode {
 		return printTraceJSONReport(os.Stdout, source, sourceDescriptions, traceJSONFilters{

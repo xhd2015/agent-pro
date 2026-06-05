@@ -32,6 +32,7 @@ type AskOptions struct {
 	AgentMode        bool
 	DisableSubAgents bool
 	SandboxMode      string
+	SessionID        string
 	OnToolCall       ToolCallCallback
 }
 

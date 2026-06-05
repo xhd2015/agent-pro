@@ -14,6 +14,9 @@ import (
 	openskills "github.com/xhd2015/agent-pro/agent/opencode/skills"
 	"github.com/xhd2015/agent-pro/agent/opencode/permissions"
 	"github.com/xhd2015/agent-pro/agent/opencode/plugins"
+	"github.com/xhd2015/agent-pro/frontend"
+	"github.com/xhd2015/agent-pro/run"
+	"github.com/xhd2015/agent-pro/server"
 	"github.com/xhd2015/less-gen/flags"
 )
 
@@ -23,6 +26,7 @@ Usage: agent-pro <command> [ARGS]
 Commands:
   opencode          manage opencode hooks and permissions
   codex             manage codex configuration
+  traces            view agent trace sessions (web viewer)
 
 Run agent-pro <command> --help for command-specific options.
 `
@@ -40,6 +44,7 @@ Run agent-pro opencode <command> --help for command-specific options.
 `
 
 func main() {
+	server.Init(frontend.DistFS, frontend.TemplateHTML)
 	if err := handle(os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "agent-pro: %v\n", err)
 		os.Exit(1)
@@ -57,6 +62,8 @@ func handle(args []string) error {
 		return handleOpenCode(args[1:])
 	case "codex":
 		return handleCodex(args[1:])
+	case "traces":
+		return handleTraces(args[1:])
 	default:
 		return fmt.Errorf("unknown command: %s", args[0])
 	}
@@ -1390,6 +1397,12 @@ func printSkillGroup(label string, skills []openskills.SkillInfo, home string) {
 		}
 	}
 	fmt.Println()
+}
+
+// --- traces ---
+
+func handleTraces(args []string) error {
+	return run.Run(args)
 }
 
 // --- helpers ---

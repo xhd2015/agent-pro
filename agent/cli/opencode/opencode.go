@@ -50,6 +50,9 @@ func (a *OpencodeAgent) Ask(ctx context.Context, question string, opts *registry
 		}
 		args = append(args, "--model", model)
 	}
+	if opts != nil && opts.SessionID != "" {
+		args = append(args, "--session", opts.SessionID)
+	}
 	fullQuestion := question
 	if opts != nil && opts.DisableSubAgents {
 		fullQuestion += "\n\n# CRITICAL RULE: DO NOT USE SUB-AGENTS\nYou MUST NOT use the Task tool (sub-agents/subagents) under any circumstances. Perform all work directly yourself without delegating to sub-agents."
