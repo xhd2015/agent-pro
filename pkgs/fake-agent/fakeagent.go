@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
+
+	"github.com/xhd2015/agent-pro/pkgs/fake-agent/probe"
 )
 
 type EventType string
@@ -53,6 +55,11 @@ type FileChange struct {
 	Kind string `json:"kind"`
 }
 
+const (
+	maxRounds     = 31
+	responseChance = 1.0 / 32.0
+)
+
 type Generator struct {
 	rng *rand.Rand
 }
@@ -86,16 +93,22 @@ func (g *Generator) GenerateSession(prompt string) []Event {
 	reasoningEvents := g.generateReasoning(reasoningID, topic)
 	events = append(events, reasoningEvents...)
 
-	if g.chance(0.35) {
-		cmdID := g.NextID()
-		cmdEvents := g.generateCommandExecution(cmdID)
-		events = append(events, cmdEvents...)
-	}
+	probeList := probe.Scan(prompt)
+	probeList = probe.Merge(probeList, probe.DefaultSuggestions())
 
-	if g.chance(0.3) {
-		fcID := g.NextID()
-		fcEvents := g.generateFileChange(fcID)
-		events = append(events, fcEvents...)
+	for round := 0; round < maxRounds; round++ {
+		if g.chance(responseChance) {
+			break
+		}
+
+		suggestion := g.pickSuggestion(probeList)
+		toolEvents, result := g.execProbe(suggestion)
+		events = append(events, toolEvents...)
+
+		if result != "" {
+			newProbes := probe.Scan(result)
+			probeList = probe.Merge(probeList, newProbes)
+		}
 	}
 
 	msgID := g.NextID()
@@ -103,6 +116,129 @@ func (g *Generator) GenerateSession(prompt string) []Event {
 	events = append(events, msgEvents...)
 
 	return events
+}
+
+func (g *Generator) pickSuggestion(suggestions []probe.Suggestion) probe.Suggestion {
+	if len(suggestions) == 0 {
+		return probe.Suggestion{Kind: "tool_call", Value: "echo no suggestions"}
+	}
+	return suggestions[g.rng.Intn(len(suggestions))]
+}
+
+func (g *Generator) execProbe(s probe.Suggestion) ([]Event, string) {
+	id := g.NextID()
+	switch s.Kind {
+	case probe.KindToolCall:
+		return g.execToolCall(id, s.Value)
+	case probe.KindFileRead:
+		return g.execFileRead(id, s.Value)
+	case probe.KindFileWrite:
+		return g.execFileWrite(id, s.Value)
+	case probe.KindSearch:
+		return g.execSearch(id, s.Value)
+	default:
+		return g.execRandomTool(id)
+	}
+}
+
+func (g *Generator) execToolCall(id, cmd string) ([]Event, string) {
+	stdout := fakes[g.rng.Intn(len(fakes))]
+	started := Event{
+		Type: EventStarted,
+		Item: &EventItem{ID: id, Type: ItemCommandExecution, Command: cmd},
+	}
+	exitCode := 0
+	completed := Event{
+		Type: EventCompleted,
+		Item: &EventItem{
+			ID:               id,
+			Type:             ItemCommandExecution,
+			Command:          cmd,
+			AggregatedOutput: stdout.text,
+			ExitCode:         &exitCode,
+			Status:           "completed",
+		},
+	}
+	return []Event{started, completed}, stdout.text
+}
+
+func (g *Generator) execFileRead(id, path string) ([]Event, string) {
+	cmd := "cat " + path
+	stdout := fakeReadContent[g.rng.Intn(len(fakeReadContent))]
+	started := Event{
+		Type: EventStarted,
+		Item: &EventItem{ID: id, Type: ItemCommandExecution, Command: cmd},
+	}
+	exitCode := 0
+	completed := Event{
+		Type: EventCompleted,
+		Item: &EventItem{
+			ID:               id,
+			Type:             ItemCommandExecution,
+			Command:          cmd,
+			AggregatedOutput: stdout.text,
+			ExitCode:         &exitCode,
+			Status:           "completed",
+		},
+	}
+	return []Event{started, completed}, stdout.text
+}
+
+func (g *Generator) execFileWrite(id, path string) ([]Event, string) {
+	kind := "add"
+	if g.rng.Intn(2) == 0 {
+		kind = "modify"
+	}
+	started := Event{
+		Type: EventStarted,
+		Item: &EventItem{ID: id, Type: ItemFileChange},
+	}
+	completed := Event{
+		Type: EventCompleted,
+		Item: &EventItem{
+			ID:      id,
+			Type:    ItemFileChange,
+			Status:  "completed",
+			Changes: []FileChange{{Path: path, Kind: kind}},
+		},
+	}
+	return []Event{started, completed}, path
+}
+
+func (g *Generator) execSearch(id, query string) ([]Event, string) {
+	cmd := "grep -rn " + query + " ."
+	stdout := fakeSearchResults[g.rng.Intn(len(fakeSearchResults))]
+	started := Event{
+		Type: EventStarted,
+		Item: &EventItem{ID: id, Type: ItemCommandExecution, Command: cmd},
+	}
+	exitCode := 0
+	completed := Event{
+		Type: EventCompleted,
+		Item: &EventItem{
+			ID:               id,
+			Type:             ItemCommandExecution,
+			Command:          cmd,
+			AggregatedOutput: stdout,
+			ExitCode:         &exitCode,
+			Status:           "completed",
+		},
+	}
+	return []Event{started, completed}, stdout
+}
+
+func (g *Generator) execRandomTool(id string) ([]Event, string) {
+	defaultCommands := []string{
+		"ls -la",
+		"git status",
+		"git diff",
+		"cat README.md",
+		"find . -name \"*.go\"",
+		"go test ./...",
+		"go build ./...",
+	}
+	cmd := defaultCommands[g.rng.Intn(len(defaultCommands))]
+	return g.execToolCall(id, cmd)
 }
 
 func (g *Generator) generateReasoning(id, topic string) []Event {
@@ -152,94 +288,6 @@ func (g *Generator) generateReasoning(id, topic string) []Event {
 	return events
 }
 
-func (g *Generator) generateCommandExecution(id string) []Event {
-	commands := [][]string{
-		{"ls", "-la"},
-		{"git", "status"},
-		{"git", "diff"},
-		{"cat", "README.md"},
-		{"find", ".", "-name", "*.go"},
-		{"go", "test", "./..."},
-		{"go", "build", "./..."},
-	}
-	cmd := commands[g.rng.Intn(len(commands))]
-	cmdStr := strings.Join(cmd, " ")
-
-	outputs := []string{
-		"src/\n  main.go\n  utils.go\nREADME.md\n",
-		"On branch main\nnothing to commit, working tree clean\n",
-		"",
-		"# Project\n\nThis is a sample project.\n",
-		"./cmd/main.go\n./pkgs/foo/foo.go\n",
-		"ok \t github.com/xhd2015/agent-pro/... \t 0.123s\n",
-		"",
-	}
-
-	started := Event{
-		Type: EventStarted,
-		Item: &EventItem{
-			ID:      id,
-			Type:    ItemCommandExecution,
-			Command: cmdStr,
-		},
-	}
-
-	exitCode := 0
-	completed := Event{
-		Type: EventCompleted,
-		Item: &EventItem{
-			ID:               id,
-			Type:             ItemCommandExecution,
-			Command:          cmdStr,
-			AggregatedOutput: outputs[g.rng.Intn(len(outputs))],
-			ExitCode:         &exitCode,
-			Status:           "completed",
-		},
-	}
-
-	return []Event{started, completed}
-}
-
-func (g *Generator) generateFileChange(id string) []Event {
-	kinds := []string{"add", "modify", "delete"}
-	paths := []string{
-		"/tmp/output.txt",
-		"/tmp/result.go",
-		"/tmp/config.json",
-		"/tmp/script.sh",
-		"/tmp/notes.md",
-	}
-
-	n := g.rng.Intn(3) + 1
-	var changes []FileChange
-	for i := 0; i < n; i++ {
-		changes = append(changes, FileChange{
-			Path: paths[g.rng.Intn(len(paths))],
-			Kind: kinds[g.rng.Intn(len(kinds))],
-		})
-	}
-
-	started := Event{
-		Type: EventStarted,
-		Item: &EventItem{
-			ID:   id,
-			Type: ItemFileChange,
-		},
-	}
-
-	completed := Event{
-		Type: EventCompleted,
-		Item: &EventItem{
-			ID:      id,
-			Type:    ItemFileChange,
-			Status:  "completed",
-			Changes: changes,
-		},
-	}
-
-	return []Event{started, completed}
-}
-
 func (g *Generator) generateMessage(id, topic string) []Event {
 	responses := []string{
 		fmt.Sprintf("I've completed the task related to %s. Let me know if you need any adjustments.", topic),
@@ -275,6 +323,35 @@ func (g *Generator) shufflePick(items []string, n int) []string {
 		result[i] = items[perm[i]]
 	}
 	return result
+}
+
+type fakeCommand struct {
+	cmd  string
+	text string
+}
+
+var fakes = []fakeCommand{
+	{"ls -la", "src/\n  main.go\n  utils.go\nREADME.md\n"},
+	{"git status", "On branch main\nnothing to commit, working tree clean\n"},
+	{"git diff", ""},
+	{"cat README.md", "# Project\n\nThis is a sample project.\nSee docs/ for /tmp/details.\n"},
+	{"find . -name \"*.go\"", "./cmd/main.go\n./pkgs/foo/foo.go\n"},
+	{"go test ./...", "ok \t github.com/xhd2015/agent-pro/... \t 0.123s\n"},
+	{"go build ./...", ""},
+}
+
+var fakeReadContent = []fakeCommand{
+	{"cat config.json", "{\n  \"version\": \"1.0\",\n  \"include\": [\"/tmp/shared\", \"/tmp/plugins\"]\n}\n"},
+	{"cat Makefile", "build:\n\tgo build -o /tmp/output ./cmd/...\n\ntest:\n\tgo test ./...\n"},
+	{"cat .env", "DATABASE_URL=postgres://localhost/db\nAPI_KEY=sk-xxx\n"},
+	{"cat TODO.md", "# TODO\n\n- fix bug in /tmp/auth.go\n- add /tmp/feature.go\n- search for deprecated\n"},
+}
+
+var fakeSearchResults = []string{
+	"src/main.go:10: import \"github.com/xhd2015/agent-pro\"\nsrc/main.go:42: TODO: refactor /tmp/legacy.go\n",
+	"README.md:5: See /tmp/docs/guide.md for setup.\nREADME.md:20: Run `go test ./tmp/...`\n",
+	"config.toml:3: path = \"/tmp/data\"\nconfig.toml:8: include = \"/tmp/extra\"\n",
+	"",
 }
 
 func extractTopic(prompt string) string {

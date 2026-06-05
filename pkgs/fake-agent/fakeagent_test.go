@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/xhd2015/agent-pro/pkgs/fake-agent/probe"
 )
 
 func TestNewGenerator(t *testing.T) {
@@ -195,5 +197,176 @@ func TestExtractTopic(t *testing.T) {
 		if !strings.Contains(got, tt.want) {
 			t.Errorf("extractTopic(%q) = %q, want containing %q", tt.input, got, tt.want)
 		}
+	}
+}
+
+func TestGenerateSession_WithProbeBacktick(t *testing.T) {
+	g := NewGenerator(42)
+	events := g.GenerateSession("please run `echo hello` for me")
+	found := false
+	for _, e := range events {
+		if e.Item != nil && e.Item.Command == "echo hello" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		for _, e := range events {
+			if e.Item != nil && e.Item.Type == ItemCommandExecution {
+				t.Logf("found command: %s", e.Item.Command)
+			}
+		}
+		t.Fatal("no command_execution with 'echo hello' found")
+	}
+}
+
+func TestGenerateSession_WithProbeFilePath(t *testing.T) {
+	g := NewGenerator(42)
+	events := g.GenerateSession("read /tmp/config.json and check it")
+	found := false
+	for _, e := range events {
+		if e.Item != nil && e.Item.Command == "cat /tmp/config.json" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		for _, e := range events {
+			if e.Item != nil && e.Item.Command != "" {
+				t.Logf("found command: %s", e.Item.Command)
+			}
+		}
+		t.Fatal("no cat /tmp/config.json found")
+	}
+}
+
+func TestGenerateSession_WithProbeFileWrite(t *testing.T) {
+	g := NewGenerator(100)
+	events := g.GenerateSession("create /tmp/out.txt with some content")
+	found := false
+	for _, e := range events {
+		if e.Item != nil && e.Item.Type == ItemFileChange && len(e.Item.Changes) > 0 {
+			for _, c := range e.Item.Changes {
+				if c.Path == "/tmp/out.txt" {
+					found = true
+					break
+				}
+			}
+		}
+		if found {
+			break
+		}
+	}
+	if !found {
+		for _, e := range events {
+			if e.Item != nil && e.Item.Type == ItemFileChange {
+				t.Logf("found file_change: %+v", e.Item.Changes)
+			}
+		}
+		t.Fatal("no file_change with /tmp/out.txt found")
+	}
+}
+
+func TestGenerateSession_WithProbeSearch(t *testing.T) {
+	g := NewGenerator(42)
+	events := g.GenerateSession("grep TODO src/")
+	found := false
+	for _, e := range events {
+		if e.Item != nil && strings.HasPrefix(e.Item.Command, "grep -rn TODO") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		for _, e := range events {
+			if e.Item != nil && strings.Contains(e.Item.Command, "grep") {
+				t.Logf("found grep: %s", e.Item.Command)
+			}
+		}
+		t.Fatal("no grep command found")
+	}
+}
+
+func TestGenerateSession_RoundLimit(t *testing.T) {
+	for seed := int64(0); seed < 50; seed++ {
+		g := NewGenerator(seed)
+		events := g.GenerateSession("some task")
+
+		toolRoundCount := 0
+		messageSeen := false
+		for _, e := range events {
+			if e.Item == nil {
+				continue
+			}
+			switch e.Item.Type {
+			case ItemCommandExecution:
+				if e.Type == EventCompleted {
+					toolRoundCount++
+				}
+			case ItemFileChange:
+				if e.Type == EventCompleted {
+					toolRoundCount++
+				}
+			case ItemMessage:
+				if e.Type == EventCompleted {
+					messageSeen = true
+				}
+			}
+		}
+
+		if toolRoundCount > maxRounds {
+			t.Fatalf("seed %d: %d tool rounds exceeds max %d", seed, toolRoundCount, maxRounds)
+		}
+		if !messageSeen {
+			t.Fatalf("seed %d: no message at end", seed)
+		}
+	}
+}
+
+func TestGenerateSession_ResponseEventuallyProduced(t *testing.T) {
+	for seed := int64(0); seed < 30; seed++ {
+		g := NewGenerator(seed)
+		events := g.GenerateSession("some task")
+
+		hasMessage := false
+		for _, e := range events {
+			if e.Item != nil && e.Item.Type == ItemMessage && e.Type == EventCompleted {
+				hasMessage = true
+				break
+			}
+		}
+		if !hasMessage {
+			t.Fatalf("seed %d: no final message produced", seed)
+		}
+	}
+}
+
+func TestExecProbe_ReturnsResultText(t *testing.T) {
+	g := NewGenerator(42)
+	events, result := g.execProbe(probe.Suggestion{Kind: "tool_call", Value: "echo test"})
+	if len(events) == 0 {
+		t.Fatal("execProbe returned no events")
+	}
+	_ = result // some commands legitimately have empty output
+
+	_, result2 := g.execProbe(probe.Suggestion{Kind: "file_read", Value: "/tmp/test.txt"})
+	if result2 == "" {
+		t.Fatal("execFileRead returned empty result")
+	}
+}
+
+func TestPickSuggestion_EmptySuggestsDefault(t *testing.T) {
+	g := NewGenerator(42)
+	s := g.pickSuggestion(nil)
+	if s.Kind == "" {
+		t.Fatal("empty suggestions should return a default")
+	}
+}
+
+func TestExecProbe_FileWriteReturnsPath(t *testing.T) {
+	g := NewGenerator(42)
+	_, result := g.execProbe(probe.Suggestion{Kind: "file_write", Value: "/tmp/test.txt"})
+	if result != "/tmp/test.txt" {
+		t.Fatalf("file write result = %q, want /tmp/test.txt", result)
 	}
 }
