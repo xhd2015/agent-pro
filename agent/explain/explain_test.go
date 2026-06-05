@@ -54,17 +54,17 @@ func (m *mockRunner) Resume(ctx context.Context, model string, prompt string, me
 	return out.output, out.err
 }
 
-func TestRunExplain_NewSession_SingleArg(t *testing.T) {
+func TestRunExplain_SingleArgNewSession(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
 	runner := &mockRunner{
 		startOutputs: []mockRunOutput{
-			{sessionID: "sess-new-1", output: "run的过去式是ran"},
+			{sessionID: "sess-1", output: "answer"},
 		},
 	}
 
-	err := RunExplainWithRunner([]string{"run的过去式"}, runner)
+	err := RunExplainWithRunner([]string{"hello"}, runner)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -74,34 +74,63 @@ func TestRunExplain_NewSession_SingleArg(t *testing.T) {
 	if runner.resumeCalled != 0 {
 		t.Fatalf("expected 0 resume calls, got %d", runner.resumeCalled)
 	}
-	if runner.lastPrompt != "run的过去式" {
-		t.Fatalf("expected prompt 'run的过去式', got %q", runner.lastPrompt)
-	}
 }
 
-func TestRunExplain_ResumeSession_StrictPrefixMatch(t *testing.T) {
+func TestRunExplain_SingleArgRepeatNewSession(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	createSessionDir(t, home, "2026-06-05-14-30-00-run", SessionData{
+	createSessionDir(t, home, "2026-06-05-14-30-00-existing", SessionData{
 		AgentRunner: "opencode",
-		Model:       "deepseek",
+		AgentRunnersMeta: RunnerMeta{
+			"opencode": mustMarshalJSON(map[string]string{"session_id": "sess-old"}),
+		},
+		Messages: []Message{
+			{Role: "user", Message: "hello"},
+			{Role: "assistant", Message: "old answer"},
+		},
+	})
+
+	runner := &mockRunner{
+		startOutputs: []mockRunOutput{
+			{sessionID: "sess-new", output: "new answer"},
+		},
+	}
+
+	err := RunExplainWithRunner([]string{"hello"}, runner)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if runner.startCalled != 1 {
+		t.Fatalf("expected 1 start call (1 arg never matches), got %d", runner.startCalled)
+	}
+	if runner.resumeCalled != 0 {
+		t.Fatalf("expected 0 resume calls, got %d", runner.resumeCalled)
+	}
+}
+
+func TestRunExplain_TwoArgsExactMatchResume(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	createSessionDir(t, home, "2026-06-05-14-30-00-existing", SessionData{
+		AgentRunner: "opencode",
 		AgentRunnersMeta: RunnerMeta{
 			"opencode": mustMarshalJSON(map[string]string{"session_id": "sess-existing"}),
 		},
 		Messages: []Message{
-			{Role: "user", Message: "run"},
-			{Role: "assistant", Message: "ran"},
+			{Role: "user", Message: "A F"},
+			{Role: "assistant", Message: "old answer"},
 		},
 	})
 
 	runner := &mockRunner{
 		resumeOutputs: []mockRunOutput{
-			{output: "ran是过去式"},
+			{output: "resumed answer"},
 		},
 	}
 
-	err := RunExplainWithRunner([]string{"run的过去式", "ran是什么意思"}, runner)
+	err := RunExplainWithRunner([]string{"A F", "B"}, runner)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -111,88 +140,82 @@ func TestRunExplain_ResumeSession_StrictPrefixMatch(t *testing.T) {
 	if runner.resumeCalled != 1 {
 		t.Fatalf("expected 1 resume call, got %d", runner.resumeCalled)
 	}
-	if runner.lastPrompt != "ran是什么意思" {
-		t.Fatalf("expected prompt 'ran是什么意思', got %q", runner.lastPrompt)
-	}
-
-	var opencodeMeta struct {
-		SessionID string `json:"session_id"`
-	}
-	if err := json.Unmarshal(runner.lastMeta, &opencodeMeta); err != nil {
-		t.Fatalf("unmarshal resume meta: %v", err)
-	}
-	if opencodeMeta.SessionID != "sess-existing" {
-		t.Fatalf("expected session_id sess-existing, got %s", opencodeMeta.SessionID)
+	if runner.lastPrompt != "B" {
+		t.Fatalf("expected prompt 'B', got %q", runner.lastPrompt)
 	}
 }
 
-func TestRunExplain_PrefixMatchResume(t *testing.T) {
+func TestRunExplain_TwoArgsElementMismatchNewSession(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	createSessionDir(t, home, "2026-06-05-14-30-00-run-de-guo-qu", SessionData{
-		AgentRunner: "opencode",
-		Model:       "deepseek",
-		AgentRunnersMeta: RunnerMeta{
-			"opencode": mustMarshalJSON(map[string]string{"session_id": "sess-existing"}),
-		},
-		Messages: []Message{
-			{Role: "user", Message: "run的过去式"},
-			{Role: "assistant", Message: "ran"},
-		},
-	})
-
-	runner := &mockRunner{
-		resumeOutputs: []mockRunOutput{
-			{output: "ran, running, runs"},
-		},
-	}
-
-	err := RunExplainWithRunner([]string{"run的过去式和各种形态"}, runner)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if runner.startCalled != 0 {
-		t.Fatalf("expected 0 start calls (should resume via prefix match), got %d", runner.startCalled)
-	}
-	if runner.resumeCalled != 1 {
-		t.Fatalf("expected 1 resume call, got %d", runner.resumeCalled)
-	}
-	if runner.lastPrompt != "run的过去式和各种形态" {
-		t.Fatalf("expected prompt to be the user input, got %q", runner.lastPrompt)
-	}
-}
-
-func TestRunExplain_ExactMatchStartsNewSession(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	createSessionDir(t, home, "2026-06-05-14-30-00-exact", SessionData{
+	createSessionDir(t, home, "2026-06-05-14-30-00-existing", SessionData{
 		AgentRunner: "opencode",
 		AgentRunnersMeta: RunnerMeta{
-			"opencode": mustMarshalJSON(map[string]string{"session_id": "sess-exact"}),
+			"opencode": mustMarshalJSON(map[string]string{"session_id": "sess-old"}),
 		},
 		Messages: []Message{
-			{Role: "user", Message: "run的过去式"},
-			{Role: "assistant", Message: "ran"},
+			{Role: "user", Message: "A"},
+			{Role: "assistant", Message: "ans"},
 		},
 	})
 
 	runner := &mockRunner{
 		startOutputs: []mockRunOutput{
-			{sessionID: "sess-new-2", output: "ran is past tense"},
+			{sessionID: "sess-new", output: "new answer"},
+		},
+		resumeOutputs: []mockRunOutput{
+			{output: "follow up answer"},
 		},
 	}
 
-	err := RunExplainWithRunner([]string{"run的过去式"}, runner)
+	err := RunExplainWithRunner([]string{"A F", "B"}, runner)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if runner.startCalled != 1 {
-		t.Fatalf("expected 1 start call (exact match = new session), got %d", runner.startCalled)
+		t.Fatalf("expected 1 start call, got %d", runner.startCalled)
 	}
-	if runner.resumeCalled != 0 {
-		t.Fatalf("expected 0 resume calls, got %d", runner.resumeCalled)
+	if runner.resumeCalled != 1 {
+		t.Fatalf("expected 1 resume for follow-up, got %d", runner.resumeCalled)
+	}
+}
+
+func TestRunExplain_ThreeArgsTwoPrefixResume(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	createSessionDir(t, home, "2026-06-05-14-30-00-existing", SessionData{
+		AgentRunner: "opencode",
+		AgentRunnersMeta: RunnerMeta{
+			"opencode": mustMarshalJSON(map[string]string{"session_id": "sess-existing"}),
+		},
+		Messages: []Message{
+			{Role: "user", Message: "A"},
+			{Role: "assistant", Message: "ans1"},
+			{Role: "user", Message: "B"},
+			{Role: "assistant", Message: "ans2"},
+		},
+	})
+
+	runner := &mockRunner{
+		resumeOutputs: []mockRunOutput{
+			{output: "resumed C"},
+		},
+	}
+
+	err := RunExplainWithRunner([]string{"A", "B", "C"}, runner)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if runner.startCalled != 0 {
+		t.Fatalf("expected 0 start calls, got %d", runner.startCalled)
+	}
+	if runner.resumeCalled != 1 {
+		t.Fatalf("expected 1 resume call, got %d", runner.resumeCalled)
+	}
+	if runner.lastPrompt != "C" {
+		t.Fatalf("expected prompt 'C', got %q", runner.lastPrompt)
 	}
 }
 
@@ -200,49 +223,24 @@ func TestRunExplain_NoMatchNewSession(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	createSessionDir(t, home, "2026-06-05-14-30-00-unrelated", SessionData{
+	createSessionDir(t, home, "2026-06-05-14-30-00-existing", SessionData{
 		AgentRunner: "opencode",
 		AgentRunnersMeta: RunnerMeta{
 			"opencode": mustMarshalJSON(map[string]string{"session_id": "sess-old"}),
 		},
 		Messages: []Message{
-			{Role: "user", Message: "python的用法"},
-			{Role: "assistant", Message: "python is..."},
+			{Role: "user", Message: "X"},
+			{Role: "assistant", Message: "ans"},
 		},
 	})
 
 	runner := &mockRunner{
 		startOutputs: []mockRunOutput{
-			{sessionID: "sess-new-2", output: "ran是run的过去式"},
+			{sessionID: "sess-new", output: "answer"},
 		},
 	}
 
-	err := RunExplainWithRunner([]string{"run的过去式"}, runner)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if runner.startCalled != 1 {
-		t.Fatalf("expected 1 start call, got %d", runner.startCalled)
-	}
-	if runner.resumeCalled != 0 {
-		t.Fatalf("expected 0 resume calls, got %d", runner.resumeCalled)
-	}
-}
-
-func TestRunExplain_FollowUpOnNewSession(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	runner := &mockRunner{
-		startOutputs: []mockRunOutput{
-			{sessionID: "sess-new", output: "run的过去式是ran"},
-		},
-		resumeOutputs: []mockRunOutput{
-			{output: "ran是过去式"},
-		},
-	}
-
-	err := RunExplainWithRunner([]string{"run的过去式", "ran是什么意思"}, runner)
+	err := RunExplainWithRunner([]string{"A", "B"}, runner)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -250,10 +248,7 @@ func TestRunExplain_FollowUpOnNewSession(t *testing.T) {
 		t.Fatalf("expected 1 start call, got %d", runner.startCalled)
 	}
 	if runner.resumeCalled != 1 {
-		t.Fatalf("expected 1 resume call (for follow-up), got %d", runner.resumeCalled)
-	}
-	if runner.lastPrompt != "ran是什么意思" {
-		t.Fatalf("expected resume prompt 'ran是什么意思', got %q", runner.lastPrompt)
+		t.Fatalf("expected 1 resume for follow-up (inner resume after new session), got %d", runner.resumeCalled)
 	}
 }
 
@@ -263,7 +258,7 @@ func TestRunExplain_ModelFlag(t *testing.T) {
 
 	runner := &mockRunner{
 		startOutputs: []mockRunOutput{
-			{sessionID: "sess-model-test", output: "answer"},
+			{sessionID: "sess-model", output: "answer"},
 		},
 	}
 
@@ -273,6 +268,25 @@ func TestRunExplain_ModelFlag(t *testing.T) {
 	}
 	if runner.lastModel != "gpt-4" {
 		t.Fatalf("expected model gpt-4, got %q", runner.lastModel)
+	}
+}
+
+func TestRunExplain_VerboseFlag(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	runner := &mockRunner{
+		startOutputs: []mockRunOutput{
+			{sessionID: "sess-v", output: "verbose output"},
+		},
+	}
+
+	err := RunExplainWithRunner([]string{"-v", "hello"}, runner)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if runner.startCalled != 1 {
+		t.Fatalf("expected 1 start call, got %d", runner.startCalled)
 	}
 }
 

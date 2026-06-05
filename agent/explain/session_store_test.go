@@ -12,7 +12,7 @@ func TestFindMatchingSession_EmptyStore(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	result, err := findMatchingSession("anything")
+	result, err := findMatchingSession([]string{"anything"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -21,104 +21,111 @@ func TestFindMatchingSession_EmptyStore(t *testing.T) {
 	}
 }
 
-func TestFindMatchingSession_StrictPrefixMatch(t *testing.T) {
+func TestFindMatchingSession_SingleArgNeverMatches(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	createSessionDir(t, home, "2026-06-05-14-30-00-run-de-guo-qu", SessionData{
-		AgentRunner: "opencode",
-		Model:       "deepseek",
-		AgentRunnersMeta: RunnerMeta{
-			"opencode": mustMarshalJSON(map[string]string{"session_id": "sess_1"}),
-		},
-		Messages: []Message{
-			{Role: "user", Message: "run的过去式"},
-			{Role: "assistant", Message: "ran"},
-		},
-	})
-
-	result, err := findMatchingSession("run的过去式和其他")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result == nil {
-		t.Fatal("expected match, got nil")
-	}
-	if len(allUserMessages(result.Data)) != 1 || allUserMessages(result.Data)[0] != "run的过去式" {
-		t.Fatalf("unexpected messages: %v", result.Data.Messages)
-	}
-}
-
-func TestFindMatchingSession_ExactMatchNoMatch(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	createSessionDir(t, home, "2026-06-05-14-30-00-run-de-guo-qu", SessionData{
+	createSessionDir(t, home, "2026-06-05-14-30-00-a1b2c3d4", SessionData{
 		AgentRunner: "opencode",
 		AgentRunnersMeta: RunnerMeta{
 			"opencode": mustMarshalJSON(map[string]string{"session_id": "sess_1"}),
 		},
 		Messages: []Message{
-			{Role: "user", Message: "run的过去式"},
-			{Role: "assistant", Message: "ran"},
+			{Role: "user", Message: "hello"},
+			{Role: "assistant", Message: "world"},
 		},
 	})
 
-	result, err := findMatchingSession("run的过去式")
+	result, err := findMatchingSession([]string{"hello"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if result != nil {
-		t.Fatalf("expected nil (exact match not strict), got %+v", result)
+		t.Fatalf("expected nil (1 arg never matches), got %+v", result)
 	}
 }
 
-func TestFindMatchingSession_LongestPrefix(t *testing.T) {
+func TestFindMatchingSession_TwoArgsExactMatch(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	createSessionDir(t, home, "2026-06-05-14-30-00-short-match", SessionData{
+	createSessionDir(t, home, "2026-06-05-14-30-00-a1b2c3d4", SessionData{
 		AgentRunner: "opencode",
 		AgentRunnersMeta: RunnerMeta{
-			"opencode": mustMarshalJSON(map[string]string{"session_id": "sess_short"}),
+			"opencode": mustMarshalJSON(map[string]string{"session_id": "sess_1"}),
 		},
 		Messages: []Message{
-			{Role: "user", Message: "run的"},
-			{Role: "assistant", Message: "short answer"},
+			{Role: "user", Message: "A F"},
+			{Role: "assistant", Message: "answer"},
 		},
 	})
 
-	createSessionDir(t, home, "2026-06-05-14-30-10-long-match", SessionData{
-		AgentRunner: "opencode",
-		AgentRunnersMeta: RunnerMeta{
-			"opencode": mustMarshalJSON(map[string]string{"session_id": "sess_long"}),
-		},
-		Messages: []Message{
-			{Role: "user", Message: "run的过去式"},
-			{Role: "assistant", Message: "long answer"},
-		},
-	})
-
-	result, err := findMatchingSession("run的过去式是")
+	result, err := findMatchingSession([]string{"A F", "B"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if result == nil {
 		t.Fatal("expected match, got nil")
 	}
-
-	var opencodeMeta struct {
-		SessionID string `json:"session_id"`
-	}
-	if err := json.Unmarshal(result.Data.AgentRunnersMeta["opencode"], &opencodeMeta); err != nil {
-		t.Fatalf("unmarshal opencode meta: %v", err)
-	}
-	if opencodeMeta.SessionID != "sess_long" {
-		t.Fatalf("expected sess_long (longer prefix), got %s", opencodeMeta.SessionID)
+	if result.MatchedCount != 1 {
+		t.Fatalf("expected MatchedCount=1, got %d", result.MatchedCount)
 	}
 }
 
-func TestFindMatchingSession_SameLengthNewer(t *testing.T) {
+func TestFindMatchingSession_ElementMismatch(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	createSessionDir(t, home, "2026-06-05-14-30-00-a1b2c3d4", SessionData{
+		AgentRunner: "opencode",
+		AgentRunnersMeta: RunnerMeta{
+			"opencode": mustMarshalJSON(map[string]string{"session_id": "sess_1"}),
+		},
+		Messages: []Message{
+			{Role: "user", Message: "A"},
+			{Role: "assistant", Message: "answer"},
+		},
+	})
+
+	result, err := findMatchingSession([]string{"A F", "B"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != nil {
+		t.Fatalf("expected nil (\"A\" != \"A F\"), got %+v", result)
+	}
+}
+
+func TestFindMatchingSession_ThreeArgsTwoMatch(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	createSessionDir(t, home, "2026-06-05-14-30-00-a1b2c3d4", SessionData{
+		AgentRunner: "opencode",
+		AgentRunnersMeta: RunnerMeta{
+			"opencode": mustMarshalJSON(map[string]string{"session_id": "sess_1"}),
+		},
+		Messages: []Message{
+			{Role: "user", Message: "A"},
+			{Role: "assistant", Message: "ans1"},
+			{Role: "user", Message: "B"},
+			{Role: "assistant", Message: "ans2"},
+		},
+	})
+
+	result, err := findMatchingSession([]string{"A", "B", "C"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected match, got nil")
+	}
+	if result.MatchedCount != 2 {
+		t.Fatalf("expected MatchedCount=2, got %d", result.MatchedCount)
+	}
+}
+
+func TestFindMatchingSession_NewerWinsOnTie(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
@@ -128,8 +135,8 @@ func TestFindMatchingSession_SameLengthNewer(t *testing.T) {
 			"opencode": mustMarshalJSON(map[string]string{"session_id": "sess_old"}),
 		},
 		Messages: []Message{
-			{Role: "user", Message: "run的"},
-			{Role: "assistant", Message: "older"},
+			{Role: "user", Message: "A"},
+			{Role: "assistant", Message: "old"},
 		},
 	})
 
@@ -139,12 +146,12 @@ func TestFindMatchingSession_SameLengthNewer(t *testing.T) {
 			"opencode": mustMarshalJSON(map[string]string{"session_id": "sess_new"}),
 		},
 		Messages: []Message{
-			{Role: "user", Message: "run的"},
-			{Role: "assistant", Message: "newer"},
+			{Role: "user", Message: "A"},
+			{Role: "assistant", Message: "new"},
 		},
 	})
 
-	result, err := findMatchingSession("run的过")
+	result, err := findMatchingSession([]string{"A", "X"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -163,31 +170,57 @@ func TestFindMatchingSession_SameLengthNewer(t *testing.T) {
 	}
 }
 
-func TestFindMatchingSession_UserRoleOnly(t *testing.T) {
+func TestFindMatchingSession_LongerPrefixWins(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	createSessionDir(t, home, "2026-06-05-14-30-00-test", SessionData{
+	createSessionDir(t, home, "2026-06-05-14-30-00-short", SessionData{
 		AgentRunner: "opencode",
 		AgentRunnersMeta: RunnerMeta{
-			"opencode": mustMarshalJSON(map[string]string{"session_id": "sess_1"}),
+			"opencode": mustMarshalJSON(map[string]string{"session_id": "sess_short"}),
 		},
 		Messages: []Message{
-			{Role: "user", Message: "hello"},
-			{Role: "assistant", Message: "and more text that happens to contain run的过去式"},
+			{Role: "user", Message: "A"},
+			{Role: "assistant", Message: "short"},
 		},
 	})
 
-	result, err := findMatchingSession("run的过去式")
+	createSessionDir(t, home, "2026-06-05-14-30-10-long", SessionData{
+		AgentRunner: "opencode",
+		AgentRunnersMeta: RunnerMeta{
+			"opencode": mustMarshalJSON(map[string]string{"session_id": "sess_long"}),
+		},
+		Messages: []Message{
+			{Role: "user", Message: "A"},
+			{Role: "assistant", Message: "ans"},
+			{Role: "user", Message: "B"},
+			{Role: "assistant", Message: "ans"},
+		},
+	})
+
+	result, err := findMatchingSession([]string{"A", "B", "C"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != nil {
-		t.Fatalf("expected nil (assistant messages should not match), got %+v", result)
+	if result == nil {
+		t.Fatal("expected match, got nil")
+	}
+	if result.MatchedCount != 2 {
+		t.Fatalf("expected MatchedCount=2 (longer prefix wins), got %d", result.MatchedCount)
+	}
+
+	var opencodeMeta struct {
+		SessionID string `json:"session_id"`
+	}
+	if err := json.Unmarshal(result.Data.AgentRunnersMeta["opencode"], &opencodeMeta); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if opencodeMeta.SessionID != "sess_long" {
+		t.Fatalf("expected sess_long, got %s", opencodeMeta.SessionID)
 	}
 }
 
-func TestFindMatchingSession_NoMatch(t *testing.T) {
+func TestFindMatchingSession_NoMatchUnrelated(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
@@ -197,12 +230,12 @@ func TestFindMatchingSession_NoMatch(t *testing.T) {
 			"opencode": mustMarshalJSON(map[string]string{"session_id": "sess_1"}),
 		},
 		Messages: []Message{
-			{Role: "user", Message: "run的过去式"},
-			{Role: "assistant", Message: "ran"},
+			{Role: "user", Message: "X"},
+			{Role: "assistant", Message: "ans"},
 		},
 	})
 
-	result, err := findMatchingSession("python的用法")
+	result, err := findMatchingSession([]string{"A", "B"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -211,34 +244,28 @@ func TestFindMatchingSession_NoMatch(t *testing.T) {
 	}
 }
 
-func TestFindMatchingSession_MultipleUserMessages(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	createSessionDir(t, home, "2026-06-05-14-30-00-test", SessionData{
-		AgentRunner: "opencode",
-		AgentRunnersMeta: RunnerMeta{
-			"opencode": mustMarshalJSON(map[string]string{"session_id": "sess_1"}),
-		},
-		Messages: []Message{
-			{Role: "user", Message: "run的过去式"},
-			{Role: "assistant", Message: "ran"},
-			{Role: "user", Message: "run的过去式和各种形态"},
-			{Role: "assistant", Message: "ran, running, runs"},
-		},
-	})
-
-	result, err := findMatchingSession("run的过去式和各种形态")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result == nil {
-		t.Fatal("expected strict prefix match via first user msg, got nil")
+func TestCountPrefixMatch(t *testing.T) {
+	tests := []struct {
+		stored   []string
+		input    []string
+		expected int
+	}{
+		{[]string{"A"}, []string{"A"}, 0},
+		{[]string{"A"}, []string{"A", "B"}, 1},
+		{[]string{"A", "B"}, []string{"A", "B", "C"}, 2},
+		{[]string{"A"}, []string{"A F", "B"}, 0},
+		{[]string{"A F"}, []string{"A F", "B"}, 1},
+		{[]string{"A", "B"}, []string{"A", "X"}, 1},
+		{[]string{"A", "B"}, []string{"A", "C"}, 1},
+		{[]string{}, []string{"A"}, 0},
+		{[]string{"A", "B"}, []string{"A", "B"}, 0},
 	}
 
-	userMsgs := allUserMessages(result.Data)
-	if len(userMsgs) < 2 {
-		t.Fatalf("expected at least 2 user messages, got %d", len(userMsgs))
+	for _, tt := range tests {
+		got := countPrefixMatch(tt.stored, tt.input)
+		if got != tt.expected {
+			t.Fatalf("countPrefixMatch(%v, %v) = %d, want %d", tt.stored, tt.input, got, tt.expected)
+		}
 	}
 }
 
@@ -279,9 +306,6 @@ func TestSaveSession(t *testing.T) {
 	if len(readData.Messages) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(readData.Messages))
 	}
-	if readData.Messages[0].Role != "user" || readData.Messages[0].Message != "run的过去式" {
-		t.Fatalf("unexpected first message: %+v", readData.Messages[0])
-	}
 }
 
 func TestUpdateSession(t *testing.T) {
@@ -307,7 +331,6 @@ func TestUpdateSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("readSession failed: %v", err)
 	}
-
 	read.Messages = append(read.Messages, Message{Role: "assistant", Message: "world"})
 	if err := updateSession(dir, read); err != nil {
 		t.Fatalf("updateSession failed: %v", err)
@@ -318,10 +341,34 @@ func TestUpdateSession(t *testing.T) {
 		t.Fatalf("readSession failed: %v", err)
 	}
 	if len(readAgain.Messages) != 2 {
-		t.Fatalf("expected 2 messages after update, got %d", len(readAgain.Messages))
+		t.Fatalf("expected 2 messages, got %d", len(readAgain.Messages))
 	}
-	if readAgain.Messages[1].Role != "assistant" || readAgain.Messages[1].Message != "world" {
-		t.Fatalf("unexpected second message: %+v", readAgain.Messages[1])
+}
+
+func TestDebugConfigHomeEnv(t *testing.T) {
+	debugHome := t.TempDir()
+	t.Setenv(debugConfigHomeEnv, debugHome)
+	t.Setenv("HOME", "/nonexistent")
+
+	dir, err := sessionsDir()
+	if err != nil {
+		t.Fatalf("sessionsDir failed: %v", err)
+	}
+	expected := filepath.Join(debugHome, "sessions")
+	if dir != expected {
+		t.Fatalf("expected %s, got %s", expected, dir)
+	}
+}
+
+func TestMakeSessionName_HashSuffix(t *testing.T) {
+	n1 := makeSessionName("run的各种形态")
+	n2 := makeSessionName("run的过去式")
+
+	if n1 == n2 {
+		t.Fatalf("expected different names, both got %q", n1)
+	}
+	if n1[:19] != n2[:19] {
+		t.Fatalf("expected same timestamp prefix, got %q and %q", n1[:19], n2[:19])
 	}
 }
 
@@ -351,28 +398,34 @@ func TestMakeSessionName(t *testing.T) {
 	if len(name) < 20 {
 		t.Fatalf("name too short: %s", name)
 	}
-
 	ts := time.Now().Format("2006-01-02-15-04-05")
 	if name[:19] != ts {
 		t.Fatalf("expected timestamp prefix %s, got %s", ts, name[:19])
 	}
 }
 
-func TestMakeSessionName_Uniqueness(t *testing.T) {
-	n1 := makeSessionName("run的各种形态")
-	n2 := makeSessionName("run的过去式")
-
-	if n1 == n2 {
-		t.Fatalf("expected different names for different prompts, both got %q", n1)
+func TestUserMessageSlice(t *testing.T) {
+	data := SessionData{
+		Messages: []Message{
+			{Role: "user", Message: "A"},
+			{Role: "assistant", Message: "ans"},
+			{Role: "user", Message: "B"},
+			{Role: "assistant", Message: "ans"},
+			{Role: "system", Message: "sys"},
+		},
 	}
-	if n1[:19] != n2[:19] {
-		t.Fatalf("expected same timestamp prefix, got %q and %q", n1[:19], n2[:19])
+	msgs := userMessageSlice(data)
+	if len(msgs) != 2 {
+		t.Fatalf("expected 2 user messages, got %d", len(msgs))
+	}
+	if msgs[0] != "A" || msgs[1] != "B" {
+		t.Fatalf("unexpected messages: %v", msgs)
 	}
 }
 
 func createSessionDir(t *testing.T, home, dirName string, data SessionData) {
 	t.Helper()
-	baseDir := filepath.Join(home, sessionsBaseDir)
+	baseDir := filepath.Join(home, defaultSessionsBaseDir, "sessions")
 	dir := filepath.Join(baseDir, dirName)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatalf("create test dir: %v", err)

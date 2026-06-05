@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/xhd2015/agent-pro/agent/opencode/models"
@@ -12,16 +13,18 @@ import (
 	"github.com/xhd2015/less-gen/flags"
 )
 
-var explainHelp = `Usage: explain [options] <message> [follow-up message]
+var explainHelp = `Usage: explain [options] <message> [follow-up messages...]
 
 Ask an AI agent a question and get an answer. Sessions are reused when the
-first message matches a previous session (longest prefix match).
+positional arguments match a prefix of a previous session's user messages.
 
 Options:
   --model MODEL
               Model to use for generation
   --agent-runner RUNNER
               Agent runner to use (opencode or codex, default: opencode)
+  -v, --verbose
+              Show details about session creation/reuse
   -h, --help  Show this help message
 `
 
@@ -38,8 +41,9 @@ func (r *Runtime) Start(ctx context.Context, model string, prompt string) (strin
 	if r.AgentRunner == "codex" {
 		return "", "", fmt.Errorf("codex runner not yet implemented")
 	}
+	agentPath := agentPathFromEnv("opencode")
 	sessionID, answer, err := run.StartSession(ctx, run.SessionRunOpts{
-		AgentPath: "opencode",
+		AgentPath: agentPath,
 		Prompt:    prompt,
 		Model:     model,
 	})
@@ -59,13 +63,21 @@ func (r *Runtime) Resume(ctx context.Context, model string, prompt string, meta 
 	if opencodeMeta.SessionID == "" {
 		return "", fmt.Errorf("session_id not found in opencode meta")
 	}
+	agentPath := agentPathFromEnv("opencode")
 	_, answer, err := run.ResumeSession(ctx, run.SessionRunOpts{
-		AgentPath: "opencode",
+		AgentPath: agentPath,
 		SessionID: opencodeMeta.SessionID,
 		Prompt:    prompt,
 		Model:     model,
 	})
 	return answer, err
+}
+
+func agentPathFromEnv(defaultPath string) string {
+	if p := os.Getenv("EXPLAIN_AGENT_PATH"); p != "" {
+		return p
+	}
+	return defaultPath
 }
 
 func RunExplain(args []string) error {
@@ -75,9 +87,11 @@ func RunExplain(args []string) error {
 func RunExplainWithRunner(rawArgs []string, runner Runner) error {
 	var model string
 	var agentRunner string
+	var verbose bool
 	remainArgs, err := flags.
 		String("--model", &model).
 		String("--agent-runner", &agentRunner).
+		Bool("-v,--verbose", &verbose).
 		Help("-h,--help", explainHelp).
 		Parse(rawArgs)
 	if err != nil {
@@ -91,19 +105,18 @@ func RunExplainWithRunner(rawArgs []string, runner Runner) error {
 		return fmt.Errorf("unsupported agent runner: %s (supported: opencode, codex)", agentRunner)
 	}
 
-	args_ := remainArgs
-	if len(args_) == 0 {
+	if len(remainArgs) == 0 {
 		return fmt.Errorf("missing message argument\n\n%s", explainHelp)
 	}
 
-	firstMsg := args_[0]
+	firstMsg := remainArgs[0]
 	var followUp string
-	if len(args_) >= 2 {
-		followUp = strings.Join(args_[1:], " ")
+	if len(remainArgs) >= 2 {
+		followUp = strings.Join(remainArgs[1:], " ")
 	}
 
-	if runner, ok := runner.(*Runtime); ok {
-		runner.AgentRunner = agentRunner
+	if r, ok := runner.(*Runtime); ok {
+		r.AgentRunner = agentRunner
 	}
 
 	ctx := context.Background()
@@ -115,7 +128,7 @@ func RunExplainWithRunner(rawArgs []string, runner Runner) error {
 		}
 	}
 
-	match, err := findMatchingSession(firstMsg)
+	match, err := findMatchingSession(remainArgs)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to search sessions: %v\n", err)
 	}
@@ -132,7 +145,14 @@ func RunExplainWithRunner(rawArgs []string, runner Runner) error {
 
 		prompt := firstMsg
 		if followUp != "" {
-			prompt = followUp
+			followUpArgs := remainArgs[match.MatchedCount:]
+			prompt = strings.Join(followUpArgs, " ")
+		}
+
+		if verbose {
+			matchedMsgs := userMessageSlice(match.Data)[:match.MatchedCount]
+			fmt.Fprintf(os.Stderr, "[explain] matched session %s (%d msg prefix: %v)\n", filepath.Base(match.SessionDir), match.MatchedCount, matchedMsgs)
+			fmt.Fprintf(os.Stderr, "[explain] resuming %s session...\n", agentRunner)
 		}
 
 		output, resumeErr := runner.Resume(ctx, model, prompt, runnerMetaBytes)
@@ -141,6 +161,10 @@ func RunExplainWithRunner(rawArgs []string, runner Runner) error {
 		}
 		if output == "" {
 			return fmt.Errorf("agent returned empty response")
+		}
+
+		if verbose {
+			fmt.Fprintf(os.Stderr, "[explain] done\n")
 		}
 
 		match.Data.Messages = append(match.Data.Messages, Message{Role: "user", Message: prompt})
@@ -154,6 +178,11 @@ func RunExplainWithRunner(rawArgs []string, runner Runner) error {
 
 		fmt.Print(output)
 		return nil
+	}
+
+	if verbose {
+		fmt.Fprintf(os.Stderr, "[explain] no matching session\n")
+		fmt.Fprintf(os.Stderr, "[explain] starting new %s session...\n", agentRunner)
 	}
 
 	sessionID, output, startErr := runner.Start(ctx, model, firstMsg)
@@ -187,8 +216,12 @@ func RunExplainWithRunner(rawArgs []string, runner Runner) error {
 		fmt.Fprintf(os.Stderr, "Warning: failed to save session: %v\n", saveErr)
 	}
 
+	if verbose {
+		fmt.Fprintf(os.Stderr, "[explain] saved to %s\n", filepath.Base(sessionDir))
+	}
+
 	if followUp != "" {
-		match := &MatchResult{
+		m := &MatchResult{
 			SessionDir: sessionDir,
 			Data:       data,
 		}
@@ -200,9 +233,13 @@ func RunExplainWithRunner(rawArgs []string, runner Runner) error {
 			return fmt.Errorf("agent returned empty response")
 		}
 
-		match.Data.Messages = append(match.Data.Messages, Message{Role: "user", Message: followUp})
-		match.Data.Messages = append(match.Data.Messages, Message{Role: "assistant", Message: followUpOutput})
-		if err := updateSession(sessionDir, match.Data); err != nil {
+		if verbose {
+			fmt.Fprintf(os.Stderr, "[explain] follow-up done\n")
+		}
+
+		m.Data.Messages = append(m.Data.Messages, Message{Role: "user", Message: followUp})
+		m.Data.Messages = append(m.Data.Messages, Message{Role: "assistant", Message: followUpOutput})
+		if err := updateSession(sessionDir, m.Data); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to update session: %v\n", saveErr)
 		}
 
@@ -210,6 +247,9 @@ func RunExplainWithRunner(rawArgs []string, runner Runner) error {
 		return nil
 	}
 
+	if verbose {
+		fmt.Fprintf(os.Stderr, "[explain] done\n")
+	}
 	fmt.Print(output)
 	return nil
 }

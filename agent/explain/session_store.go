@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 )
@@ -21,10 +20,10 @@ type Message struct {
 type RunnerMeta map[string]json.RawMessage
 
 type SessionData struct {
-	AgentRunner      string          `json:"agent_runner"`
-	Model            string          `json:"model"`
-	AgentRunnersMeta RunnerMeta      `json:"agent_runners_meta"`
-	Messages         []Message       `json:"messages"`
+	AgentRunner      string     `json:"agent_runner"`
+	Model            string     `json:"model"`
+	AgentRunnersMeta RunnerMeta `json:"agent_runners_meta"`
+	Messages         []Message  `json:"messages"`
 }
 
 type sessionDir struct {
@@ -34,18 +33,22 @@ type sessionDir struct {
 }
 
 const (
-	sessionsBaseDir = ".agent-pro/dedicated-agents/explain/sessions"
-	fileName        = "session.data"
+	defaultSessionsBaseDir = ".agent-pro/dedicated-agents/explain"
+	debugConfigHomeEnv     = "AGENT_PRO_DEDICATED_AGENT_EXPLAIN_DEBUG_CONFIG_HOME"
+	fileName               = "session.data"
 )
 
 var nonAlphanum = regexp.MustCompile(`[^a-zA-Z0-9]+`)
 
 func sessionsDir() (string, error) {
+	if debugHome := os.Getenv(debugConfigHomeEnv); debugHome != "" {
+		return filepath.Join(debugHome, "sessions"), nil
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("get home dir: %w", err)
 	}
-	return filepath.Join(home, sessionsBaseDir), nil
+	return filepath.Join(home, defaultSessionsBaseDir, "sessions"), nil
 }
 
 func slugFromPrompt(prompt string) string {
@@ -163,11 +166,12 @@ func parseTimestamp(dirName string) (time.Time, error) {
 }
 
 type MatchResult struct {
-	SessionDir string
-	Data       SessionData
+	SessionDir   string
+	Data         SessionData
+	MatchedCount int
 }
 
-func findMatchingSession(userInput string) (*MatchResult, error) {
+func findMatchingSession(args []string) (*MatchResult, error) {
 	sessions, err := listSessions()
 	if err != nil {
 		return nil, err
@@ -177,29 +181,22 @@ func findMatchingSession(userInput string) (*MatchResult, error) {
 		dir       string
 		timestamp time.Time
 		data      SessionData
-		msgLen    int
+		n         int
 	}
 
 	var best *candidate
 	for _, s := range sessions {
-		for _, m := range s.data.Messages {
-			if m.Role != "user" {
-				continue
-			}
-			msgLen := len(m.Message)
-			if len(userInput) <= msgLen {
-				continue
-			}
-			if !strings.HasPrefix(userInput, m.Message) {
-				continue
-			}
-			if best == nil || msgLen > best.msgLen || (msgLen == best.msgLen && s.timestamp.After(best.timestamp)) {
-				best = &candidate{
-					dir:       s.dir,
-					timestamp: s.timestamp,
-					data:      s.data,
-					msgLen:    msgLen,
-				}
+		userMsgs := userMessageSlice(s.data)
+		n := countPrefixMatch(userMsgs, args)
+		if n == 0 {
+			continue
+		}
+		if best == nil || n > best.n || (n == best.n && s.timestamp.After(best.timestamp)) {
+			best = &candidate{
+				dir:       s.dir,
+				timestamp: s.timestamp,
+				data:      s.data,
+				n:         n,
 			}
 		}
 	}
@@ -209,12 +206,27 @@ func findMatchingSession(userInput string) (*MatchResult, error) {
 	}
 
 	return &MatchResult{
-		SessionDir: best.dir,
-		Data:       best.data,
+		SessionDir:   best.dir,
+		Data:         best.data,
+		MatchedCount: best.n,
 	}, nil
 }
 
-func allUserMessages(data SessionData) []string {
+func countPrefixMatch(stored []string, input []string) int {
+	n := 0
+	for n < len(stored) && n < len(input) {
+		if stored[n] != input[n] {
+			break
+		}
+		n++
+	}
+	if n > 0 && n < len(input) {
+		return n
+	}
+	return 0
+}
+
+func userMessageSlice(data SessionData) []string {
 	var msgs []string
 	for _, m := range data.Messages {
 		if m.Role == "user" {
@@ -222,10 +234,4 @@ func allUserMessages(data SessionData) []string {
 		}
 	}
 	return msgs
-}
-
-func sortSessionDirsByTimestamp(dirs []sessionDir) {
-	sort.Slice(dirs, func(i, j int) bool {
-		return dirs[i].timestamp.Before(dirs[j].timestamp)
-	})
 }
