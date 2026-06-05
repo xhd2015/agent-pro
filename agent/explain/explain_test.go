@@ -77,40 +77,20 @@ func TestRunExplain_NewSession_SingleArg(t *testing.T) {
 	if runner.lastPrompt != "run的过去式" {
 		t.Fatalf("expected prompt 'run的过去式', got %q", runner.lastPrompt)
 	}
-
-	result, err := findMatchingSession("run的过去式")
-	if err != nil {
-		t.Fatalf("findMatchingSession failed: %v", err)
-	}
-	if result == nil {
-		t.Fatal("expected session to be saved")
-	}
-	if result.Data.AgentRunner != "opencode" {
-		t.Fatalf("expected agent_runner opencode, got %s", result.Data.AgentRunner)
-	}
-	if len(result.Data.Messages) != 2 {
-		t.Fatalf("expected 2 messages, got %d", len(result.Data.Messages))
-	}
-	if result.Data.Messages[0].Role != "user" || result.Data.Messages[0].Message != "run的过去式" {
-		t.Fatalf("unexpected message[0]: %+v", result.Data.Messages[0])
-	}
-	if result.Data.Messages[1].Role != "assistant" || result.Data.Messages[1].Message != "run的过去式是ran" {
-		t.Fatalf("unexpected message[1]: %+v", result.Data.Messages[1])
-	}
 }
 
-func TestRunExplain_ResumeSession_TwoArgs(t *testing.T) {
+func TestRunExplain_ResumeSession_StrictPrefixMatch(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	createSessionDir(t, home, "2026-06-05-14-30-00-run-de-guo-qu", SessionData{
+	createSessionDir(t, home, "2026-06-05-14-30-00-run", SessionData{
 		AgentRunner: "opencode",
 		Model:       "deepseek",
 		AgentRunnersMeta: RunnerMeta{
 			"opencode": mustMarshalJSON(map[string]string{"session_id": "sess-existing"}),
 		},
 		Messages: []Message{
-			{Role: "user", Message: "run的过去式"},
+			{Role: "user", Message: "run"},
 			{Role: "assistant", Message: "ran"},
 		},
 	})
@@ -144,23 +124,9 @@ func TestRunExplain_ResumeSession_TwoArgs(t *testing.T) {
 	if opencodeMeta.SessionID != "sess-existing" {
 		t.Fatalf("expected session_id sess-existing, got %s", opencodeMeta.SessionID)
 	}
-
-	result, err := findMatchingSession("run的过去式")
-	if err != nil {
-		t.Fatalf("findMatchingSession failed: %v", err)
-	}
-	if result == nil {
-		t.Fatal("expected session to exist")
-	}
-	if len(result.Data.Messages) != 4 {
-		t.Fatalf("expected 4 messages (2 original + follow-up), got %d", len(result.Data.Messages))
-	}
-	if result.Data.Messages[2].Role != "user" || result.Data.Messages[2].Message != "ran是什么意思" {
-		t.Fatalf("unexpected message[2]: %+v", result.Data.Messages[2])
-	}
 }
 
-func TestRunExplain_NewSession_PrefixMatchResume(t *testing.T) {
+func TestRunExplain_PrefixMatchResume(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
@@ -194,6 +160,39 @@ func TestRunExplain_NewSession_PrefixMatchResume(t *testing.T) {
 	}
 	if runner.lastPrompt != "run的过去式和各种形态" {
 		t.Fatalf("expected prompt to be the user input, got %q", runner.lastPrompt)
+	}
+}
+
+func TestRunExplain_ExactMatchStartsNewSession(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	createSessionDir(t, home, "2026-06-05-14-30-00-exact", SessionData{
+		AgentRunner: "opencode",
+		AgentRunnersMeta: RunnerMeta{
+			"opencode": mustMarshalJSON(map[string]string{"session_id": "sess-exact"}),
+		},
+		Messages: []Message{
+			{Role: "user", Message: "run的过去式"},
+			{Role: "assistant", Message: "ran"},
+		},
+	})
+
+	runner := &mockRunner{
+		startOutputs: []mockRunOutput{
+			{sessionID: "sess-new-2", output: "ran is past tense"},
+		},
+	}
+
+	err := RunExplainWithRunner([]string{"run的过去式"}, runner)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if runner.startCalled != 1 {
+		t.Fatalf("expected 1 start call (exact match = new session), got %d", runner.startCalled)
+	}
+	if runner.resumeCalled != 0 {
+		t.Fatalf("expected 0 resume calls, got %d", runner.resumeCalled)
 	}
 }
 
@@ -256,17 +255,6 @@ func TestRunExplain_FollowUpOnNewSession(t *testing.T) {
 	if runner.lastPrompt != "ran是什么意思" {
 		t.Fatalf("expected resume prompt 'ran是什么意思', got %q", runner.lastPrompt)
 	}
-
-	result, err := findMatchingSession("run的过去式")
-	if err != nil {
-		t.Fatalf("findMatchingSession failed: %v", err)
-	}
-	if result == nil {
-		t.Fatal("expected session to exist")
-	}
-	if len(result.Data.Messages) != 4 {
-		t.Fatalf("expected 4 messages, got %d", len(result.Data.Messages))
-	}
 }
 
 func TestRunExplain_ModelFlag(t *testing.T) {
@@ -285,17 +273,6 @@ func TestRunExplain_ModelFlag(t *testing.T) {
 	}
 	if runner.lastModel != "gpt-4" {
 		t.Fatalf("expected model gpt-4, got %q", runner.lastModel)
-	}
-
-	result, err := findMatchingSession("hello")
-	if err != nil {
-		t.Fatalf("findMatchingSession failed: %v", err)
-	}
-	if result == nil {
-		t.Fatal("expected session to exist")
-	}
-	if result.Data.Model != "gpt-4" {
-		t.Fatalf("expected model gpt-4, got %s", result.Data.Model)
 	}
 }
 

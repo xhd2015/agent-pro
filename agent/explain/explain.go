@@ -139,6 +139,9 @@ func RunExplainWithRunner(rawArgs []string, runner Runner) error {
 		if resumeErr != nil {
 			return fmt.Errorf("resume session failed: %w", resumeErr)
 		}
+		if output == "" {
+			return fmt.Errorf("agent returned empty response")
+		}
 
 		match.Data.Messages = append(match.Data.Messages, Message{Role: "user", Message: prompt})
 		match.Data.Messages = append(match.Data.Messages, Message{Role: "assistant", Message: output})
@@ -156,6 +159,9 @@ func RunExplainWithRunner(rawArgs []string, runner Runner) error {
 	sessionID, output, startErr := runner.Start(ctx, model, firstMsg)
 	if startErr != nil {
 		return fmt.Errorf("start session failed: %w", startErr)
+	}
+	if output == "" {
+		return fmt.Errorf("agent returned empty response")
 	}
 
 	runnerMeta := make(RunnerMeta)
@@ -189,6 +195,9 @@ func RunExplainWithRunner(rawArgs []string, runner Runner) error {
 		followUpOutput, resumeErr := runner.Resume(ctx, model, followUp, runnerMeta[agentRunner])
 		if resumeErr != nil {
 			return fmt.Errorf("follow-up resume failed: %w", resumeErr)
+		}
+		if followUpOutput == "" {
+			return fmt.Errorf("agent returned empty response")
 		}
 
 		match.Data.Messages = append(match.Data.Messages, Message{Role: "user", Message: followUp})

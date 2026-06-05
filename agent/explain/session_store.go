@@ -1,6 +1,8 @@
 package explain
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -65,7 +67,9 @@ func slugFromPrompt(prompt string) string {
 func makeSessionName(prompt string) string {
 	ts := time.Now().Format("2006-01-02-15-04-05")
 	slug := slugFromPrompt(prompt)
-	return ts + "-" + slug
+	hash := sha256.Sum256([]byte(prompt))
+	hashStr := hex.EncodeToString(hash[:])
+	return ts + "-" + slug + "-" + hashStr[:8]
 }
 
 func saveSession(prompt string, data SessionData) (string, error) {
@@ -182,10 +186,13 @@ func findMatchingSession(userInput string) (*MatchResult, error) {
 			if m.Role != "user" {
 				continue
 			}
+			msgLen := len(m.Message)
+			if len(userInput) <= msgLen {
+				continue
+			}
 			if !strings.HasPrefix(userInput, m.Message) {
 				continue
 			}
-			msgLen := len(m.Message)
 			if best == nil || msgLen > best.msgLen || (msgLen == best.msgLen && s.timestamp.After(best.timestamp)) {
 				best = &candidate{
 					dir:       s.dir,

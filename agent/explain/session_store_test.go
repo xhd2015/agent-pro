@@ -21,7 +21,7 @@ func TestFindMatchingSession_EmptyStore(t *testing.T) {
 	}
 }
 
-func TestFindMatchingSession_SingleMatch(t *testing.T) {
+func TestFindMatchingSession_StrictPrefixMatch(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
@@ -37,7 +37,7 @@ func TestFindMatchingSession_SingleMatch(t *testing.T) {
 		},
 	})
 
-	result, err := findMatchingSession("run的过去式")
+	result, err := findMatchingSession("run的过去式和其他")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -46,6 +46,30 @@ func TestFindMatchingSession_SingleMatch(t *testing.T) {
 	}
 	if len(allUserMessages(result.Data)) != 1 || allUserMessages(result.Data)[0] != "run的过去式" {
 		t.Fatalf("unexpected messages: %v", result.Data.Messages)
+	}
+}
+
+func TestFindMatchingSession_ExactMatchNoMatch(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	createSessionDir(t, home, "2026-06-05-14-30-00-run-de-guo-qu", SessionData{
+		AgentRunner: "opencode",
+		AgentRunnersMeta: RunnerMeta{
+			"opencode": mustMarshalJSON(map[string]string{"session_id": "sess_1"}),
+		},
+		Messages: []Message{
+			{Role: "user", Message: "run的过去式"},
+			{Role: "assistant", Message: "ran"},
+		},
+	})
+
+	result, err := findMatchingSession("run的过去式")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != nil {
+		t.Fatalf("expected nil (exact match not strict), got %+v", result)
 	}
 }
 
@@ -75,7 +99,7 @@ func TestFindMatchingSession_LongestPrefix(t *testing.T) {
 		},
 	})
 
-	result, err := findMatchingSession("run的过去式")
+	result, err := findMatchingSession("run的过去式是")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -120,7 +144,7 @@ func TestFindMatchingSession_SameLengthNewer(t *testing.T) {
 		},
 	})
 
-	result, err := findMatchingSession("run的")
+	result, err := findMatchingSession("run的过")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -209,7 +233,7 @@ func TestFindMatchingSession_MultipleUserMessages(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if result == nil {
-		t.Fatal("expected match, got nil")
+		t.Fatal("expected strict prefix match via first user msg, got nil")
 	}
 
 	userMsgs := allUserMessages(result.Data)
@@ -331,6 +355,18 @@ func TestMakeSessionName(t *testing.T) {
 	ts := time.Now().Format("2006-01-02-15-04-05")
 	if name[:19] != ts {
 		t.Fatalf("expected timestamp prefix %s, got %s", ts, name[:19])
+	}
+}
+
+func TestMakeSessionName_Uniqueness(t *testing.T) {
+	n1 := makeSessionName("run的各种形态")
+	n2 := makeSessionName("run的过去式")
+
+	if n1 == n2 {
+		t.Fatalf("expected different names for different prompts, both got %q", n1)
+	}
+	if n1[:19] != n2[:19] {
+		t.Fatalf("expected same timestamp prefix, got %q and %q", n1[:19], n2[:19])
 	}
 }
 
