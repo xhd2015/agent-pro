@@ -7,15 +7,25 @@ import (
 	"strings"
 )
 
+type AgentRunnerID string
+
 const (
-	CursorCLIPathSettingKey       = "cursor_cli_path"
-	CodexCLIPathSettingKey        = "codex_cli_path"
-	OpencodeCLIPathSettingKey     = "opencode_cli_path"
-	CodexAPIKeySettingKey         = "codex_api_key"
-	AgentRunnerIDSettingKey          = "agent_runner_id"
+	AgentRunnerCodex    AgentRunnerID = "codex"
+	AgentRunnerOpencode AgentRunnerID = "opencode"
+	AgentRunnerCursor   AgentRunnerID = "cursor"
+	AgentRunnerFakeCodex AgentRunnerID = "fake-codex"
+)
+
+const (
+	CursorCLIPathSettingKey        = "cursor_cli_path"
+	CodexCLIPathSettingKey         = "codex_cli_path"
+	OpencodeCLIPathSettingKey      = "opencode_cli_path"
+	FakeCodexCLIPathSettingKey     = "fake_codex_cli_path"
+	CodexAPIKeySettingKey          = "codex_api_key"
+	AgentRunnerIDSettingKey        = "agent_runner_id"
 	KBDefaultAgentRunnerIDSettingKey = "kb_default_agent_runner_id"
-	ModelSettingKey                  = "model"
-	ModelsByAgentRunnerSettingKey    = "models_by_agent_runner"
+	ModelSettingKey                = "model"
+	ModelsByAgentRunnerSettingKey  = "models_by_agent_runner"
 )
 
 type Settings struct {
@@ -26,17 +36,32 @@ type Settings struct {
 	CursorCLIPath          string            `json:"cursor_cli_path,omitempty"`
 	CodexCLIPath           string            `json:"codex_cli_path,omitempty"`
 	OpencodeCLIPath        string            `json:"opencode_cli_path,omitempty"`
+	FakeCodexCLIPath       string            `json:"fake_codex_cli_path,omitempty"`
 	CodexAPIKey            string            `json:"codex_api_key,omitempty"`
 	DisableSubAgents       bool              `json:"disable_sub_agents,omitempty"`
 	ModelsByAgentRunner    map[string]string `json:"models_by_agent_runner,omitempty"`
 }
 
-func ResolveConfiguredCLIPath(settingsPath string, settingKey string, defaultPath string, fallback func() (string, error)) (string, error) {
-	if configured := LoadConfiguredStringSetting(settingsPath, settingKey); configured != "" {
-		return configured, nil
-	}
+const (
+	EnvCursorCLIPath   = "AGENT_RUNNER_CURSOR_PATH"
+	EnvCodexCLIPath    = "AGENT_RUNNER_CODEX_PATH"
+	EnvOpencodeCLIPath = "AGENT_RUNNER_OPENCODE_PATH"
+	EnvFakeCodexCLIPath = "AGENT_RUNNER_FAKE_CODEX_PATH"
+)
+
+func LoadEnvCLIPath(envKey string) string {
+	return strings.TrimSpace(os.Getenv(envKey))
+}
+
+func ResolveConfiguredCLIPath(settingsPath, settingKey, envKey, defaultPath string, fallback func() (string, error)) (string, error) {
 	if strings.TrimSpace(defaultPath) != "" {
 		return strings.TrimSpace(defaultPath), nil
+	}
+	if envVal := LoadEnvCLIPath(envKey); envVal != "" {
+		return envVal, nil
+	}
+	if configured := LoadConfiguredStringSetting(settingsPath, settingKey); configured != "" {
+		return configured, nil
 	}
 	if fallback == nil {
 		return "", fmt.Errorf("no CLI resolver configured for %s", settingKey)
@@ -57,6 +82,8 @@ func LoadConfiguredStringSetting(settingsPath string, settingKey string) string 
 		return strings.TrimSpace(settings.CodexCLIPath)
 	case OpencodeCLIPathSettingKey:
 		return strings.TrimSpace(settings.OpencodeCLIPath)
+	case FakeCodexCLIPathSettingKey:
+		return strings.TrimSpace(settings.FakeCodexCLIPath)
 	case CodexAPIKeySettingKey:
 		return strings.TrimSpace(settings.CodexAPIKey)
 	case AgentRunnerIDSettingKey:

@@ -191,6 +191,7 @@ func (a *CursorAgent) resolveAgentPath() (string, error) {
 	path, err := registry.ResolveConfiguredCLIPath(
 		a.SettingsPath,
 		registry.CursorCLIPathSettingKey,
+		registry.EnvCursorCLIPath,
 		a.AgentPath,
 		func() (string, error) { return FindAgentPath(a.Env) },
 	)

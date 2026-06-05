@@ -6,12 +6,12 @@ import (
 )
 
 type AgentRunnerInfo struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID   AgentRunnerID `json:"id"`
+	Name string        `json:"name"`
 }
 
 type AgentRunner struct {
-	ID    string
+	ID    AgentRunnerID
 	Name  string
 	Agent Agent
 }
@@ -19,15 +19,15 @@ type AgentRunner struct {
 type AgentRunnerRegistry struct {
 	defaultID string
 	ordered   []AgentRunner
-	byID      map[string]AgentRunner
+	byID      map[AgentRunnerID]AgentRunner
 }
 
 func NewAgentRunnerRegistry(defaultID string, runners []AgentRunner) (*AgentRunnerRegistry, error) {
 	reg := &AgentRunnerRegistry{
-		byID: make(map[string]AgentRunner, len(runners)),
+		byID: make(map[AgentRunnerID]AgentRunner, len(runners)),
 	}
 	for _, runner := range runners {
-		id := strings.TrimSpace(runner.ID)
+		id := AgentRunnerID(strings.TrimSpace(string(runner.ID)))
 		if id == "" {
 			return nil, fmt.Errorf("agent runner id is required")
 		}
@@ -36,7 +36,7 @@ func NewAgentRunnerRegistry(defaultID string, runners []AgentRunner) (*AgentRunn
 		}
 		runner.ID = id
 		if strings.TrimSpace(runner.Name) == "" {
-			runner.Name = id
+			runner.Name = string(id)
 		}
 		if _, exists := reg.byID[id]; exists {
 			return nil, fmt.Errorf("duplicate agent runner id: %s", id)
@@ -48,10 +48,10 @@ func NewAgentRunnerRegistry(defaultID string, runners []AgentRunner) (*AgentRunn
 		return nil, fmt.Errorf("at least one agent runner is required")
 	}
 	if strings.TrimSpace(defaultID) == "" {
-		reg.defaultID = reg.ordered[0].ID
+		reg.defaultID = string(reg.ordered[0].ID)
 		return reg, nil
 	}
-	if _, ok := reg.byID[defaultID]; !ok {
+	if _, ok := reg.byID[AgentRunnerID(defaultID)]; !ok {
 		return nil, fmt.Errorf("default agent runner not found: %s", defaultID)
 	}
 	reg.defaultID = defaultID
@@ -69,9 +69,9 @@ func (r *AgentRunnerRegistry) Resolve(id string) (AgentRunner, error) {
 	if r == nil {
 		return AgentRunner{}, fmt.Errorf("agent runner registry is not configured")
 	}
-	runnerID := strings.TrimSpace(id)
+	runnerID := AgentRunnerID(strings.TrimSpace(id))
 	if runnerID == "" {
-		runnerID = r.defaultID
+		runnerID = AgentRunnerID(r.defaultID)
 	}
 	runner, ok := r.byID[runnerID]
 	if !ok {

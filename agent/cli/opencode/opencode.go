@@ -182,6 +182,7 @@ func (a *OpencodeAgent) resolveAgentPath() (string, error) {
 	path, err := registry.ResolveConfiguredCLIPath(
 		a.SettingsPath,
 		registry.OpencodeCLIPathSettingKey,
+		registry.EnvOpencodeCLIPath,
 		a.AgentPath,
 		func() (string, error) { return FindAgentPath(a.Env) },
 	)

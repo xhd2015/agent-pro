@@ -28,6 +28,13 @@ func FindAgentPath(env *exec.Env) (string, error) {
 	return "", fmt.Errorf("codex not found in PATH")
 }
 
+func FindFakeCodexPath(env *exec.Env) (string, error) {
+	if path, err := env.LookPath("fake-codex"); err == nil {
+		return path, nil
+	}
+	return "", fmt.Errorf("fake-codex not found in PATH")
+}
+
 func (a *CodexAgent) Ask(ctx context.Context, question string, opts *registry.AskOptions, onDelta registry.DeltaCallback) (string, error) {
 	workspace := a.Workspace
 	if opts != nil && opts.Workspace != "" {
@@ -206,6 +213,7 @@ func (a *CodexAgent) resolveAgentPath() (string, error) {
 	path, err := registry.ResolveConfiguredCLIPath(
 		a.SettingsPath,
 		registry.CodexCLIPathSettingKey,
+		registry.EnvCodexCLIPath,
 		a.AgentPath,
 		func() (string, error) { return FindAgentPath(a.Env) },
 	)

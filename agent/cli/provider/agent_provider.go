@@ -11,21 +11,21 @@ import (
 	"github.com/xhd2015/agent-pro/agent/exec"
 )
 
-func Build(runnerID, settingsPath, workspace string, env *exec.Env) (registry.AgentRunner, error) {
-	id := strings.TrimSpace(runnerID)
+func Build(runnerID registry.AgentRunnerID, settingsPath, workspace string, env *exec.Env) (registry.AgentRunner, error) {
+	id := registry.AgentRunnerID(strings.TrimSpace(string(runnerID)))
 	if id == "" {
 		return registry.AgentRunner{}, fmt.Errorf("agent runner id is required")
 	}
 	switch id {
-	case "cursor":
-		cursorPath, err := registry.ResolveConfiguredCLIPath(settingsPath, registry.CursorCLIPathSettingKey, "", func() (string, error) {
+	case registry.AgentRunnerCursor:
+		cursorPath, err := registry.ResolveConfiguredCLIPath(settingsPath, registry.CursorCLIPathSettingKey, registry.EnvCursorCLIPath, "", func() (string, error) {
 			return cursoragent.FindAgentPath(env)
 		})
 		if err != nil {
 			return registry.AgentRunner{}, fmt.Errorf("cursor-agent not found: %w (install it or add it to PATH)", err)
 		}
 		return registry.AgentRunner{
-			ID:   "cursor",
+			ID:   registry.AgentRunnerCursor,
 			Name: "Cursor",
 			Agent: &cursoragent.CursorAgent{
 				AgentPath:    cursorPath,
@@ -34,15 +34,15 @@ func Build(runnerID, settingsPath, workspace string, env *exec.Env) (registry.Ag
 				Env:          env,
 			},
 		}, nil
-	case "codex":
-		codexPath, err := registry.ResolveConfiguredCLIPath(settingsPath, registry.CodexCLIPathSettingKey, "", func() (string, error) {
+	case registry.AgentRunnerCodex:
+		codexPath, err := registry.ResolveConfiguredCLIPath(settingsPath, registry.CodexCLIPathSettingKey, registry.EnvCodexCLIPath, "", func() (string, error) {
 			return codexagent.FindAgentPath(env)
 		})
 		if err != nil {
 			return registry.AgentRunner{}, fmt.Errorf("codex not found: %w (install it or add it to PATH)", err)
 		}
 		return registry.AgentRunner{
-			ID:   "codex",
+			ID:   registry.AgentRunnerCodex,
 			Name: "Codex",
 			Agent: &codexagent.CodexAgent{
 				AgentPath:    codexPath,
@@ -51,18 +51,35 @@ func Build(runnerID, settingsPath, workspace string, env *exec.Env) (registry.Ag
 				Env:          env,
 			},
 		}, nil
-	case "opencode":
-		opencodePath, err := registry.ResolveConfiguredCLIPath(settingsPath, registry.OpencodeCLIPathSettingKey, "", func() (string, error) {
+	case registry.AgentRunnerOpencode:
+		opencodePath, err := registry.ResolveConfiguredCLIPath(settingsPath, registry.OpencodeCLIPathSettingKey, registry.EnvOpencodeCLIPath, "", func() (string, error) {
 			return opencodeagent.FindAgentPath(env)
 		})
 		if err != nil {
 			return registry.AgentRunner{}, fmt.Errorf("opencode not found: %w (install it or add it to PATH)", err)
 		}
 		return registry.AgentRunner{
-			ID:   "opencode",
+			ID:   registry.AgentRunnerOpencode,
 			Name: "Opencode",
 			Agent: &opencodeagent.OpencodeAgent{
 				AgentPath:    opencodePath,
+				SettingsPath: settingsPath,
+				Workspace:    workspace,
+				Env:          env,
+			},
+		}, nil
+	case registry.AgentRunnerFakeCodex:
+		fakeCodexPath, err := registry.ResolveConfiguredCLIPath(settingsPath, registry.FakeCodexCLIPathSettingKey, registry.EnvFakeCodexCLIPath, "", func() (string, error) {
+			return codexagent.FindFakeCodexPath(env)
+		})
+		if err != nil {
+			return registry.AgentRunner{}, fmt.Errorf("fake-codex not found: %w (build it or add it to PATH)", err)
+		}
+		return registry.AgentRunner{
+			ID:   registry.AgentRunnerFakeCodex,
+			Name: "Fake Codex",
+			Agent: &codexagent.CodexAgent{
+				AgentPath:    fakeCodexPath,
 				SettingsPath: settingsPath,
 				Workspace:    workspace,
 				Env:          env,
