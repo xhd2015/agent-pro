@@ -266,6 +266,53 @@ func TestFocusSourceIncludesLinkedChildren(t *testing.T) {
 	}
 }
 
+func TestRelationshipsGroupSameCodennSessionRoundsAsOneChild(t *testing.T) {
+	parent := AgentTraceSummary{AgentTraceMetadata: AgentTraceMetadata{
+		ID:      "murphy-1",
+		Command: "murphy",
+		LogPath: filepath.Join("murphy-1", traceLogFile),
+	}}
+	firstRound := AgentTraceSummary{AgentTraceMetadata: AgentTraceMetadata{
+		ID:              "codenn-round-1",
+		Command:         "codenn",
+		Status:          "completed",
+		ParentTraceID:   "murphy-1",
+		DelegationLabel: "api",
+		CreatedAt:       "2026-06-05T10:00:00Z",
+		LogPath: filepath.Join("config", "codenn", "sessions", "session-1",
+			"rounds", "round-1", "agent-traces", "codenn-round-1", traceLogFile),
+	}}
+	secondRound := AgentTraceSummary{AgentTraceMetadata: AgentTraceMetadata{
+		ID:              "codenn-round-2",
+		Command:         "codenn",
+		Status:          "completed",
+		ParentTraceID:   "murphy-1",
+		DelegationLabel: "api",
+		CreatedAt:       "2026-06-05T10:01:00Z",
+		LogPath: filepath.Join("config", "codenn", "sessions", "session-1",
+			"rounds", "round-2", "agent-traces", "codenn-round-2", traceLogFile),
+	}}
+
+	summaries := withAgentTraceRelationships([]AgentTraceSummary{parent, firstRound, secondRound})
+	var linkedParent AgentTraceSummary
+	for _, summary := range summaries {
+		if summary.ID == "murphy-1" {
+			linkedParent = summary
+			break
+		}
+	}
+	if len(linkedParent.Children) != 1 {
+		t.Fatalf("children = %#v, want one grouped codenn child", linkedParent.Children)
+	}
+	child := linkedParent.Children[0]
+	if child.ID != "codenn-round-2" {
+		t.Fatalf("child ID = %q, want latest round codenn-round-2", child.ID)
+	}
+	if child.DelegationLabel != "api" {
+		t.Fatalf("child label = %q, want api", child.DelegationLabel)
+	}
+}
+
 type staticSource struct {
 	summaries []AgentTraceSummary
 }

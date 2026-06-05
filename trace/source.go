@@ -616,6 +616,7 @@ func withAgentTraceRelationships(summaries []AgentTraceSummary) []AgentTraceSumm
 	for i, summary := range out {
 		indexByID[summary.ID] = i
 	}
+	childIndexByParentGroup := map[string]int{}
 	for _, summary := range out {
 		parentID := strings.TrimSpace(summary.ParentTraceID)
 		if parentID == "" {
@@ -625,7 +626,7 @@ func withAgentTraceRelationships(summaries []AgentTraceSummary) []AgentTraceSumm
 		if !ok {
 			continue
 		}
-		out[parentIndex].Children = append(out[parentIndex].Children, AgentTraceChild{
+		child := AgentTraceChild{
 			ID:              summary.ID,
 			Command:         summary.Command,
 			CommandLine:     summary.CommandLine,
@@ -635,9 +636,66 @@ func withAgentTraceRelationships(summaries []AgentTraceSummary) []AgentTraceSumm
 			CreatedAt:       summary.CreatedAt,
 			DelegationID:    summary.DelegationID,
 			DelegationLabel: summary.DelegationLabel,
-		})
+		}
+		groupKey := childRelationshipGroupKey(summary)
+		if groupKey == "" {
+			out[parentIndex].Children = append(out[parentIndex].Children, child)
+			continue
+		}
+		parentGroupKey := parentID + "\x00" + groupKey
+		if childIndex, ok := childIndexByParentGroup[parentGroupKey]; ok {
+			if strings.TrimSpace(child.CreatedAt) >= strings.TrimSpace(out[parentIndex].Children[childIndex].CreatedAt) {
+				out[parentIndex].Children[childIndex] = child
+			}
+			continue
+		}
+		childIndexByParentGroup[parentGroupKey] = len(out[parentIndex].Children)
+		out[parentIndex].Children = append(out[parentIndex].Children, child)
 	}
 	return out
+}
+
+func childRelationshipGroupKey(summary AgentTraceSummary) string {
+	if strings.TrimSpace(summary.Command) != "codenn" {
+		return ""
+	}
+	parentID := strings.TrimSpace(summary.ParentTraceID)
+	if parentID == "" {
+		return ""
+	}
+	label := strings.TrimSpace(firstNonEmptyString(summary.DelegationLabel, summary.DelegationID))
+	if label == "" {
+		return ""
+	}
+	sessionDir := codennSessionDirFromLogPath(summary.LogPath)
+	if sessionDir == "" {
+		return ""
+	}
+	return parentID + "\x00" + label + "\x00" + sessionDir
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func codennSessionDirFromLogPath(logPath string) string {
+	clean := filepath.Clean(strings.TrimSpace(logPath))
+	if clean == "." || clean == "" {
+		return ""
+	}
+	parts := strings.Split(clean, string(filepath.Separator))
+	for i := 0; i+3 < len(parts); i++ {
+		if parts[i] != "codenn" || parts[i+1] != "sessions" || parts[i+3] != "rounds" {
+			continue
+		}
+		return filepath.Join(parts[:i+3]...)
+	}
+	return ""
 }
 
 func hydrateAgentTraceDetailRelationships(detail *AgentTraceDetail, summaries []AgentTraceSummary) {

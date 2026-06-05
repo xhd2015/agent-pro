@@ -30,6 +30,11 @@ Options:
   --include-linked         include linked parent/child traces with focused traces
   --print                  print trace summary to terminal and exit
   --print-messages N       number of recent normalized messages to print (default: 3)
+  --json                   print trace summaries as JSON and exit
+  --trace-id ID            with --json, include only one trace id
+  --command COMMAND        with --json, filter traces by command
+  --delegation-label LABEL with --json, filter traces by delegation label
+  --parent-trace-id ID     with --json, filter traces by parent trace id
   --route-prefix PREFIX    mount the trace viewer under PREFIX, e.g. agent-traces
   --component NAME         render a single named component (default: full app)
   --open                   open the trace viewer in a browser after startup
@@ -55,6 +60,11 @@ func Run(args []string) error {
 	var noPrintSources bool
 	var printMode bool
 	var printMessages int
+	var jsonMode bool
+	var filterTraceID string
+	var filterCommand string
+	var filterDelegationLabel string
+	var filterParentTraceID string
 	var routePrefix string
 	var openBrowser bool
 	var noOpen bool
@@ -69,6 +79,11 @@ func Run(args []string) error {
 		Bool("--no-print-sources", &noPrintSources).
 		Bool("--print", &printMode).
 		Int("--print-messages", &printMessages).
+		Bool("--json", &jsonMode).
+		String("--trace-id", &filterTraceID).
+		String("--command", &filterCommand).
+		String("--delegation-label", &filterDelegationLabel).
+		String("--parent-trace-id", &filterParentTraceID).
 		String("--route-prefix", &routePrefix).
 		String("--component", &component).
 		Bool("--open", &openBrowser).
@@ -111,6 +126,14 @@ func Run(args []string) error {
 			printMessages = 3
 		}
 		return printTraceReport(source, sourceDescriptions, printMessages)
+	}
+	if jsonMode {
+		return printTraceJSONReport(os.Stdout, source, sourceDescriptions, traceJSONFilters{
+			TraceID:         filterTraceID,
+			Command:         filterCommand,
+			DelegationLabel: filterDelegationLabel,
+			ParentTraceID:   filterParentTraceID,
+		})
 	}
 
 	if port == 0 {
