@@ -28,7 +28,7 @@ Usage: fake-codex exec [OPTIONS] [PROMPT]
 Mimics codex exec --json output with randomly generated events.
 
 Options:
-  --json                          output JSON events (default)
+  --json                          output JSON events (default: human-friendly)
   --cd <dir>                      working directory (ignored, for compatibility)
   --sandbox <mode>                sandbox mode (ignored, for compatibility)
   --model <model>                 model name (ignored, for compatibility)
@@ -101,15 +101,29 @@ func handleExec(args []string) error {
 	gen := fakeagent.NewGenerator(seed)
 	events := gen.GenerateSession(prompt)
 
-	lines, err := fakeagent.FormatCodexEvents(events)
-	if err != nil {
-		return fmt.Errorf("format events: %w", err)
-	}
+	jsonOutput := jsonFlag != nil && *jsonFlag
 
-	for i, line := range lines {
-		fmt.Println(line)
-		if delay > 0 && i < len(lines)-1 {
-			time.Sleep(delay)
+	if jsonOutput {
+		lines, err := fakeagent.FormatCodexEvents(events)
+		if err != nil {
+			return fmt.Errorf("format events: %w", err)
+		}
+		for i, line := range lines {
+			fmt.Println(line)
+			if delay > 0 && i < len(lines)-1 {
+				time.Sleep(delay)
+			}
+		}
+	} else {
+		text := fakeagent.FormatCodexEventsText(events)
+		if delay > 0 {
+			lines := strings.Split(text, "\n")
+			for _, line := range lines {
+				fmt.Println(line)
+				time.Sleep(delay)
+			}
+		} else {
+			fmt.Print(text)
 		}
 	}
 

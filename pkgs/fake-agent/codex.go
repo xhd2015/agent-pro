@@ -3,6 +3,7 @@ package fakeagent
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 func FormatCodexEvents(events []Event) ([]string, error) {
@@ -23,6 +24,52 @@ type CodexEvent struct {
 	Delta   string     `json:"delta,omitempty"`
 	Text    string     `json:"text,omitempty"`
 	Message string     `json:"message,omitempty"`
+}
+
+func FormatCodexEventsText(events []Event) string {
+	var b strings.Builder
+	for _, e := range events {
+		if e.Item == nil || e.Type != EventCompleted {
+			continue
+		}
+		switch e.Item.Type {
+		case ItemReasoning:
+			if text := strings.TrimSpace(e.Item.Text); text != "" {
+				b.WriteString("\nThinking...\n")
+				for _, line := range strings.Split(text, "\n") {
+					b.WriteString("  " + line + "\n")
+				}
+			}
+		case ItemCommandExecution:
+			cmd := e.Item.Command
+			output := strings.TrimSpace(e.Item.AggregatedOutput)
+			b.WriteString("\n> " + cmd + "\n")
+			if output != "" {
+				for _, line := range strings.Split(output, "\n") {
+					b.WriteString("  " + line + "\n")
+				}
+			}
+		case ItemFileChange:
+			for _, c := range e.Item.Changes {
+				symbol := "+"
+				verb := "created"
+				switch c.Kind {
+				case "modify":
+					symbol = "~"
+					verb = "modified"
+				case "delete":
+					symbol = "-"
+					verb = "deleted"
+				}
+				b.WriteString(symbol + " " + c.Path + " (" + verb + ")\n")
+			}
+		case ItemMessage:
+			if text := strings.TrimSpace(e.Item.Text); text != "" {
+				b.WriteString("\n" + text + "\n")
+			}
+		}
+	}
+	return b.String()
 }
 
 func ParseCodexEvents(lines []string) ([]Event, error) {

@@ -2,6 +2,7 @@ package fakeagent
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -197,5 +198,140 @@ func TestFileChangeJSON(t *testing.T) {
 	}
 	if len(changes) != 2 {
 		t.Fatalf("got %d changes, want 2", len(changes))
+	}
+}
+
+func TestFormatCodexEventsText_Reasoning(t *testing.T) {
+	events := []Event{
+		{Type: EventStarted, Item: &EventItem{ID: "r1", Type: ItemReasoning}},
+		{Type: EventUpdated, Item: &EventItem{ID: "r1", Type: ItemReasoning, Text: "Let me check"}},
+		{Type: EventCompleted, Item: &EventItem{ID: "r1", Type: ItemReasoning, Text: "Let me think.\nI will plan.", Status: "completed"}},
+	}
+	text := FormatCodexEventsText(events)
+	if !strings.Contains(text, "Thinking...") {
+		t.Fatalf("expected 'Thinking...', got: %s", text)
+	}
+	if !strings.Contains(text, "Let me think.") {
+		t.Fatalf("expected reasoning text: %s", text)
+	}
+	if !strings.Contains(text, "I will plan.") {
+		t.Fatalf("expected second line: %s", text)
+	}
+}
+
+func TestFormatCodexEventsText_CommandExecution(t *testing.T) {
+	exitCode := 0
+	events := []Event{
+		{Type: EventStarted, Item: &EventItem{ID: "c1", Type: ItemCommandExecution, Command: "ls -la"}},
+		{Type: EventCompleted, Item: &EventItem{
+			ID: "c1", Type: ItemCommandExecution, Command: "ls -la",
+			AggregatedOutput: "file1.txt\nfile2.txt", ExitCode: &exitCode, Status: "completed",
+		}},
+	}
+	text := FormatCodexEventsText(events)
+	if !strings.Contains(text, "> ls -la") {
+		t.Fatalf("expected '> ls -la': %s", text)
+	}
+	if !strings.Contains(text, "file1.txt") {
+		t.Fatalf("expected file1.txt: %s", text)
+	}
+	if !strings.Contains(text, "file2.txt") {
+		t.Fatalf("expected file2.txt: %s", text)
+	}
+}
+
+func TestFormatCodexEventsText_FileChangeAdd(t *testing.T) {
+	events := []Event{
+		{Type: EventCompleted, Item: &EventItem{
+			ID: "f1", Type: ItemFileChange, Status: "completed",
+			Changes: []FileChange{{Path: "/tmp/new.go", Kind: "add"}},
+		}},
+	}
+	text := FormatCodexEventsText(events)
+	if !strings.Contains(text, "+ /tmp/new.go (created)") {
+		t.Fatalf("expected file add: %s", text)
+	}
+}
+
+func TestFormatCodexEventsText_FileChangeModify(t *testing.T) {
+	events := []Event{
+		{Type: EventCompleted, Item: &EventItem{
+			ID: "f1", Type: ItemFileChange, Status: "completed",
+			Changes: []FileChange{{Path: "/tmp/edit.go", Kind: "modify"}},
+		}},
+	}
+	text := FormatCodexEventsText(events)
+	if !strings.Contains(text, "~ /tmp/edit.go (modified)") {
+		t.Fatalf("expected file modify: %s", text)
+	}
+}
+
+func TestFormatCodexEventsText_FileChangeDelete(t *testing.T) {
+	events := []Event{
+		{Type: EventCompleted, Item: &EventItem{
+			ID: "f1", Type: ItemFileChange, Status: "completed",
+			Changes: []FileChange{{Path: "/tmp/old.go", Kind: "delete"}},
+		}},
+	}
+	text := FormatCodexEventsText(events)
+	if !strings.Contains(text, "- /tmp/old.go (deleted)") {
+		t.Fatalf("expected file delete: %s", text)
+	}
+}
+
+func TestFormatCodexEventsText_Message(t *testing.T) {
+	events := []Event{
+		{Type: EventCompleted, Item: &EventItem{
+			ID: "m1", Type: ItemMessage, Text: "All done!", Status: "completed",
+		}},
+	}
+	text := FormatCodexEventsText(events)
+	if !strings.Contains(text, "All done!") {
+		t.Fatalf("expected message: %s", text)
+	}
+}
+
+func TestFormatCodexEventsText_SkipsStarted(t *testing.T) {
+	events := []Event{
+		{Type: EventStarted, Item: &EventItem{ID: "c1", Type: ItemCommandExecution, Command: "skipped"}},
+	}
+	text := FormatCodexEventsText(events)
+	if strings.Contains(text, "skipped") {
+		t.Fatalf("started event should be skipped: %s", text)
+	}
+}
+
+func TestFormatCodexEventsText_SkipsUpdated(t *testing.T) {
+	events := []Event{
+		{Type: EventUpdated, Item: &EventItem{ID: "r1", Type: ItemReasoning, Text: "partial thought"}},
+	}
+	text := FormatCodexEventsText(events)
+	if strings.Contains(text, "partial thought") {
+		t.Fatalf("updated event should be skipped: %s", text)
+	}
+}
+
+func TestFormatCodexEventsText_EmptyEvents(t *testing.T) {
+	text := FormatCodexEventsText(nil)
+	if text != "" {
+		t.Fatalf("expected empty for nil, got: %s", text)
+	}
+	text = FormatCodexEventsText([]Event{})
+	if text != "" {
+		t.Fatalf("expected empty for empty slice, got: %s", text)
+	}
+}
+
+func TestFormatCodexEventsText_CommandNoOutput(t *testing.T) {
+	exitCode := 0
+	events := []Event{
+		{Type: EventCompleted, Item: &EventItem{
+			ID: "c1", Type: ItemCommandExecution, Command: "echo done",
+			ExitCode: &exitCode, Status: "completed",
+		}},
+	}
+	text := FormatCodexEventsText(events)
+	if !strings.Contains(text, "> echo done") {
+		t.Fatalf("expected command line: %s", text)
 	}
 }
