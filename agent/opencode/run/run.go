@@ -24,14 +24,14 @@ type Options struct {
 	Logger    Logger
 }
 
-func Run(opts Options) (string, error) {
+func Run(ctx context.Context, opts Options) (string, string, error) {
 	promptFile, err := os.CreateTemp("", "opencode-prompt-*.txt")
 	if err != nil {
-		return "", fmt.Errorf("failed to create temp file for prompt: %w", err)
+		return "", "", fmt.Errorf("failed to create temp file for prompt: %w", err)
 	}
 	if _, err := promptFile.WriteString(opts.Prompt); err != nil {
 		promptFile.Close()
-		return "", fmt.Errorf("failed to write prompt to temp file: %w", err)
+		return "", "", fmt.Errorf("failed to write prompt to temp file: %w", err)
 	}
 	promptFile.Close()
 
@@ -47,66 +47,84 @@ func Run(opts Options) (string, error) {
 
 	cmd, err := tool_exec.New("opencode", args, &tool_exec.Options{Dir: opts.Dir})
 	if err != nil {
-		return "", fmt.Errorf("failed to run opencode: %w", err)
+		return "", "", fmt.Errorf("failed to run opencode: %w", err)
 	}
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return "", fmt.Errorf("failed to create stdout pipe: %w", err)
+		return "", "", fmt.Errorf("failed to create stdout pipe: %w", err)
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		return "", fmt.Errorf("failed to create stderr pipe: %w", err)
+		return "", "", fmt.Errorf("failed to create stderr pipe: %w", err)
 	}
 
 	if err := cmd.Start(); err != nil {
-		return "", fmt.Errorf("failed to start opencode: %w", err)
+		return "", "", fmt.Errorf("failed to start opencode: %w", err)
 	}
 
-	var fullOutput strings.Builder
-	doneChan := make(chan struct{})
+	resultCh := make(chan struct {
+		sessionID string
+		answer    string
+		err       error
+	}, 1)
 
 	go func() {
-		pipeToLogger(stderr, opts.Logger)
+		sid, answer, scanErr := scanOutputStream(stdout, nil, func(line string) {
+			opts.Logger.Log(line + "\n")
+		})
+		resultCh <- struct {
+			sessionID string
+			answer    string
+			err       error
+		}{sid, answer, scanErr}
 	}()
 
+	stderrCh := make(chan error, 1)
 	go func() {
-		buf := make([]byte, 1024)
-		for {
-			n, readErr := stdout.Read(buf)
-			if n > 0 {
-				chunk := string(buf[:n])
-				fullOutput.WriteString(chunk)
-				opts.Logger.Log(chunk)
+		stderrCh <- pipeToLogger(stderr, opts.Logger)
+	}()
+
+	var (
+		output    string
+		sessionID string
+		firstErr  error
+	)
+	for i := 0; i < 2; i++ {
+		select {
+		case result := <-resultCh:
+			sessionID = result.sessionID
+			output = result.answer
+			if result.err != nil && firstErr == nil {
+				firstErr = result.err
 			}
-			if readErr != nil {
-				break
+		case err := <-stderrCh:
+			if err != nil && firstErr == nil {
+				firstErr = err
 			}
+		case <-ctx.Done():
+			cmd.Process.Kill()
+			return "", "", ctx.Err()
 		}
-		doneChan <- struct{}{}
-	}()
-
-	<-doneChan
-	err = cmd.Wait()
-
-	if err != nil {
-		return "", fmt.Errorf("opencode run failed: %w", err)
 	}
 
-	return fullOutput.String(), nil
+	waitErr := cmd.Wait()
+	if firstErr != nil {
+		return output, sessionID, firstErr
+	}
+	if waitErr != nil {
+		return output, sessionID, fmt.Errorf("opencode run failed: %w", waitErr)
+	}
+
+	return output, sessionID, nil
 }
 
-func pipeToLogger(r io.Reader, logger Logger) {
-	buf := make([]byte, 1024)
-	for {
-		n, err := r.Read(buf)
-		if n > 0 {
-			logger.Log(string(buf[:n]))
-		}
-		if err != nil {
-			break
-		}
+func pipeToLogger(r io.Reader, logger Logger) error {
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		logger.Log(scanner.Text() + "\n")
 	}
+	return scanner.Err()
 }
 
 type SessionRunOpts struct {
@@ -208,50 +226,55 @@ func runSession(ctx context.Context, opts SessionRunOpts) (string, string, error
 		return "", "", fmt.Errorf("start opencode: %w", err)
 	}
 
-	sessionIDResult := opts.SessionID
-	fullAnswer := strings.Builder{}
+	type resultMsg struct {
+		sessionID string
+		answer    string
+		err       error
+	}
+	resultCh := make(chan resultMsg, 1)
+	stderrCh := make(chan error, 1)
 
-	done := make(chan error, 2)
 	go func() {
-		scanner := bufio.NewScanner(stdout)
-		scanner.Buffer(make([]byte, 256*1024), 2*1024*1024)
-		for scanner.Scan() {
-			line := scanner.Text()
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
-			}
-			if !strings.HasPrefix(line, "{") {
-				continue
-			}
-
-			event := parseStreamEvent(line, opts.OnEvent)
-			if event.SessionID != "" && sessionIDResult == "" {
-				sessionIDResult = event.SessionID
-			}
-			if event.Text != "" {
-				fullAnswer.WriteString(event.Text)
-			}
-		}
-		done <- scanner.Err()
+		sid, answer, scanErr := scanOutputStream(stdout, opts.OnEvent, nil)
+		resultCh <- resultMsg{sid, answer, scanErr}
 	}()
 	go func() {
 		stderrBuf := strings.Builder{}
 		io.Copy(&stderrBuf, stderr)
 		if stderrBuf.Len() > 0 {
-			done <- fmt.Errorf("%s", strings.TrimSpace(stderrBuf.String()))
+			stderrCh <- fmt.Errorf("%s", strings.TrimSpace(stderrBuf.String()))
 		} else {
-			done <- nil
+			stderrCh <- nil
 		}
 	}()
 
-	var firstErr error
+	var (
+		sessionIDResult string
+		fullAnswer      strings.Builder
+		firstErr        error
+	)
 	for i := 0; i < 2; i++ {
-		if err := <-done; err != nil {
-			if firstErr == nil {
+		select {
+		case result := <-resultCh:
+			if result.sessionID != "" && sessionIDResult == "" {
+				sessionIDResult = result.sessionID
+			}
+			fullAnswer.WriteString(result.answer)
+			if result.err != nil && firstErr == nil {
+				firstErr = result.err
+			}
+		case err := <-stderrCh:
+			if err != nil && firstErr == nil {
 				firstErr = err
 			}
+		case <-ctx.Done():
+			cmd.Process.Kill()
+			return "", "", ctx.Err()
 		}
+	}
+
+	if sessionIDResult == "" {
+		sessionIDResult = opts.SessionID
 	}
 
 	waitErr := cmd.Wait()
@@ -266,6 +289,30 @@ func runSession(ctx context.Context, opts SessionRunOpts) (string, string, error
 		opts.OnEvent(StreamEvent{Type: "done", Done: true})
 	}
 	return sessionIDResult, fullAnswer.String(), nil
+}
+
+func scanOutputStream(r io.Reader, onEvent StreamCallback, onRawLine func(string)) (sessionID, answer string, err error) {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 256*1024), 2*1024*1024)
+	var text strings.Builder
+	for scanner.Scan() {
+		line := scanner.Text()
+		if onRawLine != nil {
+			onRawLine(line)
+		}
+		line = strings.TrimSpace(line)
+		if line == "" || !strings.HasPrefix(line, "{") {
+			continue
+		}
+		event := parseStreamEvent(line, onEvent)
+		if event.SessionID != "" && sessionID == "" {
+			sessionID = event.SessionID
+		}
+		if event.Text != "" {
+			text.WriteString(event.Text)
+		}
+	}
+	return sessionID, text.String(), scanner.Err()
 }
 
 func parseStreamEvent(line string, onEvent StreamCallback) StreamEvent {

@@ -19,8 +19,8 @@ func init() {
 		fmt.Fprintf(os.Stderr, "failed to get working directory: %v\n", err)
 		os.Exit(1)
 	}
-	if _, err := os.Stat(filepath.Join(wd, "ask_user")); err != nil {
-		fmt.Fprintf(os.Stderr, "tests must be run from the test-case-design-expert agent root (ask_user/ directory not found)\n")
+	if _, err := os.Stat(filepath.Join(wd, "main.go")); err != nil {
+		fmt.Fprintf(os.Stderr, "tests must be run from the test-case-design-expert agent root (main.go not found)\n")
 		os.Exit(1)
 	}
 	agentRoot = wd
