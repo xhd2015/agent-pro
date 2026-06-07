@@ -128,30 +128,6 @@ func TestWrapText(t *testing.T) {
 	}
 }
 
-func TestGenerateOutputName(t *testing.T) {
-	tests := []struct {
-		input  string
-		suffix string
-		expect string
-	}{
-		{"Cat Classifier", "-tests-design.md", "cat-classifier-tests-design.md"},
-		{"Add dark mode", "-tests-design.md", "add-dark-mode-tests-design.md"},
-		{"Login!!! Page", "-tests-design.md", "login-page-tests-design.md"},
-		{"a very long feature description that goes on and on and on and on", "-tests-design.md", "a-very-long-feature-description-that-goes-on-and-o-tests-design.md"},
-		{"", "-tests-design.md", "tests-design.md"},
-		{"  spaces   everywhere  ", "-tests-design.md", "spaces-everywhere-tests-design.md"},
-		{"Brainstorm Feature", "-idea.md", "brainstorm-feature-idea.md"},
-		{"", "-idea.md", "idea.md"},
-	}
-
-	for _, tt := range tests {
-		got := GenerateOutputName(tt.input, tt.suffix)
-		if got != tt.expect {
-			t.Errorf("GenerateOutputName(%q, %q) = %q, want %q", tt.input, tt.suffix, got, tt.expect)
-		}
-	}
-}
-
 func TestDoneViewShowsFollowUpPrompt(t *testing.T) {
 	vp := viewport.New(80, 20)
 	m := model{

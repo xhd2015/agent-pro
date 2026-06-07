@@ -37,7 +37,7 @@ When you have finished producing the expansion, write the complete plan to a out
 
 If user mentioned where to save the file, save to that file.
 
-Otherwise, auto derive based on the feature request, use slug naming like: SOME-AMAZING-FEATURE-IDEA.md.
+Otherwise, auto derive based on the feature request, use slug naming like: `SOME-AMAZING-FEATURE-IDEA.md`(UPPER case naming).
 
 The output file could be .md or .html(self contained) format. When user mentions using html format, generate a html for better human review.
 

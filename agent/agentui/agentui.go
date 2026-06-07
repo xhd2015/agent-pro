@@ -730,37 +730,6 @@ func resolveSession(agentName, resumeID string) (sessionID, opencodeSessionID, s
 	return sid, osid, dir, feat, model, eventLogs, nil
 }
 
-func GenerateOutputName(feature, suffix string) string {
-	const maxPrefixLen = 50
-
-	s := strings.ToLower(strings.TrimSpace(feature))
-
-	var buf strings.Builder
-	for _, r := range s {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == ' ' || r == '-' {
-			buf.WriteRune(r)
-		}
-	}
-	s = buf.String()
-
-	s = strings.ReplaceAll(s, " ", "-")
-	for strings.Contains(s, "--") {
-		s = strings.ReplaceAll(s, "--", "-")
-	}
-	s = strings.Trim(s, "-")
-
-	if s == "" {
-		if strings.HasPrefix(suffix, "-") {
-			return suffix[1:]
-		}
-		return suffix
-	}
-	if len(s) > maxPrefixLen {
-		s = s[:maxPrefixLen]
-	}
-	return s + suffix
-}
-
 func newSessionID(prefix string) string {
 	var b [8]byte
 	rand.Read(b[:])

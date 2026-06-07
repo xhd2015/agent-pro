@@ -30,9 +30,9 @@ When you have finished producing all test cases, write the complete plan to a ou
 
 If user mentioned where to save the file, save to that file.
 
-Otherwise, auto derive based on the feature request, use slug naming like: SOME-AMAZING-FEATURE-TEST-DESIGN.md.
+Otherwise, auto derive based on the feature request, use slug naming like: `SOME-AMAZING-FEATURE-TEST-DESIGN.md`(UPPER case naming).
 
-The output file could be .md or .html(self contained) format. When user mentions using html format, generate a html for better human review.
+The output file could be .md or .html(self contained) format. When user mentions using html format, generate a html for better human review, otherwise default to markdown.
 
 The report must contain:
 1. The user's original feature request

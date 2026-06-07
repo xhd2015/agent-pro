@@ -12,13 +12,6 @@ import (
 	"github.com/xhd2015/agent-pro/agent/session"
 )
 
-func TestNewSessionIDViaAgentui(t *testing.T) {
-	id := agentui.GenerateOutputName("test", "-tests-design.md")
-	if !strings.HasSuffix(id, "-tests-design.md") {
-		t.Errorf("expected suffix '-tests-design.md' in output name, got %q", id)
-	}
-}
-
 func TestUsageContainsResumeFlag(t *testing.T) {
 	if !strings.Contains(usage, "--resume") {
 		t.Error("usage should mention --resume flag")
@@ -116,12 +109,5 @@ func TestPromptEmbedding(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "Test Cases") {
 		t.Error("embedded prompt should contain 'Test Cases'")
-	}
-}
-
-func TestOutputSuffixApplied(t *testing.T) {
-	result := agentui.GenerateOutputName("my feature", "-tests-design.md")
-	if !strings.HasSuffix(result, "-tests-design.md") {
-		t.Errorf("output should end with '-tests-design.md', got: %s", result)
 	}
 }
