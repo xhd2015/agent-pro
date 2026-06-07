@@ -7,3 +7,5 @@
 
 # binary
 /agent-pro
+.decisions.json
+.session.jsonl

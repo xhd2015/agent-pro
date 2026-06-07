@@ -13,6 +13,7 @@ import (
 	"time"
 
 	agenttrace "github.com/xhd2015/agent-pro/agent_trace"
+	"github.com/xhd2015/agent-pro/agent_trace/events"
 )
 
 const (
@@ -30,7 +31,7 @@ type AgentTraceSession struct {
 	mu       sync.Mutex
 	dir      string
 	metaPath string
-	logFile  *os.File
+	log      events.Logger
 	meta     AgentTraceMetadata
 }
 
@@ -52,7 +53,7 @@ func StartAgentTraceSession(dataDir string, meta AgentTraceMetadata, prompt stri
 	if err := os.WriteFile(promptPath, []byte(prompt), 0o644); err != nil {
 		return nil, err
 	}
-	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	logFile, err := events.Open(logPath)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +69,7 @@ func StartAgentTraceSession(dataDir string, meta AgentTraceMetadata, prompt stri
 	session := &AgentTraceSession{
 		dir:      dir,
 		metaPath: filepath.Join(dir, traceMetaFileName),
-		logFile:  logFile,
+		log:      logFile,
 		meta:     meta,
 	}
 	if err := session.saveMetaLocked(); err != nil {
@@ -101,14 +102,14 @@ func ResumeAgentTraceSession(traceRef string, updates AgentTraceMetadata) (*Agen
 	if strings.TrimSpace(meta.LogPath) == "" {
 		meta.LogPath = filepath.Join(dir, traceLogFile)
 	}
-	logFile, err := os.OpenFile(meta.LogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	logFile, err := events.Open(meta.LogPath)
 	if err != nil {
 		return nil, err
 	}
 	session := &AgentTraceSession{
 		dir:      dir,
 		metaPath: filepath.Join(dir, traceMetaFileName),
-		logFile:  logFile,
+		log:      logFile,
 		meta:     meta,
 	}
 	if err := session.saveMetaLocked(); err != nil {
@@ -235,7 +236,7 @@ func reserveTraceDir(root string, now time.Time) (string, string, error) {
 }
 
 func (s *AgentTraceSession) Writer() io.Writer {
-	if s == nil || s.logFile == nil {
+	if s == nil || s.log == nil {
 		return io.Discard
 	}
 	return &agentTraceLogWriter{session: s}
@@ -270,10 +271,10 @@ func (s *AgentTraceSession) Finish(err error) {
 	}
 	s.meta.UpdatedAt = time.Now().Format(time.RFC3339Nano)
 	_ = s.saveMetaLocked()
-	if s.logFile != nil {
-		_ = s.logFile.Sync()
-		_ = s.logFile.Close()
-		s.logFile = nil
+	if s.log != nil {
+		_ = s.log.Sync()
+		_ = s.log.Close()
+		s.log = nil
 	}
 }
 
@@ -300,14 +301,14 @@ func (w *agentTraceLogWriter) Write(p []byte) (int, error) {
 	}
 	w.session.mu.Lock()
 	defer w.session.mu.Unlock()
-	if w.session.logFile == nil {
+	if w.session.log == nil {
 		return len(p), nil
 	}
-	n, err := w.session.logFile.Write(p)
+	err := w.session.log.Append(p)
 	if err == nil && strings.Contains(string(p), "\n") {
-		_ = w.session.logFile.Sync()
+		_ = w.session.log.Sync()
 	}
-	return n, err
+	return len(p), err
 }
 
 func loadAgentTraceSummaries(dataDir string) ([]AgentTraceSummary, error) {

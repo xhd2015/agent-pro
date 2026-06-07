@@ -15,6 +15,18 @@ func printHumanReport(source trace.Source, descriptions []string) error {
 	return writeHumanReport(os.Stdout, source, descriptions)
 }
 
+func FormatMessage(msg types.AgentTraceMessage) string {
+	var buf strings.Builder
+	writeHumanMessage(&buf, 0, msg)
+	return strings.TrimRight(buf.String(), "\n")
+}
+
+func FormatMessageCompact(msg types.AgentTraceMessage) string {
+	var buf strings.Builder
+	writeHumanMessageCompact(&buf, msg)
+	return strings.TrimRight(buf.String(), "\n")
+}
+
 func writeHumanReport(w io.Writer, source trace.Source, descriptions []string) error {
 	summaries, err := source.List()
 	if err != nil {
@@ -108,6 +120,50 @@ func writeHumanMessage(w io.Writer, n int, msg types.AgentTraceMessage) {
 				continue
 			}
 			fmt.Fprintf(w, "     %s\n", truncateLine(line, 70))
+		}
+		fmt.Fprintln(w)
+	}
+}
+
+func writeHumanMessageCompact(w io.Writer, msg types.AgentTraceMessage) {
+	if msg.ToolCall != nil {
+		tc := msg.ToolCall
+		tool := strings.ToLower(tc.ToolName)
+		summary := strings.TrimSpace(tc.Summary)
+
+		icon, label := toolIcon(tool)
+		fmt.Fprintf(w, "%-4s %s\n", icon, label)
+
+		for _, line := range strings.Split(summary, "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			fmt.Fprintf(w, "  %s\n", truncateLine(line, 70))
+		}
+
+		if len(tc.FileChanges) > 0 {
+			for _, fc := range tc.FileChanges {
+				fmt.Fprintf(w, "  →  %s %s\n", fc.Kind, shortPath(fc.Path))
+			}
+		}
+
+		if tc.Status == types.StatusFailed {
+			fmt.Fprintf(w, "  ✗  FAILED\n")
+		}
+		fmt.Fprintln(w)
+	} else {
+		text := strings.TrimSpace(msg.Content)
+		if text == "" {
+			return
+		}
+		fmt.Fprintf(w, "💬   ASSISTANT\n")
+		for _, line := range strings.Split(text, "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			fmt.Fprintf(w, "  %s\n", truncateLine(line, 70))
 		}
 		fmt.Fprintln(w)
 	}

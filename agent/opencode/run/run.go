@@ -17,10 +17,11 @@ type Logger interface {
 }
 
 type Options struct {
-	Dir    string
-	Model  string
-	Prompt string
-	Logger Logger
+	Dir       string
+	Model     string
+	Prompt    string
+	SessionID string
+	Logger    Logger
 }
 
 func Run(opts Options) (string, error) {
@@ -40,6 +41,9 @@ func Run(opts Options) (string, error) {
 		args = append(args, "--model", opts.Model)
 	}
 	args = append(args, "--format", "json")
+	if opts.SessionID != "" {
+		args = append(args, "--session", opts.SessionID)
+	}
 
 	cmd, err := tool_exec.New("opencode", args, &tool_exec.Options{Dir: opts.Dir})
 	if err != nil {
