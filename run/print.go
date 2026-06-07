@@ -7,12 +7,14 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/fsnotify/fsnotify"
 	"github.com/xhd2015/agent-pro/agent_trace/types"
 	"github.com/xhd2015/agent-pro/trace"
+	"github.com/xhd2015/dot-pkgs/go-pkgs/logs"
 )
 
 func printHumanReport(source trace.Source, descriptions []string) error {
@@ -43,7 +45,7 @@ func writeHumanReport(w io.Writer, source trace.Source, descriptions []string) e
 			fmt.Fprintf(w, "  detail_error: %v\n", err)
 			continue
 		}
-		if err := writeHumanTrace(w, source, summary, detail); err != nil {
+		if err := writeHumanTrace(w, summary, detail); err != nil {
 			return err
 		}
 	}
@@ -51,7 +53,7 @@ func writeHumanReport(w io.Writer, source trace.Source, descriptions []string) e
 	return nil
 }
 
-func writeHumanTrace(w io.Writer, source trace.Source, summary trace.AgentTraceSummary, detail *trace.AgentTraceDetail) error {
+func writeHumanTrace(w io.Writer, summary trace.AgentTraceSummary, detail *trace.AgentTraceDetail) error {
 	sessionID := extractSessionID(detail)
 	runner := emptyDefault(summary.AgentRunnerID, "agent")
 	lines := summary.LogLineCount
@@ -73,14 +75,89 @@ func writeHumanTrace(w io.Writer, source trace.Source, summary trace.AgentTraceS
 		}
 	}
 
-	if summary.Status == "running" && detail != nil && detail.Metadata.LogPath != "" {
-		return followTraceSession(w, source, summary.ID, detail.Metadata.LogPath, len(detail.Messages), summary)
+	if summary.Status != "running" || detail == nil || detail.Metadata.LogPath == "" {
+		fmt.Fprintln(w, "───────────────────────────────────────────────────────────────")
+		printFinalStatus(w, summary)
+		fmt.Fprintln(w, "───────────────────────────────────────────────────────────────")
+		return nil
 	}
 
+	logPath := detail.Metadata.LogPath
+	metaPath := filepath.Join(filepath.Dir(logPath), "metadata.json")
+
+	watchCtx, watchCancel := context.WithCancel(context.Background())
+	defer watchCancel()
+	statusCtx, statusCancel := context.WithCancel(context.Background())
+	defer statusCancel()
+
+	sigCtx, _ := signal.NotifyContext(context.Background(), os.Interrupt)
+	go func() {
+		<-sigCtx.Done()
+		watchCancel()
+		statusCancel()
+	}()
+
+	nextNum := len(detail.Messages)
+	var mu sync.Mutex
+	statusDone := make(chan struct{})
+
+	go func() {
+		logs.WatchFileEvents(statusCtx, metaPath, logs.WatchFileEventsOptions{
+			DisableDebounce: true,
+		}, func(ev logs.FileEvent) error {
+			data, err := os.ReadFile(metaPath)
+			if err != nil {
+				return nil
+			}
+			var meta trace.AgentTraceMetadata
+			if err := json.Unmarshal(data, &meta); err != nil {
+				return nil
+			}
+			if meta.Status != "running" {
+				mu.Lock()
+				statusCancel()
+				mu.Unlock()
+				close(statusDone)
+			}
+			return nil
+		})
+	}()
+
+	watchErr := make(chan error, 1)
+	go func() {
+		watchErr <- logs.WatchLine(watchCtx, logPath, logs.WatchLineOptions{}, func(line string) error {
+			parsed, ok := types.ParseAgentTraceLine(json.RawMessage(line))
+			if !ok {
+				return nil
+			}
+			mu.Lock()
+			nextNum++
+			if parsed.Message != nil {
+				writeHumanMessage(w, nextNum, *parsed.Message)
+			} else if parsed.Activity != nil {
+				writeHumanMessage(w, nextNum, types.AgentTraceMessage{
+					Role:     types.RoleToolCall,
+					ToolCall: parsed.Activity,
+				})
+			}
+			mu.Unlock()
+			return nil
+		})
+	}()
+
+	<-statusDone
+
+	time.Sleep(200 * time.Millisecond)
+	watchCancel()
+
+	data, _ := os.ReadFile(metaPath)
+	var finalMeta trace.AgentTraceMetadata
+	json.Unmarshal(data, &finalMeta)
 	fmt.Fprintln(w, "───────────────────────────────────────────────────────────────")
-	printFinalStatus(w, summary)
+	printFinalStatus(w, trace.AgentTraceSummary{AgentTraceMetadata: finalMeta})
 	fmt.Fprintln(w, "───────────────────────────────────────────────────────────────")
-	return nil
+
+	return <-watchErr
 }
 
 func writeHumanMessage(w io.Writer, n int, msg types.AgentTraceMessage) {
@@ -255,83 +332,5 @@ func printFinalStatus(w io.Writer, summary trace.AgentTraceSummary) {
 		fmt.Fprintf(w, "  ✗ Failed: %s\n", summary.Error)
 	} else {
 		fmt.Fprintf(w, "  ○ Status: %s\n", summary.Status)
-	}
-}
-
-func followTraceSession(w io.Writer, source trace.Source, id string, logPath string, printedCount int, summary trace.AgentTraceSummary) error {
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer cancel()
-
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		return fmt.Errorf("failed to create watcher: %w", err)
-	}
-	defer watcher.Close()
-
-	dir := logPath[:strings.LastIndex(logPath, string(os.PathSeparator))]
-	if err := watcher.Add(dir); err != nil {
-		return fmt.Errorf("failed to watch directory %s: %w", dir, err)
-	}
-	if _, err := os.Stat(logPath); err == nil {
-		if err := watcher.Add(logPath); err != nil {
-			return fmt.Errorf("failed to watch file %s: %w", logPath, err)
-		}
-	}
-
-	statusTicker := time.NewTicker(500 * time.Millisecond)
-	defer statusTicker.Stop()
-
-	flushPending := func() error {
-		detail, err := source.Get(id)
-		if err != nil {
-			return err
-		}
-		newCount := len(detail.Messages)
-		if newCount > printedCount {
-			for i := printedCount; i < newCount; i++ {
-				writeHumanMessage(w, i+1, detail.Messages[i])
-			}
-			printedCount = newCount
-		}
-		if detail.Metadata.Status != "running" {
-			fmt.Fprintln(w, "───────────────────────────────────────────────────────────────")
-			printFinalStatus(w, trace.AgentTraceSummary{
-				AgentTraceMetadata: detail.Metadata,
-			})
-			fmt.Fprintln(w, "───────────────────────────────────────────────────────────────")
-			cancel()
-			return nil
-		}
-		return nil
-	}
-
-	for {
-		select {
-		case event, ok := <-watcher.Events:
-			if !ok {
-				return nil
-			}
-			if event.Op&fsnotify.Create == fsnotify.Create && event.Name == logPath {
-				if err := watcher.Add(logPath); err != nil {
-					return fmt.Errorf("failed to watch newly created file %s: %w", logPath, err)
-				}
-			}
-			if event.Name == logPath && (event.Op&fsnotify.Write == fsnotify.Write || event.Op&fsnotify.Create == fsnotify.Create) {
-				if err := flushPending(); err != nil {
-					fmt.Fprintf(os.Stderr, "Error reading trace: %v\n", err)
-				}
-			}
-		case err, ok := <-watcher.Errors:
-			if !ok {
-				return nil
-			}
-			return fmt.Errorf("watcher error: %w", err)
-		case <-statusTicker.C:
-			if err := flushPending(); err != nil {
-				fmt.Fprintf(os.Stderr, "Error polling trace: %v\n", err)
-			}
-		case <-ctx.Done():
-			return nil
-		}
 	}
 }

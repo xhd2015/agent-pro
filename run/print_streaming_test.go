@@ -68,7 +68,7 @@ func TestWriteHumanTraceFollowsRunningSession(t *testing.T) {
 	}()
 
 	go func() {
-		done <- writeHumanTrace(pw, source, summary, detail)
+		done <- writeHumanTrace(pw, summary, detail)
 	}()
 
 	collectUntil := func(want string, timeout time.Duration) {
@@ -94,10 +94,16 @@ func TestWriteHumanTraceFollowsRunningSession(t *testing.T) {
 		t.Fatalf("expected 'hello' in output, got:\n%s", initText)
 	}
 
+	// Allow time for Watch to fully initialize before appending
+	time.Sleep(200 * time.Millisecond)
+
 	newEvents := []string{
 		`{"type":"item.completed","item":{"id":"msg_2","type":"agent_message","text":"world"}}`,
 	}
 	appendLines(t, logPath, newEvents)
+
+	// Allow time for Watch to process the Write event before metadata changes
+	time.Sleep(200 * time.Millisecond)
 
 	completedMeta := initialMeta
 	completedMeta.Status = "completed"
@@ -156,7 +162,7 @@ func TestWriteHumanTracePrintsCompletedAndExits(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	err = writeHumanTrace(&buf, source, summary, detail)
+	err = writeHumanTrace(&buf, summary, detail)
 	if err != nil {
 		t.Fatalf("writeHumanTrace: %v", err)
 	}

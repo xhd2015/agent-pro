@@ -8,8 +8,8 @@ github.com/fsnotify/fsnotify v1.8.0 h1:dAwr6QBTBZIkG8roQaJjGof0pp0EeF+tNV7YBP3F/
 github.com/fsnotify/fsnotify v1.8.0/go.mod h1:8jBTzvmWwFyi3Pb8djgCCO5IBqzKJ/Jwo8TRcHyHii0=
 github.com/tidwall/jsonc v0.3.3 h1:RVQqL3xFfDkKKXIDsrBiVQiEpBtxoKbmMXONb2H/y2w=
 github.com/tidwall/jsonc v0.3.3/go.mod h1:dw+3CIxqHi+t8eFSpzzMlcVYxKp08UP5CD8/uSFCyJE=
-github.com/xhd2015/dot-pkgs/go-pkgs v0.0.10 h1:a2kGfJAxGS+G11Fjh2yP4FOb63UpN6ObtFHZC6tYhPs=
-github.com/xhd2015/dot-pkgs/go-pkgs v0.0.10/go.mod h1:64a9MONbt54CwY5tTH5bMFZPc7MwFZqnSfDD6HnPgPs=
+github.com/xhd2015/dot-pkgs/go-pkgs v0.0.11 h1:0MOYifR0ex6YcqrmesIWMxl0BoingxRBetSB2D8OTgM=
+github.com/xhd2015/dot-pkgs/go-pkgs v0.0.11/go.mod h1:64a9MONbt54CwY5tTH5bMFZPc7MwFZqnSfDD6HnPgPs=
 github.com/xhd2015/less-gen v0.0.19 h1:JllrPhx3HzN+f2AB6cTvW9aRCpvuODJFx7affpa0zQY=
 github.com/xhd2015/less-gen v0.0.19/go.mod h1:Ym5HW/yfVnf2mgSo48QsuHAKnMTPv/u7oqty+raTnTQ=
 github.com/xhd2015/xgo v1.1.14 h1:FZ8nYSOGb3SQD6S9gP5dIFbW/9OuoGzr5hXVJC+McQc=
