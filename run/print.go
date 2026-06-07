@@ -1,12 +1,16 @@
 package run
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
+	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/xhd2015/agent-pro/agent_trace/types"
 	"github.com/xhd2015/agent-pro/trace"
 )
@@ -39,13 +43,15 @@ func writeHumanReport(w io.Writer, source trace.Source, descriptions []string) e
 			fmt.Fprintf(w, "  detail_error: %v\n", err)
 			continue
 		}
-		writeHumanTrace(w, summary, detail)
+		if err := writeHumanTrace(w, source, summary, detail); err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-func writeHumanTrace(w io.Writer, summary trace.AgentTraceSummary, detail *trace.AgentTraceDetail) {
+func writeHumanTrace(w io.Writer, source trace.Source, summary trace.AgentTraceSummary, detail *trace.AgentTraceDetail) error {
 	sessionID := extractSessionID(detail)
 	runner := emptyDefault(summary.AgentRunnerID, "agent")
 	lines := summary.LogLineCount
@@ -55,28 +61,26 @@ func writeHumanTrace(w io.Writer, summary trace.AgentTraceSummary, detail *trace
 	if sessionID != "" {
 		fmt.Fprintf(w, "  Session: %s\n", sessionID)
 	}
-	fmt.Fprintf(w, "  Events:  %d lines  ·  %s  ·  %s status\n", lines, runner, summary.Status)
+	fmt.Fprintf(w, "  Events:  %d lines  ·  %s  ·  %s\n", lines, runner, statusDisplay(summary.Status))
 	fmt.Fprintf(w, "═══════════════════════════════════════════════════════════════\n")
 	fmt.Fprintln(w)
 
 	if detail == nil || len(detail.Messages) == 0 {
 		fmt.Fprintln(w, "  (no messages)")
-		return
-	}
-
-	for i, msg := range detail.Messages {
-		writeHumanMessage(w, i+1, msg)
-	}
-
-	fmt.Fprintln(w, "───────────────────────────────────────────────────────────────")
-	if summary.Status == "completed" && summary.Error == "" {
-		fmt.Fprintln(w, "  ✓ Done")
-	} else if summary.Status == "failed" {
-		fmt.Fprintf(w, "  ✗ Failed: %s\n", summary.Error)
 	} else {
-		fmt.Fprintf(w, "  ○ Status: %s\n", summary.Status)
+		for i, msg := range detail.Messages {
+			writeHumanMessage(w, i+1, msg)
+		}
 	}
+
+	if summary.Status == "running" && detail != nil && detail.Metadata.LogPath != "" {
+		return followTraceSession(w, source, summary.ID, detail.Metadata.LogPath, len(detail.Messages), summary)
+	}
+
 	fmt.Fprintln(w, "───────────────────────────────────────────────────────────────")
+	printFinalStatus(w, summary)
+	fmt.Fprintln(w, "───────────────────────────────────────────────────────────────")
+	return nil
 }
 
 func writeHumanMessage(w io.Writer, n int, msg types.AgentTraceMessage) {
@@ -227,4 +231,107 @@ func emptyDefault(value, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func statusDisplay(status string) string {
+	switch status {
+	case "running":
+		return "⚡ running"
+	case "completed":
+		return "✓ completed"
+	case "failed":
+		return "✗ failed"
+	case "stopped":
+		return "⊘ stopped"
+	default:
+		return status + " status"
+	}
+}
+
+func printFinalStatus(w io.Writer, summary trace.AgentTraceSummary) {
+	if summary.Status == "completed" && summary.Error == "" {
+		fmt.Fprintln(w, "  ✓ Done")
+	} else if summary.Status == "failed" {
+		fmt.Fprintf(w, "  ✗ Failed: %s\n", summary.Error)
+	} else {
+		fmt.Fprintf(w, "  ○ Status: %s\n", summary.Status)
+	}
+}
+
+func followTraceSession(w io.Writer, source trace.Source, id string, logPath string, printedCount int, summary trace.AgentTraceSummary) error {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return fmt.Errorf("failed to create watcher: %w", err)
+	}
+	defer watcher.Close()
+
+	dir := logPath[:strings.LastIndex(logPath, string(os.PathSeparator))]
+	if err := watcher.Add(dir); err != nil {
+		return fmt.Errorf("failed to watch directory %s: %w", dir, err)
+	}
+	if _, err := os.Stat(logPath); err == nil {
+		if err := watcher.Add(logPath); err != nil {
+			return fmt.Errorf("failed to watch file %s: %w", logPath, err)
+		}
+	}
+
+	statusTicker := time.NewTicker(500 * time.Millisecond)
+	defer statusTicker.Stop()
+
+	flushPending := func() error {
+		detail, err := source.Get(id)
+		if err != nil {
+			return err
+		}
+		newCount := len(detail.Messages)
+		if newCount > printedCount {
+			for i := printedCount; i < newCount; i++ {
+				writeHumanMessage(w, i+1, detail.Messages[i])
+			}
+			printedCount = newCount
+		}
+		if detail.Metadata.Status != "running" {
+			fmt.Fprintln(w, "───────────────────────────────────────────────────────────────")
+			printFinalStatus(w, trace.AgentTraceSummary{
+				AgentTraceMetadata: detail.Metadata,
+			})
+			fmt.Fprintln(w, "───────────────────────────────────────────────────────────────")
+			cancel()
+			return nil
+		}
+		return nil
+	}
+
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return nil
+			}
+			if event.Op&fsnotify.Create == fsnotify.Create && event.Name == logPath {
+				if err := watcher.Add(logPath); err != nil {
+					return fmt.Errorf("failed to watch newly created file %s: %w", logPath, err)
+				}
+			}
+			if event.Name == logPath && (event.Op&fsnotify.Write == fsnotify.Write || event.Op&fsnotify.Create == fsnotify.Create) {
+				if err := flushPending(); err != nil {
+					fmt.Fprintf(os.Stderr, "Error reading trace: %v\n", err)
+				}
+			}
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return nil
+			}
+			return fmt.Errorf("watcher error: %w", err)
+		case <-statusTicker.C:
+			if err := flushPending(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error polling trace: %v\n", err)
+			}
+		case <-ctx.Done():
+			return nil
+		}
+	}
 }
