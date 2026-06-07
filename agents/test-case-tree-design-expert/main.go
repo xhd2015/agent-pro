@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/xhd2015/agent-pro/agent/agentui"
+	"github.com/xhd2015/agent-pro/agents/test-case-tree-design-expert/validate"
 )
 
 //go:embed PROMPT.md
@@ -34,6 +35,9 @@ func main() {
 		SessionPrefix: "tctd_",
 		Prompt:        prompt,
 		Usage:         usage,
+		Dispatch: map[string]func() error{
+			"validate_test_case_tree": validate.Run,
+		},
 	}, os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)

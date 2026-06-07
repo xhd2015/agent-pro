@@ -35,6 +35,7 @@ type Config struct {
 	SessionPrefix string
 	Prompt        string
 	Usage         string
+	Dispatch      map[string]func() error
 }
 
 func Run(cfg Config, args []string) error {
@@ -47,6 +48,9 @@ func Run(cfg Config, args []string) error {
 	if base == "ask_user" || (suffix != "" && base == "ask_user"+suffix) {
 		ask_user.Run()
 		return nil
+	}
+	if handler, ok := cfg.Dispatch[base]; ok {
+		return handler()
 	}
 	return runMain(cfg, args)
 }
@@ -422,6 +426,12 @@ func runMain(cfg Config, args []string) error {
 	askUserPath := filepath.Join(tempDir, "ask_user")
 	if out, err := exec.Command("cp", exe, askUserPath).CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to copy ask_user: %w\n%s", err, string(out))
+	}
+	for name := range cfg.Dispatch {
+		dst := filepath.Join(tempDir, name)
+		if out, err := exec.Command("cp", exe, dst).CombinedOutput(); err != nil {
+			return fmt.Errorf("failed to copy %s: %w\n%s", name, err, string(out))
+		}
 	}
 
 	answerDir := filepath.Join(tempDir, "answer")

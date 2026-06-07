@@ -7,12 +7,12 @@ Check the user's input and choose one of two modes:
 ### Mode A: Short Description
 The input is terse, vague, or incomplete (e.g. "test the login flow", "add a --force flag"). This mode requires full exploration.
 
-**Follow all steps: 1 → 2 → 3 → 4.**
+**Follow all steps: 1 → 2 → 3 → 4 → 5.**
 
 ### Mode B: Detailed Specification
 The input is already comprehensive — it includes explicit decision points, edge cases, flags/subcommands, error states, and expected behaviors. The user has already done the brainstorming and clarification work.
 
-**Skip Steps 1 and 2. Go directly to Steps 3 and 4.**
+**Skip Steps 1 and 2. Go directly to Steps 3 → 4 → 5.**
 
 ---
 
@@ -23,7 +23,7 @@ Expand the user's feature into a fully described plan. Identify:
 - Error states and edge conditions
 - Happy-path and sad-path outcomes
 
-## Step 2: Clarify
+## Step 2: Clarify Requirements
 If any detail is ambiguous or missing, call the CLI tool
 ```sh
 ask_user "your question here"
@@ -31,7 +31,26 @@ ask_user "your question here"
 The tool will return the user's answer to stdout. You may call it multiple times.
 Only ask questions that affect the test tree structure.
 
-## Step 3: Build the Decision Tree
+## Step 3: Propose Outline and Get Approval
+Before building the full decision tree, first present a basic flat list of proposed test cases to the user. Each entry should include the test case name and a one-line description of what it covers. For example:
+
+```
+Proposed test cases:
+- testBasicMove — Happy path: move /a to /b succeeds
+- testTargetExistsNoForce — Target exists, no --force flag returns error
+- testForceOverwrite — --force flag overwrites existing target
+- testWorktreeCollision — Moving a checked-out file returns error
+...
+```
+
+Call the CLI tool to present the list and wait for user response:
+```sh
+ask_user "Here is the proposed test case list. Does this look correct? Any additions, removals, or changes?"
+```
+
+The tool will return the user's answer. If the user requests changes, revise the list and present it again. **Only proceed to Step 4 when the user explicitly approves the test case list.**
+
+## Step 4: Build the Decision Tree
 Model the feature as a decision tree:
 - **Root**: the feature itself (e.g. the CLI command, API endpoint, user action)
 - **Modes**: top-level branches (flags, subcommands, operation types)
@@ -40,7 +59,7 @@ Model the feature as a decision tree:
 
 Name each leaf with a descriptive test case name (e.g. `testBasicMove`, `testWorktreeBranchCollision`).
 
-## Step 4: Produce Output
+## Step 5: Produce Output
 Create the output directory structure. Each directory represents a branch in the decision tree.
 
 ### Directory layout
@@ -55,9 +74,11 @@ Create the output directory structure. Each directory represents a branch in the
 │   │   ├── SETUP.md     # Inherits + adds decision-specific setup
 │   │   └── ASSERT.md    # Runnable: assertions for this leaf
 │   └── decision-leaf-b/
-│       └── ASSERT.md    # Runnable (inherits SETUP from ancestors)
+│   │   ├── SETUP.md     # Inherits + adds decision-specific setup
+│   │   └── ASSERT.md    # Runnable: assertions for this leaf
 │
 ├── mode-yyy/
+│   ├── SETUP.md         # Inherits parent SETUP + adds mode-specific setup
 │   └── ASSERT.md        # Runnable leaf directly under a mode
 ...
 ```
@@ -66,6 +87,7 @@ Create the output directory structure. Each directory represents a branch in the
 - **SETUP.md inherits**: a test case's effective setup = root SETUP + parent mode SETUP + ... + its own SETUP (walking the ancestor chain upward). This eliminates duplication.
 - **ASSERT.md does NOT inherit**: each leaf's assertions are self-contained.
 - **Runnability**: any directory that contains an ASSERT.md is a runnable test case. Directories without ASSERT.md are abstract grouping/decision nodes.
+- **Every runnable leaf MUST contain its own SETUP.md**: ASSERT.md without a SETUP.md in the same directory is forbidden. Each leaf's SETUP.md specifies the leaf-specific preconditions and steps, while also inheriting from ancestor SETUP.md files.
 
 ### SETUP.md format (structured DSL)
 ```markdown
@@ -123,3 +145,10 @@ The output is complete when:
 - Every branch of the decision tree has been explored
 - Every leaf has a SETUP.md and ASSERT.md (or inherits SETUP from ancestors)
 - README.md contains the full mermaid graph, text tree, and index table
+
+### Verification
+After writing all files, run the validation tool against the generated directory:
+```sh
+validate_test_case_tree <output-dir>
+```
+If the tool reports any errors, fix them and re-run until the output passes validation silently (exit code 0).
