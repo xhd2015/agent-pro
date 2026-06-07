@@ -11,11 +11,11 @@ import (
 //go:embed PROMPT.md
 var prompt string
 
-const usage = `Usage: test-case-design-expert [--model MODEL] [--agent-runner RUNNER] [--output FILE] [--resume SESSION_ID] <feature description>
+const usage = `Usage: test-case-tree-design-expert [--model MODEL] [--agent-runner RUNNER] [--output DIR] [--resume SESSION_ID] <feature description>
 
-Generate user-facing end-to-end test cases for the given feature description.
-The expert will brainstorm the idea, ask clarifying questions interactively,
-and produce a complete test plan.
+Generate a tree-expanded test case design for the given feature description.
+Produces a directory with SETUP.md (inherited across branches), ASSERT.md (per leaf),
+and a README.md overview with mermaid graph, text tree, and test case index.
 
 Arguments:
   <feature description>   The feature to design tests for (positional args joined with spaces)
@@ -23,15 +23,15 @@ Arguments:
 Options:
   --model MODEL           Model identifier to use (defaults to the first free model from opencode)
   --agent-runner RUNNER   Agent runner to use (opencode or codex, default: opencode)
-  -o, --output FILE       File to write the test report (default: auto-generated <name>-tests-design.md)
+  -o, --output DIR        Directory to write the test case tree (default: auto-generated <name>-test-cases/)
   --resume SESSION_ID     Resume a previous session by its ID
   -h, --help              Show this help message
 `
 
 func main() {
 	if err := agentui.Run(agentui.Config{
-		AgentName:     "test-case-design-expert",
-		SessionPrefix: "tcd_",
+		AgentName:     "test-case-tree-design-expert",
+		SessionPrefix: "tctd_",
 		Prompt:        prompt,
 		Usage:         usage,
 	}, os.Args[1:]); err != nil {

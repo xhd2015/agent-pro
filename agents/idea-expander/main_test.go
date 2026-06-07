@@ -78,16 +78,12 @@ func TestConfigValues(t *testing.T) {
 		SessionPrefix: "ie_",
 		Prompt:        prompt,
 		Usage:         usage,
-		OutputSuffix:  "-idea.md",
 	}
 	if cfg.AgentName != "idea-expander" {
 		t.Errorf("expected AgentName 'idea-expander', got %q", cfg.AgentName)
 	}
 	if cfg.SessionPrefix != "ie_" {
 		t.Errorf("expected SessionPrefix 'ie_', got %q", cfg.SessionPrefix)
-	}
-	if cfg.OutputSuffix != "-idea.md" {
-		t.Errorf("expected OutputSuffix '-idea.md', got %q", cfg.OutputSuffix)
 	}
 	if cfg.Prompt == "" {
 		t.Error("prompt should not be empty")
@@ -122,7 +118,6 @@ func TestAgentNameDiffersFromTcd(t *testing.T) {
 		SessionPrefix: "ie_",
 		Prompt:        prompt,
 		Usage:         usage,
-		OutputSuffix:  "-idea.md",
 	}
 	if cfg.AgentName == "test-case-design-expert" {
 		t.Error("idea-expander AgentName should differ from test-case-design-expert")

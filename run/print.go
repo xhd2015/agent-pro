@@ -17,6 +17,8 @@ import (
 	"github.com/xhd2015/dot-pkgs/go-pkgs/logs"
 )
 
+const TRUNCATE_LINE_MAX = 1024
+
 func printHumanReport(source trace.Source, descriptions []string) error {
 	return writeHumanReport(os.Stdout, source, descriptions)
 }
@@ -175,7 +177,7 @@ func writeHumanMessage(w io.Writer, n int, msg types.AgentTraceMessage) {
 			if line == "" {
 				continue
 			}
-			fmt.Fprintf(w, "     %s\n", truncateLine(line, 70))
+			fmt.Fprintf(w, "     %s\n", truncateLine(line, TRUNCATE_LINE_MAX))
 		}
 
 		// show file changes
@@ -200,7 +202,7 @@ func writeHumanMessage(w io.Writer, n int, msg types.AgentTraceMessage) {
 			if line == "" {
 				continue
 			}
-			fmt.Fprintf(w, "     %s\n", truncateLine(line, 70))
+			fmt.Fprintf(w, "     %s\n", truncateLine(line, TRUNCATE_LINE_MAX))
 		}
 		fmt.Fprintln(w)
 	}
@@ -220,7 +222,7 @@ func writeHumanMessageCompact(w io.Writer, msg types.AgentTraceMessage) {
 			if line == "" {
 				continue
 			}
-			fmt.Fprintf(w, "  %s\n", truncateLine(line, 70))
+			fmt.Fprintf(w, "  %s\n", truncateLine(line, TRUNCATE_LINE_MAX))
 		}
 
 		if len(tc.FileChanges) > 0 {
@@ -244,7 +246,7 @@ func writeHumanMessageCompact(w io.Writer, msg types.AgentTraceMessage) {
 			if line == "" {
 				continue
 			}
-			fmt.Fprintf(w, "  %s\n", truncateLine(line, 70))
+			fmt.Fprintf(w, "  %s\n", truncateLine(line, TRUNCATE_LINE_MAX))
 		}
 		fmt.Fprintln(w)
 	}
@@ -289,10 +291,14 @@ func extractSessionID(detail *trace.AgentTraceDetail) string {
 }
 
 func truncateLine(s string, max int) string {
-	if len(s) > max {
-		return s[:max-3] + "..."
+	if len(s) <= max {
+		return s
 	}
-	return s
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	return string(runes[:max]) + "..."
 }
 
 func shortPath(path string) string {

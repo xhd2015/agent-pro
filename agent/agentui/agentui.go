@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -22,6 +23,8 @@ import (
 	ask_user "github.com/xhd2015/agent-pro/agent/agentui/ask_user"
 	"github.com/xhd2015/agent-pro/agent/opencode/models"
 	opencoderun "github.com/xhd2015/agent-pro/agent/opencode/run"
+	lessflags "github.com/xhd2015/less-flags"
+
 	"github.com/xhd2015/agent-pro/agent/session"
 	"github.com/xhd2015/agent-pro/agent_trace/types"
 	tracefmt "github.com/xhd2015/agent-pro/run"
@@ -32,12 +35,16 @@ type Config struct {
 	SessionPrefix string
 	Prompt        string
 	Usage         string
-	OutputSuffix  string
 }
 
 func Run(cfg Config, args []string) error {
 	base := filepath.Base(os.Args[0])
-	if base == "ask_user" || base == "ask_user.exe" {
+
+	suffix := ""
+	if runtime.GOOS == "windows" {
+		suffix = ".exe"
+	}
+	if base == "ask_user" || (suffix != "" && base == "ask_user"+suffix) {
 		ask_user.Run()
 		return nil
 	}
@@ -59,14 +66,14 @@ type llmDoneMsg struct {
 type tickMsg struct{}
 
 type model struct {
-	feature  string
-	llmModel string
-	tempDir  string
+	feature   string
+	llmModel  string
+	tempDir   string
 	answerDir string
 
-	sessionID        string
+	sessionID         string
 	opencodeSessionID string
-	sessionDir       string
+	sessionDir        string
 
 	logs      []string
 	questions []pendingQuestion
@@ -314,47 +321,45 @@ func (m *model) removeQuestion(id string) {
 }
 
 func runMain(cfg Config, args []string) error {
-	var llmModel string
-	var outputFile string
-	var resumeID string
-	var positional []string
+	var modelFlag *string
+	var outputFlag *string
+	var resumeFlag *string
+	var agentRunnerFlag *string
 
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		switch {
-		case arg == "-h" || arg == "--help":
-			fmt.Fprint(os.Stderr, cfg.Usage)
-			os.Exit(0)
-		case arg == "--model":
-			if i+1 >= len(args) {
-				return fmt.Errorf("--model requires a value\n\n%s", cfg.Usage)
-			}
-			llmModel = args[i+1]
-			i++
-		case strings.HasPrefix(arg, "--model="):
-			llmModel = strings.TrimPrefix(arg, "--model=")
-		case arg == "-o" || arg == "--output":
-			if i+1 >= len(args) {
-				return fmt.Errorf("--output requires a file path\n\n%s", cfg.Usage)
-			}
-			outputFile = args[i+1]
-			i++
-		case strings.HasPrefix(arg, "--output="):
-			outputFile = strings.TrimPrefix(arg, "--output=")
-		case arg == "--resume":
-			if i+1 >= len(args) {
-				return fmt.Errorf("--resume requires a session ID\n\n%s", cfg.Usage)
-			}
-			resumeID = args[i+1]
-			i++
-		case strings.HasPrefix(arg, "--resume="):
-			resumeID = strings.TrimPrefix(arg, "--resume=")
-		default:
-			positional = append(positional, arg)
-		}
+	remainArgs, err := lessflags.String("--model", &modelFlag).
+		String("-o,--output", &outputFlag).
+		String("--resume", &resumeFlag).
+		String("--agent-runner", &agentRunnerFlag).
+		Help("-h,--help", cfg.Usage).
+		Parse(args)
+	if err != nil {
+		return err
 	}
 
-	feature := strings.Join(positional, " ")
+	agentRunner := "opencode"
+	if agentRunnerFlag != nil {
+		agentRunner = *agentRunnerFlag
+	}
+	if agentRunner != "opencode" && agentRunner != "codex" {
+		return fmt.Errorf("unsupported agent runner: %s (supported: opencode, codex)", agentRunner)
+	}
+	if agentRunner == "codex" {
+		return fmt.Errorf("codex runner not yet implemented")
+	}
+
+	llmModel := ""
+	if modelFlag != nil {
+		llmModel = *modelFlag
+	}
+	outputFile := ""
+	if outputFlag != nil {
+		outputFile = *outputFlag
+	}
+	resumeID := ""
+	if resumeFlag != nil {
+		resumeID = *resumeFlag
+	}
+	feature := strings.Join(remainArgs, " ")
 	var sessionID string
 	var opencodeSessionID string
 	var sessionDir string

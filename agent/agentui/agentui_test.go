@@ -669,7 +669,6 @@ func TestConfigRunHonorsAgentName(t *testing.T) {
 		SessionPrefix: "ma_",
 		Prompt:        "prompt",
 		Usage:         "my usage",
-		OutputSuffix:  "-out.md",
 	}
 	if cfg.AgentName != "my-agent" {
 		t.Errorf("expected AgentName 'my-agent', got %q", cfg.AgentName)

@@ -42,17 +42,12 @@ func TestExitMessageFormat(t *testing.T) {
 		SessionPrefix: "tcd_",
 		Prompt:        prompt,
 		Usage:         usage,
-		OutputSuffix:  "-tests-design.md",
 	}
-
 	if cfg.AgentName != "test-case-design-expert" {
 		t.Error("expected AgentName 'test-case-design-expert'")
 	}
 	if cfg.SessionPrefix != "tcd_" {
 		t.Error("expected SessionPrefix 'tcd_'")
-	}
-	if cfg.OutputSuffix != "-tests-design.md" {
-		t.Error("expected OutputSuffix '-tests-design.md'")
 	}
 
 	fmt.Fprintf(os.Stderr, "Session %s finished.\nTo resume: %s --resume %s\n", "tcd_test123", filepath.Base(os.Args[0]), "tcd_test123")
@@ -97,16 +92,12 @@ func TestConfigValues(t *testing.T) {
 		SessionPrefix: "tcd_",
 		Prompt:        prompt,
 		Usage:         usage,
-		OutputSuffix:  "-tests-design.md",
 	}
 	if cfg.AgentName != "test-case-design-expert" {
 		t.Errorf("expected AgentName 'test-case-design-expert', got %q", cfg.AgentName)
 	}
 	if cfg.SessionPrefix != "tcd_" {
 		t.Errorf("expected SessionPrefix 'tcd_', got %q", cfg.SessionPrefix)
-	}
-	if cfg.OutputSuffix != "-tests-design.md" {
-		t.Errorf("expected OutputSuffix '-tests-design.md', got %q", cfg.OutputSuffix)
 	}
 	if cfg.Prompt == "" {
 		t.Error("prompt should not be empty")
