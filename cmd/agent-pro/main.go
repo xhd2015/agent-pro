@@ -1410,7 +1410,8 @@ Usage: agent-pro show-agent-files [--dir DIR]
 Collect symlinks to well-known agent directories from $HOME into a target
 directory. Default target: ~/.agent-pro/agent-files-collection/
 
-The target directory must either not exist or be empty.
+The default target is always wiped and recreated. A custom target
+specified with --dir must either not exist or be empty.
 
 Agent directories scanned:
 
@@ -1443,6 +1444,7 @@ func handleShowAgentFiles(args []string) error {
 		return fmt.Errorf("find home dir: %w", err)
 	}
 
+	useDefault := true
 	targetDir := filepath.Join(homeDir, ".agent-pro", "agent-files-collection")
 	if dirFlag != nil && strings.TrimSpace(*dirFlag) != "" {
 		targetDir = *dirFlag
@@ -1450,10 +1452,17 @@ func handleShowAgentFiles(args []string) error {
 		if err != nil {
 			return fmt.Errorf("resolve --dir: %w", err)
 		}
+		useDefault = false
 	}
 
-	if err := ValidateTargetDir(targetDir); err != nil {
-		return err
+	if useDefault {
+		if err := os.RemoveAll(targetDir); err != nil {
+			return fmt.Errorf("wipe target dir: %w", err)
+		}
+	} else {
+		if err := ValidateTargetDir(targetDir); err != nil {
+			return err
+		}
 	}
 
 	fmt.Printf("Collecting agent files into %s\n\n", shortenHome(targetDir, homeDir))
