@@ -110,4 +110,7 @@ func TestPromptEmbedding(t *testing.T) {
 	if !strings.Contains(prompt, "Test Cases") {
 		t.Error("embedded prompt should contain 'Test Cases'")
 	}
+	if !strings.Contains(prompt, "add-pending-questions") {
+		t.Error("embedded prompt should contain 'add-pending-questions'")
+	}
 }

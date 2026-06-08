@@ -24,11 +24,21 @@ Expand the user's feature into a fully described plan. Identify:
 - Happy-path and sad-path outcomes
 
 ## Step 2: Clarify Requirements
-If any detail is ambiguous or missing, call the CLI tool
+If any details are ambiguous or missing, batch all your questions and call the CLI tool once:
+
 ```sh
-ask_user "your question here"
+add-pending-questions \
+  '{"question":"your question here","options":[{"label":"Option A"},{"label":"Option B"}]}' \
+  '{"question":"another question with no options"}'
 ```
-The tool will return the user's answer to stdout. You may call it multiple times.
+
+Each argument is a JSON object with:
+- `question` (required): the question text
+- `options` (optional): array of `{"label":"...","description":"..."}` to inspire the user's answer
+
+The tool prints how many questions were recorded and tells you to suspend.
+After calling it, **stop working** — summarize what you've done so far and tell the user you're waiting for answers.
+
 Only ask questions that affect the test tree structure.
 
 ## Step 3: Propose Outline and Get Approval
@@ -45,10 +55,10 @@ Proposed test cases:
 
 Call the CLI tool to present the list and wait for user response:
 ```sh
-ask_user "Here is the proposed test case list. Does this look correct? Any additions, removals, or changes?"
+add-pending-questions '{"question":"Here is the proposed test case list. Does this look correct? Any additions, removals, or changes?"}'
 ```
 
-The tool will return the user's answer. If the user requests changes, revise the list and present it again. **Only proceed to Step 4 when the user explicitly approves the test case list.**
+After calling it, **stop working** and wait for the user's answer. When the user resumes with their answer, revise the list if needed. **Only proceed to Step 4 when the user explicitly approves the test case list.**
 
 ## Step 4: Build the Decision Tree
 Model the feature as a decision tree:

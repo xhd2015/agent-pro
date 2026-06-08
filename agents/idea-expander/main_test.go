@@ -96,6 +96,9 @@ func TestPromptEmbedding(t *testing.T) {
 	if !strings.Contains(prompt, "User Stories") {
 		t.Error("embedded prompt should contain 'User Stories'")
 	}
+	if !strings.Contains(prompt, "add-pending-questions") {
+		t.Error("embedded prompt should contain 'add-pending-questions'")
+	}
 }
 
 func TestAgentNameDiffersFromTcd(t *testing.T) {

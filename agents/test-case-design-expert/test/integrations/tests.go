@@ -56,17 +56,17 @@ func buildExpert() (binPath string) {
 	return binPath
 }
 
-func buildAskUser() (binPath string) {
+func buildAddPendingQuestions() (binPath string) {
 	expertBin := buildExpert()
 
-	tmpDir, err := os.MkdirTemp("", "test-ask-user-*")
+	tmpDir, err := os.MkdirTemp("", "test-add-pending-questions-*")
 	if err != nil {
 		fatal("create temp dir: %v", err)
 	}
-	binPath = filepath.Join(tmpDir, "ask_user")
+	binPath = filepath.Join(tmpDir, "add-pending-questions")
 
 	if out, err := exec.Command("cp", expertBin, binPath).CombinedOutput(); err != nil {
-		fatal("cp expert -> ask_user failed: %v\n%s", err, string(out))
+		fatal("cp expert -> add-pending-questions failed: %v\n%s", err, string(out))
 	}
 	if err := os.Chmod(binPath, 0755); err != nil {
 		fatal("chmod: %v", err)
@@ -111,8 +111,8 @@ func runExpert(args ...string) (stdout, stderr string, exitCode int) {
 
 // ---- Tests ----
 
-func TestAskUserBuild(t *T) {
-	bin := buildAskUser()
+func TestAddPendingQuestionsBuild(t *T) {
+	bin := buildAddPendingQuestions()
 	info, err := os.Stat(bin)
 	if err != nil {
 		t.Fatalf("built binary not found: %v", err)
@@ -122,31 +122,37 @@ func TestAskUserBuild(t *T) {
 	}
 }
 
-func TestAskUserWritesQuestion(t *T) {
-	bin := buildAskUser()
+func TestAddPendingQuestionsWritesQuestion(t *T) {
+	bin := buildAddPendingQuestions()
 
-	dir, err := os.MkdirTemp("", "ask-user-test-*")
+	dir, err := os.MkdirTemp("", "apq-test-*")
 	if err != nil {
 		t.Fatalf("create temp dir: %v", err)
 	}
 	defer os.RemoveAll(dir)
 
-	answerDir := filepath.Join(dir, "answer")
-	os.Mkdir(answerDir, 0755)
 	qFifo := filepath.Join(dir, "question.fifo")
 	if err := syscall.Mkfifo(qFifo, 0666); err != nil {
 		t.Fatalf("create question fifo: %v", err)
 	}
 
-	cmd := exec.Command(bin, "What payment methods are supported?")
+	questionsFile := filepath.Join(dir, "questions.jsonl")
+
+	cmd := exec.Command(bin, `{"question":"What payment methods?"}`)
 	cmd.Env = append(os.Environ(),
 		"QUESTION_FIFO="+qFifo,
-		"ANSWER_DIR="+answerDir,
+		"QUESTIONS_FILE="+questionsFile,
 	)
 
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
 	if err := cmd.Start(); err != nil {
-		t.Fatalf("start ask_user: %v", err)
+		t.Fatalf("start add-pending-questions: %v", err)
 	}
+
+	time.Sleep(500 * time.Millisecond)
 
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
@@ -157,112 +163,226 @@ func TestAskUserWritesQuestion(t *T) {
 	}
 	scanner := bufio.NewScanner(qf)
 	if !scanner.Scan() {
-		t.Fatalf("question not written")
+		t.Fatalf("question not written to FIFO")
 	}
 	line := scanner.Text()
 	qf.Close()
 
-	parts := strings.SplitN(line, "\t", 2)
-	if len(parts) != 2 || parts[1] != "What payment methods are supported?" {
-		t.Errorf("question mismatch: got %q", line)
+	if !strings.Contains(line, `"type":"question"`) {
+		t.Errorf("expected type:question in FIFO line, got: %s", line)
 	}
-
-	answerFifo := filepath.Join(answerDir, parts[0]+".fifo")
-	go func() {
-		f, err := os.OpenFile(answerFifo, os.O_WRONLY, 0)
-		if err != nil {
-			return
-		}
-		f.Write([]byte("credit card, PayPal"))
-		f.Close()
-	}()
+	if !strings.Contains(line, "What payment methods?") {
+		t.Errorf("expected question text in FIFO line, got: %s", line)
+	}
 
 	select {
 	case err := <-done:
 		if err != nil {
-			t.Fatalf("ask_user exited with error: %v", err)
+			t.Fatalf("add-pending-questions exited with error: %v\nstderr: %s", err, stderr.String())
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(10 * time.Second):
 		cmd.Process.Kill()
-		t.Fatalf("ask_user timed out waiting for answer")
+		t.Fatalf("add-pending-questions timed out")
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "questions recorded") {
+		t.Errorf("expected 'questions recorded' in output, got: %s", out)
+	}
+	if !strings.Contains(out, "suspend") {
+		t.Errorf("expected 'suspend' in output, got: %s", out)
 	}
 }
 
-func TestAskUserRoundtrip(t *T) {
-	bin := buildAskUser()
+func TestAddPendingQuestionsMultipleQuestions(t *T) {
+	bin := buildAddPendingQuestions()
 
-	dir, err := os.MkdirTemp("", "ask-user-test-*")
+	dir, err := os.MkdirTemp("", "apq-test-*")
 	if err != nil {
 		t.Fatalf("create temp dir: %v", err)
 	}
 	defer os.RemoveAll(dir)
 
-	answerDir := filepath.Join(dir, "answer")
-	os.Mkdir(answerDir, 0755)
 	qFifo := filepath.Join(dir, "question.fifo")
 	if err := syscall.Mkfifo(qFifo, 0666); err != nil {
 		t.Fatalf("create question fifo: %v", err)
 	}
 
-	cmd := exec.Command(bin, "What analytics should the dashboard show?")
+	questionsFile := filepath.Join(dir, "questions.jsonl")
+
+	cmd := exec.Command(bin,
+		`{"question":"Q1","options":[{"label":"A"},{"label":"B"}]}`,
+		`{"question":"Q2"}`,
+	)
 	cmd.Env = append(os.Environ(),
 		"QUESTION_FIFO="+qFifo,
-		"ANSWER_DIR="+answerDir,
+		"QUESTIONS_FILE="+questionsFile,
 	)
 
 	var stdout strings.Builder
 	cmd.Stdout = &stdout
 
 	if err := cmd.Start(); err != nil {
-		t.Fatalf("start ask_user: %v", err)
+		t.Fatalf("start add-pending-questions: %v", err)
 	}
+
+	time.Sleep(500 * time.Millisecond)
 
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
 
 	qf, err := os.Open(qFifo)
 	if err != nil {
-		t.Fatalf("open question fifo: %v", err)
+		t.Fatalf("open question fifo for reading: %v", err)
 	}
 	scanner := bufio.NewScanner(qf)
-	if !scanner.Scan() {
-		t.Fatalf("question not written")
+	count := 0
+	for scanner.Scan() {
+		count++
 	}
-	line := scanner.Text()
 	qf.Close()
 
-	parts := strings.SplitN(line, "\t", 2)
-	if len(parts) != 2 || parts[1] != "What analytics should the dashboard show?" {
-		t.Errorf("question mismatch: got %q", line)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("add-pending-questions exited with error: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		cmd.Process.Kill()
+		t.Fatalf("add-pending-questions timed out")
 	}
 
-	answerFifo := filepath.Join(answerDir, parts[0]+".fifo")
-	start := time.Now()
+	if count != 2 {
+		t.Errorf("expected 2 questions on FIFO, got %d", count)
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "2 questions recorded") {
+		t.Errorf("expected '2 questions recorded', got: %s", out)
+	}
+}
+
+func TestAddPendingQuestionsWritesJSONL(t *T) {
+	bin := buildAddPendingQuestions()
+
+	dir, err := os.MkdirTemp("", "apq-test-*")
+	if err != nil {
+		t.Fatalf("create temp dir: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	qFifo := filepath.Join(dir, "question.fifo")
+	if err := syscall.Mkfifo(qFifo, 0666); err != nil {
+		t.Fatalf("create question fifo: %v", err)
+	}
+
+	questionsFile := filepath.Join(dir, "questions.jsonl")
+
+	cmd := exec.Command(bin,
+		`{"question":"Q1","options":[{"label":"A"}]}`,
+		`{"question":"Q2"}`,
+	)
+	cmd.Env = append(os.Environ(),
+		"QUESTION_FIFO="+qFifo,
+		"QUESTIONS_FILE="+questionsFile,
+	)
+
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start add-pending-questions: %v", err)
+	}
+
+	time.Sleep(500 * time.Millisecond)
+
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+
 	go func() {
-		f, err := os.OpenFile(answerFifo, os.O_WRONLY, 0)
-		if err != nil {
-			return
+		f, _ := os.Open(qFifo)
+		ioReader := bufio.NewScanner(f)
+		for ioReader.Scan() {
 		}
-		f.Write([]byte("page views, bounce rate"))
+		f.Close()
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("add-pending-questions exited with error: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		cmd.Process.Kill()
+		t.Fatalf("add-pending-questions timed out")
+	}
+
+	data, err := os.ReadFile(questionsFile)
+	if err != nil {
+		t.Fatalf("read questions.jsonl: %v", err)
+	}
+	content := string(data)
+	if strings.Count(content, "\n") < 2 {
+		t.Errorf("expected at least 2 lines in questions.jsonl, got:\n%s", content)
+	}
+	if !strings.Contains(content, `"type":"question"`) {
+		t.Errorf("expected type:question in JSONL, got: %s", content)
+	}
+	if !strings.Contains(content, `"Q1"`) {
+		t.Errorf("expected Q1 in JSONL, got: %s", content)
+	}
+	if !strings.Contains(content, `"Q2"`) {
+		t.Errorf("expected Q2 in JSONL, got: %s", content)
+	}
+}
+
+func TestAddPendingQuestionsNonBlocking(t *T) {
+	bin := buildAddPendingQuestions()
+
+	dir, err := os.MkdirTemp("", "apq-test-*")
+	if err != nil {
+		t.Fatalf("create temp dir: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	qFifo := filepath.Join(dir, "question.fifo")
+	if err := syscall.Mkfifo(qFifo, 0666); err != nil {
+		t.Fatalf("create question fifo: %v", err)
+	}
+
+	cmd := exec.Command(bin, `{"question":"Q1"}`)
+	cmd.Env = append(os.Environ(),
+		"QUESTION_FIFO="+qFifo,
+	)
+
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start add-pending-questions: %v", err)
+	}
+
+	time.Sleep(500 * time.Millisecond)
+
+	start := time.Now()
+
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+
+	go func() {
+		f, _ := os.Open(qFifo)
+		ioReader := bufio.NewScanner(f)
+		for ioReader.Scan() {
+		}
 		f.Close()
 	}()
 
 	select {
 	case err := <-done:
 		elapsed := time.Since(start)
-		if elapsed > 5*time.Second {
-			t.Errorf("roundtrip took %v, expected <5s", elapsed)
-		}
 		if err != nil {
-			t.Fatalf("ask_user failed: %v", err)
+			t.Fatalf("add-pending-questions failed: %v", err)
 		}
-		output := stdout.String()
-		if output != "page views, bounce rate" {
-			t.Errorf("stdout mismatch: got %q, want %q", output, "page views, bounce rate")
+		if elapsed > 2*time.Second {
+			t.Errorf("add-pending-questions took %v, expected near-instant (non-blocking)", elapsed)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(10 * time.Second):
 		cmd.Process.Kill()
-		t.Fatalf("ask_user timed out")
+		t.Fatalf("add-pending-questions timed out")
 	}
 }
 
@@ -367,17 +487,11 @@ func TestRunWithQuestions(t *T) {
 		scanner := bufio.NewScanner(f)
 		for scanner.Scan() {
 			line := scanner.Text()
-			parts := strings.SplitN(line, "\t", 2)
-			if len(parts) == 2 {
-				id := parts[0]
-				af := filepath.Join(answerDir, id+".fifo")
-				time.Sleep(100 * time.Millisecond)
-				wf, err := os.OpenFile(af, os.O_WRONLY, 0)
-				if err == nil {
-					wf.Write([]byte("page views, bounce rate, session duration"))
-					wf.Close()
-				}
+			var entry struct {
+				Type string `json:"type"`
+				ID   string `json:"id"`
 			}
+			fmt.Sscanf(line, `{"type":"%s","id":"%s"`, &entry.Type, &entry.ID)
 		}
 	}()
 
@@ -397,9 +511,6 @@ func TestRunWithQuestions(t *T) {
 				t.Errorf("output missing keyword %q\noutput:\n%s", kw, out)
 			}
 		}
-		if !strings.Contains(out, "page views") {
-			t.Errorf("output missing answer content 'page views'\noutput:\n%s", out)
-		}
 	case <-time.After(5 * time.Minute):
 		cmd.Process.Kill()
 		t.Fatalf("binary timed out after 5m")
@@ -418,7 +529,7 @@ func TestModelFlag(t *T) {
 	}, 1)
 	go func() {
 		stdout, stderr, code := runExpert(
-			"--model", "opencode/deepseek-v4-flash-free",
+			"--model", "opencode/deepseek-v4-pro",
 			"a simple calculator API with add, subtract, multiply, divide endpoints",
 		)
 		done <- struct {
@@ -440,5 +551,3 @@ func TestModelFlag(t *T) {
 		t.Fatalf("binary with --model timed out after 5m")
 	}
 }
-
-

@@ -11,74 +11,6 @@ import (
 	"github.com/xhd2015/agent-pro/agent/session"
 )
 
-func TestParseSessionFile(t *testing.T) {
-	data := []byte(`
-{"session_id":"abc123","feature":"Add dark mode","model":"gpt-4o"}
-{"type":"text","timestamp":1,"sessionID":"abc123","part":{"text":"Hello"}}
-{"type":"tool_use","timestamp":2,"sessionID":"abc123","part":{"tool":"bash","state":{"status":"completed","title":"ls -la"}}}
-`)
-
-	sessionID, feature, model, logs, err := parseSessionFile(data)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if sessionID != "abc123" {
-		t.Errorf("expected sessionID abc123, got %s", sessionID)
-	}
-	if feature != "Add dark mode" {
-		t.Errorf("expected feature 'Add dark mode', got %s", feature)
-	}
-	if model != "gpt-4o" {
-		t.Errorf("expected model gpt-4o, got %s", model)
-	}
-	if len(logs) == 0 {
-		t.Error("expected at least one formatted log entry")
-	}
-	if !strings.Contains(logs[0], "Hello") {
-		t.Errorf("expected first log to contain 'Hello', got: %s", logs[0])
-	}
-}
-
-func TestParseSessionFileEmpty(t *testing.T) {
-	_, _, _, _, err := parseSessionFile([]byte(""))
-	if err == nil {
-		t.Error("expected error for empty file")
-	}
-}
-
-func TestParseSessionFileEmptySessionID(t *testing.T) {
-	data := []byte(`
-{"session_id":"","feature":"Add dark mode","model":"gpt-4o"}
-{"type":"text","timestamp":1,"sessionID":"ses_abc123","part":{"text":"Hello"}}
-`)
-	sessionID, feature, model, logs, err := parseSessionFile(data)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if sessionID != "ses_abc123" {
-		t.Errorf("expected sessionID ses_abc123, got %s", sessionID)
-	}
-	if feature != "Add dark mode" {
-		t.Errorf("expected feature 'Add dark mode', got %s", feature)
-	}
-	if model != "gpt-4o" {
-		t.Errorf("expected model gpt-4o, got %s", model)
-	}
-	if len(logs) == 0 || !strings.Contains(logs[0], "Hello") {
-		t.Error("expected logs with Hello")
-	}
-}
-
-func TestParseSessionFileNoSessionID(t *testing.T) {
-	data := []byte(`
-{"session_id":"","feature":"X","model":"Y"}
-`)
-	_, _, _, _, err := parseSessionFile(data)
-	if err == nil {
-		t.Error("expected error when no sessionID found")
-	}
-}
-
 func TestWrapText(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -159,7 +91,7 @@ func TestDoneViewDoesNotShowExitPrompt(t *testing.T) {
 	}
 }
 
-func TestNonDoneViewShowsPendingQuestions(t *testing.T) {
+func TestNonDoneViewShowsWorking(t *testing.T) {
 	vp := viewport.New(80, 20)
 	m := model{
 		done:     false,
@@ -168,21 +100,466 @@ func TestNonDoneViewShowsPendingQuestions(t *testing.T) {
 		width:    80,
 	}
 	view := m.View()
-	if !strings.Contains(view, "Waiting for agent questions") {
-		t.Errorf("non-done view should show 'Waiting for agent questions', got: %s", view)
+	if !strings.Contains(view, "Working") {
+		t.Errorf("non-done view should show 'Working...', got: %s", view)
 	}
 }
 
-func TestDoneStateCtrlCQuits(t *testing.T) {
+func TestClarificationModeView(t *testing.T) {
+	vp := viewport.New(80, 20)
+	m := model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             textinput.New(),
+		width:             80,
+		questions: []pendingQuestion{
+			{ID: "1", Question: "What platform?"},
+			{ID: "2", Question: "Dark mode?", Options: []QuestionOption{{Label: "Yes"}, {Label: "No"}}},
+		},
+	}
+	view := m.View()
+	if !strings.Contains(view, "Clarification needed") {
+		t.Errorf("clarification view should contain 'Clarification needed', got: %s", view)
+	}
+	if !strings.Contains(view, "What platform?") {
+		t.Errorf("clarification view should show current question, got: %s", view)
+	}
+	if !strings.Contains(view, "Tab:next") {
+		t.Errorf("clarification view should contain 'Tab:next', got: %s", view)
+	}
+}
+
+func TestClarificationModeShowsOptions(t *testing.T) {
+	vp := viewport.New(80, 20)
+	m := model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             textinput.New(),
+		width:             80,
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Payment?", Options: []QuestionOption{{Label: "Card"}, {Label: "PayPal"}}},
+		},
+	}
+	view := m.View()
+	if !strings.Contains(view, "Card") {
+		t.Errorf("clarification view should show option 'Card', got: %s", view)
+	}
+	if !strings.Contains(view, "PayPal") {
+		t.Errorf("clarification view should show option 'PayPal', got: %s", view)
+	}
+}
+
+func TestClarificationShowsAnsweredCount(t *testing.T) {
+	vp := viewport.New(80, 20)
+	m := model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             textinput.New(),
+		width:             80,
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q1", Answer: "A1"},
+			{ID: "2", Question: "Q2"},
+			{ID: "3", Question: "Q3"},
+		},
+	}
+	view := m.View()
+	if !strings.Contains(view, "1 of 3 answered") {
+		t.Errorf("clarification view should show '1 of 3 answered', got: %s", view)
+	}
+}
+
+func TestHasUnansweredQuestions(t *testing.T) {
+	m := &model{
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q1", Answer: "A1"},
+			{ID: "2", Question: "Q2"},
+		},
+	}
+	if !m.hasUnansweredQuestions() {
+		t.Error("expected hasUnansweredQuestions=true when Q2 has no answer")
+	}
+
+	m.questions[1].Answer = "A2"
+	if m.hasUnansweredQuestions() {
+		t.Error("expected hasUnansweredQuestions=false when all answered")
+	}
+}
+
+func TestAnsweredCount(t *testing.T) {
+	m := &model{
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q1", Answer: "A1"},
+			{ID: "2", Question: "Q2"},
+			{ID: "3", Question: "Q3", Answer: "A3"},
+		},
+	}
+	if n := m.answeredCount(); n != 2 {
+		t.Errorf("expected answeredCount=2, got %d", n)
+	}
+}
+
+func TestCurrentPendingQuestionSkipsAnswered(t *testing.T) {
+	m := &model{
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q1", Answer: "A1"},
+			{ID: "2", Question: "Q2"},
+			{ID: "3", Question: "Q3", Answer: "A3"},
+		},
+		selIdx: 0,
+	}
+	q := m.currentPendingQuestion()
+	if q == nil {
+		t.Fatal("expected a pending question")
+	}
+	if q.ID != "2" {
+		t.Errorf("expected Q2 (unanswered), got %s", q.ID)
+	}
+}
+
+func TestCurrentPendingQuestionAllAnswered(t *testing.T) {
+	m := &model{
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q1", Answer: "A1"},
+		},
+		selIdx: 0,
+	}
+	q := m.currentPendingQuestion()
+	if q != nil {
+		t.Errorf("expected nil when all answered, got %v", q)
+	}
+}
+
+func TestCurrentPendingQuestionEmpty(t *testing.T) {
+	m := &model{selIdx: 0}
+	q := m.currentPendingQuestion()
+	if q != nil {
+		t.Errorf("expected nil for empty questions, got %v", q)
+	}
+}
+
+func TestSubmitAnswerRecordsAnswer(t *testing.T) {
+	m := &model{
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q1"},
+		},
+		selIdx: 0,
+		logs:   []string{},
+	}
+	m.submitAnswer("my answer")
+	if m.questions[0].Answer != "my answer" {
+		t.Errorf("expected answer 'my answer', got %q", m.questions[0].Answer)
+	}
+	found := false
+	for _, log := range m.logs {
+		if strings.Contains(log, "[You] Answered #1: my answer") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected answer log entry")
+	}
+}
+
+func TestSubmitAnswerClearsInput(t *testing.T) {
+	input := textinput.New()
+	input.SetValue("typed answer")
+	m := &model{
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q1"},
+		},
+		selIdx: 0,
+		logs:   []string{},
+		input:  input,
+	}
+	m.submitAnswer("typed answer")
+	if m.input.Value() != "" {
+		t.Errorf("expected input cleared after submit, got %q", m.input.Value())
+	}
+}
+
+func TestSubmitAnswerAllAnsweredTransitionsOutOfClarification(t *testing.T) {
+	logCh := make(chan string, 64)
+	doneCh := make(chan llmDoneMsg, 1)
+	vp := viewport.New(80, 20)
+	m := &model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             textinput.New(),
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q1", Answer: "A1"},
+			{ID: "2", Question: "Q2"},
+		},
+		selIdx:     1,
+		llmModel:   "test-model",
+		sessionID:  "test-session",
+		sessionDir: t.TempDir(),
+		logCh:      logCh,
+		llmDoneCh:  doneCh,
+		width:      80,
+		logs:       []string{},
+	}
+	m.submitAnswer("A2")
+	if m.clarificationMode {
+		t.Error("expected clarificationMode=false after all answered")
+	}
+	if m.done {
+		t.Error("expected done=false after all answered (resumes LLM)")
+	}
+}
+
+func TestSubmitAnswerStillHasUnanswered(t *testing.T) {
+	vp := viewport.New(80, 20)
+	m := &model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             textinput.New(),
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q1"},
+			{ID: "2", Question: "Q2"},
+		},
+		selIdx: 0,
+		width:  80,
+		logs:   []string{},
+	}
+	m.submitAnswer("A1")
+	if !m.clarificationMode {
+		t.Error("expected clarificationMode to stay true when more unanswered")
+	}
+	if m.selIdx != 1 {
+		t.Errorf("expected selIdx=1 after answering Q1, got %d", m.selIdx)
+	}
+}
+
+func TestBuildResumePrompt(t *testing.T) {
+	m := &model{
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Payment methods?", Options: []QuestionOption{{Label: "Card"}, {Label: "PayPal"}}, Answer: "Card"},
+			{ID: "2", Question: "Max amount?", Answer: "5000"},
+			{ID: "3", Question: "Unanswered?", Answer: ""},
+		},
+	}
+	prompt := m.buildResumePrompt("follow up text")
+	if !strings.Contains(prompt, "Payment methods?") {
+		t.Error("prompt should contain answered question")
+	}
+	if !strings.Contains(prompt, "Card") {
+		t.Error("prompt should contain answer 'Card'")
+	}
+	if !strings.Contains(prompt, "5000") {
+		t.Error("prompt should contain answer '5000'")
+	}
+	if !strings.Contains(prompt, "Options: Card, PayPal") {
+		t.Error("prompt should list options")
+	}
+	if strings.Contains(prompt, "Unanswered?") {
+		t.Error("prompt should NOT contain unanswered question")
+	}
+	if !strings.Contains(prompt, "follow up text") {
+		t.Error("prompt should contain follow-up text")
+	}
+	if !strings.Contains(prompt, "## Follow-up") {
+		t.Error("prompt should have ## Follow-up section when followUp is provided")
+	}
+}
+
+func TestBuildResumePromptNoFollowUp(t *testing.T) {
+	m := &model{
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q1?", Answer: "A1"},
+		},
+	}
+	prompt := m.buildResumePrompt("")
+	if strings.Contains(prompt, "## Follow-up") {
+		t.Error("prompt should NOT have ## Follow-up when followUp is empty")
+	}
+}
+
+func TestLlmdoneSetsClarificationMode(t *testing.T) {
+	logCh := make(chan string, 64)
+	vp := viewport.New(80, 20)
+	m := &model{
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q1"},
+		},
+		viewport: vp,
+		logCh:    logCh,
+		logs:     []string{},
+		width:    80,
+	}
+	updated, _ := m.Update(llmDoneMsg{output: "test output"})
+	um := updated.(model)
+	if !um.clarificationMode {
+		t.Error("expected clarificationMode=true when pending questions exist")
+	}
+	if !um.done {
+		t.Error("expected done=true after llmDoneMsg")
+	}
+}
+
+func TestLlmdoneNoQuestionsGoesToDone(t *testing.T) {
+	logCh := make(chan string, 64)
+	vp := viewport.New(80, 20)
+	m := &model{
+		viewport: vp,
+		logCh:    logCh,
+		logs:     []string{},
+		width:    80,
+	}
+	updated, _ := m.Update(llmDoneMsg{output: "test output"})
+	um := updated.(model)
+	if um.clarificationMode {
+		t.Error("expected clarificationMode=false when no pending questions")
+	}
+	if !um.done {
+		t.Error("expected done=true after llmDoneMsg")
+	}
+}
+
+func TestLlmdoneAllAnsweredGoesToDone(t *testing.T) {
+	logCh := make(chan string, 64)
+	vp := viewport.New(80, 20)
+	m := &model{
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q1", Answer: "A1"},
+		},
+		viewport: vp,
+		logCh:    logCh,
+		logs:     []string{},
+		width:    80,
+	}
+	updated, _ := m.Update(llmDoneMsg{output: "test output"})
+	um := updated.(model)
+	if um.clarificationMode {
+		t.Error("expected clarificationMode=false when all answered")
+	}
+	if !um.done {
+		t.Error("expected done=true after llmDoneMsg")
+	}
+}
+
+func TestDoneStateDoubleCtrlCQuits(t *testing.T) {
 	m := model{done: true}
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	um := updated.(model)
+	if !um.ctrlCPending {
+		t.Error("first ctrl+c should set ctrlCPending=true")
+	}
 	if cmd == nil {
-		t.Error("ctrl+c when done should return a non-nil command")
+		t.Error("first ctrl+c should return a non-nil timer command")
+	}
+
+	updated, cmd = um.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if cmd == nil {
+		t.Error("second ctrl+c should return a command")
 		return
 	}
-	msg := cmd()
-	if _, ok := msg.(tea.QuitMsg); !ok {
-		t.Error("ctrl+c when done should return tea.Quit")
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Error("second ctrl+c should return tea.Quit")
+	}
+}
+
+func TestDoneStateCtrlCResetOnOtherKey(t *testing.T) {
+	m := model{done: true, ctrlCPending: true}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	um := updated.(model)
+	if um.ctrlCPending {
+		t.Error("any other key should reset ctrlCPending")
+	}
+}
+
+func TestClarificationDoubleCtrlCQuits(t *testing.T) {
+	m := model{
+		done:              true,
+		clarificationMode: true,
+		questions:         []pendingQuestion{{ID: "1", Question: "Q1"}},
+	}
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	um := updated.(model)
+	if !um.ctrlCPending {
+		t.Error("first ctrl+c should set ctrlCPending=true")
+	}
+	if cmd == nil {
+		t.Error("first ctrl+c should return timer command")
+	}
+
+	updated, cmd = um.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if cmd == nil {
+		t.Error("second ctrl+c should return a command")
+		return
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Error("second ctrl+c should return tea.Quit")
+	}
+}
+
+func TestCtrlCResetOnTimeout(t *testing.T) {
+	m := model{done: true, ctrlCPending: true}
+	updated, _ := m.Update(ctrlCResetMsg{})
+	um := updated.(model)
+	if um.ctrlCPending {
+		t.Error("ctrlCResetMsg should set ctrlCPending=false")
+	}
+}
+
+func TestViewShowsCtrlCHint(t *testing.T) {
+	vp := viewport.New(80, 20)
+	m := model{
+		done:         true,
+		ctrlCPending: true,
+		viewport:     vp,
+		input:        textinput.New(),
+		width:        80,
+	}
+	view := m.View()
+	if !strings.Contains(view, "Press Ctrl+C again to quit") {
+		t.Errorf("view should show ctrl+c hint when pending, got: %s", view)
+	}
+}
+
+func TestViewNoCtrlCHintWhenIdle(t *testing.T) {
+	vp := viewport.New(80, 20)
+	m := model{
+		done:     true,
+		viewport: vp,
+		input:    textinput.New(),
+		width:    80,
+	}
+	view := m.View()
+	if strings.Contains(view, "Press Ctrl+C again to quit") {
+		t.Error("view should NOT show ctrl+c hint when not pending")
+	}
+}
+
+func TestRunningDoubleCtrlCQuits(t *testing.T) {
+	vp := viewport.New(80, 20)
+	m := model{
+		done:     false,
+		viewport: vp,
+		input:    textinput.New(),
+		width:    80,
+	}
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	um := updated.(model)
+	if !um.ctrlCPending {
+		t.Error("first ctrl+c while running should set ctrlCPending=true")
+	}
+	if cmd == nil {
+		t.Error("first ctrl+c should return timer command")
+	}
+
+	updated, cmd = um.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if cmd == nil {
+		t.Error("second ctrl+c should quit")
+		return
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Error("second ctrl+c should return tea.Quit")
 	}
 }
 
@@ -361,7 +738,7 @@ func TestViewShowsSpinnerWithPendingQuestions(t *testing.T) {
 		viewport:  vp,
 		input:     textinput.New(),
 		width:     80,
-		questions: []pendingQuestion{{id: "1", question: "What platform?"}},
+		questions: []pendingQuestion{{ID: "1", Question: "What platform?"}},
 	}
 	view := m.View()
 	if !strings.Contains(view, "⠋") {
@@ -694,5 +1071,559 @@ func TestResumeSessionLogsStartWithExistingContent(t *testing.T) {
 	count := strings.Count(view, "[You]")
 	if count != 1 {
 		t.Errorf("resume session should have exactly 1 '[You]', got %d", count)
+	}
+}
+
+func TestLoadQuestionsFromFile(t *testing.T) {
+	dir := t.TempDir()
+	session.AppendLine(dir, "questions.jsonl", `{"type":"question","id":"1","question":"Q1","options":[{"label":"A"},{"label":"B"}]}`)
+	session.AppendLine(dir, "questions.jsonl", `{"type":"question","id":"2","question":"Q2"}`)
+	session.AppendLine(dir, "questions.jsonl", `{"type":"answer","id":"1","answer":"Answer 1"}`)
+
+	m := &model{
+		sessionDir: dir,
+		logs:       []string{},
+	}
+	m.loadQuestionsFromFile()
+
+	if len(m.questions) != 2 {
+		t.Fatalf("expected 2 questions loaded, got %d", len(m.questions))
+	}
+	if m.questions[0].ID != "1" || m.questions[0].Question != "Q1" {
+		t.Errorf("Q1 not loaded correctly: %+v", m.questions[0])
+	}
+	if m.questions[0].Answer != "Answer 1" {
+		t.Errorf("expected Q1 answer 'Answer 1', got %q", m.questions[0].Answer)
+	}
+	if m.questions[1].Answer != "" {
+		t.Errorf("expected Q2 answer empty, got %q", m.questions[1].Answer)
+	}
+	if len(m.questions[0].Options) != 2 {
+		t.Errorf("expected 2 options for Q1, got %d", len(m.questions[0].Options))
+	}
+}
+
+func TestLoadQuestionsFromFileNoFile(t *testing.T) {
+	m := &model{
+		sessionDir: "/nonexistent",
+		logs:       []string{},
+	}
+	m.loadQuestionsFromFile()
+	if len(m.questions) != 0 {
+		t.Errorf("expected 0 questions for missing file, got %d", len(m.questions))
+	}
+}
+
+func TestClarificationTabSkipsAnswered(t *testing.T) {
+	vp := viewport.New(80, 20)
+	m := model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             textinput.New(),
+		width:             80,
+		selIdx:            0,
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q1", Answer: "A1"},
+			{ID: "2", Question: "Q2"},
+		},
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	um := updated.(model)
+	q := um.currentPendingQuestion()
+	if q == nil {
+		t.Fatal("expected a pending question")
+	}
+	if q.ID != "2" {
+		t.Errorf("Tab should land on unanswered Q2, got %s", q.ID)
+	}
+}
+
+func TestClarificationCtrlCFirstTimeSetsPending(t *testing.T) {
+	m := model{
+		done:              true,
+		clarificationMode: true,
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q1"},
+		},
+	}
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	um := updated.(model)
+	if !um.ctrlCPending {
+		t.Error("first ctrl+c in clarification should set ctrlCPending=true")
+	}
+	if cmd == nil {
+		t.Error("first ctrl+c should return a timer command")
+	}
+}
+
+func TestClarificationOptionNavDown(t *testing.T) {
+	vp := viewport.New(80, 20)
+	m := model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             textinput.New(),
+		width:             80,
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q?", Options: []QuestionOption{{Label: "A"}, {Label: "B"}, {Label: "C"}}},
+		},
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	um := updated.(model)
+	if um.optionHighlightIdx != 1 {
+		t.Errorf("down should move to index 1, got %d", um.optionHighlightIdx)
+	}
+
+	updated, _ = um.Update(tea.KeyMsg{Type: tea.KeyDown})
+	um = updated.(model)
+	if um.optionHighlightIdx != 2 {
+		t.Errorf("down should move to index 2, got %d", um.optionHighlightIdx)
+	}
+
+	updated, _ = um.Update(tea.KeyMsg{Type: tea.KeyDown})
+	um = updated.(model)
+	if um.optionHighlightIdx != 3 {
+		t.Errorf("down should move to virtual option index 3, got %d", um.optionHighlightIdx)
+	}
+
+	updated, _ = um.Update(tea.KeyMsg{Type: tea.KeyDown})
+	um = updated.(model)
+	if um.optionHighlightIdx != 0 {
+		t.Errorf("down should wrap to index 0, got %d", um.optionHighlightIdx)
+	}
+}
+
+func TestClarificationOptionNavUp(t *testing.T) {
+	vp := viewport.New(80, 20)
+	m := model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             textinput.New(),
+		width:             80,
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q?", Options: []QuestionOption{{Label: "A"}, {Label: "B"}, {Label: "C"}}},
+		},
+		optionHighlightIdx: 3,
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	um := updated.(model)
+	if um.optionHighlightIdx != 2 {
+		t.Errorf("up should move to index 2, got %d", um.optionHighlightIdx)
+	}
+
+	updated, _ = um.Update(tea.KeyMsg{Type: tea.KeyUp})
+	um = updated.(model)
+	if um.optionHighlightIdx != 1 {
+		t.Errorf("up should move to index 1, got %d", um.optionHighlightIdx)
+	}
+
+	updated, _ = um.Update(tea.KeyMsg{Type: tea.KeyUp})
+	um = updated.(model)
+	if um.optionHighlightIdx != 0 {
+		t.Errorf("up should move to index 0, got %d", um.optionHighlightIdx)
+	}
+
+	updated, _ = um.Update(tea.KeyMsg{Type: tea.KeyUp})
+	um = updated.(model)
+	if um.optionHighlightIdx != 3 {
+		t.Errorf("up should wrap to virtual option index 3, got %d", um.optionHighlightIdx)
+	}
+}
+
+func TestClarificationOptionNavNoOptions(t *testing.T) {
+	vp := viewport.New(80, 20)
+	m := model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             textinput.New(),
+		width:             80,
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Freeform?"},
+		},
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	um := updated.(model)
+	if um.optionHighlightIdx != 0 {
+		t.Errorf("down on no-options should keep idx 0, got %d", um.optionHighlightIdx)
+	}
+
+	updated, _ = um.Update(tea.KeyMsg{Type: tea.KeyUp})
+	um = updated.(model)
+	if um.optionHighlightIdx != 0 {
+		t.Errorf("up on no-options should keep idx 0, got %d", um.optionHighlightIdx)
+	}
+}
+
+func TestClarificationEnterSubmitsHighlightedOption(t *testing.T) {
+	vp := viewport.New(80, 20)
+	m := &model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             textinput.New(),
+		width:             80,
+		logs:              []string{},
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q?", Options: []QuestionOption{{Label: "Card"}, {Label: "PayPal"}}},
+		},
+		optionHighlightIdx: 1,
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	um := updated.(model)
+	if um.questions[0].Answer != "PayPal" {
+		t.Errorf("expected answer 'PayPal', got %q", um.questions[0].Answer)
+	}
+}
+
+func TestClarificationEnterSubmitsTypedTextOverOption(t *testing.T) {
+	input := textinput.New()
+	input.SetValue("Custom answer")
+	vp := viewport.New(80, 20)
+	m := &model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             input,
+		width:             80,
+		logs:              []string{},
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q?", Options: []QuestionOption{{Label: "Card"}, {Label: "PayPal"}}},
+		},
+		optionHighlightIdx: 1,
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	um := updated.(model)
+	if um.questions[0].Answer != "Custom answer" {
+		t.Errorf("expected answer 'Custom answer', got %q", um.questions[0].Answer)
+	}
+}
+
+func TestClarificationEnterEmptyNoOptions(t *testing.T) {
+	vp := viewport.New(80, 20)
+	m := model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             textinput.New(),
+		width:             80,
+		logs:              []string{},
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Freeform?"},
+		},
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	um := updated.(model)
+	if um.questions[0].Answer != "" {
+		t.Errorf("enter with empty input and no options should not submit, got answer %q", um.questions[0].Answer)
+	}
+}
+
+func TestClarificationTabResetsOptionHighlight(t *testing.T) {
+	vp := viewport.New(80, 20)
+	m := model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             textinput.New(),
+		width:             80,
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q1", Options: []QuestionOption{{Label: "A"}, {Label: "B"}}, Answer: "done"},
+			{ID: "2", Question: "Q2", Options: []QuestionOption{{Label: "X"}, {Label: "Y"}}},
+		},
+		optionHighlightIdx: 1,
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	um := updated.(model)
+	if um.optionHighlightIdx != 0 {
+		t.Errorf("tab should reset optionHighlightIdx to 0, got %d", um.optionHighlightIdx)
+	}
+	if um.selIdx != 1 {
+		t.Errorf("tab should move selIdx, got %d", um.selIdx)
+	}
+}
+
+func TestClarificationShiftTab(t *testing.T) {
+	vp := viewport.New(80, 20)
+	m := model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             textinput.New(),
+		width:             80,
+		selIdx:            1,
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q1"},
+			{ID: "2", Question: "Q2"},
+		},
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	um := updated.(model)
+	if um.selIdx != 0 {
+		t.Errorf("shift+tab should move to previous question, got selIdx %d", um.selIdx)
+	}
+
+	updated, _ = um.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	um = updated.(model)
+	if um.selIdx != 1 {
+		t.Errorf("shift+tab should wrap, got selIdx %d", um.selIdx)
+	}
+}
+
+func TestClarificationShiftTabResetsOptionHighlight(t *testing.T) {
+	vp := viewport.New(80, 20)
+	m := model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             textinput.New(),
+		width:             80,
+		selIdx:            0,
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q1", Options: []QuestionOption{{Label: "A"}, {Label: "B"}}},
+		},
+		optionHighlightIdx: 1,
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	um := updated.(model)
+	if um.optionHighlightIdx != 0 {
+		t.Errorf("shift+tab should reset optionHighlightIdx to 0, got %d", um.optionHighlightIdx)
+	}
+}
+
+func TestClarificationViewShowsHighlightedOption(t *testing.T) {
+	vp := viewport.New(80, 20)
+	m := model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             textinput.New(),
+		width:             80,
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Payment?", Options: []QuestionOption{{Label: "Card"}, {Label: "PayPal"}, {Label: "Bank"}}},
+		},
+		optionHighlightIdx: 1,
+	}
+	view := m.View()
+	if strings.Count(view, "▸ Card") > 0 {
+		t.Error("Card should not show ▸ when index 1 highlighted")
+	}
+	if !strings.Contains(view, "▸ PayPal") {
+		t.Error("PayPal should show ▸ when index 1 highlighted")
+	}
+	if strings.Count(view, "▸ Bank") > 0 {
+		t.Error("Bank should not show ▸ when index 1 highlighted")
+	}
+}
+
+func TestClarificationViewDimsEmptyInput(t *testing.T) {
+	vp := viewport.New(80, 20)
+	input := textinput.New()
+	input.Placeholder = "default"
+	m := model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             input,
+		width:             80,
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q?", Options: []QuestionOption{{Label: "A"}}},
+		},
+	}
+	view := m.View()
+	if !strings.Contains(view, "Select an option") {
+		t.Error("should show dimmed input placeholder when on real option")
+	}
+	if !strings.Contains(view, "Shift+Tab") {
+		t.Error("should show Shift+Tab in status line")
+	}
+}
+
+func TestClarificationViewNormalInputWithText(t *testing.T) {
+	vp := viewport.New(80, 20)
+	input := textinput.New()
+	input.SetValue("My answer")
+	m := model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             input,
+		width:             80,
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q?"},
+		},
+	}
+	view := m.View()
+	if !strings.Contains(view, "My answer") {
+		t.Errorf("view should contain typed text 'My answer', got: %s", view)
+	}
+}
+
+func TestClarificationViewShowsVirtualOption(t *testing.T) {
+	vp := viewport.New(80, 20)
+	m := model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             textinput.New(),
+		width:             80,
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q?", Options: []QuestionOption{{Label: "A"}, {Label: "B"}}},
+		},
+		optionHighlightIdx: 0,
+	}
+	view := m.View()
+	if !strings.Contains(view, "Type your answer below") {
+		t.Error("view should show virtual 'Type your answer below' option")
+	}
+}
+
+func TestClarificationVirtualOptionHighlighted(t *testing.T) {
+	vp := viewport.New(80, 20)
+	m := model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             textinput.New(),
+		width:             80,
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q?", Options: []QuestionOption{{Label: "A"}}},
+		},
+		optionHighlightIdx: 1,
+	}
+	view := m.View()
+	if !strings.Contains(view, "▸ ✎") {
+		t.Error("virtual option should show ▸ when highlighted")
+	}
+}
+
+func TestClarificationEnterOnVirtualSubmitsTypedText(t *testing.T) {
+	input := textinput.New()
+	input.SetValue("Custom response")
+	vp := viewport.New(80, 20)
+	m := &model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             input,
+		width:             80,
+		logs:              []string{},
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q?", Options: []QuestionOption{{Label: "A"}}},
+		},
+		optionHighlightIdx: 1,
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	um := updated.(model)
+	if um.questions[0].Answer != "Custom response" {
+		t.Errorf("expected answer 'Custom response' from virtual option, got %q", um.questions[0].Answer)
+	}
+}
+
+func TestClarificationEnterOnVirtualEmptyDoesNothing(t *testing.T) {
+	vp := viewport.New(80, 20)
+	m := model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             textinput.New(),
+		width:             80,
+		logs:              []string{},
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q?", Options: []QuestionOption{{Label: "A"}}},
+		},
+		optionHighlightIdx: 1,
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	um := updated.(model)
+	if um.questions[0].Answer != "" {
+		t.Errorf("enter on virtual with empty input should not submit, got answer %q", um.questions[0].Answer)
+	}
+}
+
+func TestClarificationTypingIgnoredOnRealOption(t *testing.T) {
+	vp := viewport.New(80, 20)
+	input := textinput.New()
+	input.Focus()
+	m := model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             input,
+		width:             80,
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q?", Options: []QuestionOption{{Label: "A"}, {Label: "B"}}},
+		},
+		optionHighlightIdx: 0,
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	um := updated.(model)
+	if um.input.Value() != "" {
+		t.Errorf("typing should be ignored when on real option, got input %q", um.input.Value())
+	}
+	if um.optionHighlightIdx != 0 {
+		t.Errorf("option highlight should not change on typing, got %d", um.optionHighlightIdx)
+	}
+}
+
+func TestClarificationTypingAllowedOnVirtualOption(t *testing.T) {
+	vp := viewport.New(80, 20)
+	input := textinput.New()
+	input.Focus()
+	m := model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             input,
+		width:             80,
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q?", Options: []QuestionOption{{Label: "A"}}},
+		},
+		optionHighlightIdx: 1,
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	um := updated.(model)
+	if !strings.Contains(um.input.Value(), "x") {
+		t.Errorf("typing should work when on virtual option, got input %q", um.input.Value())
+	}
+}
+
+func TestClarificationViewDimsInputOnRealOption(t *testing.T) {
+	vp := viewport.New(80, 20)
+	m := model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             textinput.New(),
+		width:             80,
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q?", Options: []QuestionOption{{Label: "A"}}},
+		},
+		optionHighlightIdx: 0,
+	}
+	view := m.View()
+	if !strings.Contains(view, "Select an option") {
+		t.Error("should show dimmed placeholder when on real option")
+	}
+}
+
+func TestClarificationViewActiveInputOnVirtualOption(t *testing.T) {
+	vp := viewport.New(80, 20)
+	m := model{
+		done:              true,
+		clarificationMode: true,
+		viewport:          vp,
+		input:             textinput.New(),
+		width:             80,
+		questions: []pendingQuestion{
+			{ID: "1", Question: "Q?", Options: []QuestionOption{{Label: "A"}}},
+		},
+		optionHighlightIdx: 1,
+	}
+	view := m.View()
+	if !strings.Contains(view, "Type your answer") {
+		t.Error("should show active placeholder when on virtual option")
 	}
 }

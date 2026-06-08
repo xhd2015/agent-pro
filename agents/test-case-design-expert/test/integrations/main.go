@@ -55,9 +55,11 @@ func main() {
 		}
 	}
 
-	run("TestAskUserBuild", TestAskUserBuild)
-	run("TestAskUserWritesQuestion", TestAskUserWritesQuestion)
-	run("TestAskUserRoundtrip", TestAskUserRoundtrip)
+	run("TestAddPendingQuestionsBuild", TestAddPendingQuestionsBuild)
+	run("TestAddPendingQuestionsWritesQuestion", TestAddPendingQuestionsWritesQuestion)
+	run("TestAddPendingQuestionsMultipleQuestions", TestAddPendingQuestionsMultipleQuestions)
+	run("TestAddPendingQuestionsWritesJSONL", TestAddPendingQuestionsWritesJSONL)
+	run("TestAddPendingQuestionsNonBlocking", TestAddPendingQuestionsNonBlocking)
 	run("TestMainBuild", TestMainBuild)
 	run("TestNoArgs", TestNoArgs)
 	run("TestRunSelfContained", TestRunSelfContained)
