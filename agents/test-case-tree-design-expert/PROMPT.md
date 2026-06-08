@@ -106,6 +106,7 @@ Create the output directory structure. Each directory represents a branch in the
 - Another precondition
 
 ## Steps
+(...implicit steps inherited from ancestors...)
 1. First action the tester takes
 2. Second action
 3. ...
@@ -136,7 +137,7 @@ Not every section is required — use only what applies to the specific test cas
 ### README.md overview
 The README.md at the root must contain three sections:
 
-1. **Mermaid graph** — a `graph TD` diagram showing the full decision tree. Use this style:
+1. **DOT graph** — a `graph TD` diagram showing the full decision tree. Use this style:
    - Rectangles (mode fill:#e1f5fe) for modes
    - Diamonds (decision fill:#fff9c4) for decision nodes
    - Rounded rectangles (test fill:#e8f5e9) for leaves (test case names)
