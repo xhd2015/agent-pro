@@ -27,6 +27,7 @@ Commands:
   opencode          manage opencode hooks and permissions
   codex             manage codex configuration
   traces            view agent trace sessions (web viewer)
+  show-agent-files  collect known agent files under ~/.agent-pro/agent-files-collection/
 
 Run agent-pro <command> --help for command-specific options.
 `
@@ -64,6 +65,8 @@ func handle(args []string) error {
 		return handleCodex(args[1:])
 	case "traces":
 		return handleTraces(args[1:])
+	case "show-agent-files":
+		return handleShowAgentFiles(args[1:])
 	default:
 		return fmt.Errorf("unknown command: %s", args[0])
 	}
@@ -1397,6 +1400,55 @@ func printSkillGroup(label string, skills []openskills.SkillInfo, home string) {
 		}
 	}
 	fmt.Println()
+}
+
+// --- show-agent-files ---
+
+const showAgentFilesHelp = `
+Usage: agent-pro show-agent-files
+
+Collect symlinks to well-known agent directories from $HOME into
+~/.agent-pro/agent-files-collection/. The target is wiped and recreated
+on each run.
+
+Agent directories scanned:
+
+  ~/.codex             OpenAI Codex CLI
+  ~/.claude            Claude Code (Anthropic)
+  ~/.config/opencode   OpenCode
+  ~/.agents            Agent Skills Standard
+  ~/.gemini            Gemini CLI
+  ~/.config/gemini-cli Gemini CLI
+  ~/.cursor            Cursor Editor
+
+Only existing directories are linked.
+
+Options:
+  -h,--help  show help
+`
+
+func handleShowAgentFiles(args []string) error {
+	_, err := flags.
+		Help("-h,--help", showAgentFilesHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("find home dir: %w", err)
+	}
+
+	targetDir := filepath.Join(homeDir, ".agent-pro", "agent-files-collection")
+
+	fmt.Printf("Collecting agent files into %s\n\n", shortenHome(targetDir, homeDir))
+	if err := CollectAgentFiles(homeDir, targetDir); err != nil {
+		return err
+	}
+
+	fmt.Printf("\nDone. View with: ls -laR %s\n", shortenHome(targetDir, homeDir))
+	return nil
 }
 
 // --- traces ---

@@ -2,6 +2,7 @@ package commit_msg
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -164,12 +165,14 @@ Respond with ONLY a JSON object in this exact format (no other text):
 	logger.Log(fmt.Sprintf("$ opencode run  [prompt: Generate brief git commit message for %d staged file(s), %d chars]", fileCount, len(stagedDiff)))
 	logger.Log("Running agent...")
 
-	output, err := run.Run(run.Options{
+	ctx := context.Background()
+	output, sessionID, err := run.Run(ctx, run.Options{
 		Dir:    dir,
 		Model:  actualModel,
 		Prompt: commitPrompt,
 		Logger: logger,
 	})
+	_ = sessionID
 	if err != nil {
 		return "", fmt.Errorf("agent failed: %w", err)
 	}

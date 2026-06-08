@@ -392,7 +392,7 @@ func TestLlmdoneSetsClarificationMode(t *testing.T) {
 		logs:     []string{},
 		width:    80,
 	}
-	updated, _ := m.Update(llmDoneMsg{output: "test output"})
+	updated, _ := m.Update(llmDoneMsg{Output: "test output"})
 	um := updated.(model)
 	if !um.clarificationMode {
 		t.Error("expected clarificationMode=true when pending questions exist")
@@ -411,7 +411,7 @@ func TestLlmdoneNoQuestionsGoesToDone(t *testing.T) {
 		logs:     []string{},
 		width:    80,
 	}
-	updated, _ := m.Update(llmDoneMsg{output: "test output"})
+	updated, _ := m.Update(llmDoneMsg{Output: "test output"})
 	um := updated.(model)
 	if um.clarificationMode {
 		t.Error("expected clarificationMode=false when no pending questions")
@@ -433,7 +433,7 @@ func TestLlmdoneAllAnsweredGoesToDone(t *testing.T) {
 		logs:     []string{},
 		width:    80,
 	}
-	updated, _ := m.Update(llmDoneMsg{output: "test output"})
+	updated, _ := m.Update(llmDoneMsg{Output: "test output"})
 	um := updated.(model)
 	if um.clarificationMode {
 		t.Error("expected clarificationMode=false when all answered")
@@ -632,7 +632,7 @@ func TestWaitForLLMDoneReadsFromChannel(t *testing.T) {
 	doneCh := make(chan llmDoneMsg, 1)
 	m := model{llmDoneCh: doneCh}
 
-	testMsg := llmDoneMsg{output: "test output", err: nil}
+	testMsg := llmDoneMsg{Output: "test output", Err: nil}
 	doneCh <- testMsg
 
 	cmd := m.waitForLLMDone()
@@ -644,8 +644,8 @@ func TestWaitForLLMDoneReadsFromChannel(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected llmDoneMsg, got %T", result)
 	}
-	if msg.output != "test output" {
-		t.Errorf("expected output 'test output', got %q", msg.output)
+	if msg.Output != "test output" {
+		t.Errorf("expected output 'test output', got %q", msg.Output)
 	}
 }
 

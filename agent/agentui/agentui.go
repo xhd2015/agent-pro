@@ -1,10 +1,6 @@
 package agentui
 
 import (
-	"bufio"
-	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -21,13 +17,14 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	add_pending_questions "github.com/xhd2015/agent-pro/agent/agentui/add_pending_questions"
+	"github.com/xhd2015/agent-pro/agent/agentui/question"
+	"github.com/xhd2015/agent-pro/agent/agentui/runner"
+	"github.com/xhd2015/agent-pro/agent/agentui/sessionstate"
+	"github.com/xhd2015/agent-pro/agent/agentui/textutil"
 	"github.com/xhd2015/agent-pro/agent/opencode/models"
-	opencoderun "github.com/xhd2015/agent-pro/agent/opencode/run"
 	lessflags "github.com/xhd2015/less-flags"
 
 	"github.com/xhd2015/agent-pro/agent/session"
-	"github.com/xhd2015/agent-pro/agent_trace/types"
-	tracefmt "github.com/xhd2015/agent-pro/run"
 )
 
 type Config struct {
@@ -55,33 +52,13 @@ func Run(cfg Config, args []string) error {
 	return runMain(cfg, args)
 }
 
-type QuestionOption struct {
-	Label       string `json:"label"`
-	Description string `json:"description,omitempty"`
-}
-
-type pendingQuestion struct {
-	ID       string           `json:"id"`
-	Question string           `json:"question"`
-	Options  []QuestionOption `json:"options"`
-	Answer   string           `json:"answer,omitempty"`
-}
-
-type questionLineEntry struct {
-	Type     string           `json:"type"`
-	ID       string           `json:"id"`
-	Question string           `json:"question,omitempty"`
-	Options  []QuestionOption `json:"options,omitempty"`
-	Answer   string           `json:"answer,omitempty"`
-}
+type QuestionOption = question.Option
+type pendingQuestion = question.Question
+type questionLineEntry = question.Entry
 
 type logMsg string
 type questionMsg pendingQuestion
-type llmDoneMsg struct {
-	output            string
-	opencodeSessionID string
-	err               error
-}
+type llmDoneMsg = runner.Done
 type tickMsg struct{}
 type ctrlCResetMsg struct{}
 
@@ -270,7 +247,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				prompt := m.buildResumePrompt(followUp)
 				go runLLM(prompt, m.llmModel, m.opencodeSessionID, m.sessionDir, m.logCh, newDoneCh)
 
-				m.viewport.SetContent(WrapText(strings.Join(m.logs, "\n"), m.viewport.Width))
+				m.viewport.SetContent(textutil.WrapText(strings.Join(m.logs, "\n"), m.viewport.Width))
 				m.viewport.GotoBottom()
 
 				return m, tea.Batch(m.waitForLLMDone(), tick())
@@ -290,47 +267,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case logMsg:
 		m.logs = append(m.logs, string(msg))
-		m.viewport.SetContent(WrapText(strings.Join(m.logs, "\n"), m.viewport.Width))
+		m.viewport.SetContent(textutil.WrapText(strings.Join(m.logs, "\n"), m.viewport.Width))
 		m.viewport.GotoBottom()
 		return m, m.listenForLogs()
 
 	case questionMsg:
-		id := msg.ID
-		question := msg.Question
-		options := msg.Options
-		m.questions = append(m.questions, pendingQuestion{
-			ID:       id,
-			Question: question,
-			Options:  options,
-		})
-		optsDesc := ""
-		if len(options) > 0 {
-			var labels []string
-			for _, o := range options {
-				labels = append(labels, o.Label)
-			}
-			optsDesc = fmt.Sprintf(" [%s]", strings.Join(labels, "/"))
-		}
-		m.logs = append(m.logs, fmt.Sprintf("[Agent asks] #%s: %s%s", id, question, optsDesc))
-		m.viewport.SetContent(WrapText(strings.Join(m.logs, "\n"), m.viewport.Width))
+		m.questions = append(m.questions, pendingQuestion(msg))
+		m.logs = append(m.logs, question.FormatAskLog(question.Question(msg)))
+		m.viewport.SetContent(textutil.WrapText(strings.Join(m.logs, "\n"), m.viewport.Width))
 		m.viewport.GotoBottom()
 		return m, m.listenForQuestions()
 
 	case llmDoneMsg:
 		m.done = true
-		if msg.err != nil {
-			m.err = msg.err
-			m.logs = append(m.logs, fmt.Sprintf("[Error] %v", msg.err))
+		if msg.Err != nil {
+			m.err = msg.Err
+			m.logs = append(m.logs, fmt.Sprintf("[Error] %v", msg.Err))
 		} else {
-			m.llmOutput = msg.output
+			m.llmOutput = msg.Output
 		}
-		if msg.opencodeSessionID != "" && m.opencodeSessionID == "" {
-			m.opencodeSessionID = msg.opencodeSessionID
-			var meta sessionMeta
-			if session.ReadJSON(m.sessionDir, "metadata.json", &meta) == nil {
-				meta.OpencodeSessionID = msg.opencodeSessionID
-				session.WriteJSON(m.sessionDir, "metadata.json", meta)
-			}
+		if msg.OpencodeSessionID != "" && m.opencodeSessionID == "" {
+			m.opencodeSessionID = msg.OpencodeSessionID
+			sessionstate.UpdateOpencodeSessionID(m.sessionDir, msg.OpencodeSessionID)
 		}
 
 		m.clarificationMode = m.hasUnansweredQuestions()
@@ -340,7 +298,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.logs = append(m.logs, "[Agent] Done. Review output below.")
 		}
-		m.viewport.SetContent(WrapText(strings.Join(m.logs, "\n"), m.viewport.Width))
+		m.viewport.SetContent(textutil.WrapText(strings.Join(m.logs, "\n"), m.viewport.Width))
 		m.viewport.GotoBottom()
 
 	case ctrlCResetMsg:
@@ -457,42 +415,20 @@ func (m model) View() string {
 }
 
 func (m *model) currentPendingQuestion() *pendingQuestion {
-	if len(m.questions) == 0 {
+	idx := question.PendingIndex(m.questions, m.selIdx)
+	if idx < 0 {
 		return nil
 	}
-	if m.selIdx >= len(m.questions) {
-		m.selIdx = 0
-	}
-	startIdx := m.selIdx
-	for {
-		q := &m.questions[m.selIdx]
-		if q.Answer == "" {
-			return q
-		}
-		m.selIdx = (m.selIdx + 1) % len(m.questions)
-		if m.selIdx == startIdx {
-			return nil
-		}
-	}
+	m.selIdx = idx
+	return &m.questions[m.selIdx]
 }
 
 func (m *model) hasUnansweredQuestions() bool {
-	for _, q := range m.questions {
-		if q.Answer == "" {
-			return true
-		}
-	}
-	return false
+	return question.HasUnanswered(m.questions)
 }
 
 func (m *model) answeredCount() int {
-	n := 0
-	for _, q := range m.questions {
-		if q.Answer != "" {
-			n++
-		}
-	}
-	return n
+	return question.AnsweredCount(m.questions)
 }
 
 func (m *model) submitAnswer(answer string) {
@@ -526,42 +462,18 @@ func (m *model) submitAnswer(answer string) {
 		m.done = false
 		go runLLM(prompt, m.llmModel, m.opencodeSessionID, m.sessionDir, m.logCh, newDoneCh)
 
-		m.viewport.SetContent(WrapText(strings.Join(m.logs, "\n"), m.viewport.Width))
+		m.viewport.SetContent(textutil.WrapText(strings.Join(m.logs, "\n"), m.viewport.Width))
 		m.viewport.GotoBottom()
 	} else {
 		m.selIdx = (m.selIdx + 1) % len(m.questions)
 		m.optionHighlightIdx = 0
-		m.viewport.SetContent(WrapText(strings.Join(m.logs, "\n"), m.viewport.Width))
+		m.viewport.SetContent(textutil.WrapText(strings.Join(m.logs, "\n"), m.viewport.Width))
 		m.viewport.GotoBottom()
 	}
 }
 
 func (m *model) buildResumePrompt(followUp string) string {
-	var sb strings.Builder
-	sb.WriteString("## Pending Questions — Answered\n\n")
-	sb.WriteString("You previously asked these questions. Here are the answers:\n\n")
-	for i, q := range m.questions {
-		if q.Answer != "" {
-			optStr := ""
-			if len(q.Options) > 0 {
-				var labels []string
-				for _, o := range q.Options {
-					labels = append(labels, o.Label)
-				}
-				optStr = fmt.Sprintf("\n   Options: %s", strings.Join(labels, ", "))
-			}
-			sb.WriteString(fmt.Sprintf("%d. **%s**%s\n   ▶ %s\n\n", i+1, q.Question, optStr, q.Answer))
-		}
-	}
-	sb.WriteString("Continue your work incorporating these answers.\n")
-
-	if followUp != "" {
-		sb.WriteString("\n## Follow-up\n\n")
-		sb.WriteString(followUp)
-		sb.WriteString("\n")
-	}
-
-	return sb.String()
+	return question.BuildResumePrompt(m.questions, followUp)
 }
 
 func (m *model) loadQuestionsFromFile() {
@@ -570,46 +482,10 @@ func (m *model) loadQuestionsFromFile() {
 		return
 	}
 
-	questionMap := make(map[string]*pendingQuestion)
-	var questionOrder []string
-	for _, line := range lines {
-		var entry questionLineEntry
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
-			continue
-		}
-		switch entry.Type {
-		case "question":
-			if _, exists := questionMap[entry.ID]; !exists {
-				questionOrder = append(questionOrder, entry.ID)
-			}
-			questionMap[entry.ID] = &pendingQuestion{
-				ID:       entry.ID,
-				Question: entry.Question,
-				Options:  entry.Options,
-			}
-		case "answer":
-			if q, ok := questionMap[entry.ID]; ok {
-				q.Answer = entry.Answer
-			}
-		}
-	}
-
-	for _, id := range questionOrder {
-		q := questionMap[id]
-		m.questions = append(m.questions, *q)
-		optsDesc := ""
-		if len(q.Options) > 0 {
-			var labels []string
-			for _, o := range q.Options {
-				labels = append(labels, o.Label)
-			}
-			optsDesc = fmt.Sprintf(" [%s]", strings.Join(labels, "/"))
-		}
-		answerNote := ""
-		if q.Answer != "" {
-			answerNote = fmt.Sprintf(" (answered: %s)", q.Answer)
-		}
-		m.logs = append(m.logs, fmt.Sprintf("[Agent asks] #%s: %s%s%s", q.ID, q.Question, optsDesc, answerNote))
+	questions := question.ReplayLines(lines)
+	for _, q := range questions {
+		m.questions = append(m.questions, pendingQuestion(q))
+		m.logs = append(m.logs, question.FormatReplayLog(q))
 	}
 }
 
@@ -658,7 +534,7 @@ func runMain(cfg Config, args []string) error {
 	var sessionDir string
 	var initialLogs []string
 
-	sid, osid, dir, feat, resumeModel, logs, err := resolveSession(cfg.AgentName, resumeID)
+	sid, osid, dir, feat, resumeModel, logs, err := sessionstate.Resolve(cfg.AgentName, resumeID)
 	if err != nil {
 		return err
 	}
@@ -687,7 +563,7 @@ func runMain(cfg Config, args []string) error {
 	}
 
 	if sessionID == "" {
-		sessionID = newSessionID(cfg.SessionPrefix)
+		sessionID = sessionstate.NewID(cfg.SessionPrefix)
 	}
 	if sessionDir == "" {
 		var err error
@@ -696,7 +572,7 @@ func runMain(cfg Config, args []string) error {
 			return fmt.Errorf("create session dir: %w", err)
 		}
 	}
-	session.WriteJSON(sessionDir, "metadata.json", sessionMeta{
+	sessionstate.WriteMeta(sessionDir, sessionstate.Meta{
 		SessionID: sessionID,
 		Feature:   feature,
 		Model:     llmModel,
@@ -761,10 +637,10 @@ func runMain(cfg Config, args []string) error {
 	vp := viewport.New(80, 20)
 	startContent := "Starting..."
 	if len(initialLogs) > 0 {
-		startContent = WrapText(strings.Join(initialLogs, "\n"), vp.Width)
+		startContent = textutil.WrapText(strings.Join(initialLogs, "\n"), vp.Width)
 	} else if feature != "" {
 		initialLogs = []string{"[You] " + feature}
-		startContent = WrapText("[You] "+feature, vp.Width)
+		startContent = textutil.WrapText("[You] "+feature, vp.Width)
 	}
 	vp.SetContent(startContent)
 	vp.GotoBottom()
@@ -812,29 +688,7 @@ func runMain(cfg Config, args []string) error {
 }
 
 func WrapText(s string, width int) string {
-	if width <= 0 {
-		return s
-	}
-	var lines []string
-	for _, line := range strings.Split(s, "\n") {
-		for len(line) > width {
-			cut := width
-			for cut > 0 && line[cut] != ' ' {
-				cut--
-			}
-			if cut == 0 {
-				cut = width
-			}
-			lines = append(lines, line[:cut])
-			if cut < len(line) && line[cut] == ' ' {
-				line = line[cut+1:]
-			} else {
-				line = line[cut:]
-			}
-		}
-		lines = append(lines, line)
-	}
-	return strings.Join(lines, "\n")
+	return textutil.WrapText(s, width)
 }
 
 func isTTY(f *os.File) bool {
@@ -851,156 +705,35 @@ func startQuestionMonitor(fifo string, ch chan<- pendingQuestion) {
 		if err != nil {
 			return
 		}
-		scanner := bufio.NewScanner(f)
-		for scanner.Scan() {
-			line := scanner.Text()
-			var entry questionLineEntry
-			if err := json.Unmarshal([]byte(line), &entry); err != nil {
-				continue
-			}
-			if entry.Type == "question" {
-				ch <- pendingQuestion{
-					ID:       entry.ID,
-					Question: entry.Question,
-					Options:  entry.Options,
-				}
-			}
-		}
+		question.ReadQuestions(f, ch)
 		f.Close()
 	}
 }
 
 func runLLM(prompt, llmModel, sessionID, sessionDir string, logCh chan<- string, doneCh chan<- llmDoneMsg) {
-	sf, err := os.OpenFile(filepath.Join(sessionDir, "events.jsonl"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		sf = nil
-	}
-
-	output, opencodeSID, err := opencoderun.Run(context.Background(), opencoderun.Options{
-		Prompt:    prompt,
-		Dir:       ".",
-		Model:     llmModel,
-		SessionID: sessionID,
-		Logger:    &formatLogger{ch: logCh, file: sf},
-	})
-	if sf != nil {
-		sf.Close()
-	}
-	doneCh <- llmDoneMsg{output: output, opencodeSessionID: opencodeSID, err: err}
-}
-
-type formatLogger struct {
-	ch   chan<- string
-	buf  []byte
-	file *os.File
-}
-
-func (l *formatLogger) Log(msg string) {
-	if msg == "" {
-		return
-	}
-	l.buf = append(l.buf, []byte(msg)...)
-	for {
-		idx := indexByte(l.buf, '\n')
-		if idx < 0 {
-			break
-		}
-		line := string(l.buf[:idx])
-		l.buf = l.buf[idx+1:]
-		if line == "" {
-			continue
-		}
-		if l.file != nil {
-			l.file.Write([]byte(line + "\n"))
-		}
-		formatted := formatLogLine(line)
-		if formatted == "" {
-			continue
-		}
-		select {
-		case l.ch <- formatted:
-		default:
-		}
-	}
+	runner.RunLLM(prompt, llmModel, sessionID, sessionDir, logCh, doneCh)
 }
 
 func formatLogLine(line string) string {
-	parsed, ok := types.ParseAgentTraceLine(json.RawMessage(line))
-	if !ok {
-		return ""
-	}
-	if parsed.Message != nil {
-		return tracefmt.FormatMessageCompact(*parsed.Message)
-	}
-	if parsed.Activity != nil {
-		msg := types.AgentTraceMessage{
-			ToolCall: parsed.Activity,
-		}
-		return tracefmt.FormatMessageCompact(msg)
-	}
-	return ""
+	return runner.FormatLogLine(line)
 }
 
 func indexByte(data []byte, b byte) int {
-	for i, c := range data {
-		if c == b {
-			return i
-		}
-	}
-	return -1
+	return textutil.IndexByte(data, b)
 }
 
-type sessionMeta struct {
-	SessionID         string `json:"session_id"`
-	OpencodeSessionID string `json:"opencode_session_id,omitempty"`
-	Feature           string `json:"feature"`
-	Model             string `json:"model"`
-}
+type sessionMeta = sessionstate.Meta
 
 func readSessionFromDir(dir, sessionID string) (string, string, string, string, []string) {
-	var meta sessionMeta
-	if err := session.ReadJSON(dir, "metadata.json", &meta); err != nil {
-		return "", "", "", "", nil
-	}
-	if meta.SessionID == "" {
-		meta.SessionID = sessionID
-	}
-
-	lines, err := session.ReadLines(dir, "events.jsonl")
-	if err != nil {
-		return meta.SessionID, meta.OpencodeSessionID, meta.Feature, meta.Model, nil
-	}
-
-	var logs []string
-	for _, line := range lines {
-		formatted := formatLogLine(line)
-		if formatted != "" {
-			logs = append(logs, formatted)
-		}
-	}
-
-	return meta.SessionID, meta.OpencodeSessionID, meta.Feature, meta.Model, logs
+	return sessionstate.ReadFromDir(dir, sessionID)
 }
 
 func resolveSession(agentName, resumeID string) (sessionID, opencodeSessionID, sessionDir, feature, llmModel string, logs []string, err error) {
-	if resumeID == "" {
-		return "", "", "", "", "", nil, nil
-	}
-	dir, err := session.Dir(agentName, resumeID)
-	if err != nil {
-		return "", "", "", "", "", nil, fmt.Errorf("resume session: %w", err)
-	}
-	sid, osid, feat, model, eventLogs := readSessionFromDir(dir, resumeID)
-	if sid == "" {
-		return "", "", "", "", "", nil, fmt.Errorf("session not found: %s (check the session ID)", resumeID)
-	}
-	return sid, osid, dir, feat, model, eventLogs, nil
+	return sessionstate.Resolve(agentName, resumeID)
 }
 
 func newSessionID(prefix string) string {
-	var b [8]byte
-	rand.Read(b[:])
-	return prefix + hex.EncodeToString(b[:])
+	return sessionstate.NewID(prefix)
 }
 
 func runPlain(cfg Config, feature, llmModel, outputFile string) {
@@ -1009,24 +742,5 @@ func runPlain(cfg Config, feature, llmModel, outputFile string) {
 	if outputFile != "" {
 		prompt += "\n\n## Output File\nWrite the complete report to: " + outputFile
 	}
-	output, _, err := opencoderun.Run(context.Background(), opencoderun.Options{
-		Prompt: prompt,
-		Dir:    ".",
-		Model:  llmModel,
-		Logger: &plainLogger{},
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "agent error: %v\n", err)
-		os.Exit(1)
-	}
-	fmt.Print(output)
-}
-
-type plainLogger struct{}
-
-func (l *plainLogger) Log(msg string) {
-	if msg == "" {
-		return
-	}
-	fmt.Fprint(os.Stderr, msg)
+	runner.RunPlain(prompt, llmModel)
 }
