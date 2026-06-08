@@ -6,6 +6,47 @@ import (
 	"testing"
 )
 
+func TestValidateTargetDir(t *testing.T) {
+	t.Run("accepts non-existent dir", func(t *testing.T) {
+		err := ValidateTargetDir(filepath.Join(t.TempDir(), "does-not-exist"))
+		if err != nil {
+			t.Errorf("non-existent dir should be valid: %v", err)
+		}
+	})
+
+	t.Run("accepts empty dir", func(t *testing.T) {
+		err := ValidateTargetDir(t.TempDir())
+		if err != nil {
+			t.Errorf("empty dir should be valid: %v", err)
+		}
+	})
+
+	t.Run("rejects non-empty dir", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "stale"), []byte("x"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		err := ValidateTargetDir(dir)
+		if err == nil {
+			t.Fatal("non-empty dir should be rejected")
+		}
+	})
+
+	t.Run("rejects file path", func(t *testing.T) {
+		f, err := os.CreateTemp("", "agent-pro-test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.Close()
+		defer os.Remove(f.Name())
+
+		err = ValidateTargetDir(f.Name())
+		if err == nil {
+			t.Fatal("file path should be rejected")
+		}
+	})
+}
+
 func TestCollectAgentFiles(t *testing.T) {
 	t.Run("creates symlinks for existing agent paths", func(t *testing.T) {
 		homeDir := t.TempDir()
@@ -49,28 +90,6 @@ func TestCollectAgentFiles(t *testing.T) {
 		if len(entries) != 0 {
 			t.Errorf("expected no entries, got %d", len(entries))
 		}
-	})
-
-	t.Run("wipes target before recreating", func(t *testing.T) {
-		homeDir := t.TempDir()
-		targetDir := t.TempDir()
-
-		homeBase := filepath.Join(targetDir, "HOME")
-		if err := os.MkdirAll(homeBase, 0755); err != nil {
-			t.Fatal(err)
-		}
-		staleFile := filepath.Join(homeBase, "stale-file")
-		if err := os.WriteFile(staleFile, []byte("x"), 0644); err != nil {
-			t.Fatal(err)
-		}
-
-		createDir(t, homeDir, ".codex")
-		err := CollectAgentFiles(homeDir, targetDir)
-		if err != nil {
-			t.Fatalf("CollectAgentFiles failed: %v", err)
-		}
-
-		assertPathNotExist(t, staleFile)
 	})
 
 	t.Run("link targets resolve correctly", func(t *testing.T) {

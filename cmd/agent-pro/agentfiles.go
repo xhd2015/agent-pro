@@ -22,11 +22,28 @@ func KnownAgentPaths() []AgentPath {
 	}
 }
 
-func CollectAgentFiles(homeDir, targetDir string) error {
-	if err := os.RemoveAll(targetDir); err != nil {
-		return fmt.Errorf("wipe target dir: %w", err)
+func ValidateTargetDir(targetDir string) error {
+	fi, err := os.Stat(targetDir)
+	if os.IsNotExist(err) {
+		return nil
 	}
+	if err != nil {
+		return fmt.Errorf("stat target dir: %w", err)
+	}
+	if !fi.IsDir() {
+		return fmt.Errorf("target exists but is not a directory: %s", targetDir)
+	}
+	entries, err := os.ReadDir(targetDir)
+	if err != nil {
+		return fmt.Errorf("read target dir: %w", err)
+	}
+	if len(entries) > 0 {
+		return fmt.Errorf("target directory is not empty: %s", targetDir)
+	}
+	return nil
+}
 
+func CollectAgentFiles(homeDir, targetDir string) error {
 	homeBase := filepath.Join(targetDir, "HOME")
 	if err := os.MkdirAll(homeBase, 0755); err != nil {
 		return fmt.Errorf("create HOME dir: %w", err)

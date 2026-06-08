@@ -1405,11 +1405,12 @@ func printSkillGroup(label string, skills []openskills.SkillInfo, home string) {
 // --- show-agent-files ---
 
 const showAgentFilesHelp = `
-Usage: agent-pro show-agent-files
+Usage: agent-pro show-agent-files [--dir DIR]
 
-Collect symlinks to well-known agent directories from $HOME into
-~/.agent-pro/agent-files-collection/. The target is wiped and recreated
-on each run.
+Collect symlinks to well-known agent directories from $HOME into a target
+directory. Default target: ~/.agent-pro/agent-files-collection/
+
+The target directory must either not exist or be empty.
 
 Agent directories scanned:
 
@@ -1424,11 +1425,13 @@ Agent directories scanned:
 Only existing directories are linked.
 
 Options:
-  -h,--help  show help
+  --dir <dir>  target directory (default: ~/.agent-pro/agent-files-collection/)
+  -h,--help    show help
 `
 
 func handleShowAgentFiles(args []string) error {
-	_, err := flags.
+	var dirFlag *string
+	_, err := flags.String("--dir", &dirFlag).
 		Help("-h,--help", showAgentFilesHelp).
 		Parse(args)
 	if err != nil {
@@ -1441,6 +1444,17 @@ func handleShowAgentFiles(args []string) error {
 	}
 
 	targetDir := filepath.Join(homeDir, ".agent-pro", "agent-files-collection")
+	if dirFlag != nil && strings.TrimSpace(*dirFlag) != "" {
+		targetDir = *dirFlag
+		targetDir, err = filepath.Abs(filepath.Clean(targetDir))
+		if err != nil {
+			return fmt.Errorf("resolve --dir: %w", err)
+		}
+	}
+
+	if err := ValidateTargetDir(targetDir); err != nil {
+		return err
+	}
 
 	fmt.Printf("Collecting agent files into %s\n\n", shortenHome(targetDir, homeDir))
 	if err := CollectAgentFiles(homeDir, targetDir); err != nil {
