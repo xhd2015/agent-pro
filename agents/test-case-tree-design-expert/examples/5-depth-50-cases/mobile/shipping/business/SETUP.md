@@ -1,0 +1,10 @@
+## Preconditions
+- The shipping flow is configured for the business shopper variant.
+
+## Steps
+1. Prepare business variant inputs.
+2. Execute the scenario path.
+3. Capture user-visible output and stored state.
+
+## Context
+- Example tree generated for test-case-tree-design-expert viewer and validator demos.

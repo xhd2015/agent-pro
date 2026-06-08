@@ -3,6 +3,7 @@ package validate
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -151,5 +152,37 @@ func TestValidateSubdirsRootAssertWithoutSetup(t *testing.T) {
 	errs := validateSubdirs(root, nil)
 	if len(errs) == 0 {
 		t.Error("root with ASSERT.md but no SETUP.md should be flagged")
+	}
+}
+
+func TestExamplesValidate(t *testing.T) {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot resolve test file path")
+	}
+
+	examplesDir := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "examples"))
+	entries, err := os.ReadDir(examplesDir)
+	if err != nil {
+		t.Fatalf("read examples dir: %v", err)
+	}
+
+	found := 0
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		found++
+		dir := filepath.Join(examplesDir, entry.Name())
+		var errs []string
+		errs = validateRoot(dir, errs)
+		errs = validateSubdirs(dir, errs)
+		if len(errs) > 0 {
+			t.Errorf("%s did not validate: %v", entry.Name(), errs)
+		}
+	}
+
+	if found == 0 {
+		t.Fatal("expected at least one example directory")
 	}
 }
