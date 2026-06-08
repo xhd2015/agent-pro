@@ -115,6 +115,31 @@ Create the output directory structure. Each directory represents a branch in the
 - Environment details, roles, configuration
 ```
 
+SETUP.md may optionally end with a single executable Go code block. If present:
+- It must be the final content in the file.
+- It may import packages; missing common imports can be resolved later by `goimports`.
+- The root SETUP.md must define the shared request/response model:
+  ```go
+  type Request struct {
+  }
+
+  type Response struct {
+  }
+  ```
+- Any SETUP.md may define setup logic:
+  ```go
+  func Setup(t *testing.T, req *Request) error {
+      return nil
+  }
+  ```
+- At least one SETUP.md in the root-to-leaf chain must define run logic:
+  ```go
+  func Run(t *testing.T, req *Request) (*Response, error) {
+      return nil, fmt.Errorf("not implemented yet")
+  }
+  ```
+- SETUP.md inherits: each runnable test runs Setup functions from root to leaf. Run is not a chain; the deepest Run in the root-to-leaf path is used.
+
 ### ASSERT.md format (structured DSL)
 ```markdown
 ## Expected
@@ -131,6 +156,13 @@ Create the output directory structure. Each directory represents a branch in the
 ## Exit Code
 - Expected exit code for CLI tools (e.g. 0, 1)
 ```
+
+ASSERT.md must end with a single executable Go code block. It must define:
+```go
+func Assert(t *testing.T, req *Request, resp *Response, err error) {
+}
+```
+The `err` argument is the error returned by Run, not by Setup. Setup errors fail the test before Run and Assert execute. ASSERT.md is not inherited.
 
 Not every section is required — use only what applies to the specific test case.
 
@@ -163,3 +195,8 @@ After writing all files, run the validation tool against the generated directory
 validate_test_case_tree <output-dir>
 ```
 If the tool reports any errors, fix them and re-run until the output passes validation silently (exit code 0).
+
+If executable Go snippets were included, also verify them:
+```sh
+test-case-tree-runner run <output-dir>
+```

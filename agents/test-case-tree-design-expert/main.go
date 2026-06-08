@@ -7,6 +7,7 @@ import (
 
 	"github.com/xhd2015/agent-pro/agent/agentui"
 	"github.com/xhd2015/agent-pro/agents/test-case-tree-design-expert/validate"
+	"github.com/xhd2015/agent-pro/agents/test-case-tree-design-expert/view"
 )
 
 //go:embed PROMPT.md
@@ -30,6 +31,13 @@ Options:
 `
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "view" {
+		if err := view.Run(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := agentui.Run(agentui.Config{
 		AgentName:     "test-case-tree-design-expert",
 		SessionPrefix: "tctd_",
