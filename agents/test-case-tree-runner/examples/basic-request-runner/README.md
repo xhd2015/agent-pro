@@ -6,7 +6,7 @@ This tree demonstrates executable `SETUP.md` and `ASSERT.md` snippets for
 Run it from the repository root:
 
 ```sh
-go run ./agents/test-case-tree-runner run ./agents/test-case-tree-runner/examples/basic-request-runner
+go run ./agents/test-case-tree-runner test ./agents/test-case-tree-runner/examples/basic-request-runner
 ```
 
 ## Tree

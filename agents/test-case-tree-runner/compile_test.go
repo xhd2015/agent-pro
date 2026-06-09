@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/xhd2015/agent-pro/agents/test-case-tree-runner/build"
+	"github.com/xhd2015/agent-pro/agents/test-case-tree-runner/core"
 )
 
 func TestRootSetupRequiresRequestAndResponseTypes(t *testing.T) {
@@ -22,7 +25,7 @@ func Setup(t *testing.T, req *Request) error { _ = req; return nil }
 func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 `))
 
-	_, err := DiscoverTreeCases(root)
+	_, err := core.DiscoverTreeCases(root)
 	if err == nil {
 		t.Fatal("expected missing Request/Response error")
 	}
@@ -46,7 +49,7 @@ func Setup(t *testing.T, req *Request) error { _ = req; return nil }
 func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 `))
 
-	err := RunTree(root, CompileOptions{})
+	err := TestTree(root, core.Options{})
 	if err == nil {
 		t.Fatal("expected missing Run error")
 	}
@@ -73,8 +76,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 }
 `))
 
-	if err := RunTree(root, CompileOptions{}); err != nil {
-		t.Fatalf("run tree: %v", err)
+	if err := TestTree(root, core.Options{}); err != nil {
+		t.Fatalf("test tree: %v", err)
 	}
 }
 
@@ -101,8 +104,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 }
 `))
 
-	if err := RunTree(root, CompileOptions{}); err != nil {
-		t.Fatalf("run tree: %v", err)
+	if err := TestTree(root, core.Options{}); err != nil {
+		t.Fatalf("test tree: %v", err)
 	}
 }
 
@@ -124,7 +127,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 }
 `))
 
-	err := RunTree(root, CompileOptions{})
+	err := TestTree(root, core.Options{})
 	if err == nil {
 		t.Fatal("expected setup failure")
 	}
@@ -150,8 +153,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 }
 `))
 
-	if err := RunTree(root, CompileOptions{}); err != nil {
-		t.Fatalf("run tree: %v", err)
+	if err := TestTree(root, core.Options{}); err != nil {
+		t.Fatalf("test tree: %v", err)
 	}
 }
 
@@ -177,8 +180,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 }
 `))
 
-	if err := RunTree(root, CompileOptions{}); err != nil {
-		t.Fatalf("run tree: %v", err)
+	if err := TestTree(root, core.Options{}); err != nil {
+		t.Fatalf("test tree: %v", err)
 	}
 }
 
@@ -200,8 +203,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 }
 `))
 
-	if err := RunTree(root, CompileOptions{}); err != nil {
-		t.Fatalf("run tree: %v", err)
+	if err := TestTree(root, core.Options{}); err != nil {
+		t.Fatalf("test tree: %v", err)
 	}
 }
 
@@ -227,8 +230,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 }
 `))
 
-	if err := RunTree(root, CompileOptions{}); err != nil {
-		t.Fatalf("run tree: %v", err)
+	if err := TestTree(root, core.Options{}); err != nil {
+		t.Fatalf("test tree: %v", err)
 	}
 }
 
@@ -259,8 +262,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 }
 `))
 
-	if err := RunTree(root, CompileOptions{}); err != nil {
-		t.Fatalf("run tree: %v", err)
+	if err := TestTree(root, core.Options{}); err != nil {
+		t.Fatalf("test tree: %v", err)
 	}
 }
 
@@ -280,7 +283,7 @@ func Setup(t *testing.T, req *Request) error { _ = req; return nil }
 func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 `))
 
-	err := RunTree(root, CompileOptions{})
+	err := TestTree(root, core.Options{})
 	if err == nil {
 		t.Fatal("expected child Request redefinition error")
 	}
@@ -306,7 +309,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 }
 `))
 
-	err := RunTree(root, CompileOptions{})
+	err := TestTree(root, core.Options{})
 	if err == nil {
 		t.Fatal("expected assert failure")
 	}
@@ -335,12 +338,12 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 }
 `))
 
-	if err := RunTree(root, CompileOptions{}); err != nil {
-		t.Fatalf("run tree: %v", err)
+	if err := TestTree(root, core.Options{}); err != nil {
+		t.Fatalf("test tree: %v", err)
 	}
 }
 
-func TestCompileTreeWithGenDirWritesGeneratedCode(t *testing.T) {
+func TestBuildWithGenDirWritesGeneratedCode(t *testing.T) {
 	root := t.TempDir()
 	writeTreeFile(t, root, "README.md", "# tree")
 	writeTreeFile(t, root, "SETUP.md", setupDoc(`
@@ -356,8 +359,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 `))
 
 	genDir := filepath.Join(t.TempDir(), "generated")
-	if err := CompileTreeWithOptions(root, CompileOptions{GenDir: genDir}); err != nil {
-		t.Fatalf("compile with gen dir: %v", err)
+	if err := build.Build(root, core.Options{GenDir: genDir}); err != nil {
+		t.Fatalf("build with gen dir: %v", err)
 	}
 	generated := filepath.Join(genDir, "leaf_test.go")
 	data, err := os.ReadFile(generated)
@@ -389,8 +392,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 
 	var stderr bytes.Buffer
 	genDir := filepath.Join(t.TempDir(), "generated")
-	if err := CompileTreeWithOptions(root, CompileOptions{GenDir: genDir, Stderr: &stderr}); err != nil {
-		t.Fatalf("compile: %v", err)
+	if err := build.Build(root, core.Options{GenDir: genDir, Stderr: &stderr}); err != nil {
+		t.Fatalf("build: %v", err)
 	}
 	out := stderr.String()
 	if !strings.Contains(out, "test-case-tree-runner:") {
@@ -424,8 +427,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 
 	var stderr bytes.Buffer
 	genDir := filepath.Join(t.TempDir(), "generated")
-	if err := CompileTreeWithOptions(root, CompileOptions{GenDir: genDir, Verbose: true, Stderr: &stderr}); err != nil {
-		t.Fatalf("compile verbose: %v", err)
+	if err := build.Build(root, core.Options{GenDir: genDir, Verbose: true, Stderr: &stderr}); err != nil {
+		t.Fatalf("build verbose: %v", err)
 	}
 	out := stderr.String()
 	if !strings.Contains(out, "SETUP.md") {
@@ -474,8 +477,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 
 	var stderr bytes.Buffer
 	genDir := filepath.Join(t.TempDir(), "generated")
-	if err := CompileTreeWithOptions(root, CompileOptions{GenDir: genDir, Verbose: true, Stderr: &stderr}); err != nil {
-		t.Fatalf("compile verbose: %v", err)
+	if err := build.Build(root, core.Options{GenDir: genDir, Verbose: true, Stderr: &stderr}); err != nil {
+		t.Fatalf("build verbose: %v", err)
 	}
 	out := stderr.String()
 	if !strings.Contains(out, "child/SETUP.md") {
@@ -503,8 +506,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 `))
 
 	genDir := filepath.Join(t.TempDir(), "generated")
-	if err := CompileTreeWithOptions(filepath.Join(srcRoot, "tests"), CompileOptions{GenDir: genDir}); err != nil {
-		t.Fatalf("compile: %v", err)
+	if err := build.Build(filepath.Join(srcRoot, "tests"), core.Options{GenDir: genDir}); err != nil {
+		t.Fatalf("build: %v", err)
 	}
 
 	goModData, err := os.ReadFile(filepath.Join(genDir, "go.mod"))
@@ -539,8 +542,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 `))
 
 	genDir := filepath.Join(t.TempDir(), "generated")
-	if err := CompileTreeWithOptions(root, CompileOptions{GenDir: genDir}); err != nil {
-		t.Fatalf("compile: %v", err)
+	if err := build.Build(root, core.Options{GenDir: genDir}); err != nil {
+		t.Fatalf("build: %v", err)
 	}
 
 	goModData, err := os.ReadFile(filepath.Join(genDir, "go.mod"))
@@ -572,8 +575,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 `))
 
 	var stderr bytes.Buffer
-	if err := CompileTreeWithOptions(root, CompileOptions{Stderr: &stderr}); err != nil {
-		t.Fatalf("compile: %v", err)
+	if err := build.Build(root, core.Options{Stderr: &stderr}); err != nil {
+		t.Fatalf("build: %v", err)
 	}
 
 	out := stderr.String()
@@ -606,8 +609,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 `))
 
 	var stderr bytes.Buffer
-	if err := CompileTreeWithOptions(root, CompileOptions{RemoveTemp: true, Stderr: &stderr}); err != nil {
-		t.Fatalf("compile: %v", err)
+	if err := build.Build(root, core.Options{RemoveTemp: true, Stderr: &stderr}); err != nil {
+		t.Fatalf("build: %v", err)
 	}
 
 	out := stderr.String()
@@ -639,8 +642,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 `))
 
 	genDir := filepath.Join(t.TempDir(), "generated")
-	if err := CompileTreeWithOptions(root, CompileOptions{GenDir: genDir, RemoveTemp: true}); err != nil {
-		t.Fatalf("compile: %v", err)
+	if err := build.Build(root, core.Options{GenDir: genDir, RemoveTemp: true}); err != nil {
+		t.Fatalf("build: %v", err)
 	}
 
 	if _, err := os.Stat(genDir); os.IsNotExist(err) {
@@ -674,8 +677,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 `))
 
 	genDir := filepath.Join(t.TempDir(), "generated")
-	if err := CompileTreeWithOptions(testsDir, CompileOptions{GenDir: genDir}); err != nil {
-		t.Fatalf("compile: %v", err)
+	if err := build.Build(testsDir, core.Options{GenDir: genDir}); err != nil {
+		t.Fatalf("build: %v", err)
 	}
 
 	goModData, err := os.ReadFile(filepath.Join(genDir, "go.mod"))
@@ -710,7 +713,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 `))
 
 	var buf bytes.Buffer
-	cases, err := discoverTreeCasesVerbose(root, &buf)
+	cases, err := core.DiscoverTreeCasesVerbose(root, &buf)
 	if err != nil {
 		t.Fatalf("discover verbose: %v", err)
 	}
@@ -734,7 +737,7 @@ func TestFindModuleRoot(t *testing.T) {
 	writeTreeFile(t, srcRoot, "go.mod", "module example.com/a\n\ngo 1.21\n")
 	writeTreeFile(t, srcRoot, "a/b/c/SETUP.md", "# test\n")
 
-	modRoot, modPath, ok := findModuleRoot(filepath.Join(srcRoot, "a/b/c"))
+	modRoot, modPath, ok := core.FindModuleRoot(filepath.Join(srcRoot, "a/b/c"))
 	if !ok {
 		t.Fatal("expected to find module root")
 	}
@@ -748,7 +751,7 @@ func TestFindModuleRoot(t *testing.T) {
 
 func TestFindModuleRootNotFound(t *testing.T) {
 	root := t.TempDir()
-	_, _, ok := findModuleRoot(root)
+	_, _, ok := core.FindModuleRoot(root)
 	if ok {
 		t.Fatal("expected no module root")
 	}
@@ -786,8 +789,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 `))
 
 	genDir := filepath.Join(t.TempDir(), "generated")
-	if err := CompileTreeWithOptions(testsDir, CompileOptions{GenDir: genDir}); err != nil {
-		t.Fatalf("compile: %v", err)
+	if err := build.Build(testsDir, core.Options{GenDir: genDir}); err != nil {
+		t.Fatalf("build: %v", err)
 	}
 
 	helperPath := filepath.Join(genDir, "helper.go")
@@ -861,8 +864,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 }
 `))
 
-	if err := RunTree(testsDir, CompileOptions{}); err != nil {
-		t.Fatalf("run tree: %v", err)
+	if err := TestTree(testsDir, core.Options{}); err != nil {
+		t.Fatalf("test tree: %v", err)
 	}
 }
 
@@ -893,8 +896,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 `))
 
 	genDir := filepath.Join(t.TempDir(), "generated")
-	if err := CompileTreeWithOptions(testsDir, CompileOptions{GenDir: genDir}); err != nil {
-		t.Fatalf("compile: %v", err)
+	if err := build.Build(testsDir, core.Options{GenDir: genDir}); err != nil {
+		t.Fatalf("build: %v", err)
 	}
 
 	if _, err := os.Stat(filepath.Join(genDir, "helper.go")); os.IsNotExist(err) {
@@ -921,8 +924,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 `))
 
 	genDir := filepath.Join(t.TempDir(), "generated")
-	if err := CompileTreeWithOptions(root, CompileOptions{GenDir: genDir}); err != nil {
-		t.Fatalf("compile: %v", err)
+	if err := build.Build(root, core.Options{GenDir: genDir}); err != nil {
+		t.Fatalf("build: %v", err)
 	}
 
 	leafTestData, err := os.ReadFile(filepath.Join(genDir, "leaf_test.go"))
@@ -940,7 +943,7 @@ func TestValidationReportsAllErrorsAtOnce(t *testing.T) {
 	writeTreeFile(t, root, "leaf/SETUP.md", "# Setup\n\nProse only, no Go block.\n")
 	writeTreeFile(t, root, "leaf/ASSERT.md", "# Assert\n\n```go\nfunc Check(t *testing.T, req *Request, resp *Response, err error) {}\n```\n")
 
-	_, err := DiscoverTreeCases(root)
+	_, err := core.DiscoverTreeCases(root)
 	if err == nil {
 		t.Fatal("expected validation error")
 	}
@@ -977,7 +980,7 @@ func Setup(t *testing.T, req *Request) error { _ = req; return nil }
 func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 `))
 
-	if _, err := DiscoverTreeCases(root); err != nil {
+	if _, err := core.DiscoverTreeCases(root); err != nil {
 		t.Fatalf("expected no error for valid tree, got %v", err)
 	}
 }
@@ -1006,7 +1009,7 @@ func Setup(t *testing.T, req *Request) error { _ = req; return nil }
 func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 `))
 
-	cases, err := DiscoverTreeCases(root)
+	cases, err := core.DiscoverTreeCases(root)
 	if err != nil {
 		t.Fatalf("expected no error, testdata/ should be skipped: %v", err)
 	}
@@ -1031,8 +1034,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 `))
 
 	var stderr bytes.Buffer
-	if err := RunTree(root, CompileOptions{Verbose: true, Stderr: &stderr}); err != nil {
-		t.Fatalf("run tree verbose: %v", err)
+	if err := TestTree(root, core.Options{Verbose: true, Stderr: &stderr}); err != nil {
+		t.Fatalf("test tree verbose: %v", err)
 	}
 	out := stderr.String()
 	if !strings.Contains(out, "─── leaf") {
@@ -1056,8 +1059,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 `))
 
 	var stderr bytes.Buffer
-	if err := RunTree(root, CompileOptions{Stderr: &stderr}); err != nil {
-		t.Fatalf("run tree: %v", err)
+	if err := TestTree(root, core.Options{Stderr: &stderr}); err != nil {
+		t.Fatalf("test tree: %v", err)
 	}
 	out := stderr.String()
 	if !strings.Contains(out, "→ ") {
@@ -1084,8 +1087,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 `))
 
 	var stderr bytes.Buffer
-	if err := RunTree(root, CompileOptions{Stderr: &stderr}); err != nil {
-		t.Fatalf("run tree: %v", err)
+	if err := TestTree(root, core.Options{Stderr: &stderr}); err != nil {
+		t.Fatalf("test tree: %v", err)
 	}
 	out := stderr.String()
 	i := strings.Index(out, "→ ")
@@ -1117,8 +1120,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 `))
 
 	var stderr bytes.Buffer
-	if err := RunTree(root, CompileOptions{RemoveTemp: true, Stderr: &stderr}); err != nil {
-		t.Fatalf("run tree: %v", err)
+	if err := TestTree(root, core.Options{RemoveTemp: true, Stderr: &stderr}); err != nil {
+		t.Fatalf("test tree: %v", err)
 	}
 	out := stderr.String()
 	i := strings.Index(out, "→ ")
@@ -1155,8 +1158,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 `))
 
 	var stderr bytes.Buffer
-	if err := RunTree(root, CompileOptions{Verbose: true, Stderr: &stderr}); err != nil {
-		t.Fatalf("run tree verbose: %v", err)
+	if err := TestTree(root, core.Options{Verbose: true, Stderr: &stderr}); err != nil {
+		t.Fatalf("test tree verbose: %v", err)
 	}
 	out := stderr.String()
 	if !strings.Contains(out, "─── a") {
@@ -1168,9 +1171,9 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 }
 
 func TestParseRunOptionsFlagAfterDir(t *testing.T) {
-	opts, remainder, err := parseRunOptions([]string{"mydir", "-v", "--rm"})
+	opts, remainder, err := parseTestOptions([]string{"mydir", "-v", "--rm"})
 	if err != nil {
-		t.Fatalf("parseRunOptions: %v", err)
+		t.Fatalf("parseTestOptions: %v", err)
 	}
 	if len(remainder) != 1 || remainder[0] != "mydir" {
 		t.Fatalf("expected remainder [mydir], got %v", remainder)
@@ -1184,9 +1187,9 @@ func TestParseRunOptionsFlagAfterDir(t *testing.T) {
 }
 
 func TestParseRunOptionsFlagBeforeDir(t *testing.T) {
-	opts, remainder, err := parseRunOptions([]string{"-v", "--rm", "mydir"})
+	opts, remainder, err := parseTestOptions([]string{"-v", "--rm", "mydir"})
 	if err != nil {
-		t.Fatalf("parseRunOptions: %v", err)
+		t.Fatalf("parseTestOptions: %v", err)
 	}
 	if len(remainder) != 1 || remainder[0] != "mydir" {
 		t.Fatalf("expected remainder [mydir], got %v", remainder)
@@ -1199,10 +1202,10 @@ func TestParseRunOptionsFlagBeforeDir(t *testing.T) {
 	}
 }
 
-func TestParseCompileOptionsFlagAfterDir(t *testing.T) {
-	opts, remainder, err := parseCompileOptions([]string{"mydir", "-v", "--rm", "--gen-dir", "/tmp/gen"})
+func TestParseBuildOptionsFlagAfterDir(t *testing.T) {
+	opts, remainder, err := parseBuildOptions([]string{"mydir", "-v", "--rm", "--gen-dir", "/tmp/gen"})
 	if err != nil {
-		t.Fatalf("parseCompileOptions: %v", err)
+		t.Fatalf("parseBuildOptions: %v", err)
 	}
 	if len(remainder) != 1 || remainder[0] != "mydir" {
 		t.Fatalf("expected remainder [mydir], got %v", remainder)
@@ -1218,10 +1221,10 @@ func TestParseCompileOptionsFlagAfterDir(t *testing.T) {
 	}
 }
 
-func TestParseCompileOptionsGenDirEquals(t *testing.T) {
-	opts, remainder, err := parseCompileOptions([]string{"--gen-dir=/tmp/gen", "mydir"})
+func TestParseBuildOptionsGenDirEquals(t *testing.T) {
+	opts, remainder, err := parseBuildOptions([]string{"--gen-dir=/tmp/gen", "mydir"})
 	if err != nil {
-		t.Fatalf("parseCompileOptions: %v", err)
+		t.Fatalf("parseBuildOptions: %v", err)
 	}
 	if opts.GenDir != "/tmp/gen" {
 		t.Fatalf("expected GenDir=/tmp/gen, got %q", opts.GenDir)
@@ -1231,10 +1234,10 @@ func TestParseCompileOptionsGenDirEquals(t *testing.T) {
 	}
 }
 
-func TestParseCompileOptionsCountEquals(t *testing.T) {
-	opts, remainder, err := parseCompileOptions([]string{"-count=5", "mydir"})
+func TestParseBuildOptionsCountEquals(t *testing.T) {
+	opts, remainder, err := parseBuildOptions([]string{"-count=5", "mydir"})
 	if err != nil {
-		t.Fatalf("parseCompileOptions: %v", err)
+		t.Fatalf("parseBuildOptions: %v", err)
 	}
 	if opts.Count != 5 {
 		t.Fatalf("expected Count=5, got %d", opts.Count)
@@ -1260,9 +1263,9 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 `))
 
 	var stderr bytes.Buffer
-	opts, remainArgs, err := parseRunOptions(append([]string{root}, "-v", "--rm"))
+	opts, remainArgs, err := parseTestOptions(append([]string{root}, "-v", "--rm"))
 	if err != nil {
-		t.Fatalf("parseRunOptions: %v", err)
+		t.Fatalf("parseTestOptions: %v", err)
 	}
 	if len(remainArgs) != 1 || remainArgs[0] != root {
 		t.Fatalf("expected remainder [root], got %v", remainArgs)
@@ -1274,8 +1277,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 		t.Fatal("expected RemoveTemp=true")
 	}
 	opts.Stderr = &stderr
-	if err := RunTree(remainArgs[0], opts); err != nil {
-		t.Fatalf("run tree: %v", err)
+	if err := TestTree(remainArgs[0], opts); err != nil {
+		t.Fatalf("test tree: %v", err)
 	}
 	out := stderr.String()
 	if !strings.Contains(out, "─── leaf") {
@@ -1300,9 +1303,9 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 
 	genDir := filepath.Join(t.TempDir(), "generated")
 	var stderr bytes.Buffer
-	opts, remainArgs, err := parseCompileOptions(append([]string{root}, "--gen-dir="+genDir, "-v"))
+	opts, remainArgs, err := parseBuildOptions(append([]string{root}, "--gen-dir="+genDir, "-v"))
 	if err != nil {
-		t.Fatalf("parseCompileOptions: %v", err)
+		t.Fatalf("parseBuildOptions: %v", err)
 	}
 	if len(remainArgs) != 1 || remainArgs[0] != root {
 		t.Fatalf("expected remainder [root], got %v", remainArgs)
@@ -1314,8 +1317,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 		t.Fatalf("expected GenDir=%q, got %q", genDir, opts.GenDir)
 	}
 	opts.Stderr = &stderr
-	if err := CompileTreeWithOptions(remainArgs[0], opts); err != nil {
-		t.Fatalf("compile tree: %v", err)
+	if err := build.Build(remainArgs[0], opts); err != nil {
+		t.Fatalf("build tree: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(genDir, "leaf_test.go")); err != nil {
 		t.Fatalf("expected generated leaf_test.go in gen dir: %v", err)

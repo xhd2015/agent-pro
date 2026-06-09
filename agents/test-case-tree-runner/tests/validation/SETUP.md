@@ -4,7 +4,7 @@
 
 ## Steps
 1. Set `req.InputDir` to the path of the fixture to test (done by each leaf SETUP.md)
-2. Run `test-case-tree-runner compile <InputDir>`
+2. Run `test-case-tree-runner build <InputDir>`
 3. Capture stdout/stderr and exit code
 
 ```go
@@ -25,7 +25,7 @@ func Setup(t *testing.T, req *Request) error {
 }
 
 func Run(t *testing.T, req *Request) (*Response, error) {
-	cmd := exec.Command("test-case-tree-runner", "compile", req.InputDir)
+	cmd := exec.Command("test-case-tree-runner", "build", req.InputDir)
 	out, _ := cmd.CombinedOutput()
 	return &Response{
 		Output: string(out),

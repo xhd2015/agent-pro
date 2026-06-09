@@ -3,10 +3,12 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"github.com/xhd2015/agent-pro/agents/test-case-tree-runner/core"
 )
 
 func TestExtractFinalGoBlockIgnoresSectionNames(t *testing.T) {
-	block, err := ExtractFinalGoBlock("SETUP.md", "## Anything\n\ntext\n\n```go\nfunc Setup(t *testing.T, req *Request) error { return nil }\n```\n")
+	block, err := core.ExtractFinalGoBlock("SETUP.md", "## Anything\n\ntext\n\n```go\nfunc Setup(t *testing.T, req *Request) error { return nil }\n```\n")
 	if err != nil {
 		t.Fatalf("extract final go block: %v", err)
 	}
@@ -16,7 +18,7 @@ func TestExtractFinalGoBlockIgnoresSectionNames(t *testing.T) {
 }
 
 func TestSetupRejectsMultipleGoBlocks(t *testing.T) {
-	_, err := ParseSetupDocument("SETUP.md", "```go\nvar x = 1\n```\n\n```go\nfunc Setup(t *testing.T, req *Request) error { return nil }\n```\n")
+	_, err := core.ParseSetupDocument("SETUP.md", "```go\nvar x = 1\n```\n\n```go\nfunc Setup(t *testing.T, req *Request) error { return nil }\n```\n")
 	if err == nil {
 		t.Fatal("expected error for multiple go blocks")
 	}
@@ -26,7 +28,7 @@ func TestSetupRejectsMultipleGoBlocks(t *testing.T) {
 }
 
 func TestSetupRejectsNonFinalGoBlock(t *testing.T) {
-	_, err := ParseSetupDocument("SETUP.md", "```go\nfunc Setup(t *testing.T, req *Request) error { return nil }\n```\n\nmore markdown\n")
+	_, err := core.ParseSetupDocument("SETUP.md", "```go\nfunc Setup(t *testing.T, req *Request) error { return nil }\n```\n\nmore markdown\n")
 	if err == nil {
 		t.Fatal("expected error for non-final go block")
 	}
@@ -36,7 +38,7 @@ func TestSetupRejectsNonFinalGoBlock(t *testing.T) {
 }
 
 func TestAssertRequiresSingleFinalGoBlock(t *testing.T) {
-	_, err := ParseAssertDocument("ASSERT.md", "## Expected\n- no executable assertion\n")
+	_, err := core.ParseAssertDocument("ASSERT.md", "## Expected\n- no executable assertion\n")
 	if err == nil {
 		t.Fatal("expected error for missing assert go block")
 	}
@@ -46,7 +48,7 @@ func TestAssertRequiresSingleFinalGoBlock(t *testing.T) {
 }
 
 func TestSetupFunctionSignature(t *testing.T) {
-	_, err := ParseSetupDocument("SETUP.md", setupDoc(`
+	_, err := core.ParseSetupDocument("SETUP.md", setupDoc(`
 type Request struct{}
 type Response struct{}
 func Setup(t *testing.T) {}
@@ -60,7 +62,7 @@ func Setup(t *testing.T) {}
 }
 
 func TestRunFunctionSignature(t *testing.T) {
-	_, err := ParseSetupDocument("SETUP.md", setupDoc(`
+	_, err := core.ParseSetupDocument("SETUP.md", setupDoc(`
 type Request struct{}
 type Response struct{}
 func Run(t *testing.T, req *Request) error { return nil }
@@ -74,7 +76,7 @@ func Run(t *testing.T, req *Request) error { return nil }
 }
 
 func TestAssertFunctionSignature(t *testing.T) {
-	_, err := ParseAssertDocument("ASSERT.md", assertDoc(`
+	_, err := core.ParseAssertDocument("ASSERT.md", assertDoc(`
 func Assert(t *testing.T, req *Request, err error) {}
 `))
 	if err == nil {
@@ -86,7 +88,7 @@ func Assert(t *testing.T, req *Request, err error) {}
 }
 
 func TestInvalidGoReportsSourceMarkdown(t *testing.T) {
-	_, err := ParseSetupDocument("branch/SETUP.md", setupDoc(`
+	_, err := core.ParseSetupDocument("branch/SETUP.md", setupDoc(`
 type Request struct{
 `))
 	if err == nil {
