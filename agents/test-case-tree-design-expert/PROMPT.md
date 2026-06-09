@@ -198,5 +198,5 @@ If the tool reports any errors, fix them and re-run until the output passes vali
 
 If executable Go snippets were included, also verify them:
 ```sh
-test-case-tree-runner run <output-dir>
+test-case-tree-runner test <output-dir>
 ```

@@ -1,4 +1,4 @@
-package main
+package core
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func assembleTestSource(tc TreeCase, compileOnly bool, pkgName string) (string, error) {
+func AssembleTestSource(tc TreeCase, compileOnly bool, pkgName string) (string, error) {
 	var buf strings.Builder
 	buf.WriteString("package ")
 	buf.WriteString(pkgName)
@@ -30,7 +30,7 @@ func assembleTestSource(tc TreeCase, compileOnly bool, pkgName string) (string, 
 	}
 
 	buf.WriteString("func ")
-	buf.WriteString(testFuncName(tc))
+	buf.WriteString(TestFuncName(tc))
 	buf.WriteString("(t *testing.T) {\n")
 
 	run := writeSetupDecls(&buf, tc.SetupFiles)

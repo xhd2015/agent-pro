@@ -98,7 +98,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error)
 
 ## Validation Rules
 
-All files are validated by `test-case-tree-runner compile`. Rules are checked
+All files are validated by `test-case-tree-runner build`. Rules are checked
 in order; the first violation for each file is reported. Multiple violations
 across different files are collected and reported together.
 
