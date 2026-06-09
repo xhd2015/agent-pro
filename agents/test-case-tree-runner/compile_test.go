@@ -1038,8 +1038,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 		t.Fatalf("test tree verbose: %v", err)
 	}
 	out := stderr.String()
-	if !strings.Contains(out, "─── leaf") {
-		t.Fatalf("expected per-case header, got %q", out)
+	if !strings.Contains(out, "TestGeneratedCaseLeaf") {
+		t.Fatalf("expected test function name in output, got %q", out)
 	}
 }
 
@@ -1066,8 +1066,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 	if !strings.Contains(out, "→ ") {
 		t.Fatalf("expected gen dir in output, got %q", out)
 	}
-	if !strings.Contains(out, "cd ") || !strings.Contains(out, "go test") {
-		t.Fatalf("expected cd xxx && go test ... in output, got %q", out)
+	if !strings.Contains(out, "cd ") || !strings.Contains(out, "go test -c") {
+		t.Fatalf("expected cd xxx && go test -c ... in output, got %q", out)
 	}
 }
 
@@ -1162,11 +1162,11 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 		t.Fatalf("test tree verbose: %v", err)
 	}
 	out := stderr.String()
-	if !strings.Contains(out, "─── a") {
-		t.Fatalf("expected '─── a' header, got %q", out)
+	if !strings.Contains(out, "TestGeneratedCaseA") {
+		t.Fatalf("expected TestGeneratedCaseA in output, got %q", out)
 	}
-	if !strings.Contains(out, "─── b") {
-		t.Fatalf("expected '─── b' header, got %q", out)
+	if !strings.Contains(out, "TestGeneratedCaseB") {
+		t.Fatalf("expected TestGeneratedCaseB in output, got %q", out)
 	}
 }
 
@@ -1281,8 +1281,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 		t.Fatalf("test tree: %v", err)
 	}
 	out := stderr.String()
-	if !strings.Contains(out, "─── leaf") {
-		t.Fatalf("expected verbose per-case header, got %q", out)
+	if !strings.Contains(out, "TestGeneratedCaseLeaf") {
+		t.Fatalf("expected TestGeneratedCaseLeaf in output, got %q", out)
 	}
 }
 
@@ -1326,5 +1326,116 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 	out := stderr.String()
 	if !strings.Contains(out, "─── 1 test cases") {
 		t.Fatalf("expected test case count, got %q", out)
+	}
+}
+
+func TestGeneratedCodeHasDoctestRootConst(t *testing.T) {
+	root := t.TempDir()
+	writeTreeFile(t, root, "README.md", "# tree")
+	writeTreeFile(t, root, "SETUP.md", setupDoc(`
+type Request struct{}
+type Response struct{}
+func Run(t *testing.T, req *Request) (*Response, error) { return &Response{}, nil }
+`))
+	writeTreeFile(t, root, "leaf/SETUP.md", setupDoc(`
+func Setup(t *testing.T, req *Request) error { _ = req; return nil }
+`))
+	writeTreeFile(t, root, "leaf/ASSERT.md", assertDoc(`
+func Assert(t *testing.T, req *Request, resp *Response, err error) {}
+`))
+
+	genDir := filepath.Join(t.TempDir(), "generated")
+	if err := build.Build(root, core.Options{GenDir: genDir}); err != nil {
+		t.Fatalf("build: %v", err)
+	}
+
+	leafTestData, err := os.ReadFile(filepath.Join(genDir, "leaf_test.go"))
+	if err != nil {
+		t.Fatalf("read leaf_test.go: %v", err)
+	}
+	code := string(leafTestData)
+
+	absRoot, _ := filepath.Abs(root)
+	if !strings.Contains(code, "const DOCTEST_ROOT = `"+absRoot+"`") {
+		t.Fatalf("expected DOCTEST_ROOT const with path %q, got:\n%s", absRoot, code)
+	}
+	if !strings.Contains(code, "os.Chdir(filepath.Join(DOCTEST_ROOT, \"leaf\"))") {
+		t.Fatalf("expected os.Chdir(filepath.Join(DOCTEST_ROOT, \"leaf\")), got:\n%s", code)
+	}
+	if !strings.Contains(code, "__origWd, __wdErr := os.Getwd()") {
+		t.Fatalf("expected os.Getwd() before chdir, got:\n%s", code)
+	}
+	if !strings.Contains(code, "defer os.Chdir(__origWd)") {
+		t.Fatalf("expected defer os.Chdir(__origWd), got:\n%s", code)
+	}
+	if strings.Contains(code, "func init()") {
+		t.Fatal("expected no func init() in generated code")
+	}
+}
+
+func TestGeneratedRootCaseChdirsToDoctestRoot(t *testing.T) {
+	root := t.TempDir()
+	writeTreeFile(t, root, "README.md", "# tree")
+	writeTreeFile(t, root, "SETUP.md", setupDoc(`
+type Request struct{}
+type Response struct{}
+func Run(t *testing.T, req *Request) (*Response, error) { return &Response{}, nil }
+`))
+	writeTreeFile(t, root, "ASSERT.md", assertDoc(`
+func Assert(t *testing.T, req *Request, resp *Response, err error) {}
+`))
+
+	genDir := filepath.Join(t.TempDir(), "generated")
+	if err := build.Build(root, core.Options{GenDir: genDir}); err != nil {
+		t.Fatalf("build: %v", err)
+	}
+
+	rootTestData, err := os.ReadFile(filepath.Join(genDir, "root_test.go"))
+	if err != nil {
+		t.Fatalf("read root_test.go: %v", err)
+	}
+	code := string(rootTestData)
+
+	absRoot, _ := filepath.Abs(root)
+	if !strings.Contains(code, "const DOCTEST_ROOT = `"+absRoot+"`") {
+		t.Fatalf("expected DOCTEST_ROOT const with path %q, got:\n%s", absRoot, code)
+	}
+	if !strings.Contains(code, "os.Chdir(DOCTEST_ROOT)") && !strings.Contains(code, "os.Chdir(DOCTEST_ROOT);") {
+		t.Fatalf("expected os.Chdir(DOCTEST_ROOT) for root-level case, got:\n%s", code)
+	}
+	if strings.Contains(code, "func init()") {
+		t.Fatal("expected no func init() in generated code")
+	}
+}
+
+func TestBuildPrintsTmpDirOnInvalidTree(t *testing.T) {
+	root := t.TempDir()
+	writeTreeFile(t, root, "SETUP.md", "# Setup\n\n```go\nfunc Setup(t *testing.T, req *Request) error { _ = req; return nil }\n```\n")
+	writeTreeFile(t, root, "leaf/ASSERT.md", "# Assert\n\n```go\nfunc Check(t *testing.T, req *Request, resp *Response, err error) {}\n```\n")
+
+	var stderr bytes.Buffer
+	err := build.Build(root, core.Options{Stderr: &stderr})
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	out := stderr.String()
+	if !strings.Contains(out, "→ ") {
+		t.Fatalf("expected tmp dir marker, got %q", out)
+	}
+}
+
+func TestTestCommandPrintsTmpDirOnInvalidTree(t *testing.T) {
+	root := t.TempDir()
+	writeTreeFile(t, root, "SETUP.md", "# Setup\n\n```go\nfunc Setup(t *testing.T, req *Request) error { _ = req; return nil }\n```\n")
+	writeTreeFile(t, root, "leaf/ASSERT.md", "# Assert\n\n```go\nfunc Check(t *testing.T, req *Request, resp *Response, err error) {}\n```\n")
+
+	var stderr bytes.Buffer
+	err := TestTree(root, core.Options{Stderr: &stderr})
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	out := stderr.String()
+	if !strings.Contains(out, "→ ") {
+		t.Fatalf("expected tmp dir marker, got %q", out)
 	}
 }

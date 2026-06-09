@@ -6,16 +6,16 @@ import (
 	"strings"
 )
 
-func AssembleTestSource(tc TreeCase, compileOnly bool, pkgName string) (string, error) {
+func AssembleTestSource(tc TreeCase, compileOnly bool, pkgName string, docTestRoot string) (string, error) {
 	var buf strings.Builder
 	buf.WriteString("package ")
 	buf.WriteString(pkgName)
 	buf.WriteString("\n\n")
 
 	imports := collectImports(tc.SetupFiles, tc.AssertFile.GoBlock)
-	if !imports["testing"] {
-		imports["testing"] = true
-	}
+	imports["testing"] = true
+	imports["os"] = true
+	imports["path/filepath"] = true
 	if len(imports) > 0 {
 		buf.WriteString("import (\n")
 		importList := make([]string, 0, len(imports))
@@ -32,6 +32,23 @@ func AssembleTestSource(tc TreeCase, compileOnly bool, pkgName string) (string, 
 	buf.WriteString("func ")
 	buf.WriteString(TestFuncName(tc))
 	buf.WriteString("(t *testing.T) {\n")
+
+	escapedRoot := strings.ReplaceAll(docTestRoot, "`", "`+\"`\"+`")
+	buf.WriteString("\tconst DOCTEST_ROOT = `")
+	buf.WriteString(escapedRoot)
+	buf.WriteString("`\n")
+	buf.WriteString("\t__origWd, __wdErr := os.Getwd()\n")
+	buf.WriteString("\tif __wdErr != nil {\n")
+	buf.WriteString("\t\tt.Fatal(__wdErr)\n")
+	buf.WriteString("\t}\n")
+	buf.WriteString("\tdefer os.Chdir(__origWd)\n")
+	if tc.Path != "" {
+		buf.WriteString(fmt.Sprintf("\tif err := os.Chdir(filepath.Join(DOCTEST_ROOT, %q)); err != nil {\n", tc.Path))
+	} else {
+		buf.WriteString("\tif err := os.Chdir(DOCTEST_ROOT); err != nil {\n")
+	}
+	buf.WriteString("\t\tt.Fatal(err)\n")
+	buf.WriteString("\t}\n\n")
 
 	run := writeSetupDecls(&buf, tc.SetupFiles)
 	writeAssertDecls(&buf, tc.AssertFile.GoBlock)

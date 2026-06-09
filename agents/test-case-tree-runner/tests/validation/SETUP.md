@@ -1,6 +1,5 @@
 ## Preconditions
 - `test-case-tree-runner` is installed and available in PATH
-- Run from this directory so that `InputDir` relative paths resolve against `testdata/`
 
 ## Steps
 1. Set `req.InputDir` to the path of the fixture to test (done by each leaf SETUP.md)

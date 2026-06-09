@@ -311,7 +311,7 @@ Sets `req.InputDir` to the fixture path using a `func Setup`:
 import "path/filepath"
 
 func Setup(t *testing.T, req *Request) error {
-    req.InputDir = filepath.Join("testdata", "<fixture-name>")
+    req.InputDir = filepath.Join(DOCTEST_ROOT, "testdata", "<fixture-name>")
     return nil
 }
 ```
@@ -373,6 +373,17 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 
 Each leaf overrides only `req.InputDir` in its `Setup`; the root `Run` handles
 the actual invocation.
+
+## Working Directory
+
+Each generated test function runs with its working directory set to its own
+case directory — the directory containing the leaf's `SETUP.md` and `ASSERT.md`.
+
+The test can access `DOCTEST_ROOT` constant defined as the root of all tests, use it to refer testdata placed at root dir:
+
+```go
+req.InputDir = filepath.Join(DOCTEST_ROOT, "testdata", "child-redefines-request")
+```
 
 ## Validation
 
