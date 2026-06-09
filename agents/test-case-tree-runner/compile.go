@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -15,13 +14,6 @@ func TestTree(root string, opts core.Options) error {
 	if w == nil {
 		w = os.Stderr
 	}
-	cases, err := core.DiscoverTreeCases(root)
-	if err != nil {
-		return err
-	}
-	if len(cases) == 0 {
-		return fmt.Errorf("%s: no runnable test cases found", root)
-	}
 	tmp, err := os.MkdirTemp("", "test-case-tree-runner-*")
 	if err != nil {
 		return err
@@ -31,6 +23,14 @@ func TestTree(root string, opts core.Options) error {
 	}
 
 	fmt.Fprintf(w, "→ %s\n\n", tmp)
+
+	cases, err := core.DiscoverTreeCases(root)
+	if err != nil {
+		return err
+	}
+	if len(cases) == 0 {
+		return fmt.Errorf("%s: no runnable test cases found", root)
+	}
 
 	modRoot, modPath, hasMod := core.FindModuleRoot(root)
 	if err := core.WriteGoMod(tmp, modRoot, modPath, hasMod); err != nil {
@@ -51,40 +51,35 @@ func TestTree(root string, opts core.Options) error {
 		return err
 	}
 
-	fmt.Fprintf(w, "cd %s && go test -mod=mod ./...\n\n", tmp)
+	testBinPath := filepath.Join(tmp, "test.bin")
 
-	var errs []error
-	for _, tc := range cases {
-		if opts.Verbose {
-			fmt.Fprintf(w, "─── %s\n", tc.Path)
-		}
-		if err := runGeneratedTest(tmp, tc, opts.Count, opts.Verbose, w); err != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", tc.Path, err))
-		}
-	}
-	return errors.Join(errs...)
-}
+	fmt.Fprintf(w, "cd %s && go test -c -o test.bin . && cd %s && %s/test.bin\n\n", tmp, absRoot, tmp)
 
-func runGeneratedTest(dir string, tc core.TreeCase, count int, verbose bool, w interface{ Write(p []byte) (n int, err error) }) error {
-	args := []string{"test", "-mod=mod", "-run", "^" + core.TestFuncName(tc) + "$", "./..."}
-	if count > 0 {
-		args = append([]string{"test", fmt.Sprintf("-count=%d", count), "-mod=mod"}, args[2:]...)
+	goTestBuild := exec.Command("go", "test", "-c", "-mod=mod", "-o", testBinPath, ".")
+	goTestBuild.Dir = tmp
+	if out, err := goTestBuild.CombinedOutput(); err != nil {
+		return fmt.Errorf("go test -c failed: %v\n%s", err, string(out))
 	}
-	if verbose {
-		args = append(args, "-v")
+
+	args := []string{}
+	if opts.Count > 0 {
+		args = append(args, fmt.Sprintf("-test.count=%d", opts.Count))
 	}
-	goTestCmd := exec.Command("go", args...)
-	goTestCmd.Dir = dir
-	if verbose {
-		goTestCmd.Stdout = w
-		goTestCmd.Stderr = w
-		if err := goTestCmd.Run(); err != nil {
-			return fmt.Errorf("go test failed: %v", err)
+	if opts.Verbose {
+		args = append(args, "-test.v")
+	}
+	runCmd := exec.Command(testBinPath, args...)
+	runCmd.Dir = absRoot
+	if opts.Verbose {
+		runCmd.Stdout = w
+		runCmd.Stderr = w
+		if err := runCmd.Run(); err != nil {
+			return fmt.Errorf("test binary failed: %v", err)
 		}
 		return nil
 	}
-	if out, err := goTestCmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("go test failed: %v\n%s", err, string(out))
+	if out, err := runCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("test binary failed: %v\n%s", err, string(out))
 	}
 	return nil
 }

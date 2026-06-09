@@ -5,7 +5,7 @@
 import "path/filepath"
 
 func Setup(t *testing.T, req *Request) error {
-	req.InputDir = filepath.Join("testdata", "missing-go-block")
+	req.InputDir = filepath.Join(DOCTEST_ROOT, "testdata", "missing-go-block")
 	return nil
 }
 ```

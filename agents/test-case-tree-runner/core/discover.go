@@ -406,21 +406,16 @@ func CopySourceFiles(genDir, srcDir, origPkgName string) (string, error) {
 	return newPkgName, nil
 }
 
-func WriteGeneratedCases(dir string, cases []TreeCase, compileOnly bool, w io.Writer, pkgName string, originalDir string) ([]string, error) {
+func WriteGeneratedCases(dir string, cases []TreeCase, compileOnly bool, w io.Writer, pkgName string, docTestRoot string) ([]string, error) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, err
 	}
 	var testPaths []string
 	var testFiles []string
-	first := true
 	for _, tc := range cases {
-		src, err := AssembleTestSource(tc, compileOnly, pkgName)
+		src, err := AssembleTestSource(tc, compileOnly, pkgName, docTestRoot)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", tc.Path, err)
-		}
-		if first && originalDir != "" {
-			src = InsertInitChdir(src, originalDir)
-			first = false
 		}
 		testFile := TestFileName(tc)
 		testPath := filepath.Join(dir, testFile)
@@ -440,18 +435,4 @@ func WriteGeneratedCases(dir string, cases []TreeCase, compileOnly bool, w io.Wr
 		return nil, fmt.Errorf("goimports failed: %v\n%s", err, string(out))
 	}
 	return testFiles, nil
-}
-
-func InsertInitChdir(src string, dir string) string {
-	escaped := strings.ReplaceAll(dir, "\\", "\\\\")
-	initCode := "\nimport \"os\"\n\nfunc init() { os.Chdir(`" + escaped + "`) }\n"
-	idx := strings.Index(src, ")\n\nfunc ")
-	if idx >= 0 {
-		return src[:idx+2] + initCode + src[idx+2:]
-	}
-	i := strings.Index(src, "\n")
-	if i < 0 {
-		return src
-	}
-	return src[:i+1] + initCode + src[i+1:]
 }

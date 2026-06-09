@@ -18,6 +18,25 @@ func Build(dir string, opts core.Options) error {
 
 	var cases []core.TreeCase
 	var err error
+
+	tmp := opts.GenDir
+	removeTmp := false
+	if tmp == "" {
+		tmp, err = os.MkdirTemp("", "test-case-tree-runner-*")
+		if err != nil {
+			return err
+		}
+		removeTmp = opts.RemoveTemp
+	} else if err := os.MkdirAll(tmp, 0755); err != nil {
+		return err
+	}
+
+	fmt.Fprintf(w, "→ %s\n\n", tmp)
+
+	if removeTmp {
+		defer os.RemoveAll(tmp)
+	}
+
 	if opts.Verbose {
 		fmt.Fprintf(w, "test-case-tree-runner: %s\n\n", dir)
 		cases, err = core.DiscoverTreeCasesVerbose(dir, w)
@@ -36,24 +55,6 @@ func Build(dir string, opts core.Options) error {
 
 	if len(cases) == 0 {
 		return fmt.Errorf("%s: no runnable test cases found", dir)
-	}
-
-	tmp := opts.GenDir
-	removeTmp := false
-	if tmp == "" {
-		tmp, err = os.MkdirTemp("", "test-case-tree-runner-*")
-		if err != nil {
-			return err
-		}
-		removeTmp = opts.RemoveTemp
-	} else if err := os.MkdirAll(tmp, 0755); err != nil {
-		return err
-	}
-
-	fmt.Fprintf(w, "→ %s\n\n", tmp)
-
-	if removeTmp {
-		defer os.RemoveAll(tmp)
 	}
 
 	modRoot, modPath, hasMod := core.FindModuleRoot(dir)

@@ -5,7 +5,7 @@
 import "path/filepath"
 
 func Setup(t *testing.T, req *Request) error {
-	req.InputDir = filepath.Join("testdata", "multiple-violations")
+	req.InputDir = filepath.Join(DOCTEST_ROOT, "testdata", "multiple-violations")
 	return nil
 }
 ```
