@@ -13,6 +13,9 @@ import (
 //go:embed PROMPT.md
 var prompt string
 
+//go:embed SKILL.md
+var skillTemplate string
+
 const usage = `Usage: test-case-tree-design-expert [--model MODEL] [--agent-runner RUNNER] [--output DIR] [--resume SESSION_ID] <feature description>
 
 Generate a tree-expanded test case design for the given feature description.
@@ -28,6 +31,12 @@ Options:
   -o, --output DIR        Directory to write the test case tree (default: auto-generated <name>-test-cases/)
   --resume SESSION_ID     Resume a previous session by its ID
   -h, --help              Show this help message
+
+Skill Commands:
+  skill show              Print the embedded SKILL.md content
+  skill install [OPTIONS] [DIR]
+                          Install the skill to .agents/skills, .codex/skills,
+                          .cursor/skills, or .opencode/skills
 `
 
 func main() {
@@ -46,6 +55,8 @@ func main() {
 		Dispatch: map[string]func() error{
 			"validate_test_case_tree": validate.Run,
 		},
+		SkillName:    "test-case-tree-design-expert",
+		SkillContent: skillTemplate,
 	}, os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)

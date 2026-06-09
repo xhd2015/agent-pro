@@ -21,6 +21,15 @@ func TestUsageContainsResumeFlag(t *testing.T) {
 	}
 }
 
+func TestUsageContainsSkillCommands(t *testing.T) {
+	if !strings.Contains(usage, "skill show") {
+		t.Error("usage should mention 'skill show'")
+	}
+	if !strings.Contains(usage, "skill install") {
+		t.Error("usage should mention 'skill install'")
+	}
+}
+
 func TestExitMessageFormat(t *testing.T) {
 	orig := os.Args[0]
 	defer func() { os.Args[0] = orig }()
@@ -35,6 +44,8 @@ func TestExitMessageFormat(t *testing.T) {
 		SessionPrefix: "tcd_",
 		Prompt:        prompt,
 		Usage:         usage,
+		SkillName:     "test-case-design-expert",
+		SkillContent:  skillTemplate,
 	}
 	if cfg.AgentName != "test-case-design-expert" {
 		t.Error("expected AgentName 'test-case-design-expert'")
@@ -85,6 +96,8 @@ func TestConfigValues(t *testing.T) {
 		SessionPrefix: "tcd_",
 		Prompt:        prompt,
 		Usage:         usage,
+		SkillName:     "test-case-design-expert",
+		SkillContent:  skillTemplate,
 	}
 	if cfg.AgentName != "test-case-design-expert" {
 		t.Errorf("expected AgentName 'test-case-design-expert', got %q", cfg.AgentName)
@@ -94,6 +107,15 @@ func TestConfigValues(t *testing.T) {
 	}
 	if cfg.Prompt == "" {
 		t.Error("prompt should not be empty")
+	}
+	if cfg.SkillName != "test-case-design-expert" {
+		t.Errorf("expected SkillName 'test-case-design-expert', got %q", cfg.SkillName)
+	}
+	if cfg.SkillContent == "" {
+		t.Error("SkillContent should not be empty")
+	}
+	if cfg.SkillContent != skillTemplate {
+		t.Error("SkillContent should match skillTemplate")
 	}
 	if !strings.Contains(cfg.Usage, "test-case-design-expert") {
 		t.Error("usage should mention agent name")
@@ -112,5 +134,50 @@ func TestPromptEmbedding(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "add-pending-questions") {
 		t.Error("embedded prompt should contain 'add-pending-questions'")
+	}
+}
+
+func TestSkillEmbedding(t *testing.T) {
+	if skillTemplate == "" {
+		t.Error("skillTemplate should not be empty")
+	}
+	if !strings.Contains(skillTemplate, "name: test-case-design-expert") {
+		t.Error("skillTemplate should contain 'name: test-case-design-expert'")
+	}
+	if !strings.Contains(skillTemplate, "description:") {
+		t.Error("skillTemplate should contain 'description:'")
+	}
+}
+
+func TestSkillShow(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe: %v", err)
+	}
+	oldStdout := os.Stdout
+	os.Stdout = w
+	defer func() { os.Stdout = oldStdout }()
+
+	done := make(chan struct{})
+	var buf strings.Builder
+	go func() {
+		defer close(done)
+		io.Copy(&buf, r)
+	}()
+
+	err = agentui.Run(agentui.Config{
+		AgentName:    "test-case-design-expert",
+		SkillName:    "test-case-design-expert",
+		SkillContent: skillTemplate,
+	}, []string{"skill", "show"})
+	w.Close()
+	<-done
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "name: test-case-design-expert") {
+		t.Errorf("expected output to contain 'name: test-case-design-expert', got: %s", out)
 	}
 }

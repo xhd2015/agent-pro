@@ -4,25 +4,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	add_pending_questions "github.com/xhd2015/agent-pro/agent/agentui/add_pending_questions"
 	"github.com/xhd2015/agent-pro/agent/agentui/question"
 	"github.com/xhd2015/agent-pro/agent/agentui/runner"
 	"github.com/xhd2015/agent-pro/agent/agentui/sessionstate"
 	"github.com/xhd2015/agent-pro/agent/agentui/textutil"
-	"github.com/xhd2015/agent-pro/agent/opencode/models"
-	lessflags "github.com/xhd2015/less-flags"
 
 	"github.com/xhd2015/agent-pro/agent/session"
 )
@@ -33,6 +28,8 @@ type Config struct {
 	Prompt        string
 	Usage         string
 	Dispatch      map[string]func() error
+	SkillName     string
+	SkillContent  string
 }
 
 func Run(cfg Config, args []string) error {
@@ -48,6 +45,9 @@ func Run(cfg Config, args []string) error {
 	}
 	if handler, ok := cfg.Dispatch[base]; ok {
 		return handler()
+	}
+	if len(args) > 0 && args[0] == "skill" {
+		return runSkillCommand(cfg, args[1:])
 	}
 	return runMain(cfg, args)
 }
@@ -150,270 +150,6 @@ func (m model) listenForQuestions() tea.Cmd {
 	}
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
-
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		m.viewport.Width = msg.Width
-		m.viewport.Height = msg.Height - 5
-
-	case tea.KeyMsg:
-		if msg.String() == "enter" && strings.TrimSpace(m.input.Value()) == "/exit" {
-			return m, tea.Quit
-		}
-
-		if msg.Type == tea.KeyCtrlC {
-			if m.ctrlCPending {
-				return m, tea.Quit
-			}
-			m.ctrlCPending = true
-			return m, ctrlCResetTimer()
-		}
-
-		if m.ctrlCPending {
-			m.ctrlCPending = false
-		}
-
-		if m.clarificationMode {
-			switch msg.String() {
-			case "enter":
-				answer := strings.TrimSpace(m.input.Value())
-				q := m.currentPendingQuestion()
-				if q != nil && len(q.Options) > 0 && m.optionHighlightIdx == len(q.Options) {
-					if answer != "" {
-						m.submitAnswer(answer)
-					}
-					return m, nil
-				}
-				if answer != "" {
-					m.submitAnswer(answer)
-					return m, nil
-				}
-				if q != nil && len(q.Options) > 0 && m.optionHighlightIdx < len(q.Options) {
-					m.submitAnswer(q.Options[m.optionHighlightIdx].Label)
-					return m, nil
-				}
-			case "tab":
-				if len(m.questions) > 0 {
-					m.selIdx = (m.selIdx + 1) % len(m.questions)
-					m.input.SetValue("")
-					m.optionHighlightIdx = 0
-				}
-			case "shift+tab":
-				if len(m.questions) > 0 {
-					m.selIdx = (m.selIdx - 1 + len(m.questions)) % len(m.questions)
-					m.input.SetValue("")
-					m.optionHighlightIdx = 0
-				}
-			case "up":
-				q := m.currentPendingQuestion()
-				if q != nil && len(q.Options) > 0 {
-					m.optionHighlightIdx = (m.optionHighlightIdx - 1 + len(q.Options) + 1) % (len(q.Options) + 1)
-				}
-			case "down":
-				q := m.currentPendingQuestion()
-				if q != nil && len(q.Options) > 0 {
-					m.optionHighlightIdx = (m.optionHighlightIdx + 1) % (len(q.Options) + 1)
-				}
-			default:
-				q := m.currentPendingQuestion()
-				if q != nil && len(q.Options) > 0 && m.optionHighlightIdx < len(q.Options) {
-					return m, nil
-				}
-				var cmd tea.Cmd
-				m.input, cmd = m.input.Update(msg)
-				return m, cmd
-			}
-			return m, nil
-		}
-
-		if m.done {
-			switch msg.String() {
-			case "enter":
-				followUp := strings.TrimSpace(m.input.Value())
-				if followUp == "" {
-					break
-				}
-				m.logs = append(m.logs, "[You] "+followUp)
-				m.input.SetValue("")
-				m.done = false
-
-				newDoneCh := make(chan llmDoneMsg, 1)
-				m.llmDoneCh = newDoneCh
-
-				prompt := m.buildResumePrompt(followUp)
-				go runLLM(prompt, m.llmModel, m.opencodeSessionID, m.sessionDir, m.logCh, newDoneCh)
-
-				m.viewport.SetContent(textutil.WrapText(strings.Join(m.logs, "\n"), m.viewport.Width))
-				m.viewport.GotoBottom()
-
-				return m, tea.Batch(m.waitForLLMDone(), tick())
-			default:
-				var cmd tea.Cmd
-				m.input, cmd = m.input.Update(msg)
-				return m, cmd
-			}
-		}
-
-		switch msg.String() {
-		default:
-			var cmd tea.Cmd
-			m.input, cmd = m.input.Update(msg)
-			cmds = append(cmds, cmd)
-		}
-
-	case logMsg:
-		m.logs = append(m.logs, string(msg))
-		m.viewport.SetContent(textutil.WrapText(strings.Join(m.logs, "\n"), m.viewport.Width))
-		m.viewport.GotoBottom()
-		return m, m.listenForLogs()
-
-	case questionMsg:
-		m.questions = append(m.questions, pendingQuestion(msg))
-		m.logs = append(m.logs, question.FormatAskLog(question.Question(msg)))
-		m.viewport.SetContent(textutil.WrapText(strings.Join(m.logs, "\n"), m.viewport.Width))
-		m.viewport.GotoBottom()
-		return m, m.listenForQuestions()
-
-	case llmDoneMsg:
-		m.done = true
-		if msg.Err != nil {
-			m.err = msg.Err
-			m.logs = append(m.logs, fmt.Sprintf("[Error] %v", msg.Err))
-		} else {
-			m.llmOutput = msg.Output
-		}
-		if msg.OpencodeSessionID != "" && m.opencodeSessionID == "" {
-			m.opencodeSessionID = msg.OpencodeSessionID
-			sessionstate.UpdateOpencodeSessionID(m.sessionDir, msg.OpencodeSessionID)
-		}
-
-		m.clarificationMode = m.hasUnansweredQuestions()
-
-		if m.clarificationMode {
-			m.logs = append(m.logs, "[Agent] Needs clarification — answer questions below.")
-		} else {
-			m.logs = append(m.logs, "[Agent] Done. Review output below.")
-		}
-		m.viewport.SetContent(textutil.WrapText(strings.Join(m.logs, "\n"), m.viewport.Width))
-		m.viewport.GotoBottom()
-
-	case ctrlCResetMsg:
-		m.ctrlCPending = false
-
-	case tickMsg:
-		m.spinFrame++
-		if !m.done {
-			cmds = append(cmds, tick())
-		}
-	}
-
-	var cmd tea.Cmd
-	m.viewport, cmd = m.viewport.Update(msg)
-	cmds = append(cmds, cmd)
-
-	return m, tea.Batch(cmds...)
-}
-
-func (m model) View() string {
-	var view string
-
-	if m.clarificationMode {
-		statusStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
-		answered := m.answeredCount()
-		total := len(m.questions)
-		status := statusStyle.Render(fmt.Sprintf("◆ Clarification needed  (%d of %d answered)", answered, total))
-
-		questionView := ""
-		q := m.currentPendingQuestion()
-		if q != nil {
-			questionStyle := lipgloss.NewStyle().Bold(true)
-			questionView = questionStyle.Render(fmt.Sprintf("  ▸ #%s: %s", q.ID, q.Question))
-			hasOptions := len(q.Options) > 0
-			if hasOptions {
-				highlightStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
-				for i, o := range q.Options {
-					marker := "  ○"
-					if i == m.optionHighlightIdx {
-						marker = highlightStyle.Render("  ▸")
-					}
-					desc := ""
-					if o.Description != "" {
-						desc = fmt.Sprintf(" — %s", o.Description)
-					}
-					questionView += fmt.Sprintf("\n    %s %s%s", marker, o.Label, desc)
-				}
-				virtualMarker := "  ○"
-				if m.optionHighlightIdx == len(q.Options) {
-					virtualMarker = highlightStyle.Render("  ▸")
-				}
-				questionView += fmt.Sprintf("\n    %s ✎ Type your answer below...", virtualMarker)
-			}
-			questionView += "\n"
-		}
-
-		q = m.currentPendingQuestion()
-		inputActive := q == nil || len(q.Options) == 0 || m.optionHighlightIdx == len(q.Options)
-		var inputView string
-		if !inputActive {
-			m.input.Placeholder = "Select an option or move to ✎ to type..."
-			inputView = m.input.View()
-			inputView = lipgloss.NewStyle().Faint(true).Render(inputView)
-		} else if m.input.Value() == "" {
-			m.input.Placeholder = "Type your answer..."
-			inputView = m.input.View()
-		} else {
-			m.input.Placeholder = ""
-			inputView = m.input.View()
-		}
-
-		view = lipgloss.JoinVertical(lipgloss.Top,
-			m.viewport.View(),
-			strings.Repeat("─", m.width),
-			status+"  Tab:next  Shift+Tab:prev  Enter:answer  Ctrl+C:quit",
-			questionView,
-			inputView,
-		)
-	} else if m.done {
-		statusStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-		status := statusStyle.Render("✓ Done")
-		view = lipgloss.JoinVertical(lipgloss.Top,
-			m.viewport.View(),
-			strings.Repeat("─", m.width),
-			status+"  Enter to follow up, Ctrl+C to exit.",
-			m.input.View(),
-		)
-	} else {
-		statusLine := ""
-		if len(m.questions) > 0 {
-			ids := make([]string, len(m.questions))
-			for i, q := range m.questions {
-				ids[i] = fmt.Sprintf("#%s", q.ID)
-			}
-			statusLine = fmt.Sprintf("[%s] Pending: %s | Ctrl+C:quit", SpinnerChar(m.spinFrame), strings.Join(ids, ", "))
-		} else {
-			statusLine = fmt.Sprintf("[%s] Working...", SpinnerChar(m.spinFrame))
-		}
-
-		view = lipgloss.JoinVertical(lipgloss.Top,
-			m.viewport.View(),
-			strings.Repeat("─", m.width),
-			statusLine,
-			m.input.View(),
-		)
-	}
-
-	if m.ctrlCPending {
-		hint := lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Render("  ══ Press Ctrl+C again to quit ══")
-		view = lipgloss.JoinVertical(lipgloss.Top, view, hint)
-	}
-
-	return view
-}
-
 func (m *model) currentPendingQuestion() *pendingQuestion {
 	idx := question.PendingIndex(m.questions, m.selIdx)
 	if idx < 0 {
@@ -490,200 +226,47 @@ func (m *model) loadQuestionsFromFile() {
 }
 
 func runMain(cfg Config, args []string) error {
-	var modelFlag *string
-	var outputFlag *string
-	var resumeFlag *string
-	var agentRunnerFlag *string
-
-	remainArgs, err := lessflags.String("--model", &modelFlag).
-		String("-o,--output", &outputFlag).
-		String("--resume", &resumeFlag).
-		String("--agent-runner", &agentRunnerFlag).
-		Help("-h,--help", cfg.Usage).
-		Parse(args)
+	opts, err := parseRunOptions(cfg, args)
 	if err != nil {
 		return err
 	}
 
-	agentRunner := "opencode"
-	if agentRunnerFlag != nil {
-		agentRunner = *agentRunnerFlag
-	}
-	if agentRunner != "opencode" && agentRunner != "codex" {
-		return fmt.Errorf("unsupported agent runner: %s (supported: opencode, codex)", agentRunner)
-	}
-	if agentRunner == "codex" {
-		return fmt.Errorf("codex runner not yet implemented")
-	}
-
-	llmModel := ""
-	if modelFlag != nil {
-		llmModel = *modelFlag
-	}
-	outputFile := ""
-	if outputFlag != nil {
-		outputFile = *outputFlag
-	}
-	resumeID := ""
-	if resumeFlag != nil {
-		resumeID = *resumeFlag
-	}
-	feature := strings.Join(remainArgs, " ")
-	var sessionID string
-	var opencodeSessionID string
-	var sessionDir string
-	var initialLogs []string
-
-	sid, osid, dir, feat, resumeModel, logs, err := sessionstate.Resolve(cfg.AgentName, resumeID)
+	resolved, err := resolveRunSession(cfg, opts)
 	if err != nil {
 		return err
 	}
-	if resumeID != "" {
-		sessionID = sid
-		opencodeSessionID = osid
-		sessionDir = dir
-		if feature == "" {
-			feature = feat
-		}
-		if llmModel == "" {
-			llmModel = resumeModel
-		}
-		initialLogs = logs
-	} else if feature == "" {
-		fmt.Fprint(os.Stderr, cfg.Usage)
-		return fmt.Errorf("missing feature description")
-	}
 
-	if llmModel == "" {
-		_, preferred, err := models.ListFree()
-		if err != nil {
-			return fmt.Errorf("failed to list free models: %w", err)
-		}
-		llmModel = preferred
-	}
-
-	if sessionID == "" {
-		sessionID = sessionstate.NewID(cfg.SessionPrefix)
-	}
-	if sessionDir == "" {
-		var err error
-		sessionDir, err = session.Dir(cfg.AgentName, sessionID)
-		if err != nil {
-			return fmt.Errorf("create session dir: %w", err)
-		}
-	}
-	sessionstate.WriteMeta(sessionDir, sessionstate.Meta{
-		SessionID: sessionID,
-		Feature:   feature,
-		Model:     llmModel,
-	})
-
-	tempDir, err := os.MkdirTemp("", cfg.AgentName+"-*")
+	paths, cleanup, err := prepareRuntimePaths(cfg, resolved.SessionDir)
 	if err != nil {
-		return fmt.Errorf("create temp dir: %w", err)
+		return err
 	}
-	defer os.RemoveAll(tempDir)
+	defer cleanup()
+	configureQuestionEnvironment(paths)
 
-	exe, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("get executable path: %w", err)
-	}
-	apqPath := filepath.Join(tempDir, "add-pending-questions")
-	if out, err := exec.Command("cp", exe, apqPath).CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to copy add-pending-questions: %w\n%s", err, string(out))
-	}
-	for name := range cfg.Dispatch {
-		dst := filepath.Join(tempDir, name)
-		if out, err := exec.Command("cp", exe, dst).CombinedOutput(); err != nil {
-			return fmt.Errorf("failed to copy %s: %w\n%s", name, err, string(out))
-		}
-	}
-
-	answerDir := filepath.Join(tempDir, "answer")
-	if err := os.Mkdir(answerDir, 0755); err != nil {
-		return fmt.Errorf("create answer dir: %w", err)
-	}
-
-	questionFifo := filepath.Join(tempDir, "question.fifo")
-	if err := syscall.Mkfifo(questionFifo, 0666); err != nil {
-		return fmt.Errorf("create question fifo: %w", err)
-	}
-
-	questionsFile := filepath.Join(sessionDir, "questions.jsonl")
-	os.Setenv("QUESTION_FIFO", questionFifo)
-	os.Setenv("ANSWER_DIR", answerDir)
-	os.Setenv("QUESTIONS_FILE", questionsFile)
-	pathEntry := tempDir + string(filepath.ListSeparator)
-	if !strings.Contains(os.Getenv("PATH"), pathEntry) {
-		os.Setenv("PATH", pathEntry+os.Getenv("PATH"))
-	}
-
-	logCh := make(chan string, 64)
-	questionCh := make(chan pendingQuestion, 16)
-	llmDoneCh := make(chan llmDoneMsg, 1)
+	channels := newRuntimeChannels()
 
 	if !isTTY(os.Stdout) {
-		runPlain(cfg, feature, llmModel, outputFile)
+		runPlain(cfg, resolved.Feature, resolved.Model, opts.OutputFile)
 		return nil
 	}
 
-	go startQuestionMonitor(questionFifo, questionCh)
+	go startQuestionMonitor(paths.QuestionFIFO, channels.QuestionCh)
 
-	ti := textinput.New()
-	ti.Placeholder = "Type answer and press Enter..."
-	ti.Focus()
-	ti.CharLimit = 500
-
-	vp := viewport.New(80, 20)
-	startContent := "Starting..."
-	if len(initialLogs) > 0 {
-		startContent = textutil.WrapText(strings.Join(initialLogs, "\n"), vp.Width)
-	} else if feature != "" {
-		initialLogs = []string{"[You] " + feature}
-		startContent = textutil.WrapText("[You] "+feature, vp.Width)
-	}
-	vp.SetContent(startContent)
-	vp.GotoBottom()
-
-	m := &model{
-		feature:           feature,
-		llmModel:          llmModel,
-		tempDir:           tempDir,
-		answerDir:         answerDir,
-		sessionID:         sessionID,
-		opencodeSessionID: opencodeSessionID,
-		sessionDir:        sessionDir,
-		questionsFile:     questionsFile,
-		input:             ti,
-		viewport:          vp,
-		logs:              initialLogs,
-		logCh:             logCh,
-		questionCh:        questionCh,
-		llmDoneCh:         llmDoneCh,
-	}
-
-	if resumeID != "" {
-		m.loadQuestionsFromFile()
-		if m.hasUnansweredQuestions() {
-			m.done = true
-			m.clarificationMode = true
-			m.logs = append(m.logs, "[Agent] Resumed with pending clarification questions.")
-		}
-	}
+	m := newRuntimeModel(cfg, opts, resolved, paths, channels)
 
 	if !m.clarificationMode {
-		prompt := cfg.Prompt + "\n\n## Feature Description\n" + feature
-		if outputFile != "" {
-			prompt += "\n\n## Output File\nWrite the complete report to: " + outputFile
+		prompt := cfg.Prompt + "\n\n## Feature Description\n" + resolved.Feature
+		if opts.OutputFile != "" {
+			prompt += "\n\n## Output File\nWrite the complete report to: " + opts.OutputFile
 		}
-		go runLLM(prompt, llmModel, opencodeSessionID, sessionDir, logCh, llmDoneCh)
+		go runLLM(prompt, resolved.Model, resolved.OpencodeSessionID, resolved.SessionDir, channels.LogCh, channels.DoneCh)
 	}
 
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("tui error: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "Session %s finished.\nTo resume: %s --resume %s\n", sessionID, filepath.Base(os.Args[0]), sessionID)
+	fmt.Fprintf(os.Stderr, "Session %s finished.\nTo resume: %s --resume %s\n", resolved.SessionID, filepath.Base(os.Args[0]), resolved.SessionID)
 	return nil
 }
 

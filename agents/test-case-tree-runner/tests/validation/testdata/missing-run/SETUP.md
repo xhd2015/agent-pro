@@ -1,0 +1,16 @@
+```go
+import "testing"
+
+type Request struct {
+	Value int
+}
+
+type Response struct {
+	Result int
+}
+
+func Setup(t *testing.T, req *Request) error {
+	_ = req
+	return nil
+}
+```
