@@ -9,3 +9,6 @@
 /agent-pro
 .decisions.json
 *.jsonl
+
+
+handoff_*
