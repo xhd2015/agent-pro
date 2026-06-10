@@ -63,10 +63,12 @@ type tickMsg struct{}
 type ctrlCResetMsg struct{}
 
 type model struct {
-	feature   string
-	llmModel  string
-	tempDir   string
-	answerDir string
+	feature     string
+	llmModel    string
+	agentRunner string
+	llmStarter  llmStarterFunc
+	tempDir     string
+	answerDir   string
 
 	sessionID         string
 	opencodeSessionID string
@@ -196,7 +198,7 @@ func (m *model) submitAnswer(answer string) {
 		newDoneCh := make(chan llmDoneMsg, 1)
 		m.llmDoneCh = newDoneCh
 		m.done = false
-		go runLLM(prompt, m.llmModel, m.opencodeSessionID, m.sessionDir, m.logCh, newDoneCh)
+		m.startLLM(prompt, newDoneCh)
 
 		m.viewport.SetContent(textutil.WrapText(strings.Join(m.logs, "\n"), m.viewport.Width))
 		m.viewport.GotoBottom()
@@ -246,7 +248,7 @@ func runMain(cfg Config, args []string) error {
 	channels := newRuntimeChannels()
 
 	if !isTTY(os.Stdout) {
-		runPlain(cfg, resolved.Feature, resolved.Model, opts.OutputFile)
+		runPlain(cfg, resolved.Feature, resolved.Model, opts.OutputFile, opts.AgentRunner)
 		return nil
 	}
 
@@ -259,7 +261,7 @@ func runMain(cfg Config, args []string) error {
 		if opts.OutputFile != "" {
 			prompt += "\n\n## Output File\nWrite the complete report to: " + opts.OutputFile
 		}
-		go runLLM(prompt, resolved.Model, resolved.OpencodeSessionID, resolved.SessionDir, channels.LogCh, channels.DoneCh)
+		go runLLM(prompt, resolved.Model, resolved.OpencodeSessionID, resolved.SessionDir, opts.AgentRunner, channels.LogCh, channels.DoneCh)
 	}
 
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
@@ -293,8 +295,22 @@ func startQuestionMonitor(fifo string, ch chan<- pendingQuestion) {
 	}
 }
 
-func runLLM(prompt, llmModel, sessionID, sessionDir string, logCh chan<- string, doneCh chan<- llmDoneMsg) {
-	runner.RunLLM(prompt, llmModel, sessionID, sessionDir, logCh, doneCh)
+type llmStarterFunc func(prompt, llmModel, sessionID, sessionDir, agentRunner string, logCh chan<- string, doneCh chan<- llmDoneMsg)
+
+func (m *model) startLLM(prompt string, doneCh chan<- llmDoneMsg) {
+	starter := m.llmStarter
+	if starter == nil {
+		starter = defaultLLMStarter
+	}
+	starter(prompt, m.llmModel, m.opencodeSessionID, m.sessionDir, m.agentRunner, m.logCh, doneCh)
+}
+
+func defaultLLMStarter(prompt, llmModel, sessionID, sessionDir, agentRunner string, logCh chan<- string, doneCh chan<- llmDoneMsg) {
+	go runLLM(prompt, llmModel, sessionID, sessionDir, agentRunner, logCh, doneCh)
+}
+
+func runLLM(prompt, llmModel, sessionID, sessionDir, agentRunner string, logCh chan<- string, doneCh chan<- llmDoneMsg) {
+	runner.RunLLM(prompt, llmModel, sessionID, sessionDir, agentRunner, logCh, doneCh)
 }
 
 func formatLogLine(line string) string {
@@ -319,11 +335,11 @@ func newSessionID(prefix string) string {
 	return sessionstate.NewID(prefix)
 }
 
-func runPlain(cfg Config, feature, llmModel, outputFile string) {
+func runPlain(cfg Config, feature, llmModel, outputFile, agentRunner string) {
 	prompt := cfg.Prompt + "\n\n## Feature Description\n" + feature
 
 	if outputFile != "" {
 		prompt += "\n\n## Output File\nWrite the complete report to: " + outputFile
 	}
-	runner.RunPlain(prompt, llmModel)
+	runner.RunPlain(prompt, llmModel, agentRunner)
 }

@@ -140,7 +140,7 @@ func (m model) updateDoneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.llmDoneCh = newDoneCh
 
 		prompt := m.buildResumePrompt(followUp)
-		go runLLM(prompt, m.llmModel, m.opencodeSessionID, m.sessionDir, m.logCh, newDoneCh)
+		m.startLLM(prompt, newDoneCh)
 
 		m.viewport.SetContent(textutil.WrapText(strings.Join(m.logs, "\n"), m.viewport.Width))
 		m.viewport.GotoBottom()

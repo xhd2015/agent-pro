@@ -35,11 +35,8 @@ func parseRunOptions(cfg Config, args []string) (runOptions, error) {
 	if agentRunnerFlag != nil {
 		agentRunner = *agentRunnerFlag
 	}
-	if agentRunner != "opencode" && agentRunner != "codex" {
-		return runOptions{}, fmt.Errorf("unsupported agent runner: %s (supported: opencode, codex)", agentRunner)
-	}
-	if agentRunner == "codex" {
-		return runOptions{}, fmt.Errorf("codex runner not yet implemented")
+	if agentRunner != "opencode" && agentRunner != "codex" && agentRunner != "fake-codex" {
+		return runOptions{}, fmt.Errorf("unsupported agent runner: %s (supported: opencode, codex, fake-codex)", agentRunner)
 	}
 
 	llmModel := ""

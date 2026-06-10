@@ -32,6 +32,7 @@ Options:
   --cd <dir>                      working directory (ignored, for compatibility)
   --sandbox <mode>                sandbox mode (ignored, for compatibility)
   --model <model>                 model name (ignored, for compatibility)
+  --script <path>                 JSON script with exact events to emit
   --skip-git-repo-check           skip git check (ignored, for compatibility)
   --seed <int>                    random seed for deterministic output
   --delay <ms>                    delay in ms between output lines (default: 0)
@@ -41,8 +42,19 @@ Options:
 func main() {
 	if err := handle(os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "fake-codex: %v\n", err)
+		if err, ok := err.(*exitError); ok {
+			os.Exit(err.Code)
+		}
 		os.Exit(1)
 	}
+}
+
+type exitError struct {
+	Code int
+}
+
+func (e *exitError) Error() string {
+	return fmt.Sprintf("script exited with code %d", e.Code)
 }
 
 func handle(args []string) error {
@@ -63,6 +75,7 @@ func handleExec(args []string) error {
 	var dirFlag *string
 	var sandboxFlag *string
 	var modelFlag *string
+	var scriptFlag *string
 	var jsonFlag *bool
 	var skipGitFlag *bool
 	var seedFlag *int64
@@ -71,6 +84,7 @@ func handleExec(args []string) error {
 	remaining, err := flags.String("--cd", &dirFlag).
 		String("--sandbox", &sandboxFlag).
 		String("--model", &modelFlag).
+		String("--script", &scriptFlag).
 		Bool("--json", &jsonFlag).
 		Bool("--skip-git-repo-check", &skipGitFlag).
 		Int("--seed", &seedFlag).
@@ -98,8 +112,28 @@ func handleExec(args []string) error {
 		delay = time.Duration(*delayFlag) * time.Millisecond
 	}
 
-	gen := fakeagent.NewGenerator(seed)
-	events := gen.GenerateSession(prompt)
+	var events []fakeagent.Event
+	var exitCode int
+	var scriptedStderr string
+	scriptPath := os.Getenv("FAKE_CODEX_SCRIPT")
+	if scriptFlag != nil && strings.TrimSpace(*scriptFlag) != "" {
+		scriptPath = strings.TrimSpace(*scriptFlag)
+	}
+	if scriptPath != "" {
+		script, err := fakeagent.LoadScript(scriptPath)
+		if err != nil {
+			return err
+		}
+		events = script.Events
+		exitCode = script.ExitCode
+		scriptedStderr = script.Stderr
+		if delayFlag == nil && script.DelayMS > 0 {
+			delay = time.Duration(script.DelayMS) * time.Millisecond
+		}
+	} else {
+		gen := fakeagent.NewGenerator(seed)
+		events = gen.GenerateSession(prompt)
+	}
 
 	jsonOutput := jsonFlag != nil && *jsonFlag
 
@@ -125,6 +159,15 @@ func handleExec(args []string) error {
 		} else {
 			fmt.Print(text)
 		}
+	}
+	if scriptedStderr != "" {
+		fmt.Fprint(os.Stderr, scriptedStderr)
+		if !strings.HasSuffix(scriptedStderr, "\n") {
+			fmt.Fprintln(os.Stderr)
+		}
+	}
+	if exitCode != 0 {
+		return &exitError{Code: exitCode}
 	}
 
 	return nil
