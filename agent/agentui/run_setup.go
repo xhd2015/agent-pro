@@ -185,6 +185,7 @@ func newRuntimeModel(cfg Config, opts runOptions, resolved resolvedRunSession, p
 	m := &model{
 		feature:           feature,
 		llmModel:          resolved.Model,
+		agentRunner:       opts.AgentRunner,
 		tempDir:           paths.TempDir,
 		answerDir:         paths.AnswerDir,
 		sessionID:         resolved.SessionID,
