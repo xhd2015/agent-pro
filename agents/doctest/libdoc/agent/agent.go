@@ -25,7 +25,7 @@ func Generate(opts GenerateOptions) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("# Generated Doc Tests\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "DOCTEST.md"), []byte("# Generated Doc Tests\n"), 0644); err != nil {
 		return err
 	}
 	if err := os.WriteFile(filepath.Join(dir, "SETUP.md"), []byte("## Preconditions\n- Generated from idea: "+opts.Idea+"\n"), 0644); err != nil {

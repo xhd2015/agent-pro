@@ -17,7 +17,7 @@ func TestRunValidationCases(t *testing.T) {
 			name: "valid root only",
 			setup: func(t *testing.T) string {
 				dir := t.TempDir()
-				writeFile(t, dir, "README.md", "# tests\n")
+				writeFile(t, dir, "DOCTEST.md", "# tests\n")
 				writeFile(t, dir, "SETUP.md", "setup\n")
 				return dir
 			},
@@ -26,7 +26,7 @@ func TestRunValidationCases(t *testing.T) {
 			name: "valid leaf",
 			setup: func(t *testing.T) string {
 				dir := t.TempDir()
-				writeFile(t, dir, "README.md", "# tests\n")
+				writeFile(t, dir, "DOCTEST.md", "# tests\n")
 				writeFile(t, dir, "SETUP.md", "setup\n")
 				writeFile(t, dir, "leaf/SETUP.md", "setup\n")
 				writeFile(t, dir, "leaf/ASSERT.md", "assert\n")
@@ -40,7 +40,7 @@ func TestRunValidationCases(t *testing.T) {
 				writeFile(t, dir, "SETUP.md", "setup\n")
 				return dir
 			},
-			wantErr: "root must contain README.md",
+			wantErr: "root must contain DOCTEST.md",
 		},
 		{
 			name: "file instead of dir",
@@ -56,7 +56,7 @@ func TestRunValidationCases(t *testing.T) {
 			name: "assert without setup at root",
 			setup: func(t *testing.T) string {
 				dir := t.TempDir()
-				writeFile(t, dir, "README.md", "# tests\n")
+				writeFile(t, dir, "DOCTEST.md", "# tests\n")
 				writeFile(t, dir, "ASSERT.md", "assert\n")
 				return dir
 			},
@@ -66,7 +66,7 @@ func TestRunValidationCases(t *testing.T) {
 			name: "assert without setup in leaf",
 			setup: func(t *testing.T) string {
 				dir := t.TempDir()
-				writeFile(t, dir, "README.md", "# tests\n")
+				writeFile(t, dir, "DOCTEST.md", "# tests\n")
 				writeFile(t, dir, "SETUP.md", "setup\n")
 				writeFile(t, dir, "leaf/ASSERT.md", "assert\n")
 				return dir
@@ -77,7 +77,7 @@ func TestRunValidationCases(t *testing.T) {
 			name: "testdata skipped",
 			setup: func(t *testing.T) string {
 				dir := t.TempDir()
-				writeFile(t, dir, "README.md", "# tests\n")
+				writeFile(t, dir, "DOCTEST.md", "# tests\n")
 				writeFile(t, dir, "SETUP.md", "setup\n")
 				writeFile(t, dir, "testdata/bad/ASSERT.md", "assert\n")
 				return dir
@@ -87,7 +87,7 @@ func TestRunValidationCases(t *testing.T) {
 			name: "extra files allowed",
 			setup: func(t *testing.T) string {
 				dir := t.TempDir()
-				writeFile(t, dir, "README.md", "# tests\n")
+				writeFile(t, dir, "DOCTEST.md", "# tests\n")
 				writeFile(t, dir, "SETUP.md", "setup\n")
 				writeFile(t, dir, "notes.txt", "notes\n")
 				writeFile(t, dir, "leaf/SETUP.md", "setup\n")

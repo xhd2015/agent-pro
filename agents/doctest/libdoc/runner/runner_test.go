@@ -72,7 +72,7 @@ func indexAfter(s, substr string) int {
 
 func createValidTestTree(t *testing.T, root string) {
 	t.Helper()
-	writeTreeFile(t, root, "README.md", "# tree")
+	writeTreeFile(t, root, "DOCTEST.md", "# tree")
 	writeTreeFile(t, root, "SETUP.md", setupDoc(`
 type Request struct{}
 type Response struct{}

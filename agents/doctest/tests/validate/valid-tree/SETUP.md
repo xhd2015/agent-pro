@@ -13,7 +13,7 @@ import (
 
 func Setup(t *testing.T, req *Request) error {
     dir := t.TempDir()
-    if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("# tests\n"), 0644); err != nil {
+    if err := os.WriteFile(filepath.Join(dir, "DOCTEST.md"), []byte("# tests\n"), 0644); err != nil {
         t.Fatal(err)
     }
     if err := os.WriteFile(filepath.Join(dir, "SETUP.md"), []byte("setup\n"), 0644); err != nil {
