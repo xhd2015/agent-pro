@@ -41,6 +41,29 @@ const skillUsage = `Usage: doctest skill --list
        doctest skill code-spec show|install
 `
 
+const buildUsage = `Usage: doctest build [-v|--verbose] [--rm] [--gen-dir DIR] [-count=N] <dir>
+
+Validate generated snippets compile without executing behavior.
+
+Options:
+  -v, --verbose     Show generated files and build command output
+  --rm              Remove the temporary generated test directory
+  --gen-dir DIR     Write generated Go test files to DIR
+  -count=N          Forward Go test count option to generated build
+  -h, --help        Show help
+`
+
+const testUsage = `Usage: doctest test [-v|--verbose] [--rm] [-count=N] <dir>
+
+Run executable Go snippets from a doc-style test directory.
+
+Options:
+  -v, --verbose     Show generated test names and runner output
+  --rm              Remove the temporary generated test directory
+  -count=N          Forward Go test count option to generated test binary
+  -h, --help        Show help
+`
+
 func Run(args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
 		fmt.Print(usage)
@@ -52,9 +75,9 @@ func Run(args []string) error {
 	case "validate":
 		return runOneDir("validate", args[1:], validate.Run)
 	case "build":
-		return runOneDir("build", args[1:], runner.Build)
+		return runRunner(args[1:], buildUsage, runner.BuildArgs)
 	case "test":
-		return runOneDir("test", args[1:], runner.Test)
+		return runRunner(args[1:], testUsage, runner.Test)
 	case "skill":
 		return runSkill(args[1:])
 	default:
@@ -90,7 +113,7 @@ Commands:
 }
 
 func runAgentGenerate(args []string) error {
-	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+	if len(args) > 0 && (args[0] == "-h" || args[0] == "--help") {
 		fmt.Print(agentGenerateUsage)
 		return nil
 	}
@@ -134,6 +157,14 @@ func runOneDir(name string, args []string, fn func(string) error) error {
 		return fmt.Errorf("%s requires <dir>", name)
 	}
 	return fn(args[0])
+}
+
+func runRunner(args []string, usage string, fn func([]string) error) error {
+	if len(args) > 0 && (args[0] == "-h" || args[0] == "--help") {
+		fmt.Print(usage)
+		return nil
+	}
+	return fn(args)
 }
 
 func runSkill(args []string) error {
