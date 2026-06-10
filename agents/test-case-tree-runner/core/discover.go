@@ -220,6 +220,7 @@ func setupChain(root, leafDir string) ([]SetupDocument, error) {
 		parts = strings.Split(rel, string(filepath.Separator))
 	}
 	var docs []SetupDocument
+	ancestorHelpers := make(map[string]bool)
 	for i := 0; i <= len(parts); i++ {
 		dir := filepath.Join(append([]string{root}, parts[:i]...)...)
 		path := filepath.Join(dir, "SETUP.md")
@@ -231,6 +232,16 @@ func setupChain(root, leafDir string) ([]SetupDocument, error) {
 		if doc.GoBlock != nil {
 			if v := rules.CheckChildNoRedefine(doc.GoBlock.Types, relPath, i); v != nil {
 				return nil, fmt.Errorf("%s: %s", v.Path, v.Msg)
+			}
+			var childHelpers []string
+			for _, h := range doc.GoBlock.Helpers {
+				childHelpers = append(childHelpers, h.Name)
+			}
+			if v := rules.CheckNoHelperRedefinition(ancestorHelpers, childHelpers, relPath, i); v != nil {
+				return nil, fmt.Errorf("%s: %s", v.Path, v.Msg)
+			}
+			for _, h := range doc.GoBlock.Helpers {
+				ancestorHelpers[h.Name] = true
 			}
 		}
 		doc.Path = relPath

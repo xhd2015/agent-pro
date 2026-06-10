@@ -91,9 +91,13 @@ func Test(dir string, opts core.Options) error {
 	if opts.Verbose {
 		goTestBuild.Stdout = w
 		goTestBuild.Stderr = w
-	}
-	if out, err := goTestBuild.CombinedOutput(); err != nil {
-		return fmt.Errorf("go test -c failed: %v\n%s", err, string(out))
+		if err := goTestBuild.Run(); err != nil {
+			return fmt.Errorf("go test -c failed: %v", err)
+		}
+	} else {
+		if out, err := goTestBuild.CombinedOutput(); err != nil {
+			return fmt.Errorf("go test -c failed: %v\n%s", err, string(out))
+		}
 	}
 
 	args := []string{}

@@ -2,6 +2,9 @@ package core
 
 import (
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"sort"
 	"strings"
 )
@@ -50,16 +53,35 @@ func AssembleTestSource(tc TreeCase, compileOnly bool, pkgName string, docTestRo
 	buf.WriteString("\t\tt.Fatal(err)\n")
 	buf.WriteString("\t}\n\n")
 
-	run := writeSetupDecls(&buf, tc.SetupFiles)
-	writeAssertDecls(&buf, tc.AssertFile.GoBlock)
+	writeTypeConstVarDecls(&buf, tc.SetupFiles)
+	writeTypeConstVarDeclsForBlock(&buf, tc.AssertFile.GoBlock)
 
-	buf.WriteString("\treq := &Request{}\n")
-	writeSetupCalls(&buf, tc.SetupFiles)
+	writeHelperDecls(&buf, tc.SetupFiles)
+	writeHelperDeclsForBlock(&buf, tc.AssertFile.GoBlock)
+
+	var run *FuncSnippet
+	for _, doc := range tc.SetupFiles {
+		if doc.GoBlock != nil && doc.GoBlock.Run != nil {
+			runCopy := *doc.GoBlock.Run
+			run = &runCopy
+		}
+	}
 	if run == nil {
 		return "", fmt.Errorf("missing Run(t *testing.T, req *Request) (*Response, error) in setup chain")
 	}
 	writeFuncClosure(&buf, "run", *run)
+	buf.WriteString("\tRun := run\n")
+
+	buf.WriteString("\treq := &Request{}\n")
+	writeSetupCalls(&buf, tc.SetupFiles)
 	writeFuncClosure(&buf, "assert", *tc.AssertFile.GoBlock.Assert)
+
+	helperNames := collectHelperNames(tc.SetupFiles, tc.AssertFile.GoBlock)
+	buf.WriteString("\t_ = Run\n")
+	for _, name := range helperNames {
+		buf.WriteString(fmt.Sprintf("\t_ = %s\n", name))
+	}
+
 	if compileOnly {
 		buf.WriteString("\t_ = req\n")
 		buf.WriteString("\t_ = run\n")
@@ -97,27 +119,40 @@ func collectImports(setupFiles []SetupDocument, assertBlock GoBlock) map[string]
 	return imports
 }
 
-func writeSetupDecls(buf *strings.Builder, setupFiles []SetupDocument) *FuncSnippet {
-	var run *FuncSnippet
+func collectHelperNames(setupFiles []SetupDocument, assertBlock GoBlock) []string {
+	seen := make(map[string]bool)
+	var names []string
 	for _, doc := range setupFiles {
 		if doc.GoBlock == nil {
 			continue
 		}
-		writeGoBlockDecls(buf, *doc.GoBlock)
-		if doc.GoBlock.Run != nil {
-			runCopy := *doc.GoBlock.Run
-			run = &runCopy
+		for _, h := range doc.GoBlock.Helpers {
+			if !seen[h.Name] {
+				seen[h.Name] = true
+				names = append(names, h.Name)
+			}
 		}
 	}
-	return run
+	for _, h := range assertBlock.Helpers {
+		if !seen[h.Name] {
+			seen[h.Name] = true
+			names = append(names, h.Name)
+		}
+	}
+	return names
 }
 
-func writeAssertDecls(buf *strings.Builder, block GoBlock) {
-	writeGoBlockDecls(buf, block)
+func writeTypeConstVarDecls(buf *strings.Builder, setupFiles []SetupDocument) {
+	for _, doc := range setupFiles {
+		if doc.GoBlock == nil {
+			continue
+		}
+		writeTypeConstVarDeclsForBlock(buf, *doc.GoBlock)
+	}
 }
 
-func writeGoBlockDecls(buf *strings.Builder, block GoBlock) {
-	for _, decl := range block.TypeDecls {
+func writeTypeConstVarDeclsForBlock(buf *strings.Builder, block GoBlock) {
+	for _, decl := range sortTypeDecls(block.TypeDecls, block.Types) {
 		writeIndented(buf, decl)
 	}
 	for _, decl := range block.Consts {
@@ -126,9 +161,103 @@ func writeGoBlockDecls(buf *strings.Builder, block GoBlock) {
 	for _, decl := range block.VarDecls {
 		writeIndented(buf, decl)
 	}
+}
+
+func writeHelperDecls(buf *strings.Builder, setupFiles []SetupDocument) {
+	for _, doc := range setupFiles {
+		if doc.GoBlock == nil {
+			continue
+		}
+		for _, helper := range doc.GoBlock.Helpers {
+			writeFuncClosure(buf, helper.Name, helper)
+		}
+	}
+}
+
+func writeHelperDeclsForBlock(buf *strings.Builder, block GoBlock) {
 	for _, helper := range block.Helpers {
 		writeFuncClosure(buf, helper.Name, helper)
 	}
+}
+
+func sortTypeDecls(decls []string, types map[string]bool) []string {
+	type depInfo struct {
+		decl string
+		deps []string
+	}
+	var infos []depInfo
+	declNames := make(map[string]int)
+	for _, decl := range decls {
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, "", "package p\n"+decl, 0)
+		if err != nil {
+			continue
+		}
+		var typeName string
+		for _, d := range file.Decls {
+			gd, ok := d.(*ast.GenDecl)
+			if !ok || gd.Tok != token.TYPE {
+				continue
+			}
+			for _, spec := range gd.Specs {
+				ts, ok := spec.(*ast.TypeSpec)
+				if !ok {
+					continue
+				}
+				typeName = ts.Name.Name
+			}
+		}
+		var deps []string
+		ast.Inspect(file, func(n ast.Node) bool {
+			id, ok := n.(*ast.Ident)
+			if !ok {
+				return true
+			}
+			if id.Name == typeName {
+				return true
+			}
+			if types[id.Name] {
+				deps = append(deps, id.Name)
+			}
+			return true
+		})
+		infos = append(infos, depInfo{decl: decl, deps: deps})
+		declNames[typeName] = len(infos) - 1
+	}
+
+	inDegree := make(map[int]int)
+	adj := make(map[int][]int)
+	for i, info := range infos {
+		for _, dep := range info.deps {
+			if j, ok := declNames[dep]; ok {
+				adj[j] = append(adj[j], i)
+				inDegree[i]++
+			}
+		}
+	}
+
+	var sorted []string
+	var queue []int
+	for i := range infos {
+		if inDegree[i] == 0 {
+			queue = append(queue, i)
+		}
+	}
+	for len(queue) > 0 {
+		i := queue[0]
+		queue = queue[1:]
+		sorted = append(sorted, infos[i].decl)
+		for _, j := range adj[i] {
+			inDegree[j]--
+			if inDegree[j] == 0 {
+				queue = append(queue, j)
+			}
+		}
+	}
+	if len(sorted) == len(decls) {
+		return sorted
+	}
+	return decls
 }
 
 func writeSetupCalls(buf *strings.Builder, setupFiles []SetupDocument) {
