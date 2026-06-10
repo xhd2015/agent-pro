@@ -13,6 +13,7 @@ to scenario.
 ```
 <feature>-test-cases/
 ├── DOCTEST.md          # Overview: graph diagram + text tree + test case index
+│                       #   Must include a header section with how to run the tests
 ├── SETUP.md            # Root setup — shared state and preconditions for all tests
 ├── testdata/           # Fixtures: minimal tree structures for validation testing
 │   └── <fixture>/
@@ -229,6 +230,19 @@ sections; use only those relevant to the specific scenario:
 ## Exit Code
 - Expected exit code for CLI tools
 - e.g. exit code 0 on success, 1 on error
+```
+
+## DOCTEST.md Format
+
+The root `DOCTEST.md` serves as the entry point for the test suite. It must
+include a header section that tells readers how to execute all tests:
+
+```markdown
+## How to Run
+
+```sh
+doctest test ./
+```
 ```
 
 ## Verification
