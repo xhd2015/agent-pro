@@ -12,7 +12,7 @@ to scenario.
 
 ```
 <feature>-test-cases/
-├── README.md           # Overview: graph diagram + text tree + test case index
+├── DOCTEST.md          # Overview: graph diagram + text tree + test case index
 ├── SETUP.md            # Root setup — shared state and preconditions for all tests
 ├── testdata/           # Fixtures: minimal tree structures for validation testing
 │   └── <fixture>/

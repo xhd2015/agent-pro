@@ -14,8 +14,8 @@ func Run(dir string) error {
 	if !info.IsDir() {
 		return fmt.Errorf("not a directory: %s", dir)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "README.md")); err != nil {
-		return fmt.Errorf("%s: root must contain README.md", dir)
+	if _, err := os.Stat(filepath.Join(dir, "DOCTEST.md")); err != nil {
+		return fmt.Errorf("%s: root must contain DOCTEST.md", dir)
 	}
 	return filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {

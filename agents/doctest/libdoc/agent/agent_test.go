@@ -16,7 +16,7 @@ func TestGenerateCreatesExpectedFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
-	for _, name := range []string{"README.md", "SETUP.md"} {
+	for _, name := range []string{"DOCTEST.md", "SETUP.md"} {
 		if _, err := os.Stat(filepath.Join(outDir, name)); err != nil {
 			t.Fatalf("%s missing: %v", name, err)
 		}
@@ -44,7 +44,7 @@ func TestGenerateDefaultDirUsesWorkingDirectory(t *testing.T) {
 	if err := Generate(GenerateOptions{Idea: "default dir"}); err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(tmp, "doctest-test-cases", "README.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(tmp, "doctest-test-cases", "DOCTEST.md")); err != nil {
 		t.Fatalf("default README missing: %v", err)
 	}
 }
