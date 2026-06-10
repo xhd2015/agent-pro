@@ -447,3 +447,21 @@ func WriteGeneratedCases(dir string, cases []TreeCase, compileOnly bool, w io.Wr
 	}
 	return testFiles, nil
 }
+
+func FilterBySubDir(cases []TreeCase, root, subDir string) []TreeCase {
+	if subDir == "" || subDir == root {
+		return cases
+	}
+	relSubDir, err := filepath.Rel(root, subDir)
+	if err != nil || relSubDir == "." {
+		return cases
+	}
+	prefix := relSubDir + string(filepath.Separator)
+	var filtered []TreeCase
+	for _, tc := range cases {
+		if tc.Path == relSubDir || strings.HasPrefix(tc.Path, prefix) {
+			filtered = append(filtered, tc)
+		}
+	}
+	return filtered
+}

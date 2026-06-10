@@ -48,6 +48,7 @@ type Options struct {
 	Stderr     io.Writer
 	RemoveTemp bool
 	Count      int
+	SubDir     string
 }
 
 type ValidationError struct {

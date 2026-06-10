@@ -139,3 +139,43 @@ func TestWithArgsWithValidTree(t *testing.T) {
 		t.Fatalf("Test: %v", err)
 	}
 }
+
+func TestParseBuildOptionsRemoveTempDefault(t *testing.T) {
+	opts, _, err := parseBuildOptions([]string{"somedir"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.RemoveTemp {
+		t.Fatal("expected RemoveTemp=false by default, got true")
+	}
+}
+
+func TestParseBuildOptionsRemoveTempFlag(t *testing.T) {
+	opts, _, err := parseBuildOptions([]string{"--rm", "somedir"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !opts.RemoveTemp {
+		t.Fatal("expected RemoveTemp=true with --rm flag, got false")
+	}
+}
+
+func TestParseTestOptionsRemoveTempDefault(t *testing.T) {
+	opts, _, err := parseTestOptions([]string{"somedir"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.RemoveTemp {
+		t.Fatal("expected RemoveTemp=false by default, got true")
+	}
+}
+
+func TestParseTestOptionsRemoveTempFlag(t *testing.T) {
+	opts, _, err := parseTestOptions([]string{"--rm", "somedir"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !opts.RemoveTemp {
+		t.Fatal("expected RemoveTemp=true with --rm flag, got false")
+	}
+}
