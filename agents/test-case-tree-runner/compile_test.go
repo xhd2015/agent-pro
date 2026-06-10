@@ -396,7 +396,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {}
 		t.Fatalf("build: %v", err)
 	}
 	out := stderr.String()
-	if !strings.Contains(out, "test-case-tree-runner:") {
+	if !strings.Contains(out, "doctest:") {
 		t.Fatalf("expected source dir in output, got %q", out)
 	}
 	if !strings.Contains(out, "─── 1 test cases") {

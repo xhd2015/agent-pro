@@ -38,7 +38,7 @@ func Build(dir string, opts core.Options) error {
 	}
 
 	if opts.Verbose {
-		fmt.Fprintf(w, "test-case-tree-runner: %s\n\n", dir)
+		fmt.Fprintf(w, "doctest: %s\n\n", dir)
 		cases, err = core.DiscoverTreeCasesVerbose(dir, w)
 		if err != nil {
 			return err
@@ -49,7 +49,7 @@ func Build(dir string, opts core.Options) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(w, "test-case-tree-runner: %s\n", dir)
+		fmt.Fprintf(w, "doctest: %s\n", dir)
 		fmt.Fprintf(w, "─── %d test cases\n", len(cases))
 	}
 
