@@ -1,12 +1,10 @@
 package runner
 
 import (
-	"bytes"
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
 
+	"github.com/xhd2015/less-flags"
 	runnerbuild "github.com/xhd2015/agent-pro/agents/test-case-tree-runner/build"
 	"github.com/xhd2015/agent-pro/agents/test-case-tree-runner/core"
 )
@@ -16,56 +14,48 @@ func Build(dir string) error {
 }
 
 func BuildArgs(args []string) error {
-	return runTestCaseTreeRunner("build", args)
-}
-
-func Test(args []string) error {
-	return runTestCaseTreeRunner("test", args)
-}
-
-func runTestCaseTreeRunner(command string, args []string) error {
-	root, err := findRepoRoot()
+	opts, remainArgs, err := parseBuildOptions(args)
 	if err != nil {
 		return err
 	}
-	runnerDir := filepath.Join(root, "agents", "test-case-tree-runner")
-	cmdArgs := append([]string{"run", runnerDir, command, "--rm"}, args...)
-	cmd := exec.Command("go", cmdArgs...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%s failed: %w", command, err)
+	if len(remainArgs) != 1 {
+		return fmt.Errorf("build requires <dir>")
 	}
-	return nil
+	return runnerbuild.Build(remainArgs[0], opts)
 }
 
-func findRepoRoot() (string, error) {
-	wd, err := os.Getwd()
+func Test(args []string) error {
+	opts, remainArgs, err := parseTestOptions(args)
 	if err != nil {
-		return "", err
+		return err
 	}
-	for dir := wd; ; dir = filepath.Dir(dir) {
-		if isAgentProRoot(dir) {
-			return dir, nil
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
+	if len(remainArgs) != 1 {
+		return fmt.Errorf("test requires <dir>")
 	}
-	return "", fmt.Errorf("could not locate agent-pro repository root from %s", wd)
+	return runnerbuild.Test(remainArgs[0], opts)
 }
 
-func isAgentProRoot(dir string) bool {
-	data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+func parseBuildOptions(args []string) (core.Options, []string, error) {
+	opts := core.Options{Stderr: os.Stderr, RemoveTemp: true}
+	remainArgs, err := lessflags.Bool("-v,--verbose", &opts.Verbose).
+		Bool("--rm", &opts.RemoveTemp).
+		String("--gen-dir", &opts.GenDir).
+		Int("-count", &opts.Count).
+		Parse(args)
 	if err != nil {
-		return false
+		return core.Options{}, nil, err
 	}
-	if !bytes.Contains(data, []byte("module github.com/xhd2015/agent-pro")) {
-		return false
+	return opts, remainArgs, nil
+}
+
+func parseTestOptions(args []string) (core.Options, []string, error) {
+	opts := core.Options{Stderr: os.Stderr, RemoveTemp: true}
+	remainArgs, err := lessflags.Bool("-v,--verbose", &opts.Verbose).
+		Bool("--rm", &opts.RemoveTemp).
+		Int("-count", &opts.Count).
+		Parse(args)
+	if err != nil {
+		return core.Options{}, nil, err
 	}
-	if _, err := os.Stat(filepath.Join(dir, "agents", "test-case-tree-runner")); err != nil {
-		return false
-	}
-	return true
+	return opts, remainArgs, nil
 }

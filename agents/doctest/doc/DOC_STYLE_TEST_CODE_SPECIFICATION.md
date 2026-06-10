@@ -7,6 +7,14 @@ This specification builds on top of [doc-style-test-specification](./DOC_STYLE_T
 It adds executable Go code to doc-style test documents, turning prose test cases
 into runnable, verifiable tests.
 
+The code block is just additional to the original doc, so what really matters is the doc itself, not the code.
+
+`SETUP.md` and `ASSERT.md` must not only have code blocks, they must have meaningful description of steps to derive the code.
+
+**NOTE: code is supplementary, the human-readable steps are precious.**
+
+Never omit the description, and write merely code block.
+
 ## Go Code Block
 
 Each SETUP.md or ASSERT.md may carry a **single** Go code block at the very end
@@ -98,7 +106,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error)
 
 ## Validation Rules
 
-All files are validated by `test-case-tree-runner build`. Rules are checked
+All files are validated by `doctest build`. Rules are checked
 in order; the first violation for each file is reported. Multiple violations
 across different files are collected and reported together.
 
@@ -362,7 +370,7 @@ type Response struct {
 }
 
 func Run(t *testing.T, req *Request) (*Response, error) {
-    cmd := exec.Command("test-case-tree-runner", "compile", req.InputDir)
+    cmd := exec.Command("doctest", "build", req.InputDir)
     out, _ := cmd.CombinedOutput()
     return &Response{
         Output: string(out),
@@ -389,7 +397,7 @@ req.InputDir = filepath.Join(DOCTEST_ROOT, "testdata", "child-redefines-request"
 
 ```sh
 # works like go build
-test-case-tree-runner build tests/validation
+doctest build tests/validation
 ```
 
 ## Execution
@@ -398,7 +406,7 @@ Run all validation tests from the tree root:
 
 ```sh
 # works like go test
-test-case-tree-runner test tests/validation
+doctest test tests/validation
 ```
 
 This discovers every leaf (each `verify-*/` directory with an `ASSERT.md`),

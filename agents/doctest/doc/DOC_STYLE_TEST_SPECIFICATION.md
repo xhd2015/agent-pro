@@ -33,7 +33,7 @@ to scenario.
 ```
 
 - Any directory containing an `ASSERT.md` is a **runnable leaf**.
-- Directories without `ASSERT.md` are **abstract grouping/decision nodes**.
+- Directories without `ASSERT.md` are **abstract grouping/decision nodes**, and must have a `SETUP.md`
 - Every runnable leaf **must** have its own `SETUP.md`.
 
 ### Why Every Directory Needs a SETUP.md
