@@ -53,12 +53,13 @@ func Run(t *testing.T, req *Request) (*Response, error) {
     ctx, cancel := context.WithTimeout(context.Background(), req.Timeout)
     defer cancel()
 
+    repoRoot := filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../.."))
     bin := strings.TrimSpace(os.Getenv("DOCTEST_BIN"))
     var cmd *exec.Cmd
     if bin != "" {
         cmd = exec.CommandContext(ctx, bin, req.Args...)
     } else {
-        args := append([]string{"run", "./agents/doctest"}, req.Args...)
+        args := append([]string{"run", filepath.Join(repoRoot, "agents/doctest")}, req.Args...)
         cmd = exec.CommandContext(ctx, "go", args...)
     }
     cmd.Dir = req.WorkDir
@@ -89,4 +90,3 @@ func Run(t *testing.T, req *Request) (*Response, error) {
     return resp, err
 }
 ```
-

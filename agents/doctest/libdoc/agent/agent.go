@@ -42,8 +42,12 @@ func FillCode(dir string) error {
 	if strings.TrimSpace(dir) == "" {
 		return fmt.Errorf("agent fill-code requires <target-dir>")
 	}
-	if _, err := os.Stat(dir); err != nil {
+	info, err := os.Stat(dir)
+	if err != nil {
 		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("not a directory: %s", dir)
 	}
 	return nil
 }
