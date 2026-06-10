@@ -42,11 +42,17 @@ func Test(dir string, opts core.Options) error {
 		if err != nil {
 			return err
 		}
+		if opts.SubDir != "" {
+			cases = core.FilterBySubDir(cases, dir, opts.SubDir)
+		}
 		fmt.Fprintf(w, "─── %d test cases\n\n", len(cases))
 	} else {
 		cases, err = core.DiscoverTreeCases(dir)
 		if err != nil {
 			return err
+		}
+		if opts.SubDir != "" {
+			cases = core.FilterBySubDir(cases, dir, opts.SubDir)
 		}
 		fmt.Fprintf(w, "doctest: %s\n", dir)
 		fmt.Fprintf(w, "─── %d test cases\n", len(cases))

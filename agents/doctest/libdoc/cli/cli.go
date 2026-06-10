@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -164,7 +165,12 @@ func runRunner(args []string, usage string, fn func([]string) error) error {
 		fmt.Print(usage)
 		return nil
 	}
-	return fn(args)
+	err := fn(args)
+	if errors.Is(err, runner.ErrNoTestsFound) {
+		fmt.Fprintln(os.Stderr, "no tests found")
+		return nil
+	}
+	return err
 }
 
 func runSkill(args []string) error {

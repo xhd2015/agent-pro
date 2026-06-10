@@ -405,8 +405,12 @@ doctest build tests/validation
 Run all validation tests from the tree root:
 
 ```sh
-# works like go test
+# works like go test, run all tests
 doctest test tests/validation
+
+# run individual group of tests in a sub dir
+doctest test tests/validation/group-a
+doctest test tests/validation/group-a/nested-sub-group
 ```
 
 This discovers every leaf (each `verify-*/` directory with an `ASSERT.md`),
