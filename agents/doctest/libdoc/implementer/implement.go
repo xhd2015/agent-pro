@@ -56,12 +56,12 @@ func Run(opts Options) error {
 		agentRunner = "opencode"
 	}
 
-	threadID := os.Getenv("CODEX_THREAD_ID")
-	if threadID == "" {
-		return fmt.Errorf("CODEX_THREAD_ID must be set")
+	srcs, err := resolveSessionID()
+	if err != nil {
+		return err
 	}
 
-	sessionDir, isNew, err := findOrCreateSession(threadID)
+	sessionDir, isNew, err := findOrCreateSession(srcs.sessionID, srcs)
 	if err != nil {
 		return fmt.Errorf("session: %w", err)
 	}
@@ -116,9 +116,9 @@ func Run(opts Options) error {
 	if isNew {
 		sid := capture.sessionID
 		if sid == "" {
-			sid = threadID
+			sid = srcs.sessionID
 		}
-		if updateErr := updateOpencodeSessionID(sessionDir, sid); updateErr != nil {
+		if updateErr := updateSessionMeta(sessionDir, sid, srcs); updateErr != nil {
 			return fmt.Errorf("update session meta: %w", updateErr)
 		}
 	}
@@ -137,6 +137,105 @@ func Run(opts Options) error {
 	}
 
 	return nil
+}
+
+type sessionIDSources struct {
+	sessionID          string
+	codexThreadID      string
+	opencodeSessionID  string
+}
+
+func resolveSessionID() (*sessionIDSources, error) {
+	if v := os.Getenv("DOCTEST_AGENT_IMPLEMENTER_SESSION_ID"); v != "" {
+		return &sessionIDSources{
+			sessionID:         v,
+			codexThreadID:     os.Getenv("CODEX_THREAD_ID"),
+		}, nil
+	}
+	if v := os.Getenv("CODEX_THREAD_ID"); v != "" {
+		return &sessionIDSources{
+			sessionID:     v,
+			codexThreadID: v,
+		}, nil
+	}
+	if v, err := discoverOpencodeSessionID(); err == nil && v != "" {
+		return &sessionIDSources{
+			sessionID:         v,
+			opencodeSessionID: v,
+		}, nil
+	}
+	return nil, fmt.Errorf("no session ID resolved: must be run from codex or opencode (set DOCTEST_AGENT_IMPLEMENTER_SESSION_ID, or CODEX_THREAD_ID, or run under opencode)")
+}
+
+func discoverOpencodeSessionID() (string, error) {
+	if !hasOpencodeAncestor() {
+		return "", fmt.Errorf("no opencode ancestor in process tree")
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("getwd: %w", err)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("home: %w", err)
+	}
+	dbPath := filepath.Join(home, ".local", "share", "opencode", "opencode.db")
+	if _, err := os.Stat(dbPath); err != nil {
+		return "", fmt.Errorf("opencode db not found at %s: %w", dbPath, err)
+	}
+	sessionID, err := queryOpencodeSession(dbPath, wd)
+	if err != nil {
+		return "", fmt.Errorf("query opencode session: %w", err)
+	}
+	return sessionID, nil
+}
+
+func hasOpencodeAncestor() bool {
+	pid := os.Getppid()
+	for i := 0; i < 50; i++ {
+		if pid <= 1 {
+			return false
+		}
+		cmd, err := getProcessName(pid)
+		if err != nil {
+			return false
+		}
+		if cmd == "opencode" {
+			return true
+		}
+		ppid, err := getParentPID(pid)
+		if err != nil || ppid == pid || ppid <= 1 {
+			return false
+		}
+		pid = ppid
+	}
+	return false
+}
+
+func getProcessName(pid int) (string, error) {
+	out, err := exec.Command("ps", "-o", "comm=", "-p", strconv.Itoa(pid)).Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func getParentPID(pid int) (int, error) {
+	out, err := exec.Command("ps", "-o", "ppid=", "-p", strconv.Itoa(pid)).Output()
+	if err != nil {
+		return 0, err
+	}
+	return strconv.Atoi(strings.TrimSpace(string(out)))
+}
+
+func queryOpencodeSession(dbPath, workDir string) (string, error) {
+	escaped := strings.ReplaceAll(workDir, "'", "''")
+	query := fmt.Sprintf("SELECT id FROM session WHERE directory = '%s' ORDER BY time_updated DESC LIMIT 1;", escaped)
+	out, err := exec.Command("sqlite3", dbPath, query).Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 func runAgent(agentRunner, prompt, sessionID string, rawLog *sessionIDCapture) (string, error) {
@@ -211,6 +310,9 @@ func HandleYieldPendingQuestions(args []string) error {
 }
 
 func sessionsBase() (string, error) {
+	if v := os.Getenv("DOCTEST_DEBUG_SESSION_HOME"); v != "" {
+		return v, nil
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("get home dir: %w", err)
@@ -219,12 +321,14 @@ func sessionsBase() (string, error) {
 }
 
 type meta struct {
-	CodexThreadID     string    `json:"codex_thread_id"`
-	OpencodeSessionID string    `json:"opencode_session_id,omitempty"`
-	CreatedAt         time.Time `json:"created_at"`
+	DoctestAgentImplementerSessionID string    `json:"doctest_agent_implementer_session_id,omitempty"`
+	MainAgentCodexThreadID           string    `json:"main_agent_codex_thread_id,omitempty"`
+	MainAgentOpencodeSessionID       string    `json:"main_agent_opencode_session_id,omitempty"`
+	OpencodeSessionID                string    `json:"opencode_session_id,omitempty"`
+	CreatedAt                        time.Time `json:"created_at"`
 }
 
-func findOrCreateSession(threadID string) (dir string, isNew bool, err error) {
+func findOrCreateSession(threadID string, srcs *sessionIDSources) (dir string, isNew bool, err error) {
 	base, err := sessionsBase()
 	if err != nil {
 		return "", false, err
@@ -235,7 +339,7 @@ func findOrCreateSession(threadID string) (dir string, isNew bool, err error) {
 		return dir, false, nil
 	}
 
-	dir, err = createSession(base, threadID)
+	dir, err = createSession(base, threadID, srcs)
 	if err != nil {
 		return "", false, err
 	}
@@ -265,7 +369,7 @@ func findSession(base, threadID string) string {
 			if err := json.Unmarshal(data, &m); err != nil {
 				continue
 			}
-			if m.CodexThreadID == threadID {
+			if m.DoctestAgentImplementerSessionID == threadID {
 				return sessDir
 			}
 		}
@@ -273,10 +377,10 @@ func findSession(base, threadID string) string {
 	return ""
 }
 
-func createSession(base, threadID string) (string, error) {
+func createSession(base, threadID string, srcs *sessionIDSources) (string, error) {
 	now := time.Now()
 	dateDir := now.Format("2006/01/02")
-	sessID := fmt.Sprintf("sess_%d", now.UnixNano())
+	sessID := fmt.Sprintf("sess_%s_%d", now.Format("150405"), now.UnixNano())
 	sessDir := filepath.Join(base, dateDir, sessID)
 
 	if err := os.MkdirAll(sessDir, 0755); err != nil {
@@ -284,8 +388,10 @@ func createSession(base, threadID string) (string, error) {
 	}
 
 	m := meta{
-		CodexThreadID: threadID,
-		CreatedAt:     now,
+		DoctestAgentImplementerSessionID: threadID,
+		MainAgentCodexThreadID:           srcs.codexThreadID,
+		MainAgentOpencodeSessionID:       srcs.opencodeSessionID,
+		CreatedAt:                        now,
 	}
 	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
@@ -351,7 +457,7 @@ func readOpencodeSessionID(sessionDir string) string {
 	return m.OpencodeSessionID
 }
 
-func updateOpencodeSessionID(sessionDir, sessionID string) error {
+func updateSessionMeta(sessionDir, innerSessionID string, srcs *sessionIDSources) error {
 	metaPath := filepath.Join(sessionDir, "meta.json")
 	data, err := os.ReadFile(metaPath)
 	if err != nil {
@@ -361,7 +467,11 @@ func updateOpencodeSessionID(sessionDir, sessionID string) error {
 	if err := json.Unmarshal(data, &m); err != nil {
 		return err
 	}
-	m.OpencodeSessionID = sessionID
+	m.OpencodeSessionID = innerSessionID
+	if srcs != nil {
+		m.MainAgentCodexThreadID = srcs.codexThreadID
+		m.MainAgentOpencodeSessionID = srcs.opencodeSessionID
+	}
 	newData, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return err

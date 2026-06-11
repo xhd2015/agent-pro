@@ -1,7 +1,7 @@
 ## Expected
 - Exit code 0.
 - Session directory is created with `meta.json`.
-- `meta.json` contains `codex_thread_id` and `opencode_session_id`.
+- `meta.json` contains `main_agent_codex_thread_id` and `opencode_session_id`.
 - `opencode_session_id` is non-empty.
 
 ```go
@@ -22,8 +22,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
         t.Fatalf("exit code = %d\nstderr:\n%s", resp.ExitCode, resp.Stderr)
     }
 
-    home, _ := os.UserHomeDir()
-    sessionsDir := filepath.Join(home, ".agent-pro", "dedicated-agents", "doctest-agent-implementer", "sessions")
+    sessionsDir := sessionsDir()
 
     today := time.Now().Format("2006/01/02")
     dateDir := filepath.Join(sessionsDir, today)
@@ -60,15 +59,15 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
         t.Fatalf("cannot read meta.json: %v", readErr)
     }
     var meta struct {
-        CodexThreadID     string `json:"codex_thread_id"`
-        OpencodeSessionID string `json:"opencode_session_id"`
-        CreatedAt         string `json:"created_at"`
+        MainAgentCodexThreadID string `json:"main_agent_codex_thread_id"`
+        OpencodeSessionID      string `json:"opencode_session_id"`
+        CreatedAt              string `json:"created_at"`
     }
     if jsonErr := json.Unmarshal(data, &meta); jsonErr != nil {
         t.Fatalf("invalid meta.json: %v", jsonErr)
     }
-    if meta.CodexThreadID == "" {
-        t.Fatal("meta.json missing codex_thread_id")
+    if meta.MainAgentCodexThreadID == "" {
+        t.Fatal("meta.json missing main_agent_codex_thread_id")
     }
     if meta.OpencodeSessionID == "" {
         t.Fatal("meta.json missing opencode_session_id")

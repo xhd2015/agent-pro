@@ -1,9 +1,6 @@
 ## Expected
-- When NOT running under opencode: non-zero exit, stderr lists session ID options.
-- When running under opencode: auto-discovery may succeed, test skips.
-
-## Exit Code
-- Non-zero when no session ID source is available.
+- When NOT running under opencode: exit code non-zero, stderr lists all 3 options.
+- When running under opencode: auto-discovery succeeds, test skips.
 
 ```go
 import (
@@ -15,14 +12,15 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
     if resp.ExitCode == 0 {
         t.Skip("auto-discovery succeeded (running under opencode)")
     }
+
     if !strings.Contains(resp.Stderr, "must be run from codex or opencode") {
-        t.Fatalf("expected error about session ID, got:\n%s", resp.Stderr)
+        t.Fatalf("stderr missing 'must be run from codex or opencode':\n%s", resp.Stderr)
     }
     if !strings.Contains(resp.Stderr, "DOCTEST_AGENT_IMPLEMENTER_SESSION_ID") {
-        t.Fatalf("stderr missing DOCTEST_AGENT_IMPLEMENTER_SESSION_ID:\n%s", resp.Stderr)
+        t.Fatalf("stderr missing 'DOCTEST_AGENT_IMPLEMENTER_SESSION_ID':\n%s", resp.Stderr)
     }
     if !strings.Contains(resp.Stderr, "CODEX_THREAD_ID") {
-        t.Fatalf("stderr missing CODEX_THREAD_ID:\n%s", resp.Stderr)
+        t.Fatalf("stderr missing 'CODEX_THREAD_ID':\n%s", resp.Stderr)
     }
 }
 ```
