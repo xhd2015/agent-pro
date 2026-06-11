@@ -23,9 +23,11 @@ Commands:
   validate <dir>
   build <dir>
   test <dir>
-  skill --list
-  skill doc-spec show|install
-  skill code-spec show|install
+   skill --list
+   skill doc-spec show|install
+   skill code-spec show|install
+   skill tdd show|install
+   skill implementer show|install
 
 Run doctest <command> --help for command-specific options.
 `
@@ -43,6 +45,8 @@ Options:
 const skillUsage = `Usage: doctest skill --list
        doctest skill doc-spec show|install
        doctest skill code-spec show|install
+       doctest skill tdd show|install
+       doctest skill implementer show|install
 `
 
 const buildUsage = `Usage: doctest build [-v|--verbose] [--rm] [--gen-dir DIR] [-count=N] <dir>
@@ -235,10 +239,12 @@ func runSkill(args []string) error {
 	if args[0] == "--list" {
 		fmt.Println("doc-spec")
 		fmt.Println("code-spec")
+		fmt.Println("tdd")
+		fmt.Println("implementer")
 		return nil
 	}
 	if len(args) < 2 {
-		return fmt.Errorf("skill requires doc-spec or code-spec plus show or install")
+		return fmt.Errorf("skill requires doc-spec, code-spec, tdd, or implementer plus show or install")
 	}
 	switch args[1] {
 	case "show":

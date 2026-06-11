@@ -3,19 +3,41 @@ package implementer
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	agentprovider "github.com/xhd2015/agent-pro/agent/cli/provider"
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
 	agentexec "github.com/xhd2015/agent-pro/agent/exec"
-	"github.com/xhd2015/agent-pro/agent/session"
 )
+
+//go:embed PROMPT.md
+var promptContent string
+
+func PromptContent() string {
+	return promptContent
+}
+
+func agentPrompt() string {
+	s := promptContent
+	if strings.HasPrefix(s, "---\n") {
+		rest := s[4:]
+		if idx := strings.Index(rest, "\n---\n"); idx >= 0 {
+			s = rest[idx+5:]
+			if strings.HasPrefix(s, "\n") {
+				s = s[1:]
+			}
+		}
+	}
+	return s
+}
 
 type Options struct {
 	Prompt      string
@@ -35,21 +57,13 @@ func Run(opts Options) error {
 	}
 
 	threadID := os.Getenv("CODEX_THREAD_ID")
-	var sessionDir string
 	if threadID == "" {
-		threadID = fmt.Sprintf("impl_%d", time.Now().UnixNano())
-		os.Setenv("CODEX_THREAD_ID", threadID)
-		var err error
-		sessionDir, err = session.Dir("doctest-agent", threadID)
-		if err != nil {
-			return fmt.Errorf("create session dir: %w", err)
-		}
-	} else {
-		var err error
-		sessionDir, err = session.Dir("doctest-agent", threadID)
-		if err != nil {
-			return fmt.Errorf("resolve session dir: %w", err)
-		}
+		return fmt.Errorf("CODEX_THREAD_ID must be set")
+	}
+
+	sessionDir, isNew, err := findOrCreateSession(threadID)
+	if err != nil {
+		return fmt.Errorf("session: %w", err)
 	}
 
 	tempDir, err := os.MkdirTemp("", "doctest-agent-*")
@@ -70,18 +84,29 @@ func Run(opts Options) error {
 	pathEntry := tempDir + string(filepath.ListSeparator)
 	os.Setenv("PATH", pathEntry+os.Getenv("PATH"))
 
-	questionFile := filepath.Join(tempDir, "questions.jsonl")
+	questionsDir := filepath.Join(sessionDir, "questions")
+	if err := os.MkdirAll(questionsDir, 0755); err != nil {
+		return fmt.Errorf("create questions dir: %w", err)
+	}
+	questionFile := newQuestionsFile(questionsDir)
 	os.Setenv("QUESTION_FIFO", questionFile)
 
 	if opts.MockConfig != "" {
 		os.Setenv("FAKE_CODEX_MOCK_CONFIG", opts.MockConfig)
 	}
 
-	fullPrompt := prompt
+	var fullPrompt string
+	if isNew {
+		fullPrompt = agentPrompt() + "\n\n---\n\n<user_request>\n" + prompt + "\n</user_request>\n"
+	} else {
+		fullPrompt = prompt
+	}
 	output, err := runAgent(agentRunner, fullPrompt, threadID, sessionDir)
 	if err != nil {
 		return fmt.Errorf("sub-agent failed: %w", err)
 	}
+
+	fmt.Print(output)
 
 	f, fErr := os.Open(questionFile)
 	if fErr == nil {
@@ -89,12 +114,11 @@ func Run(opts Options) error {
 		var buf bytes.Buffer
 		buf.ReadFrom(f)
 		if buf.Len() > 0 {
+			fmt.Print("\n\n---\nQUESTIONS\n---\n\n")
 			fmt.Print(buf.String())
-			return nil
 		}
 	}
 
-	fmt.Print(output)
 	return nil
 }
 
@@ -142,6 +166,10 @@ func HandleYieldPendingQuestions(args []string) error {
 		var input struct {
 			ID       string `json:"id"`
 			Question string `json:"question"`
+			Options  []struct {
+				Option      string `json:"option"`
+				Explanation string `json:"explanation"`
+			} `json:"options"`
 		}
 		if err := json.Unmarshal([]byte(arg), &input); err != nil || input.Question == "" {
 			continue
@@ -155,8 +183,117 @@ func HandleYieldPendingQuestions(args []string) error {
 			"id":       id,
 			"question": input.Question,
 		}
+		if len(input.Options) > 0 {
+			entry["options"] = input.Options
+		}
 		data, _ := json.Marshal(entry)
 		fmt.Fprintf(f, "%s\n", string(data))
 	}
 	return nil
+}
+
+func sessionsBase() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("get home dir: %w", err)
+	}
+	return filepath.Join(home, ".agent-pro", "dedicated-agents", "doctest-agent-implementer", "sessions"), nil
+}
+
+type meta struct {
+	CodexThreadID string    `json:"codex_thread_id"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+func findOrCreateSession(threadID string) (dir string, isNew bool, err error) {
+	base, err := sessionsBase()
+	if err != nil {
+		return "", false, err
+	}
+
+	dir = findSession(base, threadID)
+	if dir != "" {
+		return dir, false, nil
+	}
+
+	dir, err = createSession(base, threadID)
+	if err != nil {
+		return "", false, err
+	}
+	return dir, true, nil
+}
+
+func findSession(base, threadID string) string {
+	today := time.Now()
+	for i := 0; i < 7; i++ {
+		dateDir := today.AddDate(0, 0, -i).Format("2006/01/02")
+		dayPath := filepath.Join(base, dateDir)
+		entries, err := os.ReadDir(dayPath)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() || !strings.HasPrefix(entry.Name(), "sess_") {
+				continue
+			}
+			sessDir := filepath.Join(dayPath, entry.Name())
+			metaPath := filepath.Join(sessDir, "meta.json")
+			data, err := os.ReadFile(metaPath)
+			if err != nil {
+				continue
+			}
+			var m meta
+			if err := json.Unmarshal(data, &m); err != nil {
+				continue
+			}
+			if m.CodexThreadID == threadID {
+				return sessDir
+			}
+		}
+	}
+	return ""
+}
+
+func createSession(base, threadID string) (string, error) {
+	now := time.Now()
+	dateDir := now.Format("2006/01/02")
+	sessID := fmt.Sprintf("sess_%d", now.UnixNano())
+	sessDir := filepath.Join(base, dateDir, sessID)
+
+	if err := os.MkdirAll(sessDir, 0755); err != nil {
+		return "", fmt.Errorf("create session dir: %w", err)
+	}
+
+	m := meta{
+		CodexThreadID: threadID,
+		CreatedAt:     now,
+	}
+	data, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("marshal meta: %w", err)
+	}
+	metaPath := filepath.Join(sessDir, "meta.json")
+	if err := os.WriteFile(metaPath, append(data, '\n'), 0644); err != nil {
+		return "", fmt.Errorf("write meta.json: %w", err)
+	}
+
+	return sessDir, nil
+}
+
+func newQuestionsFile(dir string) string {
+	base := time.Now().Format("2006_01_02_15_04_05")
+	name := base + ".json"
+	path := filepath.Join(dir, name)
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		os.WriteFile(path, nil, 0644)
+		return path
+	}
+	for n := 1; ; n++ {
+		name := base + "_" + strconv.Itoa(n) + ".json"
+		path := filepath.Join(dir, name)
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			os.WriteFile(path, nil, 0644)
+			return path
+		}
+	}
 }

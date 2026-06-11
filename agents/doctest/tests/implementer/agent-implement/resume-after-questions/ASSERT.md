@@ -1,6 +1,10 @@
 ## Expected
 - Exit code 0.
 - The followup is delivered on the same session.
+- The PROMPT template is not included (resume skips template).
+
+## Exit Code
+- Exit code 0.
 
 ```go
 import (
@@ -17,6 +21,9 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
     }
     if !strings.Contains(resp.Stdout, "resumed and done") {
         t.Fatalf("stdout missing expected text:\n%s", resp.Stdout)
+    }
+    if strings.Contains(resp.Stdout, "Step 1: Read the Test Tree") {
+        t.Fatalf("stdout should not contain PROMPT template text on resume:\n%s", resp.Stdout)
     }
 }
 ```

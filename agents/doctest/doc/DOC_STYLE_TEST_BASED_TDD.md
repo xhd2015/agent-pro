@@ -4,8 +4,8 @@ description: adversarial two-agent TDD with doc-style tests
 ---
 
 This document defines the workflow for an **adversarial two-agent TDD system**
-built on [doc-style tests](./DOC_STYLE_TEST_SPECIFICATION.md) with
-[executable Go code](./DOC_STYLE_TEST_CODE_SPECIFICATION.md).
+built on doc-style tests(see `doctest skill doc-spec show`) with
+[executable Go code](see `doctest skill code-spec show`).
 
 The main agent writes and seals the tests. The sub-agent implements code to
 make them pass. The two agents are adversarial: the main agent verifies that
@@ -28,10 +28,10 @@ implementation code. Its responsibilities:
 
 The main agent must understand:
 
-- **[DOC_STYLE_TEST_SPECIFICATION.md](./DOC_STYLE_TEST_SPECIFICATION.md)** —
+- **`doctest skill doc-spec show`** —
   how to structure test cases as markdown decision trees with `SETUP.md` and
   `ASSERT.md`
-- **[DOC_STYLE_TEST_CODE_SPECIFICATION.md](./DOC_STYLE_TEST_CODE_SPECIFICATION.md)** —
+- **`doctest skill code-spec show`** —
   how to embed executable Go code in `SETUP.md` and `ASSERT.md`, including
   function signatures for `Setup`, `Run`, and `Assert`
 
@@ -105,17 +105,14 @@ The prompt should include:
 - A concise summary of the feature and its expected behaviour
 - The test tree structure and what each leaf covers
 - The fact that tests are sealed (staged) and must not be modified
-- Instructions to call `yield-pending-questions` when clarification is needed
 
 ### Phase 6: Handle Sub-Agent Questions
 
-The sub-agent may encounter ambiguity during implementation and call
-`yield-pending-questions`. This causes `doctest agent implement` to exit,
-printing the questions to stdout and writing them to a question file.
+The sub-agent may encounter ambiguity during implementation, and it would return questions to stdout and wait for your followup.
 
 When this happens:
 
-1. Read the questions from the output (or question file).
+1. Read the questions from the output.
 2. Attempt to resolve based on the design document and test expectations.
 3. If the design document and tests are sufficient to answer, provide the
    answer directly.
@@ -125,11 +122,11 @@ When this happens:
 Once answers are ready, feed them back by re-invoking the sub-agent:
 
 ```sh
+# invoke with followup
 doctest agent implement "<answers to questions>"
 ```
 
-The CLI detects the existing session via the `CODEX_THREAD_ID` environment
-variable and sends the message as a followup on the same thread. The sub-agent
+The CLI sends the message as a followup on the same thread. The sub-agent
 resumes its context and continues implementation.
 
 This re-invoke loop may repeat multiple times until the sub-agent reports
@@ -159,7 +156,7 @@ found, evaluate each one:
 **Step 2 — Run tests:**
 
 ```sh
-doctest test ./
+doctest test -v ./tests
 ```
 
 All tests must pass (GREEN). If any test fails, feed the failure output back
@@ -169,99 +166,3 @@ to the sub-agent for correction. Repeat until all tests pass.
 
 Summarize the results to the user: how many tests passed, any test
 modifications accepted (with rationale).
-
-## Sub-Agent Interface
-
-### `doctest agent implement "<prompt>"`
-
-A blocking command. Spawns a sub-agent with the given prompt and waits until
-the sub-agent either reports completion or yields questions.
-
-**On first call** — a new sub-agent session is created. The thread ID is stored
-in the `CODEX_THREAD_ID` environment variable and persisted to a session file.
-
-**On subsequent calls** — the CLI reads `CODEX_THREAD_ID` from the environment,
-finds the existing session, and sends the message as a followup on the same
-thread. The main agent does not need to track or pass the thread ID explicitly.
-
-The sub-agent:
-
-- Reads the test tree at the current working directory
-- Implements code to make all tests pass
-- Writes implementation files as needed
-- Calls `yield-pending-questions` when blocked on ambiguity (command exits)
-- Reports completion when all tests pass (command exits with status 0)
-
-Options:
-
-- `--agent-runner RUNNER` — agent runner to use (default: `opencode`)
-
-### `yield-pending-questions`
-
-A CLI tool available to the sub-agent. Implemented as a separate binary
-(dispatched via `os.Args[0]` from the same executable, following the same
-pattern as `add-pending-questions`). The `doctest agent implement` command
-copies itself to a temp directory as `yield-pending-questions` and prepends
-that directory to `PATH`.
-
-When called by the sub-agent, it writes one or more questions as JSON to a
-named FIFO known to the main agent. The `doctest agent implement` command
-then exits, printing the questions. The main agent resolves them and
-re-invokes `doctest agent implement "<answers>"` to feed answers back on the
-same thread.
-
-The question format includes:
-
-- `id` — unique identifier
-- `question` — the question text
-- `options` (optional) — multiple-choice options
-
-## Continuity
-
-The sub-agent session is identified by a thread ID stored in the
-`CODEX_THREAD_ID` environment variable. The first call to
-`doctest agent implement` creates the session; every subsequent call
-automatically reads `CODEX_THREAD_ID`, locates the existing session, and sends
-the message as a followup on the same thread.
-
-The main agent does not need to pass `--continue` or manage thread IDs
-explicitly — it simply invokes `doctest agent implement "<message>"` and the
-CLI handles session routing transparently.
-
-## Example: Full Cycle
-
-```sh
-# Phase 1-2: Write tests (directories + markdown + Go code blocks)
-# ... (manual or via agent generate)
-
-# Phase 3: Confirm RED
-doctest test -v ./tests/my-feature
-# Output: 15 tests, 15 failures (all "error not implemented")
-
-# Phase 4: Seal
-git add ./tests/my-feature
-
-# Phase 5: Handoff (first call — creates session, stores CODEX_THREAD_ID)
-doctest agent implement \
-  "Feature: a CLI tool that validates JSON files.
-   Test tree: tests/my-feature/
-   - mode-validate/: valid JSON passes, invalid JSON fails
-   - mode-stdin/: reads from stdin when no file arg given
-   - mode-multiple/: processes multiple files
-   - error-invalid-json/: reports parse errors with line numbers
-   - error-file-not-found/: reports missing files
-   Tests are sealed — do not modify test files."
-
-# Phase 6: Sub-agent yields questions → command exits
-# Main agent resolves, re-invokes (same CODEX_THREAD_ID, same session)
-doctest agent implement \
-  "Regarding error-file-not-found: the error message should match the
-   format 'file not found: <path>'. For mode-stdin: use '-' as the
-   filename to indicate stdin."
-
-# Sub-agent continues, may yield more questions → loop as needed
-
-# Phase 7: Sub-agent reports completion → main agent verifies
-git diff ./tests/my-feature   # expect empty (no unauthorized changes)
-doctest test -v ./tests/my-feature  # expect all GREEN
-```
