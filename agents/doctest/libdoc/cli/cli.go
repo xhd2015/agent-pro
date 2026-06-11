@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/xhd2015/agent-pro/agents/doctest/libdoc/agent"
@@ -17,6 +18,7 @@ const usage = `Usage: doctest <command> [options]
 Commands:
   agent generate <idea> [-d|--dir <target-dir>] [--agent-runner RUNNER]
   agent fill-code <target-dir>
+  agent implement <prompt> [--agent-runner RUNNER] [--mock-config PATH]
   validate <dir>
   build <dir>
   test <dir>
@@ -65,7 +67,22 @@ Options:
   -h, --help        Show help
 `
 
+const agentImplementUsage = `Usage: doctest agent implement [--agent-runner RUNNER] [--mock-config PATH] <prompt>
+
+Spawn a sub-agent to implement code that makes doctests pass.
+Blocks until the sub-agent completes or yields questions via
+yield-pending-questions.
+
+Options:
+  --agent-runner RUNNER   opencode, codex, or fake-codex (default: opencode)
+  --mock-config PATH      mock config JSON for fake-codex
+  -h, --help              Show help
+`
+
 func Run(args []string) error {
+	if filepath.Base(os.Args[0]) == "yield-pending-questions" {
+		return agent.HandleYieldPendingQuestions(args)
+	}
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
 		fmt.Print(usage)
 		return nil
@@ -93,6 +110,7 @@ func runAgent(args []string) error {
 Commands:
   generate <idea> [-d|--dir <target-dir>]
   fill-code <target-dir>
+  implement <prompt> [--agent-runner RUNNER] [--mock-config PATH]
 `)
 		return nil
 	}
@@ -108,6 +126,8 @@ Commands:
 			return fmt.Errorf("agent fill-code requires <target-dir>")
 		}
 		return agent.FillCode(args[1])
+	case "implement":
+		return runAgentImplement(args[1:])
 	default:
 		return fmt.Errorf("unknown agent command: %s", args[0])
 	}
@@ -147,6 +167,39 @@ func runAgentGenerate(args []string) error {
 		return fmt.Errorf("agent generate requires <idea>")
 	}
 	return agent.Generate(opts)
+}
+
+func runAgentImplement(args []string) error {
+	if len(args) > 0 && (args[0] == "-h" || args[0] == "--help") {
+		fmt.Print(agentImplementUsage)
+		return nil
+	}
+	opts := agent.ImplementOptions{AgentRunner: "opencode"}
+	var promptParts []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch arg {
+		case "-h", "--help":
+			fmt.Print(agentImplementUsage)
+			return nil
+		case "--agent-runner":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--agent-runner requires value")
+			}
+			opts.AgentRunner = args[i+1]
+			i++
+		case "--mock-config":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--mock-config requires value")
+			}
+			opts.MockConfig = args[i+1]
+			i++
+		default:
+			promptParts = append(promptParts, arg)
+		}
+	}
+	opts.Prompt = strings.Join(promptParts, " ")
+	return agent.Implement(opts)
 }
 
 func runOneDir(name string, args []string, fn func(string) error) error {

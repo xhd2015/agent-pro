@@ -158,6 +158,17 @@ func handleExec(args []string) error {
 		events = gen.GenerateSession(prompt)
 	}
 
+	if os.Getenv("CODEX_THREAD_ID") == "" {
+		threadID := ""
+		if mockConfig != nil && mockConfig.SessionID != "" {
+			threadID = mockConfig.SessionID
+		}
+		if threadID == "" {
+			threadID = fmt.Sprintf("codex_%d", time.Now().UnixNano())
+		}
+		os.Setenv("CODEX_THREAD_ID", threadID)
+	}
+
 	jsonOutput := jsonFlag != nil && *jsonFlag
 
 	if mockConfig != nil {
