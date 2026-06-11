@@ -90,6 +90,30 @@ The convention is for the root to provide a default `Run` (e.g., a harness that
 shells out to the tool under test). Children and leaves override it only when
 they need different behavior.
 
+#### Do Not Wrap Unit Tests
+
+A doc-style test must execute the behavior it describes. Do **not** write a
+doctest whose only behavior is running an existing unit test, such as:
+
+```go
+cmd := exec.Command("go", "test", "./pkg/foo", "-run", "TestSpecificCase")
+```
+
+That is an anti-pattern because the actual assertions live outside the
+doc-style test tree, so the markdown no longer owns the specification.
+Instead, migrate the relevant unit-test scenario into the doctest:
+
+- call the target function, CLI, or API directly from `Run`
+- store the observed result in `Response`
+- assert the expected behavior in the leaf `ASSERT.md`
+- keep any shell-out in `Run` for the actual program under test, not for
+  delegating assertions to another test framework
+
+If the function that needs direct coverage is unexported, prefer extracting or
+exporting a small pure helper with a production-meaningful name over wrapping a
+unit test that can access package internals. The doctest should remain the
+place where the scenario is expressed and verified.
+
 ### func Assert
 
 Declared in every `ASSERT.md`. Validates the outcomes described in

@@ -11,6 +11,29 @@ The main agent writes and seals the tests. The sub-agent implements code to
 make them pass. The two agents are adversarial: the main agent verifies that
 the sub-agent never modifies sealed tests without justification.
 
+## Non-Negotiable Agent Boundary
+
+When this workflow is requested, the implementation sub-agent is the
+`doctest agent implement` sub-agent. Do **not** replace it with another
+delegation mechanism, generic coding agent, multi-agent tool, handoff skill,
+or manually-created implementation worker.
+
+Allowed main-agent actions:
+
+- write or update the doc-style tests
+- run RED tests
+- stage/seal the test files
+- invoke `doctest agent implement "<design doc + test summary>"`
+- answer follow-up questions by invoking `doctest agent implement "<answer>"`
+- verify test integrity and GREEN results
+
+Disallowed substitutions:
+
+- spawning a generic worker or explorer agent for implementation
+- using a separate handoff directory as the primary implementation mechanism
+- implementing the production change directly after tests are sealed
+- treating an existing non-doctest delegation tool as equivalent to `doctest agent implement`
+
 ## Role: Main Agent
 
 The main agent is the **test writer and orchestrator**. It does not write
@@ -66,6 +89,19 @@ Build a doctest tree following the doc-style test specification:
 The tests must be **comprehensive**: cover happy paths, error paths, edge
 cases, and input variants. Prefer more leaves over fewer.
 
+If a relevant doctest tree already exists, do not skip the TDD protocol.
+Instead:
+
+1. Inspect the existing tests and identify coverage gaps.
+2. Add or update tests that express the new requirement.
+3. Run the relevant doctest tree and confirm the new requirement fails before
+   implementation, unless the feature is already correctly implemented.
+4. Seal the affected test files before handoff.
+
+If the feature is already correctly implemented and the tests pass before any
+code change, report that result to the user instead of delegating unnecessary
+implementation.
+
 ### Phase 3: RED — Confirm Tests Fail
 
 Run the tests to confirm every leaf is in a failing state:
@@ -92,19 +128,32 @@ This stages the test directory. The sub-agent may still read the tests, but
 any modification to them will appear as an unstaged diff that the main agent
 can detect in the verification phase.
 
+Run `git status --short` before and after sealing. If the current working
+directory is not a Git repository, locate the repository that owns the doctest
+tree and run `git add` there. If the doctest tree is genuinely outside any Git
+repository, explicitly tell the user that tests cannot be sealed with Git and
+ask whether to continue with an unsealed doctest handoff.
+
 ### Phase 5: Handoff to Sub-Agent
 
-Invoke the sub-agent with the design document and test overview:
+Invoke the doctest-managed implementation sub-agent with the design document
+and test overview:
 
 ```sh
 doctest agent implement "<design doc + test summary>"
 ```
+
+This command is mandatory for implementation handoff in this workflow. Do not
+use any other agent or worker command in its place.
 
 The prompt should include:
 
 - A concise summary of the feature and its expected behaviour
 - The test tree structure and what each leaf covers
 - The fact that tests are sealed (staged) and must not be modified
+- The exact command(s) the sub-agent should run to verify the change
+- Any known external limitations, such as live service rate limits, and which
+  local deterministic tests are authoritative
 
 ### Phase 6: Handle Sub-Agent Questions
 
@@ -128,6 +177,9 @@ doctest agent implement "<answers to questions>"
 
 The CLI sends the message as a followup on the same thread. The sub-agent
 resumes its context and continues implementation.
+
+Use this same command for every follow-up. Do not switch to another agent
+system mid-workflow unless the user explicitly cancels the doctest TDD flow.
 
 This re-invoke loop may repeat multiple times until the sub-agent reports
 completion (all tests passing) with no further questions.
@@ -166,3 +218,11 @@ to the sub-agent for correction. Repeat until all tests pass.
 
 Summarize the results to the user: how many tests passed, any test
 modifications accepted (with rationale).
+
+Also report:
+
+- the exact `doctest agent implement` invocation was used for implementation
+- the test tree that was sealed
+- whether any pre-existing dirty worktree changes were present
+- whether any verification failed for external reasons rather than code
+  reasons
