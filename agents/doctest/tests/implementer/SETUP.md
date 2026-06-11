@@ -46,6 +46,7 @@ func Setup(t *testing.T, req *Request) error {
         "AGENT_RUNNER_FAKE_CODEX_PATH="+fakeCodex,
         "YIELD_PQ_BIN="+yieldPQ,
     )
+    req.Bin = doctestBin
     os.Setenv("YIELD_PQ_BIN", yieldPQ)
     req.Timeout = 60 * time.Second
     return nil

@@ -11,10 +11,10 @@ import (
     "bytes"
     "context"
     "errors"
+    "fmt"
     "os"
     "os/exec"
     "path/filepath"
-    "strings"
     "testing"
 )
 
@@ -23,6 +23,15 @@ func Setup(t *testing.T, req *Request) error {
     exampleDir := filepath.Join(repoRoot, "agents/test-case-tree-runner/examples/basic-request-runner")
     req.WorkDir = filepath.Join(repoRoot, "agents/test-case-tree-runner")
     req.Args = []string{"test", exampleDir}
+
+    tmp := t.TempDir()
+    doctestBin := filepath.Join(tmp, "doctest")
+    buildDT := exec.Command("go", "build", "-o", doctestBin, "./agents/doctest")
+    buildDT.Dir = repoRoot
+    if out, err := buildDT.CombinedOutput(); err != nil {
+        t.Fatalf("build doctest: %v\n%s", err, string(out))
+    }
+    req.Bin = doctestBin
     return nil
 }
 
@@ -30,15 +39,11 @@ func Run(t *testing.T, req *Request) (*Response, error) {
     ctx, cancel := context.WithTimeout(context.Background(), req.Timeout)
     defer cancel()
 
-    repoRoot := filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../.."))
-    bin := strings.TrimSpace(os.Getenv("DOCTEST_BIN"))
-    var cmd *exec.Cmd
-    if bin != "" {
-        cmd = exec.CommandContext(ctx, bin, req.Args...)
-    } else {
-        args := append([]string{"run", filepath.Join(repoRoot, "agents/doctest")}, req.Args...)
-        cmd = exec.CommandContext(ctx, "go", args...)
+    bin := req.Bin
+    if bin == "" {
+        return nil, fmt.Errorf("req.Bin is not set")
     }
+    cmd := exec.CommandContext(ctx, bin, req.Args...)
     cmd.Dir = req.WorkDir
     cmd.Env = append(os.Environ(), req.Env...)
 

@@ -1,5 +1,5 @@
 ## Preconditions
-- The doctest binary is built and available via `DOCTEST_BIN`.
+- The doctest binary is built by the root Setup.
 
 ## Steps
 1. Create a temporary project with `go.mod` and two `DOCTEST.md` trees.
@@ -67,10 +67,9 @@ func createTestTree(parent string, name string) error {
     return nil
 }
 
-func createTempProject(t *testing.T, req *Request) (projDir string, doctestBin string) {
+func createTempProject(t *testing.T, req *Request) string {
+    t.Helper()
     tmp := t.TempDir()
-
-    doctestBin = "/tmp/doctest"
 
     if err := os.WriteFile(filepath.Join(tmp, "go.mod"), []byte("module testproj\ngo 1.21\n"), 0644); err != nil {
         t.Fatalf("write go.mod: %v", err)
@@ -94,7 +93,7 @@ func createTempProject(t *testing.T, req *Request) (projDir string, doctestBin s
         t.Fatalf("create hidden_test: %v", err)
     }
 
-    return tmp, doctestBin
+    return tmp
 }
 
 func Setup(t *testing.T, req *Request) error {

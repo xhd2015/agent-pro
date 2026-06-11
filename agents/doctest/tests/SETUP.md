@@ -5,7 +5,7 @@
 
 ## Steps
 1. Resolve the repository root from `DOCTEST_ROOT`.
-2. Execute `DOCTEST_BIN` when provided, otherwise execute `go run ./agents/doctest`.
+2. Execute the binary given by `req.Bin`.
 3. Capture stdout, stderr, exit code, and the raw execution error.
 
 ## Context
@@ -21,7 +21,6 @@ import (
     "os"
     "os/exec"
     "path/filepath"
-    "strings"
     "testing"
     "time"
 )
@@ -31,6 +30,7 @@ type Request struct {
     Env []string
     WorkDir string
     Timeout time.Duration
+    Bin string
 }
 
 type Response struct {
@@ -46,6 +46,15 @@ func Setup(t *testing.T, req *Request) error {
     if _, err := os.Stat(filepath.Join(req.WorkDir, "go.mod")); err != nil {
         return fmt.Errorf("repo root not resolved: %w", err)
     }
+
+    tmp := t.TempDir()
+    doctestBin := filepath.Join(tmp, "doctest")
+    build := exec.Command("go", "build", "-o", doctestBin, "./agents/doctest")
+    build.Dir = req.WorkDir
+    if out, err := build.CombinedOutput(); err != nil {
+        t.Fatalf("build doctest: %v\n%s", err, string(out))
+    }
+    req.Bin = doctestBin
     return nil
 }
 
@@ -53,15 +62,11 @@ func Run(t *testing.T, req *Request) (*Response, error) {
     ctx, cancel := context.WithTimeout(context.Background(), req.Timeout)
     defer cancel()
 
-    repoRoot := filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../.."))
-    bin := strings.TrimSpace(os.Getenv("DOCTEST_BIN"))
-    var cmd *exec.Cmd
-    if bin != "" {
-        cmd = exec.CommandContext(ctx, bin, req.Args...)
-    } else {
-        args := append([]string{"run", filepath.Join(repoRoot, "agents/doctest")}, req.Args...)
-        cmd = exec.CommandContext(ctx, "go", args...)
+    bin := req.Bin
+    if bin == "" {
+        return nil, fmt.Errorf("req.Bin is not set")
     }
+    cmd := exec.CommandContext(ctx, bin, req.Args...)
     cmd.Dir = req.WorkDir
     cmd.Env = append(os.Environ(), req.Env...)
 

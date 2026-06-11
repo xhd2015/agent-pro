@@ -13,14 +13,13 @@ import (
 )
 
 func Setup(t *testing.T, req *Request) error {
-    projDir, doctestBin := createTempProject(t, req)
+    projDir := createTempProject(t, req)
 
     subDir := filepath.Join(projDir, "alpha_test", "simple")
     if mkErr := os.MkdirAll(subDir, 0755); mkErr != nil {
         t.Fatalf("mkdir subDir: %v", mkErr)
     }
 
-    os.Setenv("DOCTEST_BIN", doctestBin)
     req.WorkDir = subDir
     req.Args = []string{"test", "-v", "./..."}
     return nil

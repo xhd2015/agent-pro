@@ -61,7 +61,7 @@ func hasFile(dir, name string) bool {
 }
 
 func FindDOCTestDirs(cwd string) ([]string, error) {
-	moduleRoot, err := findModuleRoot(cwd)
+	moduleRoot, ancestorPath, err := findModuleRoot(cwd)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,13 @@ func FindDOCTestDirs(cwd string) ([]string, error) {
 			return nil
 		}
 		if hasFile(path, "go.mod") {
-			return filepath.SkipDir
+			nestedPath := readModulePath(path)
+			if nestedPath == "" {
+				return filepath.SkipDir
+			}
+			if !strings.HasPrefix(nestedPath, ancestorPath+"/") {
+				return filepath.SkipDir
+			}
 		}
 		if hasFile(path, "DOCTEST.md") {
 			for _, existing := range dirs {
@@ -101,18 +107,41 @@ func FindDOCTestDirs(cwd string) ([]string, error) {
 	return dirs, nil
 }
 
-func findModuleRoot(cwd string) (string, error) {
-	dir, err := filepath.Abs(cwd)
+func readModulePath(dir string) string {
+	data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
 	if err != nil {
-		return "", err
+		return ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "module ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "module "))
+		}
+	}
+	return ""
+}
+
+func findModuleRoot(cwd string) (dir string, modulePath string, err error) {
+	dir, err = filepath.Abs(cwd)
+	if err != nil {
+		return "", "", err
 	}
 	for {
-		if hasFile(dir, "go.mod") {
-			return dir, nil
+		modFile := filepath.Join(dir, "go.mod")
+		data, readErr := os.ReadFile(modFile)
+		if readErr == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				line = strings.TrimSpace(line)
+				if strings.HasPrefix(line, "module ") {
+					modulePath = strings.TrimSpace(strings.TrimPrefix(line, "module "))
+					return dir, modulePath, nil
+				}
+			}
+			return dir, "", nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "", os.ErrNotExist
+			return "", "", os.ErrNotExist
 		}
 		dir = parent
 	}

@@ -7,13 +7,11 @@
 
 ```go
 import (
-    "os"
     "testing"
 )
 
 func Setup(t *testing.T, req *Request) error {
-    projDir, doctestBin := createTempProject(t, req)
-    os.Setenv("DOCTEST_BIN", doctestBin)
+    projDir := createTempProject(t, req)
     req.WorkDir = projDir
     req.Args = []string{"test", "-v", "./..."}
     return nil
