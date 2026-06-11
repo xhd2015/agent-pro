@@ -95,15 +95,32 @@ func Run(opts Options) error {
 		os.Setenv("FAKE_CODEX_MOCK_CONFIG", opts.MockConfig)
 	}
 
+	var opencodeSessionID string
+	if !isNew {
+		opencodeSessionID = readOpencodeSessionID(sessionDir)
+	}
+
+	capture := &sessionIDCapture{}
+
 	var fullPrompt string
 	if isNew {
 		fullPrompt = agentPrompt() + "\n\n---\n\n<user_request>\n" + prompt + "\n</user_request>\n"
 	} else {
 		fullPrompt = prompt
 	}
-	output, err := runAgent(agentRunner, fullPrompt, threadID, sessionDir)
+	output, err := runAgent(agentRunner, fullPrompt, opencodeSessionID, capture)
 	if err != nil {
 		return fmt.Errorf("sub-agent failed: %w", err)
+	}
+
+	if isNew {
+		sid := capture.sessionID
+		if sid == "" {
+			sid = threadID
+		}
+		if updateErr := updateOpencodeSessionID(sessionDir, sid); updateErr != nil {
+			return fmt.Errorf("update session meta: %w", updateErr)
+		}
 	}
 
 	fmt.Print(output)
@@ -122,7 +139,7 @@ func Run(opts Options) error {
 	return nil
 }
 
-func runAgent(agentRunner, prompt, threadID, sessionDir string) (string, error) {
+func runAgent(agentRunner, prompt, sessionID string, rawLog *sessionIDCapture) (string, error) {
 	env := agentexec.NewEnv(&agentexec.PathsConfig{
 		RootDirName: ".agent-pro",
 		DataDirName: "data",
@@ -136,7 +153,8 @@ func runAgent(agentRunner, prompt, threadID, sessionDir string) (string, error) 
 
 	opts := &registry.AskOptions{
 		Workspace: ".",
-		SessionID: threadID,
+		SessionID: sessionID,
+		RawLog:    rawLog,
 	}
 
 	output, err := runner.Agent.Ask(context.Background(), prompt, opts, func(delta string) {})
@@ -201,8 +219,9 @@ func sessionsBase() (string, error) {
 }
 
 type meta struct {
-	CodexThreadID string    `json:"codex_thread_id"`
-	CreatedAt     time.Time `json:"created_at"`
+	CodexThreadID     string    `json:"codex_thread_id"`
+	OpencodeSessionID string    `json:"opencode_session_id,omitempty"`
+	CreatedAt         time.Time `json:"created_at"`
 }
 
 func findOrCreateSession(threadID string) (dir string, isNew bool, err error) {
@@ -296,4 +315,56 @@ func newQuestionsFile(dir string) string {
 			return path
 		}
 	}
+}
+
+type sessionIDCapture struct {
+	sessionID string
+}
+
+func (c *sessionIDCapture) Write(p []byte) (int, error) {
+	if c.sessionID != "" {
+		return len(p), nil
+	}
+	line := strings.TrimSpace(string(p))
+	if line == "" || line[0] != '{' {
+		return len(p), nil
+	}
+	var event struct {
+		SessionID string `json:"sessionID,omitempty"`
+	}
+	if json.Unmarshal([]byte(line), &event) == nil && event.SessionID != "" {
+		c.sessionID = event.SessionID
+	}
+	return len(p), nil
+}
+
+func readOpencodeSessionID(sessionDir string) string {
+	metaPath := filepath.Join(sessionDir, "meta.json")
+	data, err := os.ReadFile(metaPath)
+	if err != nil {
+		return ""
+	}
+	var m meta
+	if err := json.Unmarshal(data, &m); err != nil {
+		return ""
+	}
+	return m.OpencodeSessionID
+}
+
+func updateOpencodeSessionID(sessionDir, sessionID string) error {
+	metaPath := filepath.Join(sessionDir, "meta.json")
+	data, err := os.ReadFile(metaPath)
+	if err != nil {
+		return err
+	}
+	var m meta
+	if err := json.Unmarshal(data, &m); err != nil {
+		return err
+	}
+	m.OpencodeSessionID = sessionID
+	newData, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(metaPath, append(newData, '\n'), 0644)
 }

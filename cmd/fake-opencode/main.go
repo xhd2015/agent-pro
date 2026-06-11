@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -103,6 +104,29 @@ func handleRun(args []string) error {
 	}
 	_ = dirFlag
 	_ = skipPermissionsFlag
+
+	if sessionFlag != nil && strings.TrimSpace(*sessionFlag) != "" {
+		sessionID := strings.TrimSpace(*sessionFlag)
+		sessionsRoot := resolveSessionsRoot()
+		sessionPath := filepath.Join(sessionsRoot, sessionID)
+		info, statErr := os.Stat(sessionPath)
+		if statErr != nil || !info.IsDir() {
+			errorEvent := map[string]any{
+				"type":      "error",
+				"sessionID": sessionID,
+				"error": map[string]any{
+					"name": "Session not found",
+					"data": map[string]any{
+						"message": "Session not found",
+					},
+				},
+			}
+			line, _ := json.Marshal(errorEvent)
+			fmt.Println(string(line))
+			fmt.Fprintf(os.Stderr, "Session not found: %s\n", sessionID)
+			return &exitError{Code: 1}
+		}
+	}
 
 	prompt := strings.Join(remaining, " ")
 	if prompt == "" {
@@ -357,4 +381,13 @@ func shellQuote(s string) string {
 		return "''"
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+func resolveSessionsRoot() string {
+	configDir := os.Getenv("OPENCODE_CONFIG_DIR")
+	if configDir != "" {
+		return filepath.Join(configDir, "sessions")
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".config", "opencode", "sessions")
 }
