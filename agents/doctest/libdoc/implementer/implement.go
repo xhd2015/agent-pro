@@ -1,4 +1,4 @@
-package agent
+package implementer
 
 import (
 	"bytes"
@@ -17,13 +17,13 @@ import (
 	"github.com/xhd2015/agent-pro/agent/session"
 )
 
-type ImplementOptions struct {
+type Options struct {
 	Prompt      string
 	AgentRunner string
 	MockConfig  string
 }
 
-func Implement(opts ImplementOptions) error {
+func Run(opts Options) error {
 	prompt := strings.TrimSpace(opts.Prompt)
 	if prompt == "" {
 		return fmt.Errorf("agent implement requires <prompt>")
@@ -83,11 +83,11 @@ func Implement(opts ImplementOptions) error {
 		return fmt.Errorf("sub-agent failed: %w", err)
 	}
 
-	fifoFile, fifoErr := os.Open(questionFile)
-	if fifoErr == nil {
-		defer fifoFile.Close()
+	f, fErr := os.Open(questionFile)
+	if fErr == nil {
+		defer f.Close()
 		var buf bytes.Buffer
-		buf.ReadFrom(fifoFile)
+		buf.ReadFrom(f)
 		if buf.Len() > 0 {
 			fmt.Print(buf.String())
 			return nil

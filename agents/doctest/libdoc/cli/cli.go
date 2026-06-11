@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/xhd2015/agent-pro/agents/doctest/libdoc/agent"
+	"github.com/xhd2015/agent-pro/agents/doctest/libdoc/implementer"
 	"github.com/xhd2015/agent-pro/agents/doctest/libdoc/runner"
 	"github.com/xhd2015/agent-pro/agents/doctest/libdoc/spec"
 	"github.com/xhd2015/agent-pro/agents/doctest/libdoc/validate"
@@ -81,7 +82,7 @@ Options:
 
 func Run(args []string) error {
 	if filepath.Base(os.Args[0]) == "yield-pending-questions" {
-		return agent.HandleYieldPendingQuestions(args)
+		return implementer.HandleYieldPendingQuestions(args)
 	}
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
 		fmt.Print(usage)
@@ -174,7 +175,7 @@ func runAgentImplement(args []string) error {
 		fmt.Print(agentImplementUsage)
 		return nil
 	}
-	opts := agent.ImplementOptions{AgentRunner: "opencode"}
+	opts := implementer.Options{AgentRunner: "opencode"}
 	var promptParts []string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -199,7 +200,7 @@ func runAgentImplement(args []string) error {
 		}
 	}
 	opts.Prompt = strings.Join(promptParts, " ")
-	return agent.Implement(opts)
+	return implementer.Run(opts)
 }
 
 func runOneDir(name string, args []string, fn func(string) error) error {
