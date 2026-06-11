@@ -30,6 +30,7 @@ func Setup(t *testing.T, req *Request) error {
     writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-codex","session_id":"sess_handoff","stdout_events":[{"type":"item.completed","item":{"id":"m1","type":"message","text":"implemented greet feature","status":"completed"}}]}`)
 
     req.Env = append(req.Env, "REPO_DIR="+repoDir)
+    req.Env = append(req.Env, "CODEX_THREAD_ID=impl_test_orch_handoff")
     req.Args = []string{"agent", "implement", "--agent-runner", "fake-codex", "implement greet feature"}
     _ = exec.Command
     return nil
