@@ -9,6 +9,83 @@ import (
 	"github.com/xhd2015/agent-pro/trace"
 )
 
+func TestFormatTraceLine_CodexAssistantMessage(t *testing.T) {
+	line := `{"type":"item.completed","item":{"type":"agent_message","text":"Here is the answer."}}`
+	got := FormatTraceLine(line)
+	if !strings.Contains(got, "ASSISTANT") {
+		t.Fatalf("expected assistant label, got: %s", got)
+	}
+	if !strings.Contains(got, "Here is the answer.") {
+		t.Fatalf("expected answer text, got: %s", got)
+	}
+}
+
+func TestFormatTraceLine_CodexCommandExecutionCompleted(t *testing.T) {
+	line := `{"type":"item.completed","item":{"type":"command_execution","command":"go build ./...","exit_code":0,"aggregated_output":"success"}}`
+	got := FormatTraceLine(line)
+	if !strings.Contains(got, "RUN") {
+		t.Fatalf("expected RUN label, got: %s", got)
+	}
+	if !strings.Contains(got, "go build ./...") {
+		t.Fatalf("expected command, got: %s", got)
+	}
+}
+
+func TestFormatTraceLine_CodexCommandExecutionStarted(t *testing.T) {
+	line := `{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"go test ./..."}}`
+	got := FormatTraceLine(line)
+	if !strings.Contains(got, "RUN") {
+		t.Fatalf("expected RUN label, got: %s", got)
+	}
+	if !strings.Contains(got, "go test ./...") {
+		t.Fatalf("expected command, got: %s", got)
+	}
+}
+
+func TestFormatTraceLine_EmptyLine(t *testing.T) {
+	got := FormatTraceLine("")
+	if got != "" {
+		t.Fatalf("expected empty for empty line, got: %s", got)
+	}
+}
+
+func TestFormatTraceLine_NonJSON(t *testing.T) {
+	got := FormatTraceLine("not a json line")
+	if got != "" {
+		t.Fatalf("expected empty for non-JSON, got: %s", got)
+	}
+}
+
+func TestFormatTraceLine_CodexReasoning(t *testing.T) {
+	line := `{"type":"item.completed","item":{"id":"item_2","type":"reasoning","text":"Let me think about this..."}}`
+	got := FormatTraceLine(line)
+	if !strings.Contains(got, "REASONING") {
+		t.Fatalf("expected REASONING label, got: %s", got)
+	}
+	if !strings.Contains(got, "Let me think about this...") {
+		t.Fatalf("expected reasoning text, got: %s", got)
+	}
+}
+
+func TestFormatTraceLine_OpencodeAssistantText(t *testing.T) {
+	line := `{"type":"text","sessionID":"sess-123","timestamp":1700000000000,"part":{"id":"part-1","type":"text","text":"I have completed the task."}}`
+	got := FormatTraceLine(line)
+	if !strings.Contains(got, "ASSISTANT") {
+		t.Fatalf("expected assistant label, got: %s", got)
+	}
+	if !strings.Contains(got, "I have completed the task.") {
+		t.Fatalf("expected answer text, got: %s", got)
+	}
+}
+
+func TestFormatTraceLine_OpencodeToolUse(t *testing.T) {
+	line := `{"type":"tool_use","sessionID":"sess-123","timestamp":1700000000000,"part":{"id":"part-2","type":"tool","tool":"bash","callID":"call-1","state":{"status":"completed","title":"go build"}}}`
+	got := FormatTraceLine(line)
+	if !strings.Contains(got, "Shell") && !strings.Contains(got, "RUN") {
+		t.Fatalf("expected Shell or RUN label, got: %s", got)
+	}
+}
+
 func TestWriteTraceReportPrintsLinkedTraces(t *testing.T) {
 	t.Skip("writeTraceReport not yet implemented")
 	parent := trace.AgentTraceSummary{AgentTraceMetadata: trace.AgentTraceMetadata{

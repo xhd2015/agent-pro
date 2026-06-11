@@ -17,6 +17,7 @@ type AgentTraceMetadata struct {
 	OutputPath      string            `json:"output_path,omitempty"`
 	ResumeCommand   string            `json:"resume_command,omitempty"`
 	AgentRunnerID   string            `json:"agent_runner_id,omitempty"`
+	ProviderID      string            `json:"provider_id,omitempty"`
 	Model           string            `json:"model,omitempty"`
 	ParentTraceID   string            `json:"parent_trace_id,omitempty"`
 	ParentTraceDir  string            `json:"parent_trace_dir,omitempty"`

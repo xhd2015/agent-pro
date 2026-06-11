@@ -35,6 +35,27 @@ func FormatMessageCompact(msg types.AgentTraceMessage) string {
 	return strings.TrimRight(buf.String(), "\n")
 }
 
+func FormatTraceLine(line string) string {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" || !strings.HasPrefix(trimmed, "{") {
+		return ""
+	}
+	parsed, ok := types.ParseAgentTraceLine(json.RawMessage(trimmed))
+	if !ok {
+		return ""
+	}
+	if parsed.Message != nil {
+		return FormatMessageCompact(*parsed.Message)
+	}
+	if parsed.Activity != nil {
+		return FormatMessageCompact(types.AgentTraceMessage{
+			Role:     types.RoleToolCall,
+			ToolCall: parsed.Activity,
+		})
+	}
+	return ""
+}
+
 func writeHumanReport(w io.Writer, source trace.Source, descriptions []string) error {
 	summaries, err := source.List()
 	if err != nil {
