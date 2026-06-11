@@ -26,6 +26,21 @@ func BuildArgs(args []string) error {
 	if len(remainArgs) != 1 {
 		return fmt.Errorf("build requires <dir>")
 	}
+	if remainArgs[0] == "./..." {
+		return runForDirs(remainArgs[0], func(dir string) error {
+			root, _ := ResolveRoot(dir)
+			if root == "" {
+				root = dir
+			}
+			o := opts
+			o.SubDir = dir
+			err := runnerbuild.Build(root, o)
+			if err != nil && strings.Contains(err.Error(), "no runnable test cases found") {
+				return ErrNoTestsFound
+			}
+			return err
+		})
+	}
 	targetDir, _ := filepath.Abs(remainArgs[0])
 	root, ok := ResolveRoot(targetDir)
 	if !ok {
@@ -47,6 +62,21 @@ func Test(args []string) error {
 	if len(remainArgs) != 1 {
 		return fmt.Errorf("test requires <dir>")
 	}
+	if remainArgs[0] == "./..." {
+		return runForDirs(remainArgs[0], func(dir string) error {
+			root, _ := ResolveRoot(dir)
+			if root == "" {
+				root = dir
+			}
+			o := opts
+			o.SubDir = dir
+			err := runnerbuild.Test(root, o)
+			if err != nil && strings.Contains(err.Error(), "no runnable test cases found") {
+				return ErrNoTestsFound
+			}
+			return err
+		})
+	}
 	targetDir, _ := filepath.Abs(remainArgs[0])
 	root, ok := ResolveRoot(targetDir)
 	if !ok {
@@ -58,6 +88,29 @@ func Test(args []string) error {
 		return ErrNoTestsFound
 	}
 	return err
+}
+
+func runForDirs(pattern string, fn func(dir string) error) error {
+	dirs, err := FindDOCTestDirs(".")
+	if err != nil {
+		return err
+	}
+	if len(dirs) == 0 {
+		return ErrNoTestsFound
+	}
+	var errs []string
+	for _, dir := range dirs {
+		if err := fn(dir); err != nil {
+			if errors.Is(err, ErrNoTestsFound) {
+				continue
+			}
+			errs = append(errs, fmt.Sprintf("%s: %v", dir, err))
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("test failures:\n%s", strings.Join(errs, "\n"))
+	}
+	return nil
 }
 
 func parseBuildOptions(args []string) (core.Options, []string, error) {

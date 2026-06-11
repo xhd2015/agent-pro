@@ -70,7 +70,7 @@ Each question object has:
   - `option` — a short label for this answer
   - `explanation` — a longer explanation of this answer option
 
-After you run `yield-pending-questions`, can suspend the conversation, and wait for followup.
+After you run `yield-pending-questions`, must suspend the conversation and wait for followup.
 
 ## Example Walkthrough
 
