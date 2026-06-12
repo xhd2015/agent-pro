@@ -1,14 +1,14 @@
 ## Preconditions
-- testdata/ contains a directory with .gitignore, multiple subdirs (some gitignored), each with a DOCTest tree and go.mod.
+- testdata/ contains a directory with .gitignore and multiple DOCTest trees (one matches .gitignore).
+- There is NO git repository (no `git init`).
 
 ## Steps
 1. Copy testdata/ to a temp directory outside any Go module.
-2. Run `git init` in the temp directory so .gitignore is respected.
+2. Do NOT run `git init` — this tests that .gitignore is NOT respected without a git repo.
 3. Run `doctest test -v ./...`.
 
 ```go
 import (
-    "os/exec"
     "path/filepath"
     "testing"
 )
@@ -18,9 +18,6 @@ func Setup(t *testing.T, req *Request) error {
     tmpTestData := filepath.Join(t.TempDir(), "testdata")
     if err := copyDir(tmpTestData, srcTestData); err != nil {
         t.Fatalf("copy testdata: %v", err)
-    }
-    if out, err := exec.Command("git", "-C", tmpTestData, "init").CombinedOutput(); err != nil {
-        t.Fatalf("git init: %v\n%s", err, out)
     }
     req.WorkDir = tmpTestData
     req.Args = []string{"test", "-v", "./..."}

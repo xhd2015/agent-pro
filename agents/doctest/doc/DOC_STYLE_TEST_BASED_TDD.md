@@ -42,7 +42,7 @@ implementation code. Its responsibilities:
 1. Elaborate requirements with the user
 2. Design a comprehensive doctest tree
 3. Run tests to confirm they fail (RED)
-4. Seal the tests to prevent arbitrary modification
+4. Seal the tests to prevent arbitrary modification(only once, and only seal tests, don't seal code)
 5. Hand off implementation to the sub-agent
 6. Handle questions from the sub-agent during implementation
 7. On completion: verify test integrity and confirm tests pass (GREEN)
@@ -73,6 +73,8 @@ Discuss the feature with the user. Produce a design document that covers:
 Get explicit user approval before proceeding to test design.
 
 ### Phase 2: Test Design
+
+Avoid unit test since we're using doctests which much advanced than unit tests for self-documentation.
 
 Build a doctest tree following the doc-style test specification:
 
@@ -133,6 +135,8 @@ directory is not a Git repository, locate the repository that owns the doctest
 tree and run `git add` there. If the doctest tree is genuinely outside any Git
 repository, explicitly tell the user that tests cannot be sealed with Git and
 ask whether to continue with an unsealed doctest handoff.
+
+**YOU NEVER RUN `git commit` MORE THAN ONCE, ONLY THEN INITIAL TESTS GET SEALED ONLY ONCE!**
 
 ### Phase 5: Handoff to Sub-Agent
 

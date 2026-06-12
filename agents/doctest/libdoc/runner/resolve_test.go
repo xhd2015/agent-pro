@@ -2,6 +2,7 @@ package runner
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 )
@@ -253,40 +254,9 @@ func TestResolveRoot(t *testing.T) {
 	})
 }
 
-func TestParseGitignore(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, dir, ".gitignore", "ign_a/\nign_b/\n*_test/\n# comment\n\n")
-	patterns, err := parseGitignore(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(patterns) != 3 {
-		t.Fatalf("expected 3 patterns, got %d: %v", len(patterns), patterns)
-	}
-}
-
-func TestIsGitignored(t *testing.T) {
-	patterns := []string{"ign_a", "ign_b", "*_test"}
-	cases := []struct {
-		name     string
-		expected bool
-	}{
-		{"ign_a", true},
-		{"ign_b", true},
-		{"foo_test", true},
-		{"bar_test", true},
-		{"mod_a", false},
-		{"src", false},
-	}
-	for _, tc := range cases {
-		if got := isGitignored(tc.name, patterns); got != tc.expected {
-			t.Errorf("isGitignored(%q) = %v, want %v", tc.name, got, tc.expected)
-		}
-	}
-}
-
 func TestFindDOCTestDirsFromSubdirs_Basic(t *testing.T) {
 	dir := t.TempDir()
+	exec.Command("git", "-C", dir, "init").Run()
 
 	createModule := func(name string) {
 		mdir := filepath.Join(dir, name)
@@ -439,10 +409,11 @@ func TestIsDotDotDotPattern(t *testing.T) {
 		{"./...", true},
 		{"./alpha/...", true},
 		{"./group/subgroup/...", true},
+		{"alpha/...", true},
+		{"beta/...", true},
 		{"...", false},
 		{"/...", false},
 		{".../", false},
-		{"alpha/...", false},
 		{"./alpha", false},
 	}
 	for _, tc := range cases {
@@ -460,6 +431,8 @@ func TestExtractBasePath(t *testing.T) {
 		{"./...", "."},
 		{"./alpha/...", "alpha"},
 		{"./group/subgroup/...", "group/subgroup"},
+		{"alpha/...", "alpha"},
+		{"beta/...", "beta"},
 	}
 	for _, tc := range cases {
 		if got := extractBasePath(tc.arg); got != tc.expected {

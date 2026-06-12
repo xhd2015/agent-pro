@@ -27,6 +27,9 @@ func BuildArgs(args []string) error {
 		return fmt.Errorf("build requires <dir>")
 	}
 	arg := remainArgs[0]
+	if arg == "..." {
+		return fmt.Errorf("bare '...' pattern is not supported; use './...' or 'path/...' instead")
+	}
 	if isDotDotDotPattern(arg) {
 		return runForDirs(extractBasePath(arg), func(dir string) error {
 			root, _ := ResolveRoot(dir)
@@ -64,6 +67,9 @@ func Test(args []string) error {
 		return fmt.Errorf("test requires <dir>")
 	}
 	arg := remainArgs[0]
+	if arg == "..." {
+		return fmt.Errorf("bare '...' pattern is not supported; use './...' or 'path/...' instead")
+	}
 	if isDotDotDotPattern(arg) {
 		return runForDirs(extractBasePath(arg), func(dir string) error {
 			root, _ := ResolveRoot(dir)
@@ -134,7 +140,10 @@ func findDotDotDotDirs(basePath string) ([]string, error) {
 }
 
 func isDotDotDotPattern(arg string) bool {
-	return strings.HasPrefix(arg, "./") && strings.HasSuffix(arg, "/...")
+	if len(arg) > 0 && arg[0] == '/' {
+		return false
+	}
+	return strings.HasSuffix(arg, "/...")
 }
 
 func extractBasePath(arg string) string {

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/xhd2015/gitops/git"
 )
 
 func ResolveRoot(dir string) (root string, ok bool) {
@@ -167,15 +169,13 @@ func FindDOCTestDirsFromSubdirs(cwd string) ([]string, error) {
 		return nil, err
 	}
 
-	ignores, _ := parseGitignore(absCwd)
-
 	var allDirs []string
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 		name := entry.Name()
-		if isGitignored(name, ignores) {
+		if ignored, err := git.CheckIgnore(absCwd, name); err == nil && ignored {
 			continue
 		}
 		subdir := filepath.Join(absCwd, name)
@@ -221,36 +221,6 @@ func findDOCTestDirsInTree(subdir string) ([]string, error) {
 		return nil, errNoModuleFound
 	}
 	return dirs, nil
-}
-
-func parseGitignore(dir string) ([]string, error) {
-	data, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	var patterns []string
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		line = strings.TrimSuffix(line, "/")
-		patterns = append(patterns, line)
-	}
-	return patterns, nil
-}
-
-func isGitignored(name string, patterns []string) bool {
-	for _, pat := range patterns {
-		matched, err := filepath.Match(pat, name)
-		if err == nil && matched {
-			return true
-		}
-	}
-	return false
 }
 
 func FindDOCTestDirsWithBase(cwd, basePath string) ([]string, error) {
