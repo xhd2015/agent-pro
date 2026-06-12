@@ -252,3 +252,222 @@ func TestResolveRoot(t *testing.T) {
 		}
 	})
 }
+
+func TestParseGitignore(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, ".gitignore", "ign_a/\nign_b/\n*_test/\n# comment\n\n")
+	patterns, err := parseGitignore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(patterns) != 3 {
+		t.Fatalf("expected 3 patterns, got %d: %v", len(patterns), patterns)
+	}
+}
+
+func TestIsGitignored(t *testing.T) {
+	patterns := []string{"ign_a", "ign_b", "*_test"}
+	cases := []struct {
+		name     string
+		expected bool
+	}{
+		{"ign_a", true},
+		{"ign_b", true},
+		{"foo_test", true},
+		{"bar_test", true},
+		{"mod_a", false},
+		{"src", false},
+	}
+	for _, tc := range cases {
+		if got := isGitignored(tc.name, patterns); got != tc.expected {
+			t.Errorf("isGitignored(%q) = %v, want %v", tc.name, got, tc.expected)
+		}
+	}
+}
+
+func TestFindDOCTestDirsFromSubdirs_Basic(t *testing.T) {
+	dir := t.TempDir()
+
+	createModule := func(name string) {
+		mdir := filepath.Join(dir, name)
+		writeFile(t, mdir, "go.mod", "module "+name+"\ngo 1.21\n")
+		writeFile(t, mdir, "DOCTEST.md", "# "+name+"\n")
+		writeFile(t, mdir, "SETUP.md", doctestGoBlock("import \"testing\"\nfunc Setup(t *testing.T, req *Request) error { return nil }\nfunc Run(t *testing.T, req *Request) (*Response, error) { return &Response{}, nil }\n"))
+		leafDir := filepath.Join(mdir, "simple")
+		writeFile(t, leafDir, "SETUP.md", doctestGoBlock("import \"testing\"\nfunc Setup(t *testing.T, req *Request) error { return nil }\n"))
+		writeFile(t, leafDir, "ASSERT.md", doctestGoBlock("import \"testing\"\nfunc Assert(t *testing.T, req *Request, resp *Response, err error) {}\n"))
+	}
+	createModule("mod_a")
+	createModule("mod_b")
+	createModule("ign_a")
+	createModule("ign_b")
+	writeFile(t, dir, ".gitignore", "ign_a/\nign_b/\n")
+
+	result, err := FindDOCTestDirsFromSubdirs(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("expected 2 dirs, got %d: %v", len(result), result)
+	}
+	for _, name := range []string{"mod_a", "mod_b"} {
+		found := false
+		for _, r := range result {
+			if filepath.Base(r) == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("%s not found in results", name)
+		}
+	}
+	for _, r := range result {
+		if filepath.Base(r) == "ign_a" || filepath.Base(r) == "ign_b" {
+			t.Errorf("gitignored %s found in results", filepath.Base(r))
+		}
+	}
+}
+
+func TestFindDOCTestDirsFromSubdirs_DeepModule(t *testing.T) {
+	dir := t.TempDir()
+	mdir := filepath.Join(dir, "a", "b", "c")
+	if err := os.MkdirAll(mdir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, mdir, "go.mod", "module c\ngo 1.21\n")
+	writeFile(t, mdir, "DOCTEST.md", "# c\n")
+	writeFile(t, mdir, "SETUP.md", doctestGoBlock("import \"testing\"\nfunc Setup(t *testing.T, req *Request) error { return nil }\nfunc Run(t *testing.T, req *Request) (*Response, error) { return &Response{}, nil }\n"))
+	leafDir := filepath.Join(mdir, "simple")
+	writeFile(t, leafDir, "SETUP.md", doctestGoBlock("import \"testing\"\nfunc Setup(t *testing.T, req *Request) error { return nil }\n"))
+	writeFile(t, leafDir, "ASSERT.md", doctestGoBlock("import \"testing\"\nfunc Assert(t *testing.T, req *Request, resp *Response, err error) {}\n"))
+
+	result, err := FindDOCTestDirsFromSubdirs(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 dir, got %d: %v", len(result), result)
+	}
+}
+
+func TestFindDOCTestDirsFromSubdirs_SiblingModules(t *testing.T) {
+	dir := t.TempDir()
+
+	createModule := func(name string) {
+		mdir := filepath.Join(dir, "deep", name)
+		writeFile(t, mdir, "go.mod", "module "+name+"\ngo 1.21\n")
+		writeFile(t, mdir, "DOCTEST.md", "# "+name+"\n")
+		writeFile(t, mdir, "SETUP.md", doctestGoBlock("import \"testing\"\nfunc Setup(t *testing.T, req *Request) error { return nil }\nfunc Run(t *testing.T, req *Request) (*Response, error) { return &Response{}, nil }\n"))
+		leafDir := filepath.Join(mdir, "simple")
+		writeFile(t, leafDir, "SETUP.md", doctestGoBlock("import \"testing\"\nfunc Setup(t *testing.T, req *Request) error { return nil }\n"))
+		writeFile(t, leafDir, "ASSERT.md", doctestGoBlock("import \"testing\"\nfunc Assert(t *testing.T, req *Request, resp *Response, err error) {}\n"))
+	}
+	createModule("pkg1")
+	createModule("pkg2")
+
+	result, err := FindDOCTestDirsFromSubdirs(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("expected 2 dirs, got %d: %v", len(result), result)
+	}
+}
+
+func TestFindDOCTestDirsFromSubdirs_Empty(t *testing.T) {
+	dir := t.TempDir()
+	result, err := FindDOCTestDirsFromSubdirs(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 0 {
+		t.Fatalf("expected 0 dirs, got %d: %v", len(result), result)
+	}
+}
+
+func TestFindDOCTestDirsWithBase_Filter(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "go.mod", "module testproj\ngo 1.21\n")
+
+	createDOCTest := func(name string) {
+		mdir := filepath.Join(dir, name)
+		writeFile(t, mdir, "DOCTEST.md", "# "+name+"\n")
+		writeFile(t, mdir, "SETUP.md", doctestGoBlock("import \"testing\"\nfunc Setup(t *testing.T, req *Request) error { return nil }\nfunc Run(t *testing.T, req *Request) (*Response, error) { return &Response{}, nil }\n"))
+	}
+	createDOCTest("alpha")
+	createDOCTest("beta")
+
+	result, err := FindDOCTestDirsWithBase(dir, filepath.Join(dir, "alpha"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 dir, got %d: %v", len(result), result)
+	}
+	if filepath.Base(result[0]) != "alpha" {
+		t.Fatalf("expected alpha, got %s", filepath.Base(result[0]))
+	}
+}
+
+func TestFindDOCTestDirsWithBase_All(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "go.mod", "module testproj\ngo 1.21\n")
+
+	createDOCTest := func(name string) {
+		mdir := filepath.Join(dir, name)
+		writeFile(t, mdir, "DOCTEST.md", "# "+name+"\n")
+		writeFile(t, mdir, "SETUP.md", doctestGoBlock("import \"testing\"\nfunc Setup(t *testing.T, req *Request) error { return nil }\nfunc Run(t *testing.T, req *Request) (*Response, error) { return &Response{}, nil }\n"))
+	}
+	createDOCTest("alpha")
+	createDOCTest("beta")
+
+	result, err := FindDOCTestDirsWithBase(dir, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("expected 2 dirs, got %d: %v", len(result), result)
+	}
+}
+
+func TestIsDotDotDotPattern(t *testing.T) {
+	cases := []struct {
+		arg      string
+		expected bool
+	}{
+		{"./...", true},
+		{"./alpha/...", true},
+		{"./group/subgroup/...", true},
+		{"...", false},
+		{"/...", false},
+		{".../", false},
+		{"alpha/...", false},
+		{"./alpha", false},
+	}
+	for _, tc := range cases {
+		if got := isDotDotDotPattern(tc.arg); got != tc.expected {
+			t.Errorf("isDotDotDotPattern(%q) = %v, want %v", tc.arg, got, tc.expected)
+		}
+	}
+}
+
+func TestExtractBasePath(t *testing.T) {
+	cases := []struct {
+		arg      string
+		expected string
+	}{
+		{"./...", "."},
+		{"./alpha/...", "alpha"},
+		{"./group/subgroup/...", "group/subgroup"},
+	}
+	for _, tc := range cases {
+		if got := extractBasePath(tc.arg); got != tc.expected {
+			t.Errorf("extractBasePath(%q) = %q, want %q", tc.arg, got, tc.expected)
+		}
+	}
+}
+
+func doctestGoBlock(code string) string {
+	return "```go\n" + code + "\n```\n"
+}

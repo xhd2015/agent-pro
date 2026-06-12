@@ -411,10 +411,17 @@ the actual invocation.
 Each generated test function runs with its working directory set to its own
 case directory — the directory containing the leaf's `SETUP.md` and `ASSERT.md`.
 
-The test can access `DOCTEST_ROOT` constant defined as the root of all tests, use it to refer testdata placed at root dir:
+The test can access `DOCTEST_ROOT` constant defined as the root of all tests, use it to refer to testdata placed at the tree root:
 
 ```go
 req.InputDir = filepath.Join(DOCTEST_ROOT, "testdata", "child-redefines-request")
+```
+
+To reference testdata placed alongside a test case (under its own directory),
+use a relative path — it resolves against the case directory:
+
+```go
+srcTestData := "./testdata"
 ```
 
 ## Validation

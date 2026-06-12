@@ -26,8 +26,9 @@ func BuildArgs(args []string) error {
 	if len(remainArgs) != 1 {
 		return fmt.Errorf("build requires <dir>")
 	}
-	if remainArgs[0] == "./..." {
-		return runForDirs(remainArgs[0], func(dir string) error {
+	arg := remainArgs[0]
+	if isDotDotDotPattern(arg) {
+		return runForDirs(extractBasePath(arg), func(dir string) error {
 			root, _ := ResolveRoot(dir)
 			if root == "" {
 				root = dir
@@ -62,8 +63,9 @@ func Test(args []string) error {
 	if len(remainArgs) != 1 {
 		return fmt.Errorf("test requires <dir>")
 	}
-	if remainArgs[0] == "./..." {
-		return runForDirs(remainArgs[0], func(dir string) error {
+	arg := remainArgs[0]
+	if isDotDotDotPattern(arg) {
+		return runForDirs(extractBasePath(arg), func(dir string) error {
 			root, _ := ResolveRoot(dir)
 			if root == "" {
 				root = dir
@@ -90,8 +92,8 @@ func Test(args []string) error {
 	return err
 }
 
-func runForDirs(pattern string, fn func(dir string) error) error {
-	dirs, err := FindDOCTestDirs(".")
+func runForDirs(basePath string, fn func(dir string) error) error {
+	dirs, err := findDotDotDotDirs(basePath)
 	if err != nil {
 		return err
 	}
@@ -111,6 +113,37 @@ func runForDirs(pattern string, fn func(dir string) error) error {
 		return fmt.Errorf("test failures:\n%s", strings.Join(errs, "\n"))
 	}
 	return nil
+}
+
+func findDotDotDotDirs(basePath string) ([]string, error) {
+	if basePath == "" || basePath == "." {
+		dirs, err := FindDOCTestDirs(".")
+		if err == nil {
+			return dirs, nil
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+		return FindDOCTestDirsFromSubdirs(".")
+	}
+	dirs, err := FindDOCTestDirsWithBase(basePath, basePath)
+	if err != nil {
+		return nil, err
+	}
+	return dirs, nil
+}
+
+func isDotDotDotPattern(arg string) bool {
+	return strings.HasPrefix(arg, "./") && strings.HasSuffix(arg, "/...")
+}
+
+func extractBasePath(arg string) string {
+	base := strings.TrimSuffix(arg, "/...")
+	base = strings.TrimPrefix(base, "./")
+	if base == "" {
+		return "."
+	}
+	return base
 }
 
 func parseBuildOptions(args []string) (core.Options, []string, error) {

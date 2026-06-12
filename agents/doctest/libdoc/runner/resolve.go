@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -153,4 +154,122 @@ func isAncestor(ancestor, child string) bool {
 		return false
 	}
 	return !strings.HasPrefix(rel, "..")
+}
+
+func FindDOCTestDirsFromSubdirs(cwd string) ([]string, error) {
+	absCwd, err := filepath.Abs(cwd)
+	if err != nil {
+		return nil, err
+	}
+
+	entries, err := os.ReadDir(absCwd)
+	if err != nil {
+		return nil, err
+	}
+
+	ignores, _ := parseGitignore(absCwd)
+
+	var allDirs []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if isGitignored(name, ignores) {
+			continue
+		}
+		subdir := filepath.Join(absCwd, name)
+		dirs, err := findDOCTestDirsInTree(subdir)
+		if err != nil {
+			if errors.Is(err, errNoModuleFound) {
+				continue
+			}
+			return nil, err
+		}
+		allDirs = append(allDirs, dirs...)
+	}
+
+	sort.Strings(allDirs)
+	return allDirs, nil
+}
+
+var errNoModuleFound = errors.New("no module found")
+
+func findDOCTestDirsInTree(subdir string) ([]string, error) {
+	var dirs []string
+	err := filepath.WalkDir(subdir, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if !d.IsDir() {
+			return nil
+		}
+		if hasFile(path, "go.mod") {
+			nested, nestedErr := FindDOCTestDirs(path)
+			if nestedErr != nil {
+				return nestedErr
+			}
+			dirs = append(dirs, nested...)
+			return filepath.SkipDir
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(dirs) == 0 {
+		return nil, errNoModuleFound
+	}
+	return dirs, nil
+}
+
+func parseGitignore(dir string) ([]string, error) {
+	data, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var patterns []string
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.TrimSuffix(line, "/")
+		patterns = append(patterns, line)
+	}
+	return patterns, nil
+}
+
+func isGitignored(name string, patterns []string) bool {
+	for _, pat := range patterns {
+		matched, err := filepath.Match(pat, name)
+		if err == nil && matched {
+			return true
+		}
+	}
+	return false
+}
+
+func FindDOCTestDirsWithBase(cwd, basePath string) ([]string, error) {
+	dirs, err := FindDOCTestDirs(cwd)
+	if err != nil {
+		return nil, err
+	}
+	if basePath == "" {
+		return dirs, nil
+	}
+	absBase, err := filepath.Abs(basePath)
+	if err != nil {
+		return nil, err
+	}
+	var filtered []string
+	for _, dir := range dirs {
+		if isAncestor(absBase, dir) || dir == absBase {
+			filtered = append(filtered, dir)
+		}
+	}
+	return filtered, nil
 }
