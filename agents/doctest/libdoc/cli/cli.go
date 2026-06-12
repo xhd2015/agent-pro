@@ -203,6 +203,12 @@ func runAgentImplement(args []string) error {
 			}
 			opts.AgentRunner = args[i+1]
 			i++
+		case "--session-id":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--session-id requires value")
+			}
+			opts.SessionID = args[i+1]
+			i++
 		case "--mock-config":
 			if i+1 >= len(args) {
 				return fmt.Errorf("--mock-config requires value")

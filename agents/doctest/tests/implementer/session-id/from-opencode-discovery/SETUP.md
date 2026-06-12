@@ -1,12 +1,12 @@
 ## Preconditions
-- Neither `DOCTEST_AGENT_IMPLEMENTER_SESSION_ID` nor `CODEX_THREAD_ID` is set.
-- Auto-discovery from parent opencode process may or may not succeed.
+- Neither `--session-id`, `DOCTEST_AGENT_IMPLEMENTER_SESSION_ID`, nor `CODEX_THREAD_ID` is set.
+- Auto-discovery has been removed; no session ID can be resolved.
 
 ## Steps
-1. Set no session ID env vars.
+1. Set no session ID sources at all.
 2. Write a mock config for fake-codex.
 3. Run `doctest agent implement "test" --agent-runner fake-codex`.
-4. ASSERT handles the conditional: skip if no opencode ancestor, otherwise verify.
+4. Expect error with a generated session ID and --session-id usage instructions.
 
 ```go
 import "testing"

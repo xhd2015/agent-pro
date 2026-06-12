@@ -1,57 +1,27 @@
 ## Expected
-- When running under opencode: exit 0, meta.json has `main_agent_opencode_session_id` with `ses_*` value.
-- When NOT running under opencode: discovery fails, test skips.
+- Exit code non-zero (no session ID can be resolved).
+- Stderr contains "cannot detect session id".
+- Stderr contains a generated session ID (e.g. `gen_` prefix).
+- Stderr mentions `--session-id` flag usage.
 
 ```go
 import (
-    "encoding/json"
-    "os"
-    "path/filepath"
     "strings"
     "testing"
-    "time"
 )
 
 func Assert(t *testing.T, req *Request, resp *Response, err error) {
-    if resp.ExitCode != 0 {
-        if strings.Contains(resp.Stderr, "must be run from codex or opencode") {
-            t.Skip("not running under opencode; auto-discovery requires opencode ancestor in process tree")
-        }
-        t.Fatalf("exit code = %d, want 0\nstderr:\n%s", resp.ExitCode, resp.Stderr)
+    if resp.ExitCode == 0 {
+        t.Fatal("expected non-zero exit code when no session ID source is available")
     }
 
-    sessionsDir := sessionsDir()
+    combined := resp.Stdout + resp.Stderr
 
-    today := time.Now().Format("2006/01/02")
-    dateDir := filepath.Join(sessionsDir, today)
-    entries, readErr := os.ReadDir(dateDir)
-    if readErr != nil {
-        t.Fatalf("cannot read date dir %s: %v", dateDir, readErr)
+    if !strings.Contains(combined, "cannot detect session id") {
+        t.Fatalf("expected 'cannot detect session id' in output:\n%s", combined)
     }
-
-    for _, entry := range entries {
-        if !entry.IsDir() || !strings.HasPrefix(entry.Name(), "sess_") {
-            continue
-        }
-        metaPath := filepath.Join(dateDir, entry.Name(), "meta.json")
-        data, readErr := os.ReadFile(metaPath)
-        if readErr != nil {
-            continue
-        }
-        var meta struct {
-            MainAgentOpencodeSessionID string `json:"main_agent_opencode_session_id"`
-        }
-        if jsonErr := json.Unmarshal(data, &meta); jsonErr != nil {
-            continue
-        }
-        if meta.MainAgentOpencodeSessionID != "" {
-            if !strings.HasPrefix(meta.MainAgentOpencodeSessionID, "ses_") {
-                t.Fatalf("main_agent_opencode_session_id must start with ses_, got %q", meta.MainAgentOpencodeSessionID)
-            }
-            t.Logf("discovered session: %s", meta.MainAgentOpencodeSessionID)
-            return
-        }
+    if !strings.Contains(combined, "--session-id") {
+        t.Fatalf("expected '--session-id' flag in error message:\n%s", combined)
     }
-    t.Fatal("no session found with main_agent_opencode_session_id set")
 }
 ```

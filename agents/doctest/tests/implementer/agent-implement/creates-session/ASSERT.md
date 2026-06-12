@@ -2,8 +2,9 @@
 - Exit code 0.
 - Session directory is created under `~/.agent-pro/dedicated-agents/doctest-agent-implementer/sessions/YYYY/MM/DD/sess_*/`.
 - Session dir name matches `sess_HHMMSS_<nano>` format.
-- The session dir contains `meta.json` with `doctest_agent_implementer_session_id` and `main_agent_codex_thread_id`.
-- A `questions/` dir exists with a timestamp-named `.json` file (created before the agent runs).
+- The session dir contains `meta.json` with `main_agent_codex_thread_id`.
+- `doctest_agent_implementer_session_id` is absent (CODEX_THREAD_ID does not populate it).
+- A `questions/` dir exists with a timestamp-named `.json` file.
 
 ## Exit Code
 - Exit code 0.
@@ -57,9 +58,6 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
             sessDir = filepath.Join(dateDir, entry.Name())
             if matched, _ := filepath.Match("sess_[0-9][0-9][0-9][0-9][0-9][0-9]_[0-9]*", entry.Name()); !matched {
                 t.Fatalf("session dir name %q does not match sess_HHMMSS_<nano> format", entry.Name())
-            }
-            if meta.DoctestAgentImplementerSessionID == "" {
-                t.Fatal("meta.json missing doctest_agent_implementer_session_id")
             }
             if meta.MainAgentCodexThreadID == "" {
                 t.Fatal("meta.json missing main_agent_codex_thread_id")

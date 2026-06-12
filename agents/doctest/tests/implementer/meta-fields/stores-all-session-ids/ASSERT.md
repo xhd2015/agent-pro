@@ -1,10 +1,10 @@
 ## Expected
-- Meta.json contains all five expected fields:
-  - `doctest_agent_implementer_session_id`: `store-prio-1`
-  - `main_agent_codex_thread_id`: `store-codex-2`
-  - `main_agent_opencode_session_id`: absent (env var took priority, discovery not used)
-  - `opencode_session_id`: non-empty (inner spawned agent session)
-  - `created_at`: non-empty
+- `doctest_agent_implementer_session_id`: `store-prio-1`
+- `explicit_session_id`: absent (flag not used)
+- `main_agent_codex_thread_id`: `store-codex-2`
+- `main_agent_opencode_session_id`: absent (env var took priority, discovery not used)
+- `opencode_session_id`: non-empty (inner spawned agent session)
+- `created_at`: non-empty
 
 ```go
 import "testing"
@@ -45,6 +45,9 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
     checkFieldPresent("opencode_session_id")
     checkFieldPresent("created_at")
 
+    if _, ok := m["explicit_session_id"]; ok {
+        t.Fatalf("explicit_session_id should NOT be present when --session-id flag not used, got %v", m["explicit_session_id"])
+    }
     if _, ok := m["main_agent_opencode_session_id"]; ok {
         t.Fatalf("main_agent_opencode_session_id should NOT be present when env var takes priority, got %v", m["main_agent_opencode_session_id"])
     }

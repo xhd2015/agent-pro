@@ -1,8 +1,9 @@
 ## Expected
 - Exit code 0.
-- Meta.json has `main_agent_codex_thread_id` set to `codex-tid-222`.
-- Meta.json has `doctest_agent_implementer_session_id` set to `codex-tid-222` (fallback routing key).
-- Meta.json has `opencode_session_id` set.
+- `main_agent_codex_thread_id` = `codex-tid-222`.
+- `doctest_agent_implementer_session_id` is ABSENT (env var not set).
+- `opencode_session_id` is set.
+- `created_at` is set.
 
 ```go
 import (
@@ -25,8 +26,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
     if v, ok := m["main_agent_codex_thread_id"].(string); !ok || v != "codex-tid-222" {
         t.Fatalf("main_agent_codex_thread_id = %v, want codex-tid-222", m["main_agent_codex_thread_id"])
     }
-    if v, ok := m["doctest_agent_implementer_session_id"].(string); !ok || v != "codex-tid-222" {
-        t.Fatalf("doctest_agent_implementer_session_id = %v, want codex-tid-222", m["doctest_agent_implementer_session_id"])
+    if _, ok := m["doctest_agent_implementer_session_id"]; ok {
+        t.Fatalf("doctest_agent_implementer_session_id should NOT be present when DOCTEST_AGENT_IMPLEMENTER_SESSION_ID is not set, got %v", m["doctest_agent_implementer_session_id"])
     }
     if v, ok := m["main_agent_opencode_session_id"]; ok {
         t.Fatalf("main_agent_opencode_session_id should NOT be present when using codex, got %v", v)

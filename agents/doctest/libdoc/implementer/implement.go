@@ -43,6 +43,7 @@ type Options struct {
 	Prompt      string
 	AgentRunner string
 	MockConfig  string
+	SessionID   string
 }
 
 func Run(opts Options) error {
@@ -56,7 +57,7 @@ func Run(opts Options) error {
 		agentRunner = "opencode"
 	}
 
-	srcs, err := resolveSessionID()
+	srcs, err := resolveSessionID(opts.SessionID)
 	if err != nil {
 		return err
 	}
@@ -140,16 +141,27 @@ func Run(opts Options) error {
 }
 
 type sessionIDSources struct {
-	sessionID          string
-	codexThreadID      string
-	opencodeSessionID  string
+	sessionID         string
+	codexThreadID     string
+	implSessionID     string
+	explicitSessionID string
 }
 
-func resolveSessionID() (*sessionIDSources, error) {
-	if v := os.Getenv("DOCTEST_AGENT_IMPLEMENTER_SESSION_ID"); v != "" {
+func resolveSessionID(flagSessionID string) (*sessionIDSources, error) {
+	if flagSessionID != "" {
+		codexID := os.Getenv("CODEX_THREAD_ID")
 		return &sessionIDSources{
-			sessionID:         v,
-			codexThreadID:     os.Getenv("CODEX_THREAD_ID"),
+			sessionID:         flagSessionID,
+			codexThreadID:     codexID,
+			explicitSessionID: flagSessionID,
+		}, nil
+	}
+	if v := os.Getenv("DOCTEST_AGENT_IMPLEMENTER_SESSION_ID"); v != "" {
+		codexID := os.Getenv("CODEX_THREAD_ID")
+		return &sessionIDSources{
+			sessionID:     v,
+			codexThreadID: codexID,
+			implSessionID: v,
 		}, nil
 	}
 	if v := os.Getenv("CODEX_THREAD_ID"); v != "" {
@@ -158,84 +170,41 @@ func resolveSessionID() (*sessionIDSources, error) {
 			codexThreadID: v,
 		}, nil
 	}
-	if v, err := discoverOpencodeSessionID(); err == nil && v != "" {
-		return &sessionIDSources{
-			sessionID:         v,
-			opencodeSessionID: v,
-		}, nil
-	}
-	return nil, fmt.Errorf("no session ID resolved: must be run from codex or opencode (set DOCTEST_AGENT_IMPLEMENTER_SESSION_ID, or CODEX_THREAD_ID, or run under opencode)")
+	genID := generateSessionID()
+	return nil, fmt.Errorf("cannot detect session id, if you're running inside opencode, run with: doctest agent implement --session-id %s <prompt>, and use the same session id in subsequent followups; or set DOCTEST_AGENT_IMPLEMENTER_SESSION_ID or CODEX_THREAD_ID", genID)
 }
 
-func discoverOpencodeSessionID() (string, error) {
-	if !hasOpencodeAncestor() {
-		return "", fmt.Errorf("no opencode ancestor in process tree")
-	}
-	wd, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("getwd: %w", err)
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("home: %w", err)
-	}
-	dbPath := filepath.Join(home, ".local", "share", "opencode", "opencode.db")
-	if _, err := os.Stat(dbPath); err != nil {
-		return "", fmt.Errorf("opencode db not found at %s: %w", dbPath, err)
-	}
-	sessionID, err := queryOpencodeSession(dbPath, wd)
-	if err != nil {
-		return "", fmt.Errorf("query opencode session: %w", err)
-	}
-	return sessionID, nil
+func generateSessionID() string {
+	return "gen_" + fmt.Sprintf("%x", md5Sum([]byte(uuidString())))
 }
 
-func hasOpencodeAncestor() bool {
-	pid := os.Getppid()
-	for i := 0; i < 50; i++ {
-		if pid <= 1 {
-			return false
+func uuidString() string {
+	f, _ := os.Open("/dev/urandom")
+	if f == nil {
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	defer f.Close()
+	buf := make([]byte, 16)
+	f.Read(buf)
+	return fmt.Sprintf("%x-%x-%x-%x-%x", buf[0:4], buf[4:6], buf[6:8], buf[8:10], buf[10:])
+}
+
+func md5Sum(data []byte) [16]byte {
+	// simple md5-like hash using DJB2 + mixing
+	var h [16]byte
+	hash := uint64(5381)
+	for i, b := range data {
+		hash = ((hash << 5) + hash) + uint64(b)
+		if i%8 == 7 {
+			h[i/8] = byte(hash ^ (hash >> 8) ^ (hash >> 16) ^ (hash >> 24) ^ (hash >> 32) ^ (hash >> 40) ^ (hash >> 48) ^ (hash >> 56))
+			hash = 5381
 		}
-		cmd, err := getProcessName(pid)
-		if err != nil {
-			return false
-		}
-		if cmd == "opencode" {
-			return true
-		}
-		ppid, err := getParentPID(pid)
-		if err != nil || ppid == pid || ppid <= 1 {
-			return false
-		}
-		pid = ppid
 	}
-	return false
-}
-
-func getProcessName(pid int) (string, error) {
-	out, err := exec.Command("ps", "-o", "comm=", "-p", strconv.Itoa(pid)).Output()
-	if err != nil {
-		return "", err
+	rem := len(data) % 8
+	if rem > 0 {
+		h[len(data)/8] = byte(hash ^ (hash >> 8) ^ (hash >> 16) ^ (hash >> 24) ^ (hash >> 32) ^ (hash >> 40) ^ (hash >> 48) ^ (hash >> 56))
 	}
-	return strings.TrimSpace(string(out)), nil
-}
-
-func getParentPID(pid int) (int, error) {
-	out, err := exec.Command("ps", "-o", "ppid=", "-p", strconv.Itoa(pid)).Output()
-	if err != nil {
-		return 0, err
-	}
-	return strconv.Atoi(strings.TrimSpace(string(out)))
-}
-
-func queryOpencodeSession(dbPath, workDir string) (string, error) {
-	escaped := strings.ReplaceAll(workDir, "'", "''")
-	query := fmt.Sprintf("SELECT id FROM session WHERE directory = '%s' ORDER BY time_updated DESC LIMIT 1;", escaped)
-	out, err := exec.Command("sqlite3", dbPath, query).Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
+	return h
 }
 
 func runAgent(agentRunner, prompt, sessionID string, rawLog *sessionIDCapture) (string, error) {
@@ -321,11 +290,11 @@ func sessionsBase() (string, error) {
 }
 
 type meta struct {
-	DoctestAgentImplementerSessionID string    `json:"doctest_agent_implementer_session_id,omitempty"`
-	MainAgentCodexThreadID           string    `json:"main_agent_codex_thread_id,omitempty"`
-	MainAgentOpencodeSessionID       string    `json:"main_agent_opencode_session_id,omitempty"`
-	OpencodeSessionID                string    `json:"opencode_session_id,omitempty"`
-	CreatedAt                        time.Time `json:"created_at"`
+	ExplicitSessionID                  string    `json:"explicit_session_id,omitempty"`
+	DoctestAgentImplementerSessionID   string    `json:"doctest_agent_implementer_session_id,omitempty"`
+	MainAgentCodexThreadID             string    `json:"main_agent_codex_thread_id,omitempty"`
+	OpencodeSessionID                  string    `json:"opencode_session_id,omitempty"`
+	CreatedAt                          time.Time `json:"created_at"`
 }
 
 func findOrCreateSession(threadID string, srcs *sessionIDSources) (dir string, isNew bool, err error) {
@@ -334,7 +303,7 @@ func findOrCreateSession(threadID string, srcs *sessionIDSources) (dir string, i
 		return "", false, err
 	}
 
-	dir = findSession(base, threadID)
+	dir = findSession(base, threadID, srcs)
 	if dir != "" {
 		return dir, false, nil
 	}
@@ -346,7 +315,8 @@ func findOrCreateSession(threadID string, srcs *sessionIDSources) (dir string, i
 	return dir, true, nil
 }
 
-func findSession(base, threadID string) string {
+func findSession(base, threadID string, srcs *sessionIDSources) string {
+	matchField := sessionMatchField(srcs)
 	today := time.Now()
 	for i := 0; i < 7; i++ {
 		dateDir := today.AddDate(0, 0, -i).Format("2006/01/02")
@@ -365,16 +335,28 @@ func findSession(base, threadID string) string {
 			if err != nil {
 				continue
 			}
-			var m meta
+			var m map[string]any
 			if err := json.Unmarshal(data, &m); err != nil {
 				continue
 			}
-			if m.DoctestAgentImplementerSessionID == threadID {
-				return sessDir
+			if v, ok := m[matchField]; ok {
+				if s, ok := v.(string); ok && s == threadID {
+					return sessDir
+				}
 			}
 		}
 	}
 	return ""
+}
+
+func sessionMatchField(srcs *sessionIDSources) string {
+	if srcs.explicitSessionID != "" {
+		return "explicit_session_id"
+	}
+	if srcs.implSessionID != "" {
+		return "doctest_agent_implementer_session_id"
+	}
+	return "main_agent_codex_thread_id"
 }
 
 func createSession(base, threadID string, srcs *sessionIDSources) (string, error) {
@@ -388,9 +370,9 @@ func createSession(base, threadID string, srcs *sessionIDSources) (string, error
 	}
 
 	m := meta{
-		DoctestAgentImplementerSessionID: threadID,
+		ExplicitSessionID:                srcs.explicitSessionID,
+		DoctestAgentImplementerSessionID: srcs.implSessionID,
 		MainAgentCodexThreadID:           srcs.codexThreadID,
-		MainAgentOpencodeSessionID:       srcs.opencodeSessionID,
 		CreatedAt:                        now,
 	}
 	data, err := json.MarshalIndent(m, "", "  ")
@@ -470,7 +452,6 @@ func updateSessionMeta(sessionDir, innerSessionID string, srcs *sessionIDSources
 	m.OpencodeSessionID = innerSessionID
 	if srcs != nil {
 		m.MainAgentCodexThreadID = srcs.codexThreadID
-		m.MainAgentOpencodeSessionID = srcs.opencodeSessionID
 	}
 	newData, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
