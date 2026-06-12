@@ -19,7 +19,7 @@ const usage = `Usage: doctest <command> [options]
 Commands:
   agent generate <idea> [-d|--dir <target-dir>] [--agent-runner RUNNER]
   agent fill-code <target-dir>
-  agent implement <prompt> [--agent-runner RUNNER] [--mock-config PATH]
+   agent implement <prompt> [--agent-runner RUNNER] [--mock-config PATH] [--requirement PATH]
   validate <dir>
   build <dir>
   test <dir>
@@ -82,7 +82,7 @@ Examples:
   doctest test -v ./sub-module/...
 `
 
-const agentImplementUsage = `Usage: doctest agent implement [--agent-runner RUNNER] [--mock-config PATH] <prompt>
+const agentImplementUsage = `Usage: doctest agent implement [--agent-runner RUNNER] [--mock-config PATH] [--requirement PATH] <prompt>
 
 Spawn a sub-agent to implement code that makes doctests pass.
 Blocks until the sub-agent completes or yields questions via
@@ -91,6 +91,8 @@ yield-pending-questions.
 Options:
   --agent-runner RUNNER   opencode, codex, or fake-codex (default: opencode)
   --mock-config PATH      mock config JSON for fake-codex
+  --requirement PATH      read requirement from file (useful for long prompts
+                          or prompts with shell special characters)
   -h, --help              Show help
 `
 
@@ -125,7 +127,7 @@ func runAgent(args []string) error {
 Commands:
   generate <idea> [-d|--dir <target-dir>]
   fill-code <target-dir>
-  implement <prompt> [--agent-runner RUNNER] [--mock-config PATH]
+  implement <prompt> [--agent-runner RUNNER] [--mock-config PATH] [--requirement PATH]
 `)
 		return nil
 	}
@@ -214,6 +216,12 @@ func runAgentImplement(args []string) error {
 				return fmt.Errorf("--mock-config requires value")
 			}
 			opts.MockConfig = args[i+1]
+			i++
+		case "--requirement":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--requirement requires value")
+			}
+			opts.Requirement = args[i+1]
 			i++
 		default:
 			promptParts = append(promptParts, arg)

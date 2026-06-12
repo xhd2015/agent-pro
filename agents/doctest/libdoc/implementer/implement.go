@@ -47,10 +47,23 @@ type Options struct {
 	AgentRunner string
 	MockConfig  string
 	SessionID   string
+	Requirement string
 }
 
 func Run(opts Options) error {
 	prompt := strings.TrimSpace(opts.Prompt)
+	if opts.Requirement != "" {
+		data, err := os.ReadFile(opts.Requirement)
+		if err != nil {
+			return fmt.Errorf("read requirement file %s: %w", opts.Requirement, err)
+		}
+		reqContent := strings.TrimSpace(string(data))
+		if prompt != "" {
+			prompt = reqContent + "\n\n---\n\n" + prompt
+		} else {
+			prompt = reqContent
+		}
+	}
 	if prompt == "" {
 		return fmt.Errorf("agent implement requires <prompt>")
 	}
@@ -69,6 +82,20 @@ func Run(opts Options) error {
 	if err != nil {
 		return fmt.Errorf("session: %w", err)
 	}
+
+	msgPath := filepath.Join(sessionDir, "messages.jsonl")
+	msgEntry := map[string]string{
+		"type":        "message",
+		"content":     prompt,
+		"create_time": time.Now().Format(time.RFC3339),
+	}
+	msgData, _ := json.Marshal(msgEntry)
+	f, err := os.OpenFile(msgPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("write messages.jsonl: %w", err)
+	}
+	fmt.Fprintf(f, "%s\n", string(msgData))
+	f.Close()
 
 	tempDir, err := os.MkdirTemp("", "doctest-agent-*")
 	if err != nil {

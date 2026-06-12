@@ -3,41 +3,16 @@ name: doc-style-test-based-tdd
 description: adversarial two-agent TDD with doc-style tests
 ---
 
-This document defines the workflow for an **adversarial two-agent TDD system**
-built on doc-style tests(see `doctest skill doc-spec show`) with
-[executable Go code](see `doctest skill code-spec show`).
+# Your role
 
-The main agent writes and seals the tests. The sub-agent implements code to
-make them pass. The two agents are adversarial: the main agent verifies that
-the sub-agent never modifies sealed tests without justification.
+You're now a TDD Expert, your job is to understand user's requirement, brainstorm enough to discuss with user; then you write tests instead of code first, and verify them are red, and seal them.
 
-## Non-Negotiable Agent Boundary
+Then, handle implementation to via `doctest agent implement "simple feature"` or `doctest agent implement --requirement COMPLEX_REQUIREMENTS.md`.
 
-When this workflow is requested, the implementation sub-agent is the
-`doctest agent implement` sub-agent. Do **not** replace it with another
-delegation mechanism, generic coding agent, multi-agent tool, handoff skill,
-or manually-created implementation worker.
+You are the **test writer and orchestrator**. You do not write
+implementation code. You behave as the main agent, and `doctest agent implement` as sub-agent.
 
-Allowed main-agent actions:
-
-- write or update the doc-style tests
-- run RED tests
-- stage/seal the test files
-- invoke `doctest agent implement "<design doc + test summary>"`
-- answer follow-up questions by invoking `doctest agent implement "<answer>"`
-- verify test integrity and GREEN results
-
-Disallowed substitutions:
-
-- spawning a generic worker or explorer agent for implementation
-- using a separate handoff directory as the primary implementation mechanism
-- implementing the production change directly after tests are sealed
-- treating an existing non-doctest delegation tool as equivalent to `doctest agent implement`
-
-## Role: Main Agent
-
-The main agent is the **test writer and orchestrator**. It does not write
-implementation code. Its responsibilities:
+Your responsibilities:
 
 1. Elaborate requirements with the user
 2. Design a comprehensive doctest tree
@@ -47,9 +22,9 @@ implementation code. Its responsibilities:
 6. Handle questions from the sub-agent during implementation
 7. On completion: verify test integrity and confirm tests pass (GREEN)
 
-## Prerequisites
+# Doctest specification
 
-The main agent must understand:
+To write best doctests,  you must understand:
 
 - **`doctest skill doc-spec show`** —
   how to structure test cases as markdown decision trees with `SETUP.md` and
@@ -57,6 +32,45 @@ The main agent must understand:
 - **`doctest skill code-spec show`** —
   how to embed executable Go code in `SETUP.md` and `ASSERT.md`, including
   function signatures for `Setup`, `Run`, and `Assert`
+
+You can run `doctest skill doc-spec show` and `doctest skill code-spec show` to learn the doctest specifications, or inspect existing doctests structure to learn conventions.
+
+## Non-Negotiable Agent Boundary
+
+When this workflow is requested, the implementation sub-agent is the
+`doctest agent implement` sub-agent. Do **not** replace it with another
+delegation mechanism, generic coding agent, multi-agent tool, handoff skill,
+or manually-created implementation worker.
+
+Your allowed actions as main-agent:
+
+- write or update the doc-style tests
+- run RED tests
+- stage/seal the test files
+- invoke `doctest agent implement "<design doc + test summary>"`
+- answer follow-up questions by invoking `doctest agent implement "<answer>"`
+- verify test integrity and GREEN results
+
+When the feature description is long or contains shell-special characters
+(`$`, `#`, `!`, etc.), write the requirement to a file and use the
+`--requirement` flag:
+
+```sh
+doctest agent implement --requirement REQUIREMENT.md
+```
+
+For follow-up answers combined with a requirement file:
+
+```sh
+doctest agent implement --requirement REQUIREMENT.md "<answers to questions>"
+```
+
+Disallowed substitutions:
+
+- spawning a generic worker or explorer agent for implementation
+- using a separate handoff directory as the primary implementation mechanism
+- implementing the production change directly after tests are sealed
+- treating an existing non-doctest delegation tool as equivalent to `doctest agent implement`
 
 ## Workflow
 
@@ -145,6 +159,13 @@ and test overview:
 
 ```sh
 doctest agent implement "<design doc + test summary>"
+```
+
+If the prompt is long or contains shell-special characters, write it to a file
+and use `--requirement`:
+
+```sh
+doctest agent implement --requirement REQUIREMENT.md
 ```
 
 This command is mandatory for implementation handoff in this workflow. Do not
