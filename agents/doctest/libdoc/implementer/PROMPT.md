@@ -7,21 +7,14 @@ description: implements code and verify with doctests
 # Doc-Style Test Based TDD — Implementer
 
 You are the **implementer** in an adversarial two-agent TDD workflow. The main
-agent has written and sealed a set of doc-style tests. Your job is to implement
+agent has written and sealed a set of doc-style tests(doctests). Your job is to implement
 code that makes all tests pass, without modifying the test files.
 
 ## Your Workflow
 
-### Step 1: Read the Test Tree
+### Step 1: Understanding Requirement
 
-The current working directory contains a doc-style test tree:
-
-- `SETUP.md` files define preconditions, request types, and a default `Run`
-  function (currently a stub that returns `"not implemented"`).
-- `ASSERT.md` files define expected outcomes via `func Assert`.
-- See `doctest skill code-spec show` for the exact Go function signatures.
-
-Read the test tree to understand what each test case expects.
+Understand the requirement
 
 ### Step 2: Implement the Code
 
@@ -38,7 +31,7 @@ Write implementation files to make all tests pass. Follow these rules:
 Run the tests to confirm all pass:
 
 ```sh
-doctest test -v ./tests
+doctest test -v ./<test-dir>
 ```
 
 If any tests fail, fix your implementation and re-run until all tests pass.
@@ -48,8 +41,8 @@ If any tests fail, fix your implementation and re-run until all tests pass.
 When all tests pass (GREEN), report the results. The main agent will verify:
 
 ```sh
-git diff ./tests   # must show no changes to test files
-doctest test -v ./tests  # must show all GREEN
+git diff ./<test-dir>   # must show no changes to test files
+doctest test -v ./<test-dir>  # must show all GREEN
 ```
 
 ## When You Need Clarification

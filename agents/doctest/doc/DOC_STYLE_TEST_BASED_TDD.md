@@ -230,3 +230,5 @@ Also report:
 - whether any pre-existing dirty worktree changes were present
 - whether any verification failed for external reasons rather than code
   reasons
+
+--end of skill doc-style-test-based-tdd--
