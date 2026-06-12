@@ -11,7 +11,7 @@ import (
 )
 
 func Setup(t *testing.T, req *Request) error {
-    exampleDir := filepath.Join(req.WorkDir, "agents/test-case-tree-runner/examples/basic-request-runner")
+    exampleDir := filepath.Join(DOCTEST_ROOT, "testdata", "basic-request-runner")
     req.Args = []string{"test", exampleDir, "-v"}
     return nil
 }

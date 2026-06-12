@@ -68,7 +68,7 @@ func TestRunErrorCases(t *testing.T) {
 		{name: "generate runner missing value", args: []string{"agent", "generate", "idea", "--agent-runner"}, wantErr: "--agent-runner requires value"},
 		{name: "validate no dir", args: []string{"validate"}, wantErr: "validate requires <dir>"},
 		{name: "validate too many dirs", args: []string{"validate", "a", "b"}, wantErr: "validate requires <dir>"},
-		{name: "skill missing action", args: []string{"skill", "doc-spec"}, wantErr: "skill requires doc-spec or code-spec plus show or install"},
+		{name: "skill missing action", args: []string{"skill", "doc-spec"}, wantErr: "skill requires doc-spec, code-spec, tdd, or implementer plus show or install"},
 		{name: "skill unknown action", args: []string{"skill", "doc-spec", "nope"}, wantErr: "unknown skill action: nope"},
 		{name: "skill unknown name", args: []string{"skill", "unknown", "show"}, wantErr: "unknown skill: unknown"},
 	}

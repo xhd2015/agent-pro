@@ -3,7 +3,7 @@ name: doc-style-test-code-specification
 description: when user mentions doc-style test, with code written inside the docs
 ---
 
-This specification builds on top of [doc-style-test-specification](./DOC_STYLE_TEST_SPECIFICATION.md).
+This specification builds on top of `doctest skill doc-spec show`.
 It adds executable Go code to doc-style test documents, turning prose test cases
 into runnable, verifiable tests.
 

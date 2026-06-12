@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/xhd2015/less-flags"
-	runnerbuild "github.com/xhd2015/agent-pro/agents/test-case-tree-runner/build"
-	"github.com/xhd2015/agent-pro/agents/test-case-tree-runner/core"
+	runnerbuild "github.com/xhd2015/agent-pro/agents/doctest/libdoc/build"
+	"github.com/xhd2015/agent-pro/agents/doctest/libdoc/core"
 )
 
 var ErrNoTestsFound = errors.New("no tests found")

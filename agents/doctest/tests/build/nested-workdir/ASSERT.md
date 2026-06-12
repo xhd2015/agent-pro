@@ -15,7 +15,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
     if resp.ExitCode != 0 {
         t.Fatalf("expected zero exit, got %d\nstdout:\n%s\nstderr:\n%s", resp.ExitCode, resp.Stdout, resp.Stderr)
     }
-    if strings.Contains(resp.Stderr, "agents/test-case-tree-runner/agents/test-case-tree-runner") {
+    if strings.Contains(resp.Stderr, "agents/doctest/agents/doctest") {
         t.Fatalf("runner path was resolved relative to nested cwd:\n%s", resp.Stderr)
     }
     if strings.Contains(resp.Stderr, "directory not found") {

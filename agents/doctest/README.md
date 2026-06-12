@@ -110,7 +110,7 @@ agents/doctest/
 │   │   └── agent_test.go
 │   ├── implementer/           # agent implement + yield-pending-questions protocol
 │   │   └── implement.go
-│   ├── runner/                # build/test runner (delegates to test-case-tree-runner)
+│   ├── runner/                # build/test runner (delegates to libdoc/build and libdoc/core)
 │   │   ├── runner.go
 │   │   ├── runner_test.go
 │   │   ├── resolve.go
