@@ -51,7 +51,7 @@ const skillUsage = `Usage: doctest skill --list
 
 const buildUsage = `Usage: doctest build [-v|--verbose] [--rm] [--gen-dir DIR] [-count=N] <dir>
 
-Validate generated snippets compile without executing behavior.
+Validate generated snippets compile without executing behavior,,allow ./... patterns like go build.
 
 Options:
   -v, --verbose     Show generated files and build command output
@@ -59,17 +59,27 @@ Options:
   --gen-dir DIR     Write generated Go test files to DIR
   -count=N          Forward Go test count option to generated build
   -h, --help        Show help
+
+Examples:
+  doctest build -v ./
+  doctest build -v ./...
+  doctest build -v ./sub-module/...
 `
 
 const testUsage = `Usage: doctest test [-v|--verbose] [--rm] [-count=N] <dir>
 
-Run executable Go snippets from a doc-style test directory.
+Run executable Go snippets from a doc-style test directory, allow ./... patterns like go test.
 
 Options:
   -v, --verbose     Show generated test names and runner output
   --rm              Remove the temporary generated test directory
   -count=N          Forward Go test count option to generated test binary
   -h, --help        Show help
+
+Examples:
+  doctest test -v ./
+  doctest test -v ./...
+  doctest test -v ./sub-module/...
 `
 
 const agentImplementUsage = `Usage: doctest agent implement [--agent-runner RUNNER] [--mock-config PATH] <prompt>

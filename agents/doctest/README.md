@@ -11,6 +11,12 @@ go install github.com/xhd2015/agent-pro/agents/doctest@latest
 #  go install github.com/xhd2015/doctest/cmd/doctest@latest
 ```
 
+# Usage
+
+```sh
+doctest test -v ./...
+```
+
 ## Commands
 
 ```
@@ -39,10 +45,11 @@ doctest validate tests/my-feature
 
 ### build
 
-Validate embedded Go code compiles (no execution).
+Validate embedded Go code compiles (no execution). Supports the same
+`<dir>` patterns as `test`, including `./...` and `./<prefix>/...`.
 
 ```sh
-doctest build [-v|--verbose] [--rm] [--gen-dir DIR] [-count=N] tests/my-feature
+doctest build [-v|--verbose] [--rm] [--gen-dir DIR] [-count=N] <dir>
 ```
 
 ### test
@@ -50,7 +57,31 @@ doctest build [-v|--verbose] [--rm] [--gen-dir DIR] [-count=N] tests/my-feature
 Build and run all executable leaves in a doc-style test tree.
 
 ```sh
-doctest test [-v|--verbose] [--rm] [-count=N] tests/my-feature
+doctest test [-v|--verbose] [--rm] [-count=N] [<dir> | ./... | ./<dir>/...]
+```
+
+Examples:
+```sh
+doctest test -v ./
+doctest test -v ./path
+
+# Run all doctest trees under the current module
+doctest test -v ./...
+
+# Run only tests under tests/feature-a/
+doctest test -v ./tests/feature-a/...
+```
+
+With `./...` or `./sub-path/...`, `doctest` walks subdirectories to find modules:
+
+```
+cwd/              (no go.mod)
+├── .gitignore    # ign_a/
+├── ign_a/        (gitignored → skipped)
+├── mod_a/        (go.mod + DOCTest → found)
+└── group/        (no go.mod)
+    ├── pkg1/     (go.mod + DOCTest → found)
+    └── pkg2/     (go.mod + DOCTest → found)
 ```
 
 ### agent generate
