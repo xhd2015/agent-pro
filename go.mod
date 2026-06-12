@@ -17,13 +17,11 @@ require (
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/google/uuid v1.6.0
-	github.com/xhd2015/gitops v0.0.15
 )
 
 require (
-	github.com/xhd2015/go-coverage v1.0.41 // indirect
-	github.com/xhd2015/go-inspect v0.0.49 // indirect
+	github.com/kr/pretty v0.3.0 // indirect
+	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
 
 require (
