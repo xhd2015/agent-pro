@@ -3,6 +3,7 @@ package implementer
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -12,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	agentprovider "github.com/xhd2015/agent-pro/agent/cli/provider"
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
@@ -175,36 +178,7 @@ func resolveSessionID(flagSessionID string) (*sessionIDSources, error) {
 }
 
 func generateSessionID() string {
-	return "gen_" + fmt.Sprintf("%x", md5Sum([]byte(uuidString())))
-}
-
-func uuidString() string {
-	f, _ := os.Open("/dev/urandom")
-	if f == nil {
-		return fmt.Sprintf("%d", time.Now().UnixNano())
-	}
-	defer f.Close()
-	buf := make([]byte, 16)
-	f.Read(buf)
-	return fmt.Sprintf("%x-%x-%x-%x-%x", buf[0:4], buf[4:6], buf[6:8], buf[8:10], buf[10:])
-}
-
-func md5Sum(data []byte) [16]byte {
-	// simple md5-like hash using DJB2 + mixing
-	var h [16]byte
-	hash := uint64(5381)
-	for i, b := range data {
-		hash = ((hash << 5) + hash) + uint64(b)
-		if i%8 == 7 {
-			h[i/8] = byte(hash ^ (hash >> 8) ^ (hash >> 16) ^ (hash >> 24) ^ (hash >> 32) ^ (hash >> 40) ^ (hash >> 48) ^ (hash >> 56))
-			hash = 5381
-		}
-	}
-	rem := len(data) % 8
-	if rem > 0 {
-		h[len(data)/8] = byte(hash ^ (hash >> 8) ^ (hash >> 16) ^ (hash >> 24) ^ (hash >> 32) ^ (hash >> 40) ^ (hash >> 48) ^ (hash >> 56))
-	}
-	return h
+	return "gen_" + fmt.Sprintf("%x", md5.Sum([]byte(uuid.New().String())))
 }
 
 func runAgent(agentRunner, prompt, sessionID string, rawLog *sessionIDCapture) (string, error) {
