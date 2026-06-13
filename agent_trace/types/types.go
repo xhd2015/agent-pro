@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	eventtypes "github.com/xhd2015/agent-pro/agent/event/types"
 )
 
 type AgentTraceMetadata struct {
@@ -110,14 +112,11 @@ type AgentTraceActivity struct {
 	ReplaceSummary bool                   `json:"replace_summary,omitempty"`
 }
 
-type AgentTraceFileChange struct {
-	Path string `json:"path"`
-	Kind string `json:"kind,omitempty"`
-}
+type AgentTraceFileChange = eventtypes.FileChange
+type FileChange = eventtypes.FileChange
 
 type Message = AgentTraceMessage
 type ToolCallEvent = AgentTraceActivity
-type FileChange = AgentTraceFileChange
 
 type AgentTraceParsedEvent struct {
 	Message  *AgentTraceMessage

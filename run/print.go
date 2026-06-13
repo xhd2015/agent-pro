@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xhd2015/agent-pro/agent/event/print"
 	"github.com/xhd2015/agent-pro/agent_trace/types"
 	"github.com/xhd2015/agent-pro/trace"
 	"github.com/xhd2015/dot-pkgs/go-pkgs/logs"
@@ -30,30 +31,11 @@ func FormatMessage(msg types.AgentTraceMessage) string {
 }
 
 func FormatMessageCompact(msg types.AgentTraceMessage) string {
-	var buf strings.Builder
-	writeHumanMessageCompact(&buf, msg)
-	return strings.TrimRight(buf.String(), "\n")
+	return print.FormatMessageCompact(msg)
 }
 
 func FormatTraceLine(line string) string {
-	trimmed := strings.TrimSpace(line)
-	if trimmed == "" || !strings.HasPrefix(trimmed, "{") {
-		return ""
-	}
-	parsed, ok := types.ParseAgentTraceLine(json.RawMessage(trimmed))
-	if !ok {
-		return ""
-	}
-	if parsed.Message != nil {
-		return FormatMessageCompact(*parsed.Message)
-	}
-	if parsed.Activity != nil {
-		return FormatMessageCompact(types.AgentTraceMessage{
-			Role:     types.RoleToolCall,
-			ToolCall: parsed.Activity,
-		})
-	}
-	return ""
+	return print.FormatTraceLine(line)
 }
 
 func writeHumanReport(w io.Writer, source trace.Source, descriptions []string) error {

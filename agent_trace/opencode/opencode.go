@@ -55,7 +55,7 @@ func (opencodeTraceAdapter) Parse(raw json.RawMessage) (types.AgentTraceParsedEv
 	}
 
 	switch line.Type {
-	case "text":
+	case "text", "reasoning":
 		if line.Part != nil {
 			text := strings.TrimSpace(line.Part.Text)
 			if text != "" {
