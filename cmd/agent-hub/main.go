@@ -16,6 +16,236 @@ import (
 	"github.com/xhd2015/agent-pro/agents/agent-hub/storage"
 )
 
+const help = `
+Usage: agent-hub <command> [ARGS]
+
+Commands:
+  daemon        manage the agent-hub daemon
+  notify        send an event notification
+  hook          receive a hook event from an agent runner
+  fetch         fetch events for a consumer
+  replay        reset a consumer cursor position
+  status        show agent-hub status (home directory)
+  consumers     list registered consumers
+  sessions      list all sessions
+  partitions    list all partitions
+  session       view and manage sessions
+  integration   manage agent-hub plugin integration with agent runners
+
+Run agent-hub <command> --help for command-specific options.
+`
+
+const daemonHelp = `
+Usage: agent-hub daemon <command> [ARGS]
+
+Commands:
+  start         start the daemon
+  stop          stop the daemon
+  status        show daemon status (running or not)
+
+Run agent-hub daemon <command> --help for command-specific options.
+`
+
+const daemonStartHelp = `
+Usage: agent-hub daemon start
+
+Start the agent-hub daemon by creating a lock file.
+`
+
+const daemonStopHelp = `
+Usage: agent-hub daemon stop
+
+Stop the agent-hub daemon by removing the lock file.
+`
+
+const daemonStatusHelp = `
+Usage: agent-hub daemon status
+
+Show the daemon status (running or not) and home directory.
+`
+
+const notifyHelp = `
+Usage: agent-hub notify --json <json> | --file <path>
+
+Send an event notification to agent-hub.
+
+Options:
+  --json <json>   event payload as inline JSON string
+  --file <path>   event payload from a JSON file
+`
+
+const hookHelp = `
+Usage: agent-hub hook notify --runner <runner> --event <event>
+
+Receive a hook event from an agent runner via stdin.
+
+Options:
+  --runner <runner>   agent runner name (e.g. opencode, codex)
+  --event <event>     native event type from the runner
+`
+
+const fetchHelp = `
+Usage: agent-hub fetch --consumer-id <id> [--limit <n>] [--peek]
+
+Fetch events for a consumer.
+
+Options:
+  --consumer-id <id>   consumer identifier (required)
+  --limit <n>          max events to fetch (default: 1)
+  --peek               peek without advancing the cursor
+`
+
+const replayHelp = `
+Usage: agent-hub replay --consumer-id <id> --from <partition:offset>
+
+Reset a consumer cursor to replay events from a given position.
+
+Options:
+  --consumer-id <id>          consumer identifier (required)
+  --from <partition:offset>   partition and offset to replay from (required)
+`
+
+const statusHelp = `
+Usage: agent-hub status
+
+Show the agent-hub home directory.
+`
+
+const consumersHelp = `
+Usage: agent-hub consumers
+
+List all registered consumers and their cursor positions.
+`
+
+const sessionsHelp = `
+Usage: agent-hub sessions
+
+List all sessions stored in agent-hub.
+`
+
+const partitionsHelp = `
+Usage: agent-hub partitions
+
+List all event partitions in agent-hub.
+`
+
+const sessionHelp = `
+Usage: agent-hub session <command> [ARGS]
+
+Commands:
+  show          show session details
+  message       manage session messages
+
+Run agent-hub session <command> --help for command-specific options.
+`
+
+const sessionShowHelp = `
+Usage: agent-hub session show --runner <runner> --session-id <id>
+
+Show details for a specific session.
+
+Options:
+  --runner <runner>      agent runner name (required)
+  --session-id <id>      session identifier (required)
+`
+
+const sessionMessageHelp = `
+Usage: agent-hub session message <command> [ARGS]
+
+Commands:
+  send          send a message to a session
+  list          list messages in a session queue
+  pop           retrieve and clear messages from a session queue
+
+Run agent-hub session message <command> --help for command-specific options.
+`
+
+const sessionMessageSendHelp = `
+Usage: agent-hub session message send --runner <runner> --session-id <id> --text <text>
+
+Send a message to a session queue.
+
+Options:
+  --runner <runner>      agent runner name (required)
+  --session-id <id>      session identifier (required)
+  --text <text>          message text to send (required)
+`
+
+const sessionMessageListHelp = `
+Usage: agent-hub session message list --runner <runner> --session-id <id>
+
+List messages in a session queue.
+
+Options:
+  --runner <runner>      agent runner name (required)
+  --session-id <id>      session identifier (required)
+`
+
+const sessionMessagePopHelp = `
+Usage: agent-hub session message pop --runner <runner> --session-id <id>
+
+Retrieve and clear messages from a session queue.
+
+Options:
+  --runner <runner>      agent runner name (required)
+  --session-id <id>      session identifier (required)
+`
+
+const integrationHelp = `
+Usage: agent-hub integration <command> [ARGS]
+
+Commands:
+  status        show integration status
+  install       install plugin for a runner
+  uninstall     remove plugin for a runner
+  enable        enable a disabled plugin
+  disable       disable an enabled plugin
+
+Run agent-hub integration <command> --help for command-specific options.
+`
+
+const integrationStatusHelp = `
+Usage: agent-hub integration status [runner]
+
+Show plugin integration status. Without arguments, shows status
+for all supported runners as JSON. With a runner argument, shows
+status for that runner only.
+
+Supported runners: opencode
+`
+
+const integrationInstallHelp = `
+Usage: agent-hub integration install <runner> [--global]
+
+Install the agent-hub plugin for a runner. Without --global,
+installs to the local .opencode/plugins/ directory. With --global,
+installs to ~/.config/opencode/plugins/.
+
+Options:
+  --global   install to global plugins directory
+`
+
+const integrationUninstallHelp = `
+Usage: agent-hub integration uninstall <runner>
+
+Remove the agent-hub plugin and disabled plugin file from the
+local .opencode/plugins/ directory.
+`
+
+const integrationEnableHelp = `
+Usage: agent-hub integration enable <runner>
+
+Enable a disabled plugin by renaming agent-hub.ts.disabled to
+agent-hub.ts in the local .opencode/plugins/ directory.
+`
+
+const integrationDisableHelp = `
+Usage: agent-hub integration disable <runner>
+
+Disable an enabled plugin by renaming agent-hub.ts to
+agent-hub.ts.disabled in the local .opencode/plugins/ directory.
+`
+
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "agent-hub: %v\n", err)
@@ -25,7 +255,12 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
-		fmt.Println("Usage: agent-hub <daemon|notify|hook|fetch|replay|status|consumers|sessions|partitions|session>")
+		fmt.Print(strings.TrimPrefix(help, "\n"))
+		return nil
+	}
+	switch args[0] {
+	case "--help", "-h":
+		fmt.Print(strings.TrimPrefix(help, "\n"))
 		return nil
 	}
 	home := hubHome()
@@ -34,20 +269,52 @@ func run(args []string) error {
 	case "daemon":
 		return runDaemon(home, args[1:])
 	case "notify":
+		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Print(strings.TrimPrefix(notifyHelp, "\n"))
+			return nil
+		}
 		return runNotify(s, args[1:])
 	case "hook":
+		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Print(strings.TrimPrefix(hookHelp, "\n"))
+			return nil
+		}
 		return runHook(s, args[1:])
 	case "fetch":
+		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Print(strings.TrimPrefix(fetchHelp, "\n"))
+			return nil
+		}
 		return runFetch(s, args[1:])
 	case "replay":
+		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Print(strings.TrimPrefix(replayHelp, "\n"))
+			return nil
+		}
 		return runReplay(s, args[1:])
 	case "status":
+		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Print(strings.TrimPrefix(statusHelp, "\n"))
+			return nil
+		}
 		return printJSON(map[string]any{"home": home})
 	case "consumers":
+		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Print(strings.TrimPrefix(consumersHelp, "\n"))
+			return nil
+		}
 		return runConsumers(home)
 	case "sessions":
+		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Print(strings.TrimPrefix(sessionsHelp, "\n"))
+			return nil
+		}
 		return runSessions(home)
 	case "partitions":
+		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Print(strings.TrimPrefix(partitionsHelp, "\n"))
+			return nil
+		}
 		parts, err := s.Partitions()
 		if err != nil {
 			return err
@@ -55,6 +322,8 @@ func run(args []string) error {
 		return printJSON(map[string]any{"partitions": parts})
 	case "session":
 		return runSession(home, s, args[1:])
+	case "integration":
+		return runIntegration(args[1:])
 	default:
 		return fmt.Errorf("unknown command: %s", args[0])
 	}
@@ -68,22 +337,35 @@ func hubHome() string {
 }
 
 func runDaemon(home string, args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("daemon requires subcommand")
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(strings.TrimPrefix(daemonHelp, "\n"))
+		return nil
 	}
 	lock := filepath.Join(home, "daemon.lock")
 	switch args[0] {
 	case "start":
+		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Print(strings.TrimPrefix(daemonStartHelp, "\n"))
+			return nil
+		}
 		if err := os.MkdirAll(home, 0755); err != nil {
 			return err
 		}
 		return os.WriteFile(lock, []byte("started\n"), 0644)
 	case "stop":
+		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Print(strings.TrimPrefix(daemonStopHelp, "\n"))
+			return nil
+		}
 		if err := os.Remove(lock); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 		return nil
 	case "status":
+		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Print(strings.TrimPrefix(daemonStatusHelp, "\n"))
+			return nil
+		}
 		_, err := os.Stat(lock)
 		return printJSON(map[string]any{"running": err == nil, "home": home})
 	default:
@@ -346,11 +628,16 @@ func runSessions(home string) error {
 }
 
 func runSession(home string, s *storage.Store, args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("session requires subcommand: show, message")
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(strings.TrimPrefix(sessionHelp, "\n"))
+		return nil
 	}
 	switch args[0] {
 	case "show":
+		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Print(strings.TrimPrefix(sessionShowHelp, "\n"))
+			return nil
+		}
 		return runSessionShow(home, s, args[1:])
 	case "message":
 		return runSessionMessage(home, s, args[1:])
@@ -393,15 +680,28 @@ func runSessionShow(home string, s *storage.Store, args []string) error {
 }
 
 func runSessionMessage(home string, s *storage.Store, args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("session message requires subcommand: send, list, pop")
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(strings.TrimPrefix(sessionMessageHelp, "\n"))
+		return nil
 	}
 	switch args[0] {
 	case "send":
+		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Print(strings.TrimPrefix(sessionMessageSendHelp, "\n"))
+			return nil
+		}
 		return runSessionMessageSend(home, s, args[1:])
 	case "list":
+		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Print(strings.TrimPrefix(sessionMessageListHelp, "\n"))
+			return nil
+		}
 		return runSessionMessageList(home, s, args[1:])
 	case "pop":
+		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Print(strings.TrimPrefix(sessionMessagePopHelp, "\n"))
+			return nil
+		}
 		return runSessionMessagePop(home, s, args[1:])
 	default:
 		return fmt.Errorf("unknown session message command: %s", args[0])
@@ -552,6 +852,240 @@ func runSessionMessagePop(home string, s *storage.Store, args []string) error {
 		msgs = []model.Message{}
 	}
 	return printJSON(map[string]any{"messages": msgs})
+}
+
+func runIntegration(args []string) error {
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(strings.TrimPrefix(integrationHelp, "\n"))
+		return nil
+	}
+	switch args[0] {
+	case "status":
+		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Print(strings.TrimPrefix(integrationStatusHelp, "\n"))
+			return nil
+		}
+		return runIntegrationStatus(args[1:])
+	case "install":
+		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Print(strings.TrimPrefix(integrationInstallHelp, "\n"))
+			return nil
+		}
+		return runIntegrationInstall(args[1:])
+	case "uninstall":
+		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Print(strings.TrimPrefix(integrationUninstallHelp, "\n"))
+			return nil
+		}
+		return runIntegrationUninstall(args[1:])
+	case "enable":
+		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Print(strings.TrimPrefix(integrationEnableHelp, "\n"))
+			return nil
+		}
+		return runIntegrationEnable(args[1:])
+	case "disable":
+		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Print(strings.TrimPrefix(integrationDisableHelp, "\n"))
+			return nil
+		}
+		return runIntegrationDisable(args[1:])
+	default:
+		return fmt.Errorf("unknown integration command: %s", args[0])
+	}
+}
+
+func integrationLocalPluginsDir() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("get current directory: %w", err)
+	}
+	return filepath.Join(cwd, ".opencode", "plugins"), nil
+}
+
+type integrationStatus struct {
+	Installed bool   `json:"installed"`
+	Enabled   bool   `json:"enabled"`
+	Path      string `json:"path"`
+}
+
+func integrationStatusForOpenCode() (integrationStatus, error) {
+	localDir, err := integrationLocalPluginsDir()
+	if err != nil {
+		return integrationStatus{}, err
+	}
+	tsPath := filepath.Join(localDir, "agent-hub.ts")
+	disabledPath := filepath.Join(localDir, "agent-hub.ts.disabled")
+	_, tserr := os.Stat(tsPath)
+	_, diserr := os.Stat(disabledPath)
+	if tserr == nil {
+		return integrationStatus{Installed: true, Enabled: true, Path: tsPath}, nil
+	}
+	if diserr == nil {
+		return integrationStatus{Installed: true, Enabled: false, Path: disabledPath}, nil
+	}
+	return integrationStatus{Installed: false, Enabled: false, Path: tsPath}, nil
+}
+
+func runIntegrationStatus(args []string) error {
+	runner := ""
+	if len(args) > 0 {
+		runner = args[0]
+	}
+	if runner == "" {
+		status, err := integrationStatusForOpenCode()
+		if err != nil {
+			return err
+		}
+		return printJSON(map[string]any{"opencode": status})
+	}
+	if runner != "opencode" {
+		return fmt.Errorf("unsupported runner: %s", runner)
+	}
+	status, err := integrationStatusForOpenCode()
+	if err != nil {
+		return err
+	}
+	return printJSON(status)
+}
+
+func runIntegrationInstall(args []string) error {
+	globalFlag := false
+	runner := ""
+	runnerSet := false
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--global":
+			globalFlag = true
+		default:
+			if !runnerSet {
+				runner = args[i]
+				runnerSet = true
+			}
+		}
+	}
+	if runner == "" {
+		return fmt.Errorf("runner is required")
+	}
+	if runner != "opencode" {
+		return fmt.Errorf("unsupported runner: %s", runner)
+	}
+
+	var pluginsDir string
+	if globalFlag {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("find home directory: %w", err)
+		}
+		pluginsDir = filepath.Join(home, ".config", "opencode", "plugins")
+	} else {
+		localDir, err := integrationLocalPluginsDir()
+		if err != nil {
+			return err
+		}
+		pluginsDir = localDir
+	}
+
+	if err := os.MkdirAll(pluginsDir, 0755); err != nil {
+		return fmt.Errorf("create plugins directory: %w", err)
+	}
+
+	dstPath := filepath.Join(pluginsDir, "agent-hub.ts")
+	if err := os.WriteFile(dstPath, agentHubPlugin, 0644); err != nil {
+		return fmt.Errorf("write plugin file: %w", err)
+	}
+	fmt.Println("Installed")
+	return nil
+}
+
+func runIntegrationUninstall(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("runner is required")
+	}
+	runner := args[0]
+	if runner != "opencode" {
+		return fmt.Errorf("unsupported runner: %s", runner)
+	}
+
+	localDir, err := integrationLocalPluginsDir()
+	if err != nil {
+		return err
+	}
+	tsPath := filepath.Join(localDir, "agent-hub.ts")
+	disabledPath := filepath.Join(localDir, "agent-hub.ts.disabled")
+
+	removed := false
+	if err := os.Remove(tsPath); err == nil {
+		removed = true
+	}
+	if err := os.Remove(disabledPath); err == nil {
+		removed = true
+	}
+	if !removed {
+		return fmt.Errorf("plugin not installed")
+	}
+	fmt.Println("Uninstalled")
+	return nil
+}
+
+func runIntegrationEnable(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("runner is required")
+	}
+	runner := args[0]
+	if runner != "opencode" {
+		return fmt.Errorf("unsupported runner: %s", runner)
+	}
+
+	localDir, err := integrationLocalPluginsDir()
+	if err != nil {
+		return err
+	}
+	tsPath := filepath.Join(localDir, "agent-hub.ts")
+	disabledPath := filepath.Join(localDir, "agent-hub.ts.disabled")
+
+	if _, err := os.Stat(tsPath); err == nil {
+		fmt.Println("already enabled")
+		return nil
+	}
+	if _, err := os.Stat(disabledPath); os.IsNotExist(err) {
+		return fmt.Errorf("plugin not installed")
+	}
+	if err := os.Rename(disabledPath, tsPath); err != nil {
+		return fmt.Errorf("rename plugin: %w", err)
+	}
+	fmt.Println("Enabled")
+	return nil
+}
+
+func runIntegrationDisable(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("runner is required")
+	}
+	runner := args[0]
+	if runner != "opencode" {
+		return fmt.Errorf("unsupported runner: %s", runner)
+	}
+
+	localDir, err := integrationLocalPluginsDir()
+	if err != nil {
+		return err
+	}
+	tsPath := filepath.Join(localDir, "agent-hub.ts")
+	disabledPath := filepath.Join(localDir, "agent-hub.ts.disabled")
+
+	if _, err := os.Stat(disabledPath); err == nil {
+		fmt.Println("already disabled")
+		return nil
+	}
+	if _, err := os.Stat(tsPath); os.IsNotExist(err) {
+		return fmt.Errorf("plugin not installed")
+	}
+	if err := os.Rename(tsPath, disabledPath); err != nil {
+		return fmt.Errorf("rename plugin: %w", err)
+	}
+	fmt.Println("Disabled")
+	return nil
 }
 
 func newMessageID() string {
