@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"strings"
 
-	faketools "github.com/xhd2015/agent-pro/pkgs/fake-agent/fake-tools"
+	faketoolexec "github.com/xhd2015/agent-pro/pkgs/fake-agent/fake-tool-exec"
 	"github.com/xhd2015/agent-pro/pkgs/fake-agent/probe"
 )
 
@@ -28,10 +28,11 @@ const (
 )
 
 type Event struct {
-	Type    EventType  `json:"type"`
-	Item    *EventItem `json:"item,omitempty"`
-	Message string     `json:"message,omitempty"`
-	Text    string     `json:"text,omitempty"`
+	Type    EventType                `json:"type"`
+	Item    *EventItem               `json:"item,omitempty"`
+	Message string                   `json:"message,omitempty"`
+	Text    string                   `json:"text,omitempty"`
+	Mock    *faketoolexec.MockConfig `json:"mock,omitempty"`
 }
 
 type EventItem struct {
@@ -128,65 +129,65 @@ func (g *Generator) pickSuggestion(suggestions []probe.Suggestion) probe.Suggest
 
 func (g *Generator) execProbe(s probe.Suggestion) ([]Event, string) {
 	id := g.NextID()
-	var r faketools.Result
 	switch s.Kind {
 	case probe.KindToolCall:
-		r = faketools.ExecToolCall(g.rng, s.Value)
+		stdout, _, exitCode, _ := faketoolexec.ExecuteBash(s.Value, "", nil)
+		return g.buildCmdEvents(id, s.Value, stdout, exitCode)
 	case probe.KindFileRead:
-		r = faketools.ExecFileRead(g.rng, s.Value)
+		cmd := "cat " + s.Value
+		content, err := faketoolexec.ExecuteRead(s.Value)
+		if err != nil {
+			return g.buildCmdEvents(id, cmd, "", 1)
+		}
+		return g.buildCmdEvents(id, cmd, content, 0)
 	case probe.KindFileWrite:
-		r = faketools.ExecFileWrite(g.rng, s.Value)
+		faketoolexec.ExecuteWrite(s.Value, "content written by agent")
+		return g.buildFileChangeEvents(id, s.Value, "add")
 	case probe.KindSearch:
-		r = faketools.ExecSearch(g.rng, s.Value)
+		cmd := "grep -rn " + s.Value + " ."
+		output, exitCode, _ := faketoolexec.ExecuteGrep(s.Value, ".")
+		return g.buildCmdEvents(id, cmd, output, exitCode)
 	default:
-		r = faketools.ExecRandom(g.rng)
+		stdout, _, exitCode, _ := faketoolexec.ExecuteBash(s.Value, "", nil)
+		return g.buildCmdEvents(id, s.Value, stdout, exitCode)
 	}
-	return g.buildToolEvents(id, r)
 }
 
-func (g *Generator) buildToolEvents(id string, r faketools.Result) ([]Event, string) {
-	if len(r.Changes) > 0 {
-		var changes []FileChange
-		for _, c := range r.Changes {
-			changes = append(changes, FileChange{Path: c.Path, Kind: c.Kind})
-		}
-		started := Event{
-			Type: EventStarted,
-			Item: &EventItem{ID: id, Type: ItemFileChange},
-		}
-		completed := Event{
-			Type: EventCompleted,
-			Item: &EventItem{
-				ID:      id,
-				Type:    ItemFileChange,
-				Status:  "completed",
-				Changes: changes,
-			},
-		}
-		output := ""
-		if len(changes) > 0 {
-			output = changes[0].Path
-		}
-		return []Event{started, completed}, output
-	}
-
-	exitCode := 0
+func (g *Generator) buildCmdEvents(id, command, output string, exitCode int) ([]Event, string) {
+	ec := exitCode
 	started := Event{
 		Type: EventStarted,
-		Item: &EventItem{ID: id, Type: ItemCommandExecution, Command: r.Command},
+		Item: &EventItem{ID: id, Type: ItemCommandExecution, Command: command},
 	}
 	completed := Event{
 		Type: EventCompleted,
 		Item: &EventItem{
 			ID:               id,
 			Type:             ItemCommandExecution,
-			Command:          r.Command,
-			AggregatedOutput: r.Output,
-			ExitCode:         &exitCode,
+			Command:          command,
+			AggregatedOutput: output,
+			ExitCode:         &ec,
 			Status:           "completed",
 		},
 	}
-	return []Event{started, completed}, r.Output
+	return []Event{started, completed}, output
+}
+
+func (g *Generator) buildFileChangeEvents(id, path, kind string) ([]Event, string) {
+	started := Event{
+		Type: EventStarted,
+		Item: &EventItem{ID: id, Type: ItemFileChange},
+	}
+	completed := Event{
+		Type: EventCompleted,
+		Item: &EventItem{
+			ID:      id,
+			Type:    ItemFileChange,
+			Status:  "completed",
+			Changes: []FileChange{{Path: path, Kind: kind}},
+		},
+	}
+	return []Event{started, completed}, path
 }
 
 func (g *Generator) generateReasoning(id, topic string) []Event {

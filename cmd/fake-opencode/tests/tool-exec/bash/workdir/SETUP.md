@@ -1,0 +1,19 @@
+## Preconditions
+- The mock config contains a bash tool_use event with a `workdir` in the input.
+
+## Steps
+1. Create a known subdirectory in the temp dir.
+2. Write a mock config where bash runs `pwd` with workdir set to that subdirectory.
+3. Run fake-opencode and verify pwd output matches the workdir.
+
+```go
+import "testing"
+
+func Setup(t *testing.T, req *Request) error {
+    workDir := createTestFile(t, req, "subdir/placeholder.txt", "marker")
+    _ = workDir // we just need the directory to exist
+    mockJSON := `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_bash_wd","stdout_events":[{"type":"tool_use","part":{"id":"t1","type":"tool","tool":"bash","callID":"call_1","state":{"status":"pending","title":"pwd test","input":{"command":"pwd","workdir":"` + req.TempDir + `/subdir"}}}}]}`
+    writeMockConfig(t, req, mockJSON)
+    return nil
+}
+```

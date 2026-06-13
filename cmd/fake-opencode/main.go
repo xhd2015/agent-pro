@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	faketoolexec "github.com/xhd2015/agent-pro/pkgs/fake-agent/fake-tool-exec"
 	"github.com/xhd2015/less-gen/flags"
 )
 
@@ -188,6 +189,7 @@ func handleRun(args []string) error {
 		return fmt.Errorf("unsupported format: %s", strings.TrimSpace(*formatFlag))
 	}
 	for i, event := range cfg.StdoutEvents {
+		event = processToolUseEvent(event)
 		line, err := json.Marshal(cfg.withSession(event))
 		if err != nil {
 			return fmt.Errorf("marshal stdout_events[%d]: %w", i, err)
@@ -390,4 +392,138 @@ func resolveSessionsRoot() string {
 	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".config", "opencode", "sessions")
+}
+
+func processToolUseEvent(event map[string]any) map[string]any {
+	eventType, _ := event["type"].(string)
+	if eventType != "tool_use" {
+		return event
+	}
+
+	part, ok := event["part"].(map[string]any)
+	if !ok {
+		return event
+	}
+
+	toolName, _ := part["tool"].(string)
+
+	state, ok := part["state"].(map[string]any)
+	if !ok {
+		state = make(map[string]any)
+		part["state"] = state
+	}
+
+	mockRaw, hasMock := event["mock"]
+	if hasMock {
+		delete(event, "mock")
+		mockMap, ok := mockRaw.(map[string]any)
+		if ok {
+			mock := parseMockFromMap(mockMap)
+			applyMockOutput(event, toolName, state, mock)
+		}
+		return event
+	}
+
+	input, ok := state["input"].(map[string]any)
+	if !ok {
+		return event
+	}
+
+	switch toolName {
+	case "bash":
+		command, _ := input["command"].(string)
+		workdir, _ := input["workdir"].(string)
+		stdout, stderr, exitCode, _ := faketoolexec.ExecuteBash(command, workdir, nil)
+		state["output"] = stdout
+		state["exit_code"] = exitCode
+		if stderr != "" {
+			state["stderr"] = stderr
+		}
+		state["status"] = "completed"
+	case "read":
+		path, _ := input["path"].(string)
+		content, err := faketoolexec.ExecuteRead(path)
+		if err != nil {
+			state["error"] = err.Error()
+			state["exit_code"] = 1
+		} else {
+			state["output"] = content
+			state["exit_code"] = 0
+		}
+		state["status"] = "completed"
+	case "write":
+		path, _ := input["path"].(string)
+		content, _ := input["content"].(string)
+		err := faketoolexec.ExecuteWrite(path, content)
+		if err != nil {
+			state["error"] = err.Error()
+			state["exit_code"] = 1
+		} else {
+			state["exit_code"] = 0
+		}
+		state["status"] = "completed"
+	case "grep":
+		pattern, _ := input["pattern"].(string)
+		searchPath, _ := input["path"].(string)
+		output, exitCode, _ := faketoolexec.ExecuteGrep(pattern, searchPath)
+		state["output"] = output
+		state["exit_code"] = exitCode
+		state["status"] = "completed"
+	}
+
+	return event
+}
+
+func parseMockFromMap(m map[string]any) faketoolexec.MockConfig {
+	mock := faketoolexec.MockConfig{}
+	if v, ok := m["output"].(string); ok {
+		mock.Output = v
+	}
+	if v, ok := m["stderr"].(string); ok {
+		mock.Stderr = v
+	}
+	if v, ok := m["content"].(string); ok {
+		mock.Content = v
+	}
+	if v, ok := m["exit_code"].(float64); ok {
+		ec := int(v)
+		mock.ExitCode = &ec
+	}
+	return mock
+}
+
+func applyMockOutput(event map[string]any, toolName string, state map[string]any, mock faketoolexec.MockConfig) {
+	switch toolName {
+	case "bash":
+		stdout, stderr, exitCode := faketoolexec.ExecuteBashMock("", mock)
+		state["output"] = stdout
+		state["exit_code"] = exitCode
+		if stderr != "" {
+			state["stderr"] = stderr
+		}
+		state["status"] = "completed"
+	case "read":
+		content := faketoolexec.ExecuteReadMock(mock)
+		state["output"] = content
+		ec := 0
+		if mock.ExitCode != nil {
+			ec = *mock.ExitCode
+		}
+		state["exit_code"] = ec
+		state["status"] = "completed"
+	case "write":
+		faketoolexec.ExecuteWriteMock()
+		state["output"] = mock.Output
+		ec := 0
+		if mock.ExitCode != nil {
+			ec = *mock.ExitCode
+		}
+		state["exit_code"] = ec
+		state["status"] = "completed"
+	case "grep":
+		output, exitCode := faketoolexec.ExecuteGrepMock(mock)
+		state["output"] = output
+		state["exit_code"] = exitCode
+		state["status"] = "completed"
+	}
 }

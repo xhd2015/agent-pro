@@ -1,0 +1,16 @@
+## Preconditions
+- The mock config contains a `command_execution` event **with** a `"mock"` object.
+
+## Steps
+1. Write a mock config with `"mock":{"output":"fake codex output","exit_code":0}`.
+2. The command would produce different output if actually executed.
+3. Run fake-codex and verify mock output is used.
+
+```go
+import "testing"
+
+func Setup(t *testing.T, req *Request) error {
+    writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-codex","session_id":"codex_cmd_mock","stdout_events":[{"type":"item.completed","item":{"id":"cmd_1","type":"command_execution","command":"echo REAL CODEX OUTPUT","status":"completed"},"mock":{"output":"fake codex output","exit_code":0}}]}`)
+    return nil
+}
+```

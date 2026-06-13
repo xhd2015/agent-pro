@@ -10,6 +10,7 @@ import (
 	"time"
 
 	fakeagent "github.com/xhd2015/agent-pro/pkgs/fake-agent"
+	faketoolexec "github.com/xhd2015/agent-pro/pkgs/fake-agent/fake-tool-exec"
 	"github.com/xhd2015/less-gen/flags"
 )
 
@@ -167,6 +168,12 @@ func handleExec(args []string) error {
 			threadID = fmt.Sprintf("codex_%d", time.Now().UnixNano())
 		}
 		os.Setenv("CODEX_THREAD_ID", threadID)
+	}
+
+	if mockConfig != nil {
+		for i := range events {
+			processFakeCodexEvent(&events[i])
+		}
 	}
 
 	jsonOutput := jsonFlag != nil && *jsonFlag
@@ -385,4 +392,56 @@ func shellQuote(s string) string {
 		return "''"
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+func processFakeCodexEvent(event *fakeagent.Event) {
+	if event.Item == nil {
+		return
+	}
+
+	if event.Mock != nil {
+		processMockEvent(event)
+		return
+	}
+
+	switch event.Item.Type {
+	case fakeagent.ItemCommandExecution:
+		if event.Item.Command == "" {
+			return
+		}
+		stdout, _, exitCode, _ := faketoolexec.ExecuteBash(event.Item.Command, "", nil)
+		event.Item.AggregatedOutput = stdout
+		event.Item.ExitCode = &exitCode
+		event.Item.Status = "completed"
+	case fakeagent.ItemFileChange:
+		for _, change := range event.Item.Changes {
+			faketoolexec.ExecuteWrite(change.Path, "content written by agent")
+		}
+		event.Item.Status = "completed"
+	}
+}
+
+func processMockEvent(event *fakeagent.Event) {
+	mock := event.Mock
+	event.Mock = nil
+
+	switch event.Item.Type {
+	case fakeagent.ItemCommandExecution:
+		event.Item.AggregatedOutput = mock.Output
+		ec := 0
+		if mock.ExitCode != nil {
+			ec = *mock.ExitCode
+		}
+		event.Item.ExitCode = &ec
+		event.Item.Status = "completed"
+	case fakeagent.ItemFileChange:
+		if len(mock.Changes) > 0 {
+			var changes []fakeagent.FileChange
+			for _, c := range mock.Changes {
+				changes = append(changes, fakeagent.FileChange{Path: c.Path, Kind: c.Kind})
+			}
+			event.Item.Changes = changes
+		}
+		event.Item.Status = "completed"
+	}
 }
