@@ -6,8 +6,7 @@
 import "testing"
 
 func Assert(t *testing.T, req *Request, resp *Response, err error) {
-	assertSuccess(t, resp)
-	assertContains(t, resp.Stdout, "DONE")
-	assertNotContains(t, resp.Stdout, "FILE:")
+	assertContains(t, resp.Output, "DONE")
+	assertNotContains(t, resp.Output, "FILE:")
 }
 ```

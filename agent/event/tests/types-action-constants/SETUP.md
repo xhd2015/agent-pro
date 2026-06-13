@@ -5,24 +5,22 @@
 1. Run a program that prints each constant name and value.
 
 ```go
-import "testing"
-
-func Setup(t *testing.T, req *Request) error {
-	req.MainGo = `package main
-
 import (
 	"fmt"
+	"strings"
+	"testing"
+
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 )
 
-func main() {
-	fmt.Printf("ActionThink=%s\n", types.ActionThink)
-	fmt.Printf("ActionToolCall=%s\n", types.ActionToolCall)
-	fmt.Printf("ActionMessage=%s\n", types.ActionMessage)
-	fmt.Printf("ActionError=%s\n", types.ActionError)
-	fmt.Printf("ActionDone=%s\n", types.ActionDone)
-}
-`
+func Setup(t *testing.T, req *Request) error {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "ActionThink=%s\n", types.ActionThink)
+	fmt.Fprintf(&sb, "ActionToolCall=%s\n", types.ActionToolCall)
+	fmt.Fprintf(&sb, "ActionMessage=%s\n", types.ActionMessage)
+	fmt.Fprintf(&sb, "ActionError=%s\n", types.ActionError)
+	fmt.Fprintf(&sb, "ActionDone=%s\n", types.ActionDone)
+	req.Output = sb.String()
 	return nil
 }
 ```

@@ -5,8 +5,7 @@
 import "testing"
 
 func Assert(t *testing.T, req *Request, resp *Response, err error) {
-	assertSuccess(t, resp)
-	assertContains(t, resp.Stdout, `"path":"bar.go"`)
-	assertContains(t, resp.Stdout, `"kind":"modify"`)
+	assertContains(t, resp.Output, `"path":"bar.go"`)
+	assertContains(t, resp.Output, `"kind":"modify"`)
 }
 ```

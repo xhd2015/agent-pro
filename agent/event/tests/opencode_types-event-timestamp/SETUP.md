@@ -6,35 +6,31 @@
 2. Marshal back and verify timestamp is preserved.
 
 ```go
-import "testing"
-
-func Setup(t *testing.T, req *Request) error {
-	req.MainGo = `package main
-
 import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"testing"
+
 	opencode_types "github.com/xhd2015/agent-pro/agent/event/opencode_types"
 )
 
-func main() {
-	raw := ` + "`" + `{"type":"text","timestamp":1718200000999,"sessionID":"sess_ts","part":{"id":"p3","type":"text","text":"hello with timestamp"}}` + "`" + `
+func Setup(t *testing.T, req *Request) error {
+	raw := `{"type":"text","timestamp":1718200000999,"sessionID":"sess_ts","part":{"id":"p3","type":"text","text":"hello with timestamp"}}`
 	var evt opencode_types.Event
 	if err := json.Unmarshal([]byte(raw), &evt); err != nil {
-		fmt.Println("PARSE ERROR:", err)
-		return
+		return err
 	}
-	fmt.Printf("type=%s\n", evt.Type)
-	fmt.Printf("sessionID=%s\n", evt.SessionID)
-	fmt.Printf("timestamp=%d\n", evt.Timestamp)
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "type=%s\n", evt.Type)
+	fmt.Fprintf(&sb, "sessionID=%s\n", evt.SessionID)
+	fmt.Fprintf(&sb, "timestamp=%d\n", evt.Timestamp)
 
-	// re-marshal and verify timestamp is emitted
 	data, _ := json.Marshal(evt)
 	jsonStr := string(data)
-	fmt.Printf("has_timestamp=%v\n", strings.Contains(jsonStr, ` + "`" + `"timestamp"` + "`" + `))
-}
-`
+	fmt.Fprintf(&sb, "has_timestamp=%v\n", strings.Contains(jsonStr, `"timestamp"`))
+
+	req.Output = sb.String()
 	return nil
 }
 ```

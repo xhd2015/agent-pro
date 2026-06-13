@@ -6,23 +6,14 @@
 2. Marshal to JSON and print.
 
 ```go
-import "testing"
-
-func Setup(t *testing.T, req *Request) error {
-	req.MainGo = `package main
-
 import (
-	"encoding/json"
-	"fmt"
+	"testing"
+
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 )
 
-func main() {
-	fc := types.FileChange{Path: "bar.go", Kind: "modify"}
-	data, _ := json.Marshal(fc)
-	fmt.Println(string(data))
-}
-`
+func Setup(t *testing.T, req *Request) error {
+	req.Value = types.FileChange{Path: "bar.go", Kind: "modify"}
 	return nil
 }
 ```

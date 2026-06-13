@@ -5,12 +5,11 @@
 import "testing"
 
 func Assert(t *testing.T, req *Request, resp *Response, err error) {
-	assertSuccess(t, resp)
-	assertContains(t, resp.Stdout, `"type":"tool_use"`)
-	assertContains(t, resp.Stdout, `"sessionID":"sess_t1"`)
-	assertContains(t, resp.Stdout, `"tool":"bash"`)
-	assertContains(t, resp.Stdout, `"output":"hello"`)
-	assertContains(t, resp.Stdout, `"exit_code":0`)
-	assertContains(t, resp.Stdout, `"status":"completed"`)
+	assertContains(t, resp.Output, `"type":"tool_use"`)
+	assertContains(t, resp.Output, `"sessionID":"sess_t1"`)
+	assertContains(t, resp.Output, `"tool":"bash"`)
+	assertContains(t, resp.Output, `"output":"hello"`)
+	assertContains(t, resp.Output, `"exit_code":0`)
+	assertContains(t, resp.Output, `"status":"completed"`)
 }
 ```

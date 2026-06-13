@@ -6,19 +6,14 @@
 2. Marshal to JSON.
 
 ```go
-import "testing"
-
-func Setup(t *testing.T, req *Request) error {
-	req.MainGo = `package main
-
 import (
-	"encoding/json"
-	"fmt"
+	"testing"
+
 	opencode_types "github.com/xhd2015/agent-pro/agent/event/opencode_types"
 )
 
-func main() {
-	evt := opencode_types.Event{
+func Setup(t *testing.T, req *Request) error {
+	req.Value = opencode_types.Event{
 		Type:      "tool_use",
 		SessionID: "sess_t1",
 		Part: opencode_types.ToolUsePart{
@@ -33,10 +28,6 @@ func main() {
 			},
 		},
 	}
-	data, _ := json.Marshal(evt)
-	fmt.Println(string(data))
-}
-`
 	return nil
 }
 ```

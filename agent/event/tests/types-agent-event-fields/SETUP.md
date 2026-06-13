@@ -6,20 +6,15 @@
 2. Marshal to JSON and print.
 
 ```go
-import "testing"
-
-func Setup(t *testing.T, req *Request) error {
-	req.MainGo = `package main
-
 import (
-	"encoding/json"
-	"fmt"
+	"testing"
+
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 )
 
-func main() {
+func Setup(t *testing.T, req *Request) error {
 	ec := 42
-	evt := types.AgentEvent{
+	req.Value = types.AgentEvent{
 		ID:        "evt_001",
 		Type:      types.ActionToolCall,
 		Text:      "hello world",
@@ -30,10 +25,6 @@ func main() {
 		ExitCode:  &ec,
 		Changes:   []types.FileChange{{Path: "foo.txt", Kind: "add"}},
 	}
-	data, _ := json.Marshal(evt)
-	fmt.Println(string(data))
-}
-`
 	return nil
 }
 ```

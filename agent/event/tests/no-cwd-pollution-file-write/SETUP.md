@@ -8,31 +8,29 @@
 3. List the temporary directory contents to detect pollution.
 
 ```go
-import "testing"
-
-func Setup(t *testing.T, req *Request) error {
-	req.MainGo = `package main
-
 import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
+	"testing"
 
 	fakeagent "github.com/xhd2015/agent-pro/pkgs/fake-agent"
 )
 
-func main() {
+func Setup(t *testing.T, req *Request) error {
 	dir, err := os.MkdirTemp("", "fake-agent-probe-*")
 	if err != nil {
-		fmt.Println("ERROR:", err)
-		return
+		return fmt.Errorf("mkdirtemp: %w", err)
 	}
 	defer os.RemoveAll(dir)
 
-	origDir, _ := os.Getwd()
+	origDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("getwd: %w", err)
+	}
 	if err := os.Chdir(dir); err != nil {
-		fmt.Println("ERROR:", err)
-		return
+		return fmt.Errorf("chdir: %w", err)
 	}
 	defer os.Chdir(origDir)
 
@@ -41,8 +39,7 @@ func main() {
 
 	entries, err := os.ReadDir(".")
 	if err != nil {
-		fmt.Println("ERROR:", err)
-		return
+		return fmt.Errorf("readdir: %w", err)
 	}
 
 	var files []string
@@ -50,12 +47,13 @@ func main() {
 		files = append(files, e.Name())
 	}
 	sort.Strings(files)
+
+	var sb strings.Builder
 	for _, f := range files {
-		fmt.Println("FILE:", f)
+		fmt.Fprintf(&sb, "FILE: %s\n", f)
 	}
-	fmt.Println("DONE")
-}
-`
+	fmt.Fprint(&sb, "DONE")
+	req.Output = sb.String()
 	return nil
 }
 ```

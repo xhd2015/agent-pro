@@ -1,107 +1,60 @@
 ## Preconditions
-- The repository must have `go.mod` at its root.
-- Each leaf provides a `main.go` source string that exercises the packages under test.
+- Each leaf provides structured input data in request fields.
+- `Run` dispatches based on which fields are set: `Events` → ToCodex/ToOpencode, `Value` → marshal, `Output` → pass-through.
 
 ## Steps
-1. Write `main.go` to the temporary directory.
-2. Run `go run ./...` from the repo root referencing the temp dir main.go.
-3. Capture stdout, stderr, and exit status.
+1. If `req.Events` is set, call `codex_types.ToCodex` or `opencode_types.ToOpencode` and marshal.
+2. If `req.Value` is set, marshal it to JSON.
+3. Otherwise, pass through `req.Output`.
 
 ```go
 import (
-	"bytes"
-	"context"
-	"errors"
-	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
+	"encoding/json"
 	"strings"
 	"testing"
-	"time"
+
+	codex_types "github.com/xhd2015/agent-pro/agent/event/codex_types"
+	opencode_types "github.com/xhd2015/agent-pro/agent/event/opencode_types"
+	types "github.com/xhd2015/agent-pro/agent/event/types"
 )
 
 type Request struct {
-	RepoRoot string
-	TempDir  string
-	MainGo   string
+	Events    []types.AgentEvent
+	Target    string // "opencode" → ToOpencode; default → ToCodex
+	SessionID string
+	Value     any
+	Output    string
 }
 
 type Response struct {
-	ExitCode int
-	Stdout   string
-	Stderr   string
-	Err      error
+	Output string
 }
 
 func Setup(t *testing.T, req *Request) error {
-	_ = writeFile
-	_ = assertSuccess
 	_ = assertContains
 	_ = assertNotContains
-	req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../.."))
-	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
-		return fmt.Errorf("repo root not found: %w", err)
-	}
-	req.TempDir = t.TempDir()
 	return nil
 }
 
 func Run(t *testing.T, req *Request) (*Response, error) {
-	if req.MainGo == "" {
-		return nil, fmt.Errorf("MainGo is required")
+	var output string
+	if len(req.Events) > 0 {
+		if req.Target == "opencode" {
+			result := opencode_types.ToOpencode(req.Events, req.SessionID)
+			data, _ := json.Marshal(result)
+			output = string(data)
+		} else {
+			result := codex_types.ToCodex(req.Events)
+			data, _ := json.Marshal(result)
+			output = string(data)
+		}
+	} else if req.Value != nil {
+		data, _ := json.Marshal(req.Value)
+		output = string(data)
+	} else {
+		output = req.Output
 	}
-	mainPath := filepath.Join(req.TempDir, "main.go")
-	writeFile(t, mainPath, req.MainGo)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "go", "run", mainPath)
-	cmd.Dir = req.RepoRoot
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err := cmd.Run()
-	resp := &Response{
-		Stdout: stdout.String(),
-		Stderr: stderr.String(),
-		Err:    err,
-	}
-	if err == nil {
-		return resp, nil
-	}
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
-		resp.ExitCode = exitErr.ExitCode()
-		return resp, nil
-	}
-	if ctx.Err() != nil {
-		return resp, ctx.Err()
-	}
-	return resp, err
-}
-
-func writeFile(t *testing.T, path string, content string) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-		t.Fatalf("write %s: %v", path, err)
-	}
-}
-
-func assertSuccess(t *testing.T, resp *Response) {
-	t.Helper()
-	if resp.Err != nil && resp.ExitCode == 0 {
-		t.Fatalf("run failed: %v\nstderr: %s", resp.Err, resp.Stderr)
-	}
-	if resp.ExitCode != 0 {
-		t.Fatalf("exit code = %d, stderr:\n%s", resp.ExitCode, resp.Stderr)
-	}
+	return &Response{Output: output}, nil
 }
 
 func assertContains(t *testing.T, got string, want string) {

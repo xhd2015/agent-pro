@@ -5,16 +5,15 @@
 import "testing"
 
 func Assert(t *testing.T, req *Request, resp *Response, err error) {
-	assertSuccess(t, resp)
-	assertContains(t, resp.Stdout, `"id":"evt_001"`)
-	assertContains(t, resp.Stdout, `"type":"tool_call"`)
-	assertContains(t, resp.Stdout, `"text":"hello world"`)
-	assertContains(t, resp.Stdout, `"tool":"bash"`)
-	assertContains(t, resp.Stdout, `"command":"echo hi"`)
-	assertContains(t, resp.Stdout, `"output":"hi"`)
-	assertContains(t, resp.Stdout, `"stderr":"err msg"`)
-	assertContains(t, resp.Stdout, `"exit_code":42`)
-	assertContains(t, resp.Stdout, `"path":"foo.txt"`)
-	assertContains(t, resp.Stdout, `"kind":"add"`)
+	assertContains(t, resp.Output, `"id":"evt_001"`)
+	assertContains(t, resp.Output, `"type":"tool_call"`)
+	assertContains(t, resp.Output, `"text":"hello world"`)
+	assertContains(t, resp.Output, `"tool":"bash"`)
+	assertContains(t, resp.Output, `"command":"echo hi"`)
+	assertContains(t, resp.Output, `"output":"hi"`)
+	assertContains(t, resp.Output, `"stderr":"err msg"`)
+	assertContains(t, resp.Output, `"exit_code":42`)
+	assertContains(t, resp.Output, `"path":"foo.txt"`)
+	assertContains(t, resp.Output, `"kind":"add"`)
 }
 ```

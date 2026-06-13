@@ -5,10 +5,9 @@
 import "testing"
 
 func Assert(t *testing.T, req *Request, resp *Response, err error) {
-	assertSuccess(t, resp)
-	assertContains(t, resp.Stdout, `"type":"reasoning"`)
-	assertContains(t, resp.Stdout, `"sessionID":"sess_r1"`)
-	assertContains(t, resp.Stdout, `"id":"evt_r1"`)
-	assertContains(t, resp.Stdout, `"thinking step by step"`)
+	assertContains(t, resp.Output, `"type":"reasoning"`)
+	assertContains(t, resp.Output, `"sessionID":"sess_r1"`)
+	assertContains(t, resp.Output, `"id":"evt_r1"`)
+	assertContains(t, resp.Output, `"thinking step by step"`)
 }
 ```

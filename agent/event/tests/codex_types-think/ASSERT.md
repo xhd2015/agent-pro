@@ -6,11 +6,10 @@
 import "testing"
 
 func Assert(t *testing.T, req *Request, resp *Response, err error) {
-	assertSuccess(t, resp)
-	assertContains(t, resp.Stdout, `"type":"item.started"`)
-	assertContains(t, resp.Stdout, `"type":"item.completed"`)
-	assertContains(t, resp.Stdout, `"type":"reasoning"`)
-	assertContains(t, resp.Stdout, `"analyzing the request"`)
-	assertContains(t, resp.Stdout, `"status":"completed"`)
+	assertContains(t, resp.Output, `"type":"item.started"`)
+	assertContains(t, resp.Output, `"type":"item.completed"`)
+	assertContains(t, resp.Output, `"type":"reasoning"`)
+	assertContains(t, resp.Output, `"analyzing the request"`)
+	assertContains(t, resp.Output, `"status":"completed"`)
 }
 ```
