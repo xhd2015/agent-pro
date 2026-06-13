@@ -9,7 +9,7 @@ import (
 )
 
 func Setup(t *testing.T, req *Request) error {
-    req.Args = []string{"integration", "install", "opencode"}
+    req.Args = []string{"integration", "opencode", "install"}
     return nil
 }
 ```

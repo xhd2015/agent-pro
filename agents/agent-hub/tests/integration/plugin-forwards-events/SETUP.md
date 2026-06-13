@@ -17,7 +17,7 @@ func Setup(t *testing.T, req *Request) error {
         t.Skipf("skipping plugin test: bun not installed")
     }
 
-    resp, err := runAgentHub(t, req, "integration", "install", "opencode")
+    resp, err := runAgentHub(t, req, "integration", "opencode", "install")
     if err != nil {
         return err
     }

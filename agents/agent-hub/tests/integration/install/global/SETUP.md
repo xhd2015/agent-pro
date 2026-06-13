@@ -15,7 +15,7 @@ func Setup(t *testing.T, req *Request) error {
     if err := os.MkdirAll(fakeHome, 0755); err != nil {
         return err
     }
-    req.Args = []string{"integration", "install", "opencode", "--global"}
+    req.Args = []string{"integration", "opencode", "install", "--global"}
     req.Env = append(req.Env, "HOME="+fakeHome)
     return nil
 }

@@ -21,7 +21,7 @@ func Setup(t *testing.T, req *Request) error {
     if err := os.WriteFile(filepath.Join(pluginsDir, "agent-hub.ts"), []byte("old"), 0644); err != nil {
         return err
     }
-    req.Args = []string{"integration", "install", "opencode"}
+    req.Args = []string{"integration", "opencode", "install"}
     return nil
 }
 ```

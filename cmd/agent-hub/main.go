@@ -196,29 +196,43 @@ const integrationHelp = `
 Usage: agent-hub integration <command> [ARGS]
 
 Commands:
-  status        show integration status
-  install       install plugin for a runner
-  uninstall     remove plugin for a runner
-  enable        enable a disabled plugin
-  disable       disable an enabled plugin
+  status        show integration status for all runners
+  opencode      install, uninstall, enable, disable the agent-hub plugin for opencode
 
 Run agent-hub integration <command> --help for command-specific options.
 `
 
 const integrationStatusHelp = `
-Usage: agent-hub integration status [runner]
+Usage: agent-hub integration status
 
-Show plugin integration status. Without arguments, shows status
-for all supported runners as JSON. With a runner argument, shows
-status for that runner only.
+Show plugin integration status for all supported runners as JSON.
 
 Supported runners: opencode
 `
 
-const integrationInstallHelp = `
-Usage: agent-hub integration install <runner> [--global]
+const integrationOpenCodeHelp = `
+Usage: agent-hub integration opencode <command> [ARGS]
 
-Install the agent-hub plugin for a runner. Without --global,
+Commands:
+  status        show opencode plugin status
+  install       install the opencode plugin
+  uninstall     remove the opencode plugin
+  enable        enable a disabled plugin
+  disable       disable an enabled plugin
+
+Run agent-hub integration opencode <command> --help for command-specific options.
+`
+
+const integrationOpenCodeStatusHelp = `
+Usage: agent-hub integration opencode status
+
+Show opencode plugin integration status.
+`
+
+const integrationOpenCodeInstallHelp = `
+Usage: agent-hub integration opencode install [--global]
+
+Install the agent-hub plugin for opencode. Without --global,
 installs to the local .opencode/plugins/ directory. With --global,
 installs to ~/.config/opencode/plugins/.
 
@@ -226,25 +240,38 @@ Options:
   --global   install to global plugins directory
 `
 
-const integrationUninstallHelp = `
-Usage: agent-hub integration uninstall <runner>
+const integrationOpenCodeUninstallHelp = `
+Usage: agent-hub integration opencode uninstall [--global]
 
-Remove the agent-hub plugin and disabled plugin file from the
-local .opencode/plugins/ directory.
+Remove the agent-hub plugin and disabled plugin file. Without
+--global, removes from the local .opencode/plugins/ directory.
+With --global, removes from ~/.config/opencode/plugins/.
+
+Options:
+  --global   uninstall from global plugins directory
 `
 
-const integrationEnableHelp = `
-Usage: agent-hub integration enable <runner>
+const integrationOpenCodeEnableHelp = `
+Usage: agent-hub integration opencode enable [--global]
 
 Enable a disabled plugin by renaming agent-hub.ts.disabled to
-agent-hub.ts in the local .opencode/plugins/ directory.
+agent-hub.ts. Without --global, operates on local .opencode/plugins/.
+With --global, operates on ~/.config/opencode/plugins/.
+
+Options:
+  --global   enable plugin in global plugins directory
 `
 
-const integrationDisableHelp = `
-Usage: agent-hub integration disable <runner>
+const integrationOpenCodeDisableHelp = `
+Usage: agent-hub integration opencode disable [--global]
 
 Disable an enabled plugin by renaming agent-hub.ts to
-agent-hub.ts.disabled in the local .opencode/plugins/ directory.
+agent-hub.ts.disabled. Without --global, operates on local
+.opencode/plugins/. With --global, operates on
+~/.config/opencode/plugins/.
+
+Options:
+  --global   disable plugin in global plugins directory
 `
 
 func main() {
@@ -866,34 +893,68 @@ func runIntegration(args []string) error {
 			fmt.Print(strings.TrimPrefix(integrationStatusHelp, "\n"))
 			return nil
 		}
-		return runIntegrationStatus(args[1:])
+		return runIntegrationStatus()
+	case "opencode":
+		return runIntegrationOpenCode(args[1:])
+	default:
+		return fmt.Errorf("unknown runner: %s (supported: opencode)", args[0])
+	}
+}
+
+func runIntegrationOpenCode(args []string) error {
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(strings.TrimPrefix(integrationOpenCodeHelp, "\n"))
+		return nil
+	}
+	switch args[0] {
+	case "status":
+		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Print(strings.TrimPrefix(integrationOpenCodeStatusHelp, "\n"))
+			return nil
+		}
+		status, err := integrationStatusForOpenCode()
+		if err != nil {
+			return err
+		}
+		return printJSON(status)
 	case "install":
 		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
-			fmt.Print(strings.TrimPrefix(integrationInstallHelp, "\n"))
+			fmt.Print(strings.TrimPrefix(integrationOpenCodeInstallHelp, "\n"))
 			return nil
 		}
-		return runIntegrationInstall(args[1:])
+		return runIntegrationOpenCodeInstall(args[1:])
 	case "uninstall":
 		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
-			fmt.Print(strings.TrimPrefix(integrationUninstallHelp, "\n"))
+			fmt.Print(strings.TrimPrefix(integrationOpenCodeUninstallHelp, "\n"))
 			return nil
 		}
-		return runIntegrationUninstall(args[1:])
+		return runIntegrationOpenCodeUninstall(args[1:])
 	case "enable":
 		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
-			fmt.Print(strings.TrimPrefix(integrationEnableHelp, "\n"))
+			fmt.Print(strings.TrimPrefix(integrationOpenCodeEnableHelp, "\n"))
 			return nil
 		}
-		return runIntegrationEnable(args[1:])
+		return runIntegrationOpenCodeEnable(args[1:])
 	case "disable":
 		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
-			fmt.Print(strings.TrimPrefix(integrationDisableHelp, "\n"))
+			fmt.Print(strings.TrimPrefix(integrationOpenCodeDisableHelp, "\n"))
 			return nil
 		}
-		return runIntegrationDisable(args[1:])
+		return runIntegrationOpenCodeDisable(args[1:])
 	default:
-		return fmt.Errorf("unknown integration command: %s", args[0])
+		return fmt.Errorf("unknown opencode command: %s", args[0])
 	}
+}
+
+func integrationPluginsDir(global bool) (string, error) {
+	if global {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("find home directory: %w", err)
+		}
+		return filepath.Join(home, ".config", "opencode", "plugins"), nil
+	}
+	return integrationLocalPluginsDir()
 }
 
 func integrationLocalPluginsDir() (string, error) {
@@ -928,69 +989,28 @@ func integrationStatusForOpenCode() (integrationStatus, error) {
 	return integrationStatus{Installed: false, Enabled: false, Path: tsPath}, nil
 }
 
-func runIntegrationStatus(args []string) error {
-	runner := ""
-	if len(args) > 0 {
-		runner = args[0]
-	}
-	if runner == "" {
-		status, err := integrationStatusForOpenCode()
-		if err != nil {
-			return err
-		}
-		return printJSON(map[string]any{"opencode": status})
-	}
-	if runner != "opencode" {
-		return fmt.Errorf("unsupported runner: %s", runner)
-	}
+func runIntegrationStatus() error {
 	status, err := integrationStatusForOpenCode()
 	if err != nil {
 		return err
 	}
-	return printJSON(status)
+	return printJSON(map[string]any{"opencode": status})
 }
 
-func runIntegrationInstall(args []string) error {
+func runIntegrationOpenCodeInstall(args []string) error {
 	globalFlag := false
-	runner := ""
-	runnerSet := false
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--global":
+	for _, a := range args {
+		if a == "--global" {
 			globalFlag = true
-		default:
-			if !runnerSet {
-				runner = args[i]
-				runnerSet = true
-			}
 		}
 	}
-	if runner == "" {
-		return fmt.Errorf("runner is required")
+	pluginsDir, err := integrationPluginsDir(globalFlag)
+	if err != nil {
+		return err
 	}
-	if runner != "opencode" {
-		return fmt.Errorf("unsupported runner: %s", runner)
-	}
-
-	var pluginsDir string
-	if globalFlag {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("find home directory: %w", err)
-		}
-		pluginsDir = filepath.Join(home, ".config", "opencode", "plugins")
-	} else {
-		localDir, err := integrationLocalPluginsDir()
-		if err != nil {
-			return err
-		}
-		pluginsDir = localDir
-	}
-
 	if err := os.MkdirAll(pluginsDir, 0755); err != nil {
 		return fmt.Errorf("create plugins directory: %w", err)
 	}
-
 	dstPath := filepath.Join(pluginsDir, "agent-hub.ts")
 	if err := os.WriteFile(dstPath, []byte(assets.AgentHubPlugin), 0644); err != nil {
 		return fmt.Errorf("write plugin file: %w", err)
@@ -999,21 +1019,19 @@ func runIntegrationInstall(args []string) error {
 	return nil
 }
 
-func runIntegrationUninstall(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("runner is required")
+func runIntegrationOpenCodeUninstall(args []string) error {
+	globalFlag := false
+	for _, a := range args {
+		if a == "--global" {
+			globalFlag = true
+		}
 	}
-	runner := args[0]
-	if runner != "opencode" {
-		return fmt.Errorf("unsupported runner: %s", runner)
-	}
-
-	localDir, err := integrationLocalPluginsDir()
+	pluginsDir, err := integrationPluginsDir(globalFlag)
 	if err != nil {
 		return err
 	}
-	tsPath := filepath.Join(localDir, "agent-hub.ts")
-	disabledPath := filepath.Join(localDir, "agent-hub.ts.disabled")
+	tsPath := filepath.Join(pluginsDir, "agent-hub.ts")
+	disabledPath := filepath.Join(pluginsDir, "agent-hub.ts.disabled")
 
 	removed := false
 	if err := os.Remove(tsPath); err == nil {
@@ -1029,21 +1047,19 @@ func runIntegrationUninstall(args []string) error {
 	return nil
 }
 
-func runIntegrationEnable(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("runner is required")
+func runIntegrationOpenCodeEnable(args []string) error {
+	globalFlag := false
+	for _, a := range args {
+		if a == "--global" {
+			globalFlag = true
+		}
 	}
-	runner := args[0]
-	if runner != "opencode" {
-		return fmt.Errorf("unsupported runner: %s", runner)
-	}
-
-	localDir, err := integrationLocalPluginsDir()
+	pluginsDir, err := integrationPluginsDir(globalFlag)
 	if err != nil {
 		return err
 	}
-	tsPath := filepath.Join(localDir, "agent-hub.ts")
-	disabledPath := filepath.Join(localDir, "agent-hub.ts.disabled")
+	tsPath := filepath.Join(pluginsDir, "agent-hub.ts")
+	disabledPath := filepath.Join(pluginsDir, "agent-hub.ts.disabled")
 
 	if _, err := os.Stat(tsPath); err == nil {
 		fmt.Println("already enabled")
@@ -1059,21 +1075,19 @@ func runIntegrationEnable(args []string) error {
 	return nil
 }
 
-func runIntegrationDisable(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("runner is required")
+func runIntegrationOpenCodeDisable(args []string) error {
+	globalFlag := false
+	for _, a := range args {
+		if a == "--global" {
+			globalFlag = true
+		}
 	}
-	runner := args[0]
-	if runner != "opencode" {
-		return fmt.Errorf("unsupported runner: %s", runner)
-	}
-
-	localDir, err := integrationLocalPluginsDir()
+	pluginsDir, err := integrationPluginsDir(globalFlag)
 	if err != nil {
 		return err
 	}
-	tsPath := filepath.Join(localDir, "agent-hub.ts")
-	disabledPath := filepath.Join(localDir, "agent-hub.ts.disabled")
+	tsPath := filepath.Join(pluginsDir, "agent-hub.ts")
+	disabledPath := filepath.Join(pluginsDir, "agent-hub.ts.disabled")
 
 	if _, err := os.Stat(disabledPath); err == nil {
 		fmt.Println("already disabled")

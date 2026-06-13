@@ -17,7 +17,7 @@ func Setup(t *testing.T, req *Request) error {
     if err := os.WriteFile(filepath.Join(pluginsDir, "agent-hub.ts.disabled"), []byte("plugin"), 0644); err != nil {
         return err
     }
-    req.Args = []string{"integration", "enable", "opencode"}
+    req.Args = []string{"integration", "opencode", "enable"}
     return nil
 }
 ```

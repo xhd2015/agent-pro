@@ -5,7 +5,7 @@
 import "testing"
 
 func Setup(t *testing.T, req *Request) error {
-    req.Args = []string{"integration", "disable", "opencode"}
+    req.Args = []string{"integration", "opencode", "disable"}
     return nil
 }
 ```
