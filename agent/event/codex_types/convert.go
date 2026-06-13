@@ -5,12 +5,11 @@ import (
 	"strings"
 
 	types "github.com/xhd2015/agent-pro/agent/event/types"
-	fakeagent "github.com/xhd2015/agent-pro/pkgs/fake-agent"
 	faketoolexec "github.com/xhd2015/agent-pro/pkgs/fake-agent/fake-tool-exec"
 )
 
-func ToCodex(events []types.AgentEvent) []fakeagent.Event {
-	var result []fakeagent.Event
+func ToCodex(events []types.AgentEvent) []Event {
+	var result []Event
 	for i, e := range events {
 		id := e.ID
 		if id == "" {
@@ -18,15 +17,15 @@ func ToCodex(events []types.AgentEvent) []fakeagent.Event {
 		}
 		switch e.Type {
 		case types.ActionThink:
-			started := fakeagent.Event{
-				Type: fakeagent.EventStarted,
-				Item: &fakeagent.EventItem{ID: id, Type: fakeagent.ItemReasoning},
+			started := Event{
+				Type: EventStarted,
+				Item: &EventItem{ID: id, Type: ItemReasoning},
 			}
-			completed := fakeagent.Event{
-				Type: fakeagent.EventCompleted,
-				Item: &fakeagent.EventItem{
+			completed := Event{
+				Type: EventCompleted,
+				Item: &EventItem{
 					ID:     id,
-					Type:   fakeagent.ItemReasoning,
+					Type:   ItemReasoning,
 					Text:   e.Text,
 					Status: "completed",
 				},
@@ -35,19 +34,19 @@ func ToCodex(events []types.AgentEvent) []fakeagent.Event {
 		case types.ActionToolCall:
 			result = append(result, convertToolCallToCodex(e, id)...)
 		case types.ActionMessage:
-			completed := fakeagent.Event{
-				Type: fakeagent.EventCompleted,
-				Item: &fakeagent.EventItem{
+			completed := Event{
+				Type: EventCompleted,
+				Item: &EventItem{
 					ID:     id,
-					Type:   fakeagent.ItemMessage,
+					Type:   ItemMessage,
 					Text:   e.Text,
 					Status: "completed",
 				},
 			}
 			result = append(result, completed)
 		case types.ActionError:
-			errEvent := fakeagent.Event{
-				Type:    fakeagent.EventError,
+			errEvent := Event{
+				Type:    EventError,
 				Message: e.Text,
 			}
 			result = append(result, errEvent)
@@ -57,7 +56,7 @@ func ToCodex(events []types.AgentEvent) []fakeagent.Event {
 	return result
 }
 
-func convertToolCallToCodex(e types.AgentEvent, id string) []fakeagent.Event {
+func convertToolCallToCodex(e types.AgentEvent, id string) []Event {
 	switch e.Tool {
 	case "bash":
 		return convertBashToCodex(e, id)
@@ -72,7 +71,7 @@ func convertToolCallToCodex(e types.AgentEvent, id string) []fakeagent.Event {
 	}
 }
 
-func convertBashToCodex(e types.AgentEvent, id string) []fakeagent.Event {
+func convertBashToCodex(e types.AgentEvent, id string) []Event {
 	command, _ := e.ToolInput["command"].(string)
 
 	var stdout, stderr string
@@ -87,25 +86,25 @@ func convertBashToCodex(e types.AgentEvent, id string) []fakeagent.Event {
 	_ = stderr
 	stdout = strings.TrimRight(stdout, "\n")
 
-	started := fakeagent.Event{
-		Type: fakeagent.EventStarted,
-		Item: &fakeagent.EventItem{ID: id, Type: fakeagent.ItemCommandExecution},
+	started := Event{
+		Type: EventStarted,
+		Item: &EventItem{ID: id, Type: ItemCommandExecution},
 	}
 	ec := exitCode
-	completed := fakeagent.Event{
-		Type: fakeagent.EventCompleted,
-		Item: &fakeagent.EventItem{
+	completed := Event{
+		Type: EventCompleted,
+		Item: &EventItem{
 			ID:               id,
-			Type:             fakeagent.ItemCommandExecution,
+			Type:             ItemCommandExecution,
 			AggregatedOutput: stdout,
 			ExitCode:         &ec,
 			Status:           "completed",
 		},
 	}
-	return []fakeagent.Event{started, completed}
+	return []Event{started, completed}
 }
 
-func convertReadToCodex(e types.AgentEvent, id string) []fakeagent.Event {
+func convertReadToCodex(e types.AgentEvent, id string) []Event {
 	var output string
 	var exitCode int
 
@@ -124,86 +123,86 @@ func convertReadToCodex(e types.AgentEvent, id string) []fakeagent.Event {
 		}
 	}
 
-	started := fakeagent.Event{
-		Type: fakeagent.EventStarted,
-		Item: &fakeagent.EventItem{ID: id, Type: fakeagent.ItemCommandExecution},
+	started := Event{
+		Type: EventStarted,
+		Item: &EventItem{ID: id, Type: ItemCommandExecution},
 	}
 	ec := exitCode
-	completed := fakeagent.Event{
-		Type: fakeagent.EventCompleted,
-		Item: &fakeagent.EventItem{
+	completed := Event{
+		Type: EventCompleted,
+		Item: &EventItem{
 			ID:               id,
-			Type:             fakeagent.ItemCommandExecution,
+			Type:             ItemCommandExecution,
 			AggregatedOutput: output,
 			ExitCode:         &ec,
 			Status:           "completed",
 		},
 	}
-	return []fakeagent.Event{started, completed}
+	return []Event{started, completed}
 }
 
-func convertWriteToCodex(e types.AgentEvent, id string) []fakeagent.Event {
+func convertWriteToCodex(e types.AgentEvent, id string) []Event {
 	if e.Mock != nil {
 		if len(e.Mock.Changes) > 0 {
-			var changes []fakeagent.FileChange
+			var changes []FileChange
 			for _, c := range e.Mock.Changes {
-				changes = append(changes, fakeagent.FileChange{Path: c.Path, Kind: c.Kind})
+				changes = append(changes, FileChange{Path: c.Path, Kind: c.Kind})
 			}
 			faketoolexec.ExecuteWriteMock()
-			started := fakeagent.Event{
-				Type: fakeagent.EventStarted,
-				Item: &fakeagent.EventItem{ID: id, Type: fakeagent.ItemFileChange},
+			started := Event{
+				Type: EventStarted,
+				Item: &EventItem{ID: id, Type: ItemFileChange},
 			}
-			completed := fakeagent.Event{
-				Type: fakeagent.EventCompleted,
-				Item: &fakeagent.EventItem{
+			completed := Event{
+				Type: EventCompleted,
+				Item: &EventItem{
 					ID:      id,
-					Type:    fakeagent.ItemFileChange,
+					Type:    ItemFileChange,
 					Status:  "completed",
 					Changes: changes,
 				},
 			}
-			return []fakeagent.Event{started, completed}
+			return []Event{started, completed}
 		}
 		faketoolexec.ExecuteWriteMock()
-		started := fakeagent.Event{
-			Type: fakeagent.EventStarted,
-			Item: &fakeagent.EventItem{ID: id, Type: fakeagent.ItemFileChange},
+		started := Event{
+			Type: EventStarted,
+			Item: &EventItem{ID: id, Type: ItemFileChange},
 		}
-		completed := fakeagent.Event{
-			Type: fakeagent.EventCompleted,
-			Item: &fakeagent.EventItem{
+		completed := Event{
+			Type: EventCompleted,
+			Item: &EventItem{
 				ID:     id,
-				Type:   fakeagent.ItemFileChange,
+				Type:   ItemFileChange,
 				Status: "completed",
 			},
 		}
-		return []fakeagent.Event{started, completed}
+		return []Event{started, completed}
 	}
 
 	path, _ := e.ToolInput["path"].(string)
 	content, _ := e.ToolInput["content"].(string)
 	faketoolexec.ExecuteWrite(path, content)
 
-	started := fakeagent.Event{
-		Type: fakeagent.EventStarted,
-		Item: &fakeagent.EventItem{ID: id, Type: fakeagent.ItemFileChange},
+	started := Event{
+		Type: EventStarted,
+		Item: &EventItem{ID: id, Type: ItemFileChange},
 	}
-	completed := fakeagent.Event{
-		Type: fakeagent.EventCompleted,
-		Item: &fakeagent.EventItem{
+	completed := Event{
+		Type: EventCompleted,
+		Item: &EventItem{
 			ID:     id,
-			Type:   fakeagent.ItemFileChange,
+			Type:   ItemFileChange,
 			Status: "completed",
-			Changes: []fakeagent.FileChange{
+			Changes: []FileChange{
 				{Path: path, Kind: "add"},
 			},
 		},
 	}
-	return []fakeagent.Event{started, completed}
+	return []Event{started, completed}
 }
 
-func convertGrepToCodex(e types.AgentEvent, id string) []fakeagent.Event {
+func convertGrepToCodex(e types.AgentEvent, id string) []Event {
 	var output string
 	var exitCode int
 	var pattern string
@@ -216,21 +215,21 @@ func convertGrepToCodex(e types.AgentEvent, id string) []fakeagent.Event {
 		output, exitCode, _ = faketoolexec.ExecuteGrep(pattern, searchPath)
 	}
 
-	started := fakeagent.Event{
-		Type: fakeagent.EventStarted,
-		Item: &fakeagent.EventItem{ID: id, Type: fakeagent.ItemCommandExecution},
+	started := Event{
+		Type: EventStarted,
+		Item: &EventItem{ID: id, Type: ItemCommandExecution},
 	}
 	ec := exitCode
-	completed := fakeagent.Event{
-		Type: fakeagent.EventCompleted,
-		Item: &fakeagent.EventItem{
+	completed := Event{
+		Type: EventCompleted,
+		Item: &EventItem{
 			ID:               id,
-			Type:             fakeagent.ItemCommandExecution,
+			Type:             ItemCommandExecution,
 			Command:          pattern,
 			AggregatedOutput: output,
 			ExitCode:         &ec,
 			Status:           "completed",
 		},
 	}
-	return []fakeagent.Event{started, completed}
+	return []Event{started, completed}
 }

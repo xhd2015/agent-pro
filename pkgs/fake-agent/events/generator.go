@@ -3,12 +3,16 @@ package events
 import (
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"strings"
 
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	faketoolexec "github.com/xhd2015/agent-pro/pkgs/fake-agent/fake-tool-exec"
 	"github.com/xhd2015/agent-pro/pkgs/fake-agent/probe"
 )
+
+var probeWriteDir = filepath.Join(os.TempDir(), "fake-agent-probe")
 
 const (
 	genMaxRounds      = 31
@@ -121,7 +125,9 @@ func (g *Generator) execProbe(s probe.Suggestion) (types.AgentEvent, string) {
 			ExitCode:  &ec,
 		}, content
 	case probe.KindFileWrite:
-		faketoolexec.ExecuteWrite(s.Value, "content written by agent")
+		os.MkdirAll(probeWriteDir, 0755)
+		writePath := filepath.Join(probeWriteDir, filepath.Base(s.Value))
+		faketoolexec.ExecuteWrite(writePath, "content written by agent")
 		ec := 0
 		return types.AgentEvent{
 			ID:        id,

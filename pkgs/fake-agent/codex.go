@@ -18,14 +18,6 @@ func FormatCodexEvents(events []Event) ([]string, error) {
 	return lines, nil
 }
 
-type CodexEvent struct {
-	Type    string     `json:"type"`
-	Item    *EventItem `json:"item,omitempty"`
-	Delta   string     `json:"delta,omitempty"`
-	Text    string     `json:"text,omitempty"`
-	Message string     `json:"message,omitempty"`
-}
-
 func FormatCodexEventsText(events []Event) string {
 	var b strings.Builder
 	for _, e := range events {

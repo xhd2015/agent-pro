@@ -8,81 +8,63 @@ import (
 	faketoolexec "github.com/xhd2015/agent-pro/pkgs/fake-agent/fake-tool-exec"
 )
 
-func ToOpencode(events []types.AgentEvent, sessionID string) []map[string]any {
-	var result []map[string]any
+func ToOpencode(events []types.AgentEvent, sessionID string) []Event {
+	var result []Event
 	for i, e := range events {
 		id := e.ID
 		if id == "" {
 			id = fmt.Sprintf("evt_%d", i+1)
 		}
+		evt := Event{}
+		if sessionID != "" {
+			evt.SessionID = sessionID
+		}
 		switch e.Type {
 		case types.ActionThink:
-			evt := map[string]any{
-				"type": "reasoning",
-				"part": map[string]any{
-					"id":   id,
-					"type": "reasoning",
-					"text": e.Text,
-				},
+			evt.Type = "reasoning"
+			evt.Part = ReasoningPart{
+				ID:   id,
+				Type: "reasoning",
+				Text: e.Text,
 			}
-			if sessionID != "" {
-				evt["sessionID"] = sessionID
-			}
-			result = append(result, evt)
 		case types.ActionMessage:
-			evt := map[string]any{
-				"type": "text",
-				"part": map[string]any{
-					"id":   id,
-					"type": "text",
-					"text": e.Text,
-				},
+			evt.Type = "text"
+			evt.Part = TextPart{
+				ID:   id,
+				Type: "text",
+				Text: e.Text,
 			}
-			if sessionID != "" {
-				evt["sessionID"] = sessionID
-			}
-			result = append(result, evt)
 		case types.ActionError:
-			evt := map[string]any{
-				"type": "error",
-				"error": map[string]any{
-					"name": "Error",
-					"data": map[string]any{
-						"message": e.Text,
-					},
+			evt.Type = "error"
+			evt.Error = &ErrorDetail{
+				Name: "Error",
+				Data: &ErrorData{
+					Message: e.Text,
 				},
 			}
-			if sessionID != "" {
-				evt["sessionID"] = sessionID
-			}
-			result = append(result, evt)
 		case types.ActionDone:
-			evt := map[string]any{
-				"type": "done",
-				"done": true,
-			}
-			if sessionID != "" {
-				evt["sessionID"] = sessionID
-			}
-			result = append(result, evt)
+			evt.Type = "done"
+			evt.Done = true
 		case types.ActionToolCall:
 			result = append(result, convertToolCallToOpencode(e, id, sessionID))
+			continue
 		}
+		result = append(result, evt)
 	}
 	return result
 }
 
-func convertToolCallToOpencode(e types.AgentEvent, id, sessionID string) map[string]any {
+func convertToolCallToOpencode(e types.AgentEvent, id, sessionID string) Event {
 	tool := e.Tool
 
-	state := make(map[string]any)
+	state := ToolUseState{}
 
 	if e.ToolInput != nil {
 		input := make(map[string]any)
 		for k, v := range e.ToolInput {
 			input[k] = v
 		}
-		state["input"] = input
+		state.Input = input
 	}
 
 	if e.Mock != nil {
@@ -90,31 +72,31 @@ func convertToolCallToOpencode(e types.AgentEvent, id, sessionID string) map[str
 		switch tool {
 		case "bash":
 			stdout, stderr, ec := faketoolexec.ExecuteBashMock("", mock)
-			state["output"] = stdout
-			state["exit_code"] = ec
+			state.Output = stdout
+			state.ExitCode = ec
 			if stderr != "" {
-				state["stderr"] = stderr
+				state.Stderr = stderr
 			}
 		case "read":
 			content := faketoolexec.ExecuteReadMock(mock)
-			state["output"] = content
+			state.Output = content
 			ec := 0
 			if mock.ExitCode != nil {
 				ec = *mock.ExitCode
 			}
-			state["exit_code"] = ec
+			state.ExitCode = ec
 		case "write":
 			faketoolexec.ExecuteWriteMock()
-			state["output"] = mock.Output
+			state.Output = mock.Output
 			ec := 0
 			if mock.ExitCode != nil {
 				ec = *mock.ExitCode
 			}
-			state["exit_code"] = ec
+			state.ExitCode = ec
 		case "grep":
 			output, ec := faketoolexec.ExecuteGrepMock(mock)
-			state["output"] = output
-			state["exit_code"] = ec
+			state.Output = output
+			state.ExitCode = ec
 		}
 	} else {
 		switch tool {
@@ -123,52 +105,52 @@ func convertToolCallToOpencode(e types.AgentEvent, id, sessionID string) map[str
 			workdir, _ := e.ToolInput["workdir"].(string)
 			stdout, stderr, ec, _ := faketoolexec.ExecuteBash(command, workdir, nil)
 			stdout = strings.TrimRight(stdout, "\n")
-			state["output"] = stdout
-			state["exit_code"] = ec
+			state.Output = stdout
+			state.ExitCode = ec
 			if stderr != "" {
-				state["stderr"] = stderr
+				state.Stderr = stderr
 			}
 		case "read":
 			path, _ := e.ToolInput["path"].(string)
 			content, err := faketoolexec.ExecuteRead(path)
 			if err != nil {
-				state["error"] = err.Error()
-				state["exit_code"] = 1
+				state.Error = err.Error()
+				state.ExitCode = 1
 			} else {
-				state["output"] = content
-				state["exit_code"] = 0
+				state.Output = content
+				state.ExitCode = 0
 			}
 		case "write":
 			path, _ := e.ToolInput["path"].(string)
 			content, _ := e.ToolInput["content"].(string)
 			err := faketoolexec.ExecuteWrite(path, content)
 			if err != nil {
-				state["error"] = err.Error()
-				state["exit_code"] = 1
+				state.Error = err.Error()
+				state.ExitCode = 1
 			} else {
-				state["exit_code"] = 0
+				state.ExitCode = 0
 			}
 		case "grep":
 			pattern, _ := e.ToolInput["pattern"].(string)
 			searchPath, _ := e.ToolInput["path"].(string)
 			output, ec, _ := faketoolexec.ExecuteGrep(pattern, searchPath)
-			state["output"] = output
-			state["exit_code"] = ec
+			state.Output = output
+			state.ExitCode = ec
 		}
 	}
-	state["status"] = "completed"
+	state.Status = "completed"
 
-	evt := map[string]any{
-		"type": "tool_use",
-		"part": map[string]any{
-			"id":    id,
-			"type":  "tool",
-			"tool":  tool,
-			"state": state,
+	evt := Event{
+		Type: "tool_use",
+		Part: ToolUsePart{
+			ID:    id,
+			Type:  "tool",
+			Tool:  tool,
+			State: state,
 		},
 	}
 	if sessionID != "" {
-		evt["sessionID"] = sessionID
+		evt.SessionID = sessionID
 	}
 	return evt
 }

@@ -3,55 +3,41 @@ package fakeagent
 import (
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"strings"
 
+	codex_types "github.com/xhd2015/agent-pro/agent/event/codex_types"
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	faketoolexec "github.com/xhd2015/agent-pro/pkgs/fake-agent/fake-tool-exec"
 	"github.com/xhd2015/agent-pro/pkgs/fake-agent/probe"
 )
 
-type EventType string
+var probeWriteDir = filepath.Join(os.TempDir(), "fake-agent-probe")
+
+type EventType = codex_types.EventType
 
 const (
-	EventStarted   EventType = "item.started"
-	EventUpdated   EventType = "item.updated"
-	EventCompleted EventType = "item.completed"
-	EventError     EventType = "error"
+	EventStarted   = codex_types.EventStarted
+	EventUpdated   = codex_types.EventUpdated
+	EventCompleted = codex_types.EventCompleted
+	EventError     = codex_types.EventError
 )
 
-type ItemType string
+type ItemType = codex_types.ItemType
 
 const (
-	ItemReasoning        ItemType = "reasoning"
-	ItemCommandExecution ItemType = "command_execution"
-	ItemFileChange       ItemType = "file_change"
-	ItemMessage          ItemType = "message"
+	ItemReasoning        = codex_types.ItemReasoning
+	ItemCommandExecution = codex_types.ItemCommandExecution
+	ItemFileChange       = codex_types.ItemFileChange
+	ItemMessage          = codex_types.ItemMessage
 )
 
-type Event struct {
-	Type    EventType                `json:"type"`
-	Item    *EventItem               `json:"item,omitempty"`
-	Message string                   `json:"message,omitempty"`
-	Text    string                   `json:"text,omitempty"`
-	Mock    *faketoolexec.MockConfig `json:"mock,omitempty"`
-}
+type Event = codex_types.Event
 
-type EventItem struct {
-	ID               string       `json:"id"`
-	Type             ItemType     `json:"type"`
-	Text             string       `json:"text,omitempty"`
-	Content          []ItemPart   `json:"content,omitempty"`
-	Command          string       `json:"command,omitempty"`
-	AggregatedOutput string       `json:"aggregated_output,omitempty"`
-	ExitCode         *int         `json:"exit_code,omitempty"`
-	Status           string       `json:"status,omitempty"`
-	Changes          []FileChange `json:"changes,omitempty"`
-}
+type EventItem = codex_types.EventItem
 
-type ItemPart struct {
-	Type string `json:"type"`
-	Text string `json:"text,omitempty"`
-}
+type ItemPart = codex_types.ItemPart
 
 type FileChange = types.FileChange
 
@@ -139,7 +125,9 @@ func (g *Generator) execProbe(s probe.Suggestion) ([]Event, string) {
 		}
 		return g.buildCmdEvents(id, cmd, content, 0)
 	case probe.KindFileWrite:
-		faketoolexec.ExecuteWrite(s.Value, "content written by agent")
+		os.MkdirAll(probeWriteDir, 0755)
+		writePath := filepath.Join(probeWriteDir, filepath.Base(s.Value))
+		faketoolexec.ExecuteWrite(writePath, "content written by agent")
 		return g.buildFileChangeEvents(id, s.Value, "add")
 	case probe.KindSearch:
 		cmd := "grep -rn " + s.Value + " ."
