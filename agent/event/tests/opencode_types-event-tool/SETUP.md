@@ -14,11 +14,11 @@ import (
 
 func Setup(t *testing.T, req *Request) error {
 	req.Value = opencode_types.Event{
-		Type:      "tool_use",
+		Type:      opencode_types.EvtToolUse,
 		SessionID: "sess_t1",
 		Part: opencode_types.ToolUsePart{
 			ID:   "evt_t1",
-			Type: "tool",
+			Type: opencode_types.PartTool,
 			Tool: "bash",
 			State: opencode_types.ToolUseState{
 				Input:    map[string]any{"command": "echo hello"},

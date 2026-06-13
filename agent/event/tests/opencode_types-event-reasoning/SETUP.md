@@ -14,11 +14,11 @@ import (
 
 func Setup(t *testing.T, req *Request) error {
 	req.Value = opencode_types.Event{
-		Type:      "reasoning",
+		Type:      opencode_types.EvtReasoning,
 		SessionID: "sess_r1",
 		Part: opencode_types.ReasoningPart{
 			ID:   "evt_r1",
-			Type: "reasoning",
+			Type: opencode_types.PartReasoning,
 			Text: "thinking step by step",
 		},
 	}

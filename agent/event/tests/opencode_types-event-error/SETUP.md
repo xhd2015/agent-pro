@@ -14,7 +14,7 @@ import (
 
 func Setup(t *testing.T, req *Request) error {
 	req.Value = opencode_types.Event{
-		Type:      "error",
+		Type:      opencode_types.EvtError,
 		SessionID: "sess_e1",
 		Error: &opencode_types.ErrorDetail{
 			Name: "Error",

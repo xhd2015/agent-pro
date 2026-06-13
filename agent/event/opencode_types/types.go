@@ -1,7 +1,29 @@
 package opencode_types
 
+type EventType string
+
+const (
+	EvtReasoning  EventType = "reasoning"
+	EvtText       EventType = "text"
+	EvtError      EventType = "error"
+	EvtDone       EventType = "done"
+	EvtStepStart  EventType = "step_start"
+	EvtStepFinish EventType = "step_finish"
+	EvtToolUse    EventType = "tool_use"
+)
+
+type PartType string
+
+const (
+	PartReasoning  PartType = "reasoning"
+	PartText       PartType = "text"
+	PartTool       PartType = "tool"
+	PartStepStart  PartType = "step-start"
+	PartStepFinish PartType = "step-finish"
+)
+
 type Event struct {
-	Type      string       `json:"type"`
+	Type      EventType    `json:"type"`
 	Timestamp int64        `json:"timestamp,omitempty"`
 	SessionID string       `json:"sessionID,omitempty"`
 	Part      any          `json:"part,omitempty"`
@@ -11,14 +33,14 @@ type Event struct {
 
 type ReasoningPart struct {
 	ID   string     `json:"id"`
-	Type string     `json:"type"`
+	Type PartType   `json:"type"`
 	Text string     `json:"text"`
 	Time *TimeRange `json:"time,omitempty"`
 }
 
 type TextPart struct {
 	ID   string     `json:"id"`
-	Type string     `json:"type"`
+	Type PartType   `json:"type"`
 	Text string     `json:"text"`
 	Time *TimeRange `json:"time,omitempty"`
 }
@@ -34,7 +56,7 @@ type ErrorData struct {
 
 type ToolUsePart struct {
 	ID     string       `json:"id"`
-	Type   string       `json:"type"`
+	Type   PartType     `json:"type"`
 	CallID string       `json:"callID"`
 	Tool   string       `json:"tool"`
 	State  ToolUseState `json:"state"`
@@ -52,22 +74,22 @@ type ToolUseState struct {
 }
 
 type StepStartPart struct {
-	ID        string `json:"id"`
-	SessionID string `json:"sessionID"`
-	MessageID string `json:"messageID"`
-	Type      string `json:"type"`
-	Snapshot  string `json:"snapshot,omitempty"`
+	ID        string   `json:"id"`
+	SessionID string   `json:"sessionID"`
+	MessageID string   `json:"messageID"`
+	Type      PartType `json:"type"`
+	Snapshot  string   `json:"snapshot,omitempty"`
 }
 
 type StepFinishPart struct {
-	ID        string `json:"id"`
-	SessionID string `json:"sessionID"`
-	MessageID string `json:"messageID"`
-	Type      string `json:"type"`
-	Reason    string `json:"reason"`
-	Snapshot  string `json:"snapshot,omitempty"`
-	Cost      float64 `json:"cost"`
-	Tokens    Tokens `json:"tokens"`
+	ID        string   `json:"id"`
+	SessionID string   `json:"sessionID"`
+	MessageID string   `json:"messageID"`
+	Type      PartType `json:"type"`
+	Reason    string   `json:"reason"`
+	Snapshot  string   `json:"snapshot,omitempty"`
+	Cost      float64  `json:"cost"`
+	Tokens    Tokens   `json:"tokens"`
 }
 
 type Tokens struct {

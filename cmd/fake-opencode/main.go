@@ -119,7 +119,7 @@ func handleRun(args []string) error {
 		info, statErr := os.Stat(sessionPath)
 		if statErr != nil || !info.IsDir() {
 			errorEvent := opencode_types.Event{
-				Type:      "error",
+				Type:      opencode_types.EvtError,
 				SessionID: sessionID,
 				Error: &opencode_types.ErrorDetail{
 					Name: "Session not found",
@@ -291,7 +291,7 @@ func (c *mockConfig) validate() error {
 		return fmt.Errorf("delay_ms must be >= 0")
 	}
 	for i, event := range c.StdoutEvents {
-		if strings.TrimSpace(event.Type) == "" && !event.Done {
+		if strings.TrimSpace(string(event.Type)) == "" && !event.Done {
 			return fmt.Errorf("stdout_events[%d].type is required", i)
 		}
 	}
