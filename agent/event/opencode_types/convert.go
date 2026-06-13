@@ -19,6 +19,7 @@ func ToOpencode(events []types.AgentEvent, sessionID string) []Event {
 		if sessionID != "" {
 			evt.SessionID = sessionID
 		}
+		evt.Timestamp = e.Timestamp
 		switch e.Type {
 		case types.ActionThink:
 			evt.Type = "reasoning"
@@ -45,6 +46,18 @@ func ToOpencode(events []types.AgentEvent, sessionID string) []Event {
 		case types.ActionDone:
 			evt.Type = "done"
 			evt.Done = true
+		case types.ActionStepStart:
+			evt.Type = "step_start"
+			evt.Part = StepStartPart{
+				ID:   id,
+				Type: "step-start",
+			}
+		case types.ActionStepFinish:
+			evt.Type = "step_finish"
+			evt.Part = StepFinishPart{
+				ID:   id,
+				Type: "step-finish",
+			}
 		case types.ActionToolCall:
 			result = append(result, convertToolCallToOpencode(e, id, sessionID))
 			continue
@@ -143,10 +156,11 @@ func convertToolCallToOpencode(e types.AgentEvent, id, sessionID string) Event {
 	evt := Event{
 		Type: "tool_use",
 		Part: ToolUsePart{
-			ID:    id,
-			Type:  "tool",
-			Tool:  tool,
-			State: state,
+			ID:     id,
+			Type:   "tool",
+			CallID: id,
+			Tool:   tool,
+			State:  state,
 		},
 	}
 	if sessionID != "" {

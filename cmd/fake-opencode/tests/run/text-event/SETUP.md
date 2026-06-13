@@ -1,5 +1,5 @@
 ## Preconditions
-- The mock config contains one text event.
+- The mock config contains a message AgentEvent.
 
 ## Steps
 1. Run fake opencode with JSON output.
@@ -8,8 +8,7 @@
 import "testing"
 
 func Setup(t *testing.T, req *Request) error {
-    writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_text","stdout_events":[{"type":"text","part":{"id":"p1","type":"text","text":"fake opencode answered"}}]}`)
+    writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_text","stdout_events":[{"type":"message","text":"fake opencode answered"}]}`)
     return nil
 }
 ```
-

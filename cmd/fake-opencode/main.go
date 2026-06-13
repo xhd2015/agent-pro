@@ -13,7 +13,7 @@ import (
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	opencode_types "github.com/xhd2015/agent-pro/agent/event/opencode_types"
 	"github.com/xhd2015/agent-pro/pkgs/fake-agent/events"
-	faketoolexec "github.com/xhd2015/agent-pro/pkgs/fake-agent/fake-tool-exec"
+
 	"github.com/xhd2015/less-gen/flags"
 )
 
@@ -291,7 +291,7 @@ func (c *mockConfig) validate() error {
 		return fmt.Errorf("delay_ms must be >= 0")
 	}
 	for i, event := range c.StdoutEvents {
-		if strings.TrimSpace(event.Type) == "" {
+		if strings.TrimSpace(event.Type) == "" && !event.Done {
 			return fmt.Errorf("stdout_events[%d].type is required", i)
 		}
 	}
@@ -401,24 +401,6 @@ func resolveSessionsRoot() string {
 	return filepath.Join(home, ".config", "opencode", "sessions")
 }
 
-func parseMockFromMap(m map[string]any) faketoolexec.MockConfig {
-	mock := faketoolexec.MockConfig{}
-	if v, ok := m["output"].(string); ok {
-		mock.Output = v
-	}
-	if v, ok := m["stderr"].(string); ok {
-		mock.Stderr = v
-	}
-	if v, ok := m["content"].(string); ok {
-		mock.Content = v
-	}
-	if v, ok := m["exit_code"].(float64); ok {
-		ec := int(v)
-		mock.ExitCode = &ec
-	}
-	return mock
-}
-
 func resolveOpencodeStdoutEvents(raw json.RawMessage) ([]opencode_types.Event, error) {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil, nil
@@ -431,166 +413,13 @@ func resolveOpencodeStdoutEvents(raw json.RawMessage) ([]opencode_types.Event, e
 
 	var result []opencode_types.Event
 	for i, rawEvt := range rawEvents {
-		var probe map[string]any
-		if err := json.Unmarshal(rawEvt, &probe); err != nil {
-			return nil, fmt.Errorf("parse stdout_events[%d]: %w", i, err)
+		var ae types.AgentEvent
+		if err := json.Unmarshal(rawEvt, &ae); err != nil {
+			return nil, fmt.Errorf("parse stdout_events[%d] as agent event: %w", i, err)
 		}
-
-		if _, hasPart := probe["part"]; hasPart {
-			evt, err := processDirectOpencodeEvent(rawEvt, probe)
-			if err != nil {
-				return nil, fmt.Errorf("stdout_events[%d]: %w", i, err)
-			}
-			result = append(result, evt)
-		} else if _, hasError := probe["error"]; hasError {
-			var evt opencode_types.Event
-			if err := json.Unmarshal(rawEvt, &evt); err != nil {
-				return nil, fmt.Errorf("parse stdout_events[%d] as opencode event: %w", i, err)
-			}
-			result = append(result, evt)
-		} else if _, hasDone := probe["done"]; hasDone {
-			var evt opencode_types.Event
-			if err := json.Unmarshal(rawEvt, &evt); err != nil {
-				return nil, fmt.Errorf("parse stdout_events[%d] as opencode event: %w", i, err)
-			}
-			result = append(result, evt)
-		} else {
-			var ae types.AgentEvent
-			if err := json.Unmarshal(rawEvt, &ae); err != nil {
-				return nil, fmt.Errorf("parse stdout_events[%d] as agent event: %w", i, err)
-			}
-			result = append(result, opencode_types.ToOpencode([]types.AgentEvent{ae}, "")...)
-		}
+		result = append(result, opencode_types.ToOpencode([]types.AgentEvent{ae}, "")...)
 	}
 
 	return result, nil
 }
 
-func processDirectOpencodeEvent(raw json.RawMessage, probe map[string]any) (opencode_types.Event, error) {
-	var evt opencode_types.Event
-	if err := json.Unmarshal(raw, &evt); err != nil {
-		return evt, err
-	}
-
-	if evt.Type != "tool_use" {
-		return evt, nil
-	}
-
-	toolUsePart, err := extractToolUsePart(&evt)
-	if err != nil || toolUsePart == nil {
-		return evt, nil
-	}
-
-	if toolUsePart.State.Status == "completed" {
-		return evt, nil
-	}
-
-	mockRaw, hasMock := probe["mock"]
-	if hasMock {
-		if mockMap, ok := mockRaw.(map[string]any); ok {
-			mock := parseMockFromMap(mockMap)
-			toolUsePart.State = applyMockToState(toolUsePart.State, toolUsePart.Tool, mock)
-			evt.Part = *toolUsePart
-		}
-	} else {
-		toolUsePart.State = executeToolState(toolUsePart.State, toolUsePart.Tool)
-		evt.Part = *toolUsePart
-	}
-
-	return evt, nil
-}
-
-func extractToolUsePart(evt *opencode_types.Event) (*opencode_types.ToolUsePart, error) {
-	if part, ok := evt.Part.(map[string]any); ok {
-		data, err := json.Marshal(part)
-		if err != nil {
-			return nil, err
-		}
-		var tup opencode_types.ToolUsePart
-		if err := json.Unmarshal(data, &tup); err != nil {
-			return nil, err
-		}
-		return &tup, nil
-	}
-	if part, ok := evt.Part.(opencode_types.ToolUsePart); ok {
-		return &part, nil
-	}
-	return nil, nil
-}
-
-func applyMockToState(state opencode_types.ToolUseState, toolName string, mock faketoolexec.MockConfig) opencode_types.ToolUseState {
-	switch toolName {
-	case "bash":
-		stdout, stderr, exitCode := faketoolexec.ExecuteBashMock("", mock)
-		state.Output = stdout
-		state.ExitCode = exitCode
-		if stderr != "" {
-			state.Stderr = stderr
-		}
-	case "read":
-		content := faketoolexec.ExecuteReadMock(mock)
-		state.Output = content
-		ec := 0
-		if mock.ExitCode != nil {
-			ec = *mock.ExitCode
-		}
-		state.ExitCode = ec
-	case "write":
-		faketoolexec.ExecuteWriteMock()
-		state.Output = mock.Output
-		ec := 0
-		if mock.ExitCode != nil {
-			ec = *mock.ExitCode
-		}
-		state.ExitCode = ec
-	case "grep":
-		output, exitCode := faketoolexec.ExecuteGrepMock(mock)
-		state.Output = output
-		state.ExitCode = exitCode
-	}
-	state.Status = "completed"
-	return state
-}
-
-func executeToolState(state opencode_types.ToolUseState, toolName string) opencode_types.ToolUseState {
-	input := state.Input
-	switch toolName {
-	case "bash":
-		command, _ := input["command"].(string)
-		workdir, _ := input["workdir"].(string)
-		stdout, stderr, exitCode, _ := faketoolexec.ExecuteBash(command, workdir, nil)
-		state.Output = stdout
-		state.ExitCode = exitCode
-		if stderr != "" {
-			state.Stderr = stderr
-		}
-	case "read":
-		path, _ := input["path"].(string)
-		content, err := faketoolexec.ExecuteRead(path)
-		if err != nil {
-			state.Error = err.Error()
-			state.ExitCode = 1
-		} else {
-			state.Output = content
-			state.ExitCode = 0
-		}
-	case "write":
-		path, _ := input["path"].(string)
-		content, _ := input["content"].(string)
-		err := faketoolexec.ExecuteWrite(path, content)
-		if err != nil {
-			state.Error = err.Error()
-			state.ExitCode = 1
-		} else {
-			state.ExitCode = 0
-		}
-	case "grep":
-		pattern, _ := input["pattern"].(string)
-		searchPath, _ := input["path"].(string)
-		output, exitCode, _ := faketoolexec.ExecuteGrep(pattern, searchPath)
-		state.Output = output
-		state.ExitCode = exitCode
-	}
-	state.Status = "completed"
-	return state
-}

@@ -1,5 +1,5 @@
 ## Preconditions
-- The mock config contains a bash tool_use event with a `workdir` in the input.
+- The mock config contains a bash tool_call AgentEvent with a `workdir` in the input.
 
 ## Steps
 1. Create a known subdirectory in the temp dir.
@@ -11,8 +11,8 @@ import "testing"
 
 func Setup(t *testing.T, req *Request) error {
     workDir := createTestFile(t, req, "subdir/placeholder.txt", "marker")
-    _ = workDir // we just need the directory to exist
-    mockJSON := `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_bash_wd","stdout_events":[{"type":"tool_use","part":{"id":"t1","type":"tool","tool":"bash","callID":"call_1","state":{"status":"pending","title":"pwd test","input":{"command":"pwd","workdir":"` + req.TempDir + `/subdir"}}}}]}`
+    _ = workDir
+    mockJSON := `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_bash_wd","stdout_events":[{"type":"tool_call","tool":"bash","tool_input":{"command":"pwd","workdir":"` + req.TempDir + `/subdir"}}]}`
     writeMockConfig(t, req, mockJSON)
     return nil
 }
