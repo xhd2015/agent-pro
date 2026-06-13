@@ -1,6 +1,6 @@
-package main
+package assets
 
 import _ "embed"
 
 //go:embed agent-hub-plugin.ts
-var agentHubPlugin []byte
+var AgentHubPlugin string

@@ -38,6 +38,7 @@ Options:
   --session <id>                 session id
   --seed <int>                   random seed for deterministic output
   --mock-config <path>           JSON mock config with events, hooks, and exit behavior
+  --plugin <path>                plugin file to load (can be specified multiple times)
   --dangerously-skip-permissions accepted for compatibility
   -h,--help                      show help
 `
@@ -96,6 +97,7 @@ func handleRun(args []string) error {
 	var mockConfigFlag *string
 	var skipPermissionsFlag *bool
 	var seedFlag *int64
+	var pluginFlags []string
 
 	remaining, err := flags.String("--format", &formatFlag).
 		String("--dir", &dirFlag).
@@ -104,6 +106,7 @@ func handleRun(args []string) error {
 		String("--mock-config", &mockConfigFlag).
 		Bool("--dangerously-skip-permissions", &skipPermissionsFlag).
 		Int("--seed", &seedFlag).
+		StringSlice("--plugin", &pluginFlags).
 		Help("-h,--help", runHelp).
 		Parse(args)
 	if err != nil {
@@ -183,6 +186,17 @@ func handleRun(args []string) error {
 		cfg.Model = "openai/gpt-5"
 	}
 
+	allPlugins := mergePlugins(cfg.Plugins, pluginFlags)
+	var pluginRunner string
+	if len(allPlugins) > 0 {
+		var err error
+		pluginRunner, err = generatePluginRunner(allPlugins)
+		if err != nil {
+			return fmt.Errorf("generate plugin runner: %w", err)
+		}
+		defer os.Remove(pluginRunner)
+	}
+
 	if err := cfg.fireHooks(hookTimingBeforeStart, prompt); err != nil {
 		return err
 	}
@@ -194,7 +208,26 @@ func handleRun(args []string) error {
 	if !jsonOutput {
 		return fmt.Errorf("unsupported format: %s", strings.TrimSpace(*formatFlag))
 	}
+
+	if pluginRunner != "" {
+		firePluginEvent(pluginRunner, "session.created", map[string]any{
+			"type":       "session.created",
+			"session_id": cfg.SessionID,
+			"runner":     cfg.Runner,
+			"model":      cfg.Model,
+		})
+	}
+
 	for i, event := range cfg.StdoutEvents {
+		if pluginRunner != "" {
+			evt := cfg.withSession(event)
+			firePluginEvent(pluginRunner, string(evt.Type), map[string]any{
+				"type":       string(evt.Type),
+				"session_id": cfg.SessionID,
+				"runner":     cfg.Runner,
+				"model":      cfg.Model,
+			})
+		}
 		line, err := json.Marshal(cfg.withSession(event))
 		if err != nil {
 			return fmt.Errorf("marshal stdout_events[%d]: %w", i, err)
@@ -215,6 +248,14 @@ func handleRun(args []string) error {
 		}
 	}
 	if cfg.ExitCode != 0 {
+		if pluginRunner != "" {
+			firePluginEvent(pluginRunner, "session.error", map[string]any{
+				"type":       "session.error",
+				"session_id": cfg.SessionID,
+				"runner":     cfg.Runner,
+				"model":      cfg.Model,
+			})
+		}
 		if err := cfg.fireHooks(hookTimingOnError, prompt); err != nil {
 			return err
 		}
@@ -222,6 +263,14 @@ func handleRun(args []string) error {
 			return err
 		}
 		return &exitError{Code: cfg.ExitCode}
+	}
+	if pluginRunner != "" {
+		firePluginEvent(pluginRunner, "session.idle", map[string]any{
+			"type":       "session.idle",
+			"session_id": cfg.SessionID,
+			"runner":     cfg.Runner,
+			"model":      cfg.Model,
+		})
 	}
 	if err := cfg.fireHooks(hookTimingBeforeExit, prompt); err != nil {
 		return err
@@ -254,6 +303,7 @@ type mockConfig struct {
 	StdoutEvents     []opencode_types.Event `json:"-"`
 	LLMEvents        []opencode_types.Event `json:"-"`
 	Hooks            []mockHook             `json:"hooks"`
+	Plugins          []string               `json:"plugins"`
 }
 
 type mockHook struct {
@@ -474,5 +524,83 @@ func isValidActionType(t types.ActionType) bool {
 		return true
 	}
 	return false
+}
+
+func mergePlugins(configPlugins, cliPlugins []string) []string {
+	seen := make(map[string]bool)
+	var result []string
+	for _, p := range configPlugins {
+		if p == "" {
+			continue
+		}
+		if seen[p] {
+			continue
+		}
+		seen[p] = true
+		result = append(result, p)
+	}
+	for _, p := range cliPlugins {
+		if p == "" {
+			continue
+		}
+		if seen[p] {
+			continue
+		}
+		seen[p] = true
+		result = append(result, p)
+	}
+	return result
+}
+
+func generatePluginRunner(plugins []string) (string, error) {
+	f, err := os.CreateTemp("", "fake-opencode-plugin-*.ts")
+	if err != nil {
+		return "", err
+	}
+
+	for i, plugin := range plugins {
+		absPath, err := filepath.Abs(plugin)
+		if err != nil {
+			f.Close()
+			os.Remove(f.Name())
+			return "", fmt.Errorf("resolve plugin path %s: %w", plugin, err)
+		}
+		fmt.Fprintf(f, "import { AgentHubPlugin } from '%s';\n", absPath)
+		fmt.Fprintf(f, "const plugin%d = await AgentHubPlugin({ project: {}, client: {}, $: process.env, directory: process.cwd() });\n", i)
+	}
+	fmt.Fprint(f, `let input = '';
+for await (const chunk of process.stdin) { input += typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk); }
+const event = JSON.parse(input);
+`)
+	for i := range plugins {
+		fmt.Fprintf(f, "const handler%d = plugin%d[event.type];\n", i, i)
+		fmt.Fprintf(f, "if (handler%d) {\n", i)
+		fmt.Fprintf(f, "  try { await handler%d(event); } catch(e) { console.error(e); }\n", i)
+		fmt.Fprintf(f, "}\n")
+	}
+
+	f.Close()
+	return f.Name(), nil
+}
+
+func firePluginEvent(pluginRunner string, eventType string, payload any) {
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fake-opencode: plugin event marshal failed: %v\n", err)
+		return
+	}
+
+	cmd := exec.Command("bun", pluginRunner)
+	cmd.Stdin = bytes.NewReader(payloadJSON)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	_ = cmd.Run()
+	msg := strings.TrimSpace(stderr.String())
+	if msg != "" {
+		fmt.Fprint(os.Stderr, msg)
+		if !strings.HasSuffix(msg, "\n") {
+			fmt.Fprintln(os.Stderr)
+		}
+	}
 }
 

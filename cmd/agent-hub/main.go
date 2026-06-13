@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xhd2015/agent-pro/agents/agent-hub/assets"
 	"github.com/xhd2015/agent-pro/agents/agent-hub/model"
 	"github.com/xhd2015/agent-pro/agents/agent-hub/storage"
 )
@@ -991,10 +992,10 @@ func runIntegrationInstall(args []string) error {
 	}
 
 	dstPath := filepath.Join(pluginsDir, "agent-hub.ts")
-	if err := os.WriteFile(dstPath, agentHubPlugin, 0644); err != nil {
+	if err := os.WriteFile(dstPath, []byte(assets.AgentHubPlugin), 0644); err != nil {
 		return fmt.Errorf("write plugin file: %w", err)
 	}
-	fmt.Println("Installed")
+	fmt.Printf("Installed: %s\n", dstPath)
 	return nil
 }
 
