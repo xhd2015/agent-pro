@@ -240,18 +240,20 @@ const (
 )
 
 type mockConfig struct {
-	Version          string                   `json:"version"`
-	Runner           string                   `json:"runner"`
-	SessionID        string                   `json:"session_id"`
-	Model            string                   `json:"model"`
-	DelayMS          int                      `json:"delay_ms"`
-	ExitCode         int                      `json:"exit_code"`
-	Stderr           string                   `json:"stderr"`
-	IgnoreHookErrors bool                     `json:"ignore_hook_errors"`
-	HookCommand      string                   `json:"hook_command"`
-	StdoutEventsRaw  json.RawMessage          `json:"stdout_events"`
-	StdoutEvents     []opencode_types.Event   `json:"-"`
-	Hooks            []mockHook               `json:"hooks"`
+	Version          string                 `json:"version"`
+	Runner           string                 `json:"runner"`
+	SessionID        string                 `json:"session_id"`
+	Model            string                 `json:"model"`
+	DelayMS          int                    `json:"delay_ms"`
+	ExitCode         int                    `json:"exit_code"`
+	Stderr           string                 `json:"stderr"`
+	IgnoreHookErrors bool                   `json:"ignore_hook_errors"`
+	HookCommand      string                 `json:"hook_command"`
+	StdoutEventsRaw  json.RawMessage        `json:"stdout_events"`
+	LLMEventsRaw     json.RawMessage        `json:"llm_events"`
+	StdoutEvents     []opencode_types.Event `json:"-"`
+	LLMEvents        []opencode_types.Event `json:"-"`
+	Hooks            []mockHook             `json:"hooks"`
 }
 
 type mockHook struct {
@@ -272,11 +274,28 @@ func loadMockConfig(path string) (*mockConfig, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse mock config %s: %w", path, err)
 	}
-	events, err := resolveOpencodeStdoutEvents(cfg.StdoutEventsRaw)
-	if err != nil {
-		return nil, fmt.Errorf("resolve stdout_events: %w", err)
+
+	hasStdoutEvents := cfg.StdoutEventsRaw != nil && string(cfg.StdoutEventsRaw) != "null"
+	hasLLMEvents := cfg.LLMEventsRaw != nil
+
+	if hasLLMEvents {
+		events, err := resolveOpencodeLLMEvents(cfg.LLMEventsRaw)
+		if err != nil {
+			return nil, fmt.Errorf("resolve llm_events: %w", err)
+		}
+		cfg.StdoutEvents = events
+	} else {
+		events, err := resolveOpencodeStdoutEvents(cfg.StdoutEventsRaw)
+		if err != nil {
+			return nil, fmt.Errorf("resolve stdout_events: %w", err)
+		}
+		cfg.StdoutEvents = events
 	}
-	cfg.StdoutEvents = events
+
+	if hasStdoutEvents {
+		fmt.Fprintf(os.Stderr, "Warning: stdout_events is deprecated, use llm_events instead\n")
+	}
+
 	if err := cfg.validate(); err != nil {
 		return nil, fmt.Errorf("invalid mock config %s: %w", path, err)
 	}
@@ -421,5 +440,39 @@ func resolveOpencodeStdoutEvents(raw json.RawMessage) ([]opencode_types.Event, e
 	}
 
 	return result, nil
+}
+
+func resolveOpencodeLLMEvents(raw json.RawMessage) ([]opencode_types.Event, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+
+	var rawEvents []json.RawMessage
+	if err := json.Unmarshal(raw, &rawEvents); err != nil {
+		return nil, fmt.Errorf("parse llm_events array: %w", err)
+	}
+
+	var result []opencode_types.Event
+	for i, rawEvt := range rawEvents {
+		var ae types.AgentEvent
+		if err := json.Unmarshal(rawEvt, &ae); err != nil {
+			return nil, fmt.Errorf("parse llm_events[%d] as agent event: %w", i, err)
+		}
+		if !isValidActionType(ae.Type) {
+			return nil, fmt.Errorf("llm_events[%d]: unrecognized event type %q", i, ae.Type)
+		}
+		result = append(result, opencode_types.ToOpencode([]types.AgentEvent{ae}, "")...)
+	}
+
+	return result, nil
+}
+
+func isValidActionType(t types.ActionType) bool {
+	switch t {
+	case types.ActionThink, types.ActionToolCall, types.ActionMessage,
+		types.ActionError, types.ActionDone, types.ActionStepStart, types.ActionStepFinish:
+		return true
+	}
+	return false
 }
 
