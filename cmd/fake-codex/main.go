@@ -200,6 +200,9 @@ func handleExec(args []string) error {
 				time.Sleep(delay)
 			}
 		}
+		if delay > 0 && len(lines) > 0 {
+			time.Sleep(delay)
+		}
 	} else {
 		text := fakeagent.FormatCodexEventsText(events)
 		if delay > 0 {

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,7 +25,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
-		fmt.Println("Usage: agent-hub <daemon|notify|hook|fetch|replay|status|consumers|sessions|partitions>")
+		fmt.Println("Usage: agent-hub <daemon|notify|hook|fetch|replay|status|consumers|sessions|partitions|session>")
 		return nil
 	}
 	home := hubHome()
@@ -51,6 +53,8 @@ func run(args []string) error {
 			return err
 		}
 		return printJSON(map[string]any{"partitions": parts})
+	case "session":
+		return runSession(home, s, args[1:])
 	default:
 		return fmt.Errorf("unknown command: %s", args[0])
 	}
@@ -140,6 +144,11 @@ func runHook(s *storage.Store, args []string) error {
 			if i < len(args) {
 				nativeEvent = args[i]
 			}
+		}
+	}
+	if runner == "opencode" {
+		if redirected := strings.TrimSpace(os.Getenv("AGENT_HUB_OPENCODE_RUNNER")); redirected != "" {
+			runner = redirected
 		}
 	}
 	payload, err := io.ReadAll(os.Stdin)
@@ -291,7 +300,7 @@ func runReplay(s *storage.Store, args []string) error {
 	}
 	parts := strings.Split(from, ":")
 	if consumerID == "" || len(parts) != 2 {
-		return fmt.Errorf("replay requires --consumer-id and --from partition:offset")
+		return fmt.Errorf("replay requires --consumer-id and --from partition:offset in format partition:offset")
 	}
 	offset, err := strconv.ParseInt(parts[1], 10, 64)
 	if err != nil {
@@ -330,7 +339,225 @@ func runSessions(home string) error {
 		}
 		return nil
 	})
+	if sessions == nil {
+		sessions = []json.RawMessage{}
+	}
 	return printJSON(map[string]any{"sessions": sessions})
+}
+
+func runSession(home string, s *storage.Store, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("session requires subcommand: show, message")
+	}
+	switch args[0] {
+	case "show":
+		return runSessionShow(home, s, args[1:])
+	case "message":
+		return runSessionMessage(home, s, args[1:])
+	default:
+		return fmt.Errorf("unknown session command: %s", args[0])
+	}
+}
+
+func runSessionShow(home string, s *storage.Store, args []string) error {
+	runner := ""
+	sessionID := ""
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--runner":
+			i++
+			if i < len(args) {
+				runner = args[i]
+			}
+		case "--session-id":
+			i++
+			if i < len(args) {
+				sessionID = args[i]
+			}
+		}
+	}
+	if runner == "" {
+		return fmt.Errorf("--runner is required")
+	}
+	if sessionID == "" {
+		return fmt.Errorf("--session-id is required")
+	}
+	sd, err := s.GetSession(runner, sessionID)
+	if err != nil {
+		return err
+	}
+	if sd == nil {
+		return fmt.Errorf("session not found: %s/%s", runner, sessionID)
+	}
+	return printJSON(sd)
+}
+
+func runSessionMessage(home string, s *storage.Store, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("session message requires subcommand: send, list, pop")
+	}
+	switch args[0] {
+	case "send":
+		return runSessionMessageSend(home, s, args[1:])
+	case "list":
+		return runSessionMessageList(home, s, args[1:])
+	case "pop":
+		return runSessionMessagePop(home, s, args[1:])
+	default:
+		return fmt.Errorf("unknown session message command: %s", args[0])
+	}
+}
+
+func runSessionMessageSend(home string, s *storage.Store, args []string) error {
+	runner := ""
+	sessionID := ""
+	text := ""
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--runner":
+			i++
+			if i < len(args) {
+				runner = args[i]
+			}
+		case "--session-id":
+			i++
+			if i < len(args) {
+				sessionID = args[i]
+			}
+		case "--text":
+			i++
+			if i < len(args) {
+				text = args[i]
+			}
+		}
+	}
+	if runner == "" {
+		return fmt.Errorf("--runner is required")
+	}
+	if sessionID == "" {
+		return fmt.Errorf("--session-id is required")
+	}
+	if text == "" {
+		return fmt.Errorf("--text is required")
+	}
+
+	sd, err := s.GetSession(runner, sessionID)
+	if err != nil {
+		return err
+	}
+	if sd == nil {
+		sd = &model.SessionData{
+			Runner:          runner,
+			RunnerSessionID: sessionID,
+			Status:          "running",
+		}
+	} else if sd.Status == "completed" || sd.Status == "failed" {
+		sd.Status = "running"
+		sd.LastEvent = nil
+	}
+	if err := s.WriteSession(runner, sessionID, *sd); err != nil {
+		return err
+	}
+
+	msg := model.Message{
+		ID:        newMessageID(),
+		Text:      text,
+		SessionID: sessionID,
+		CreatedAt: nowUTC(),
+	}
+	if err := s.AppendMessage(runner, sessionID, msg); err != nil {
+		return err
+	}
+	return printJSON(map[string]any{
+		"message":        msg,
+		"session_status": sd.Status,
+	})
+}
+
+func runSessionMessageList(home string, s *storage.Store, args []string) error {
+	runner := ""
+	sessionID := ""
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--runner":
+			i++
+			if i < len(args) {
+				runner = args[i]
+			}
+		case "--session-id":
+			i++
+			if i < len(args) {
+				sessionID = args[i]
+			}
+		}
+	}
+	if runner == "" {
+		return fmt.Errorf("--runner is required")
+	}
+	if sessionID == "" {
+		return fmt.Errorf("--session-id is required")
+	}
+	sd, err := s.GetSession(runner, sessionID)
+	if err != nil {
+		return err
+	}
+	if sd == nil {
+		return fmt.Errorf("session not found: %s/%s", runner, sessionID)
+	}
+	msgs, err := s.GetMessages(runner, sessionID)
+	if err != nil {
+		return err
+	}
+	if msgs == nil {
+		msgs = []model.Message{}
+	}
+	return printJSON(map[string]any{"messages": msgs})
+}
+
+func runSessionMessagePop(home string, s *storage.Store, args []string) error {
+	runner := ""
+	sessionID := ""
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--runner":
+			i++
+			if i < len(args) {
+				runner = args[i]
+			}
+		case "--session-id":
+			i++
+			if i < len(args) {
+				sessionID = args[i]
+			}
+		}
+	}
+	if runner == "" {
+		return fmt.Errorf("--runner is required")
+	}
+	if sessionID == "" {
+		return fmt.Errorf("--session-id is required")
+	}
+	sd, err := s.GetSession(runner, sessionID)
+	if err != nil {
+		return err
+	}
+	if sd == nil {
+		return fmt.Errorf("session not found: %s/%s", runner, sessionID)
+	}
+	msgs, err := s.GetAndClearMessages(runner, sessionID)
+	if err != nil {
+		return err
+	}
+	if msgs == nil {
+		msgs = []model.Message{}
+	}
+	return printJSON(map[string]any{"messages": msgs})
+}
+
+func newMessageID() string {
+	b := make([]byte, 8)
+	rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 func printJSON(v any) error {

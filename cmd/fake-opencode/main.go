@@ -326,7 +326,7 @@ func (c *mockConfig) validate() error {
 		}
 	}
 	if len(c.Hooks) > 0 && strings.TrimSpace(c.HookCommand) == "" {
-		return fmt.Errorf("hook_command is required when hooks are configured")
+		c.HookCommand = "agent-hub hook notify --runner " + c.Runner + " --event {{event}}"
 	}
 	return nil
 }

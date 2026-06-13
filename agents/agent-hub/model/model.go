@@ -161,3 +161,17 @@ func validatePartition(partition string) error {
 	}
 	return nil
 }
+
+type SessionData struct {
+	Runner          string  `json:"runner"`
+	RunnerSessionID string  `json:"runner_session_id"`
+	Status          string  `json:"status"`
+	LastEvent       *Cursor `json:"last_event,omitempty"`
+}
+
+type Message struct {
+	ID        string    `json:"id"`
+	Text      string    `json:"text"`
+	SessionID string    `json:"session_id,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}

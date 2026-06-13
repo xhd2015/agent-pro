@@ -142,9 +142,16 @@ func (s *Store) Fetch(consumerID string, limit int, peek bool) (model.FetchRespo
 		return model.FetchResponse{}, err
 	}
 	if !peek {
-		if err := s.SaveCursor(consumerID, next); err != nil {
-			return model.FetchResponse{}, err
+		if cur.Partition != "" || next.Partition != "" {
+			if err := s.SaveCursor(consumerID, next); err != nil {
+				return model.FetchResponse{}, err
+			}
 		}
+	} else {
+		next = cur
+	}
+	if events == nil {
+		events = []model.Envelope{}
 	}
 	return model.FetchResponse{
 		ConsumerID:     consumerID,
@@ -323,7 +330,7 @@ func (s *Store) project(env model.Envelope) error {
 	status := ""
 	switch env.Event.EventType {
 	case model.EventSessionStarted:
-		status = "active"
+		status = "running"
 	case model.EventSessionFinished:
 		status = "completed"
 	case model.EventSessionFailed:
@@ -331,26 +338,131 @@ func (s *Store) project(env model.Envelope) error {
 	default:
 		return nil
 	}
-	name := sanitize(env.Event.Runner + "_" + sessionID + ".json")
-	targetDir := filepath.Join(s.Home, "sessions", status)
+	runner := sanitize(env.Event.Runner)
+	sid := sanitize(sessionID)
+	targetDir := filepath.Join(s.Home, "sessions", runner, sid)
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return err
 	}
-	for _, oldStatus := range []string{"active", "completed", "failed"} {
-		if oldStatus != status {
-			_ = os.Remove(filepath.Join(s.Home, "sessions", oldStatus, name))
-		}
+	existing, _ := s.GetSession(runner, sessionID)
+	if existing != nil && existing.Status == "completed" && status == "running" {
+	} else if existing != nil && existing.Status == "failed" && status == "running" {
+	} else {
 	}
-	data, err := json.Marshal(struct {
-		Runner          string       `json:"runner"`
-		RunnerSessionID string       `json:"runner_session_id"`
-		Status          string       `json:"status"`
-		LastEvent       model.Cursor `json:"last_event"`
-	}{Runner: env.Event.Runner, RunnerSessionID: sessionID, Status: status, LastEvent: model.Cursor{Partition: env.Partition, Offset: env.Offset}})
+	data := model.SessionData{
+		Runner:          env.Event.Runner,
+		RunnerSessionID: sessionID,
+		Status:          status,
+		LastEvent:       &model.Cursor{Partition: env.Partition, Offset: env.Offset},
+	}
+	return s.writeSessionFile(runner, sessionID, data)
+}
+
+func (s *Store) sessionDir(runner, sessionID string) string {
+	return filepath.Join(s.Home, "sessions", sanitize(runner), sanitize(sessionID))
+}
+
+func (s *Store) sessionFilePath(runner, sessionID string) string {
+	return filepath.Join(s.sessionDir(runner, sessionID), "session.json")
+}
+
+func (s *Store) writeSessionFile(runner, sessionID string, data model.SessionData) error {
+	raw, err := json.Marshal(data)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(targetDir, name), data, 0644)
+	dir := s.sessionDir(runner, sessionID)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(s.sessionFilePath(runner, sessionID), raw, 0644)
+}
+
+func (s *Store) GetSession(runner, sessionID string) (*model.SessionData, error) {
+	path := s.sessionFilePath(runner, sessionID)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var sd model.SessionData
+	if err := json.Unmarshal(data, &sd); err != nil {
+		return nil, err
+	}
+	return &sd, nil
+}
+
+func (s *Store) WriteSession(runner, sessionID string, data model.SessionData) error {
+	return s.writeSessionFile(runner, sessionID, data)
+}
+
+func (s *Store) messagesPath(runner, sessionID string) string {
+	return filepath.Join(s.sessionDir(runner, sessionID), "messages.jsonl")
+}
+
+func (s *Store) GetMessages(runner, sessionID string) ([]model.Message, error) {
+	path := s.messagesPath(runner, sessionID)
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer f.Close()
+	var msgs []model.Message
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		var msg model.Message
+		if err := json.Unmarshal(scanner.Bytes(), &msg); err != nil {
+			return nil, err
+		}
+		msgs = append(msgs, msg)
+	}
+	return msgs, scanner.Err()
+}
+
+func (s *Store) AppendMessage(runner, sessionID string, msg model.Message) error {
+	dir := s.sessionDir(runner, sessionID)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	path := s.messagesPath(runner, sessionID)
+	line, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.Write(append(line, '\n'))
+	return err
+}
+
+func (s *Store) ClearMessages(runner, sessionID string) error {
+	path := s.messagesPath(runner, sessionID)
+	if err := os.WriteFile(path, nil, 0644); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+func (s *Store) GetAndClearMessages(runner, sessionID string) ([]model.Message, error) {
+	msgs, err := s.GetMessages(runner, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.ClearMessages(runner, sessionID); err != nil {
+		return msgs, err
+	}
+	return msgs, nil
 }
 
 func nextOffset(path string) (int64, error) {
