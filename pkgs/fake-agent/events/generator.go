@@ -1,0 +1,220 @@
+package events
+
+import (
+	"fmt"
+	"math/rand"
+	"strings"
+
+	faketoolexec "github.com/xhd2015/agent-pro/pkgs/fake-agent/fake-tool-exec"
+	"github.com/xhd2015/agent-pro/pkgs/fake-agent/probe"
+)
+
+const (
+	genMaxRounds      = 31
+	genResponseChance = 1.0 / 32.0
+)
+
+type Generator struct {
+	rng *rand.Rand
+}
+
+func NewGenerator(seed int64) *Generator {
+	return &Generator{rng: rand.New(rand.NewSource(seed))}
+}
+
+func (g *Generator) nextID() string {
+	id := g.rng.Int63()
+	return fmt.Sprintf("evt_%d", id)
+}
+
+func (g *Generator) pick(items []string) string {
+	if len(items) == 0 {
+		return ""
+	}
+	return items[g.rng.Intn(len(items))]
+}
+
+func (g *Generator) chance(p float64) bool {
+	return g.rng.Float64() < p
+}
+
+func GenerateEvents(seed int64, prompt string) []AgentEvent {
+	g := NewGenerator(seed)
+	return g.generateSession(prompt)
+}
+
+func (g *Generator) generateSession(prompt string) []AgentEvent {
+	var events []AgentEvent
+
+	topic := extractTopic(prompt)
+
+	thinkID := g.nextID()
+	thinkEvent := g.generateThink(thinkID, topic)
+	events = append(events, thinkEvent)
+
+	probeList := probe.Scan(prompt)
+	probeList = probe.Merge(probeList, probe.DefaultSuggestions())
+
+	for round := 0; round < genMaxRounds; round++ {
+		if g.chance(genResponseChance) {
+			break
+		}
+
+		suggestion := g.pickSuggestion(probeList)
+		toolEvent, result := g.execProbe(suggestion)
+		events = append(events, toolEvent)
+
+		if result != "" {
+			newProbes := probe.Scan(result)
+			probeList = probe.Merge(probeList, newProbes)
+		}
+	}
+
+	msgID := g.nextID()
+	msgEvent := g.generateMessage(msgID, topic)
+	events = append(events, msgEvent)
+
+	return events
+}
+
+func (g *Generator) pickSuggestion(suggestions []probe.Suggestion) probe.Suggestion {
+	if len(suggestions) == 0 {
+		return probe.Suggestion{Kind: "tool_call", Value: "echo no suggestions"}
+	}
+	return suggestions[g.rng.Intn(len(suggestions))]
+}
+
+func (g *Generator) execProbe(s probe.Suggestion) (AgentEvent, string) {
+	id := g.nextID()
+	switch s.Kind {
+	case probe.KindToolCall:
+		stdout, _, exitCode, _ := faketoolexec.ExecuteBash(s.Value, "", nil)
+		ec := exitCode
+		return AgentEvent{
+			ID:       id,
+			Type:     ActionToolCall,
+			Tool:     "bash",
+			ToolInput: map[string]any{"command": s.Value},
+			Output:   stdout,
+			ExitCode: &ec,
+		}, stdout
+	case probe.KindFileRead:
+		content, err := faketoolexec.ExecuteRead(s.Value)
+		if err != nil {
+			ec := 1
+			return AgentEvent{
+				ID:        id,
+				Type:      ActionToolCall,
+				Tool:      "read",
+				ToolInput: map[string]any{"path": s.Value},
+				ExitCode:  &ec,
+			}, ""
+		}
+		ec := 0
+		return AgentEvent{
+			ID:        id,
+			Type:      ActionToolCall,
+			Tool:      "read",
+			ToolInput: map[string]any{"path": s.Value},
+			Output:    content,
+			ExitCode:  &ec,
+		}, content
+	case probe.KindFileWrite:
+		faketoolexec.ExecuteWrite(s.Value, "content written by agent")
+		ec := 0
+		return AgentEvent{
+			ID:        id,
+			Type:      ActionToolCall,
+			Tool:      "write",
+			ToolInput: map[string]any{"path": s.Value, "content": "content written by agent"},
+			ExitCode:  &ec,
+		}, s.Value
+	case probe.KindSearch:
+		output, exitCode, _ := faketoolexec.ExecuteGrep(s.Value, ".")
+		ec := exitCode
+		return AgentEvent{
+			ID:        id,
+			Type:      ActionToolCall,
+			Tool:      "grep",
+			ToolInput: map[string]any{"pattern": s.Value, "path": "."},
+			Output:    output,
+			ExitCode:  &ec,
+		}, output
+	default:
+		stdout, _, exitCode, _ := faketoolexec.ExecuteBash(s.Value, "", nil)
+		ec := exitCode
+		return AgentEvent{
+			ID:       id,
+			Type:     ActionToolCall,
+			Tool:     "bash",
+			ToolInput: map[string]any{"command": s.Value},
+			Output:   stdout,
+			ExitCode: &ec,
+		}, stdout
+	}
+}
+
+func (g *Generator) generateThink(id, topic string) AgentEvent {
+	steps := []string{
+		fmt.Sprintf("Let me analyze the request regarding %s.", topic),
+		fmt.Sprintf("I need to understand the requirements for %s.", topic),
+		fmt.Sprintf("Looking at the task: %s. I'll break this down into steps.", topic),
+		fmt.Sprintf("First, let me check what's needed for %s.", topic),
+		fmt.Sprintf("I'll plan the approach for %s before making changes.", topic),
+	}
+
+	fullText := strings.Join(g.shufflePick(steps, 3), "\n")
+	return AgentEvent{
+		ID:   id,
+		Type: ActionThink,
+		Text: fullText,
+	}
+}
+
+func (g *Generator) generateMessage(id, topic string) AgentEvent {
+	responses := []string{
+		fmt.Sprintf("I've completed the task related to %s. Let me know if you need any adjustments.", topic),
+		fmt.Sprintf("Here's the result for your request about %s. I've made the necessary changes.", topic),
+		fmt.Sprintf("Done! I've addressed your request regarding %s. The changes should be in place now.", topic),
+		fmt.Sprintf("I've analyzed your request about %s and implemented the solution. Please review.", topic),
+		fmt.Sprintf("Your request regarding %s has been processed. Everything looks good.", topic),
+	}
+
+	text := g.pick(responses)
+	return AgentEvent{
+		ID:   id,
+		Type: ActionMessage,
+		Text: text,
+	}
+}
+
+func (g *Generator) shufflePick(items []string, n int) []string {
+	if n > len(items) {
+		n = len(items)
+	}
+	perm := g.rng.Perm(len(items))
+	result := make([]string, n)
+	for i := 0; i < n; i++ {
+		result[i] = items[perm[i]]
+	}
+	return result
+}
+
+func extractTopic(prompt string) string {
+	trimmed := strings.TrimSpace(prompt)
+	if trimmed == "" {
+		return "the task"
+	}
+	stopWords := []string{".", "\n", "?", "!"}
+	end := len(trimmed)
+	for _, w := range stopWords {
+		if idx := strings.Index(trimmed, w); idx >= 0 && idx < end {
+			end = idx
+		}
+	}
+	topic := strings.TrimSpace(trimmed[:end])
+	if len(topic) > 50 {
+		topic = topic[:50] + "..."
+	}
+	return topic
+}

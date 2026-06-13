@@ -10,6 +10,7 @@ import (
 	"time"
 
 	fakeagent "github.com/xhd2015/agent-pro/pkgs/fake-agent"
+	"github.com/xhd2015/agent-pro/pkgs/fake-agent/events"
 	faketoolexec "github.com/xhd2015/agent-pro/pkgs/fake-agent/fake-tool-exec"
 	"github.com/xhd2015/less-gen/flags"
 )
@@ -252,17 +253,18 @@ const (
 )
 
 type mockConfig struct {
-	Version          string            `json:"version"`
-	Runner           string            `json:"runner"`
-	SessionID        string            `json:"session_id"`
-	Model            string            `json:"model"`
-	DelayMS          int               `json:"delay_ms"`
-	ExitCode         int               `json:"exit_code"`
-	Stderr           string            `json:"stderr"`
-	IgnoreHookErrors bool              `json:"ignore_hook_errors"`
-	HookCommand      string            `json:"hook_command"`
-	StdoutEvents     []fakeagent.Event `json:"stdout_events"`
-	Hooks            []mockHook        `json:"hooks"`
+	Version            string            `json:"version"`
+	Runner             string            `json:"runner"`
+	SessionID          string            `json:"session_id"`
+	Model              string            `json:"model"`
+	DelayMS            int               `json:"delay_ms"`
+	ExitCode           int               `json:"exit_code"`
+	Stderr             string            `json:"stderr"`
+	IgnoreHookErrors   bool              `json:"ignore_hook_errors"`
+	HookCommand        string            `json:"hook_command"`
+	StdoutEventsRaw    json.RawMessage   `json:"stdout_events"`
+	StdoutEvents       []fakeagent.Event `json:"-"`
+	Hooks              []mockHook        `json:"hooks"`
 }
 
 type mockHook struct {
@@ -283,6 +285,11 @@ func loadMockConfig(path string) (*mockConfig, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse mock config %s: %w", path, err)
 	}
+	events, err := resolveCodexStdoutEvents(cfg.StdoutEventsRaw)
+	if err != nil {
+		return nil, fmt.Errorf("resolve stdout_events: %w", err)
+	}
+	cfg.StdoutEvents = events
 	if err := cfg.validate(); err != nil {
 		return nil, fmt.Errorf("invalid mock config %s: %w", path, err)
 	}
@@ -414,6 +421,9 @@ func processFakeCodexEvent(event *fakeagent.Event) {
 		event.Item.ExitCode = &exitCode
 		event.Item.Status = "completed"
 	case fakeagent.ItemFileChange:
+		if event.Item.Status == "completed" && len(event.Item.Changes) > 0 {
+			return
+		}
 		for _, change := range event.Item.Changes {
 			faketoolexec.ExecuteWrite(change.Path, "content written by agent")
 		}
@@ -444,4 +454,45 @@ func processMockEvent(event *fakeagent.Event) {
 		}
 		event.Item.Status = "completed"
 	}
+}
+
+func resolveCodexStdoutEvents(raw json.RawMessage) ([]fakeagent.Event, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+
+	var rawEvents []json.RawMessage
+	if err := json.Unmarshal(raw, &rawEvents); err != nil {
+		return nil, fmt.Errorf("parse stdout_events array: %w", err)
+	}
+
+	var result []fakeagent.Event
+	for i, rawEvt := range rawEvents {
+		var probe map[string]any
+		if err := json.Unmarshal(rawEvt, &probe); err != nil {
+			return nil, fmt.Errorf("parse stdout_events[%d]: %w", i, err)
+		}
+
+		if _, hasItem := probe["item"]; hasItem {
+			var evt fakeagent.Event
+			if err := json.Unmarshal(rawEvt, &evt); err != nil {
+				return nil, fmt.Errorf("parse stdout_events[%d] as codex event: %w", i, err)
+			}
+			result = append(result, evt)
+		} else if _, hasMessage := probe["message"]; hasMessage {
+			var evt fakeagent.Event
+			if err := json.Unmarshal(rawEvt, &evt); err != nil {
+				return nil, fmt.Errorf("parse stdout_events[%d] as codex event: %w", i, err)
+			}
+			result = append(result, evt)
+		} else {
+			var ae events.AgentEvent
+			if err := json.Unmarshal(rawEvt, &ae); err != nil {
+				return nil, fmt.Errorf("parse stdout_events[%d] as agent event: %w", i, err)
+			}
+			result = append(result, events.ToCodex([]events.AgentEvent{ae})...)
+		}
+	}
+
+	return result, nil
 }

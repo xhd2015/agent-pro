@@ -1,0 +1,14 @@
+## Preconditions
+- The mock config contains an `error` AgentEvent with a message and nonzero exit code.
+
+## Steps
+1. Run fake Codex with the mock config.
+
+```go
+import "testing"
+
+func Setup(t *testing.T, req *Request) error {
+    writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-codex","exit_code":3,"stderr":"something went wrong","stdout_events":[{"type":"error","text":"execution failed"}]}`)
+    return nil
+}
+```

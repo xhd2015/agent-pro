@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xhd2015/agent-pro/pkgs/fake-agent/events"
 	faketoolexec "github.com/xhd2015/agent-pro/pkgs/fake-agent/fake-tool-exec"
 	"github.com/xhd2015/less-gen/flags"
 )
@@ -33,6 +34,7 @@ Options:
   --dir <dir>                    working directory (ignored, for compatibility)
   --model <model>                model name
   --session <id>                 session id
+  --seed <int>                   random seed for deterministic output
   --mock-config <path>           JSON mock config with events, hooks, and exit behavior
   --dangerously-skip-permissions accepted for compatibility
   -h,--help                      show help
@@ -91,6 +93,7 @@ func handleRun(args []string) error {
 	var sessionFlag *string
 	var mockConfigFlag *string
 	var skipPermissionsFlag *bool
+	var seedFlag *int64
 
 	remaining, err := flags.String("--format", &formatFlag).
 		String("--dir", &dirFlag).
@@ -98,6 +101,7 @@ func handleRun(args []string) error {
 		String("--session", &sessionFlag).
 		String("--mock-config", &mockConfigFlag).
 		Bool("--dangerously-skip-permissions", &skipPermissionsFlag).
+		Int("--seed", &seedFlag).
 		Help("-h,--help", runHelp).
 		Parse(args)
 	if err != nil {
@@ -139,26 +143,26 @@ func handleRun(args []string) error {
 		mockConfigPath = strings.TrimSpace(*mockConfigFlag)
 	}
 
-	cfg := &mockConfig{
-		Runner:    "fake-opencode",
-		SessionID: "fake-opencode-session",
-		Model:     "openai/gpt-5",
-		StdoutEvents: []map[string]any{
-			{
-				"type":      "text",
-				"sessionID": "fake-opencode-session",
-				"part": map[string]any{
-					"id":   "p1",
-					"type": "text",
-					"text": "fake opencode answered",
-				},
-			},
-		},
-	}
+	var cfg *mockConfig
 	if mockConfigPath != "" {
+		var err error
 		cfg, err = loadMockConfig(mockConfigPath)
 		if err != nil {
 			return err
+		}
+	} else {
+		var seed int64
+		if seedFlag != nil {
+			seed = *seedFlag
+		} else {
+			seed = time.Now().UnixNano()
+		}
+		agentEvents := events.GenerateEvents(seed, prompt)
+		cfg = &mockConfig{
+			Runner:       "fake-opencode",
+			SessionID:    fmt.Sprintf("session_%d", seed),
+			Model:        "openai/gpt-5",
+			StdoutEvents: events.ToOpencode(agentEvents, ""),
 		}
 	}
 	if cfg.Runner == "" {
@@ -244,7 +248,8 @@ type mockConfig struct {
 	Stderr           string           `json:"stderr"`
 	IgnoreHookErrors bool             `json:"ignore_hook_errors"`
 	HookCommand      string           `json:"hook_command"`
-	StdoutEvents     []map[string]any `json:"stdout_events"`
+	StdoutEventsRaw  json.RawMessage  `json:"stdout_events"`
+	StdoutEvents     []map[string]any `json:"-"`
 	Hooks            []mockHook       `json:"hooks"`
 }
 
@@ -266,6 +271,11 @@ func loadMockConfig(path string) (*mockConfig, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse mock config %s: %w", path, err)
 	}
+	events, err := resolveOpencodeStdoutEvents(cfg.StdoutEventsRaw)
+	if err != nil {
+		return nil, fmt.Errorf("resolve stdout_events: %w", err)
+	}
+	cfg.StdoutEvents = events
 	if err := cfg.validate(); err != nil {
 		return nil, fmt.Errorf("invalid mock config %s: %w", path, err)
 	}
@@ -315,7 +325,7 @@ func (c *mockConfig) withSession(event map[string]any) map[string]any {
 	for k, v := range event {
 		out[k] = v
 	}
-	if _, ok := out["sessionID"]; !ok {
+	if sid, ok := out["sessionID"]; !ok || sid == "" {
 		out["sessionID"] = c.SessionID
 	}
 	return out
@@ -411,6 +421,10 @@ func processToolUseEvent(event map[string]any) map[string]any {
 	if !ok {
 		state = make(map[string]any)
 		part["state"] = state
+	}
+
+	if state["status"] == "completed" {
+		return event
 	}
 
 	mockRaw, hasMock := event["mock"]
@@ -526,4 +540,39 @@ func applyMockOutput(event map[string]any, toolName string, state map[string]any
 		state["exit_code"] = exitCode
 		state["status"] = "completed"
 	}
+}
+
+func resolveOpencodeStdoutEvents(raw json.RawMessage) ([]map[string]any, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+
+	var rawEvents []json.RawMessage
+	if err := json.Unmarshal(raw, &rawEvents); err != nil {
+		return nil, fmt.Errorf("parse stdout_events array: %w", err)
+	}
+
+	var result []map[string]any
+	for i, rawEvt := range rawEvents {
+		var probe map[string]any
+		if err := json.Unmarshal(rawEvt, &probe); err != nil {
+			return nil, fmt.Errorf("parse stdout_events[%d]: %w", i, err)
+		}
+
+		if _, hasPart := probe["part"]; hasPart {
+			result = append(result, probe)
+		} else if _, hasError := probe["error"]; hasError {
+			result = append(result, probe)
+		} else if _, hasDone := probe["done"]; hasDone {
+			result = append(result, probe)
+		} else {
+			var ae events.AgentEvent
+			if err := json.Unmarshal(rawEvt, &ae); err != nil {
+				return nil, fmt.Errorf("parse stdout_events[%d] as agent event: %w", i, err)
+			}
+			result = append(result, events.ToOpencode([]events.AgentEvent{ae}, "")...)
+		}
+	}
+
+	return result, nil
 }
