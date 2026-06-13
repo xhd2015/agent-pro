@@ -5,20 +5,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	types "github.com/xhd2015/agent-pro/agent/event/types"
 )
 
-type MockConfig struct {
-	Output   string       `json:"output,omitempty"`
-	Stderr   string       `json:"stderr,omitempty"`
-	ExitCode *int         `json:"exit_code,omitempty"`
-	Content  string       `json:"content,omitempty"`
-	Changes  []FileChange `json:"changes,omitempty"`
-}
+type MockConfig = types.MockConfig
 
-type FileChange struct {
-	Path string `json:"path"`
-	Kind string `json:"kind"`
-}
+type FileChange = types.FileChange
 
 func ExecuteBash(command string, workDir string, env []string) (stdout string, stderr string, exitCode int, err error) {
 	cmd := exec.Command("bash", "-c", command)

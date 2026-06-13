@@ -9,8 +9,9 @@ import (
 	"strings"
 	"time"
 
+	types "github.com/xhd2015/agent-pro/agent/event/types"
+	codex_types "github.com/xhd2015/agent-pro/agent/event/codex_types"
 	fakeagent "github.com/xhd2015/agent-pro/pkgs/fake-agent"
-	"github.com/xhd2015/agent-pro/pkgs/fake-agent/events"
 	faketoolexec "github.com/xhd2015/agent-pro/pkgs/fake-agent/fake-tool-exec"
 	"github.com/xhd2015/less-gen/flags"
 )
@@ -486,11 +487,11 @@ func resolveCodexStdoutEvents(raw json.RawMessage) ([]fakeagent.Event, error) {
 			}
 			result = append(result, evt)
 		} else {
-			var ae events.AgentEvent
+			var ae types.AgentEvent
 			if err := json.Unmarshal(rawEvt, &ae); err != nil {
 				return nil, fmt.Errorf("parse stdout_events[%d] as agent event: %w", i, err)
 			}
-			result = append(result, events.ToCodex([]events.AgentEvent{ae})...)
+			result = append(result, codex_types.ToCodex([]types.AgentEvent{ae})...)
 		}
 	}
 

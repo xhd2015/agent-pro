@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"strings"
 
+	types "github.com/xhd2015/agent-pro/agent/event/types"
 	faketoolexec "github.com/xhd2015/agent-pro/pkgs/fake-agent/fake-tool-exec"
 	"github.com/xhd2015/agent-pro/pkgs/fake-agent/probe"
 )
@@ -52,10 +53,7 @@ type ItemPart struct {
 	Text string `json:"text,omitempty"`
 }
 
-type FileChange struct {
-	Path string `json:"path"`
-	Kind string `json:"kind"`
-}
+type FileChange = types.FileChange
 
 const (
 	maxRounds      = 31

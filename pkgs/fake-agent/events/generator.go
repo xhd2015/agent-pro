@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"strings"
 
+	types "github.com/xhd2015/agent-pro/agent/event/types"
 	faketoolexec "github.com/xhd2015/agent-pro/pkgs/fake-agent/fake-tool-exec"
 	"github.com/xhd2015/agent-pro/pkgs/fake-agent/probe"
 )
@@ -38,13 +39,13 @@ func (g *Generator) chance(p float64) bool {
 	return g.rng.Float64() < p
 }
 
-func GenerateEvents(seed int64, prompt string) []AgentEvent {
+func GenerateEvents(seed int64, prompt string) []types.AgentEvent {
 	g := NewGenerator(seed)
 	return g.generateSession(prompt)
 }
 
-func (g *Generator) generateSession(prompt string) []AgentEvent {
-	var events []AgentEvent
+func (g *Generator) generateSession(prompt string) []types.AgentEvent {
+	var events []types.AgentEvent
 
 	topic := extractTopic(prompt)
 
@@ -84,15 +85,15 @@ func (g *Generator) pickSuggestion(suggestions []probe.Suggestion) probe.Suggest
 	return suggestions[g.rng.Intn(len(suggestions))]
 }
 
-func (g *Generator) execProbe(s probe.Suggestion) (AgentEvent, string) {
+func (g *Generator) execProbe(s probe.Suggestion) (types.AgentEvent, string) {
 	id := g.nextID()
 	switch s.Kind {
 	case probe.KindToolCall:
 		stdout, _, exitCode, _ := faketoolexec.ExecuteBash(s.Value, "", nil)
 		ec := exitCode
-		return AgentEvent{
+		return types.AgentEvent{
 			ID:       id,
-			Type:     ActionToolCall,
+			Type:     types.ActionToolCall,
 			Tool:     "bash",
 			ToolInput: map[string]any{"command": s.Value},
 			Output:   stdout,
@@ -102,18 +103,18 @@ func (g *Generator) execProbe(s probe.Suggestion) (AgentEvent, string) {
 		content, err := faketoolexec.ExecuteRead(s.Value)
 		if err != nil {
 			ec := 1
-			return AgentEvent{
+			return types.AgentEvent{
 				ID:        id,
-				Type:      ActionToolCall,
+				Type:      types.ActionToolCall,
 				Tool:      "read",
 				ToolInput: map[string]any{"path": s.Value},
 				ExitCode:  &ec,
 			}, ""
 		}
 		ec := 0
-		return AgentEvent{
+		return types.AgentEvent{
 			ID:        id,
-			Type:      ActionToolCall,
+			Type:      types.ActionToolCall,
 			Tool:      "read",
 			ToolInput: map[string]any{"path": s.Value},
 			Output:    content,
@@ -122,9 +123,9 @@ func (g *Generator) execProbe(s probe.Suggestion) (AgentEvent, string) {
 	case probe.KindFileWrite:
 		faketoolexec.ExecuteWrite(s.Value, "content written by agent")
 		ec := 0
-		return AgentEvent{
+		return types.AgentEvent{
 			ID:        id,
-			Type:      ActionToolCall,
+			Type:      types.ActionToolCall,
 			Tool:      "write",
 			ToolInput: map[string]any{"path": s.Value, "content": "content written by agent"},
 			ExitCode:  &ec,
@@ -132,9 +133,9 @@ func (g *Generator) execProbe(s probe.Suggestion) (AgentEvent, string) {
 	case probe.KindSearch:
 		output, exitCode, _ := faketoolexec.ExecuteGrep(s.Value, ".")
 		ec := exitCode
-		return AgentEvent{
+		return types.AgentEvent{
 			ID:        id,
-			Type:      ActionToolCall,
+			Type:      types.ActionToolCall,
 			Tool:      "grep",
 			ToolInput: map[string]any{"pattern": s.Value, "path": "."},
 			Output:    output,
@@ -143,9 +144,9 @@ func (g *Generator) execProbe(s probe.Suggestion) (AgentEvent, string) {
 	default:
 		stdout, _, exitCode, _ := faketoolexec.ExecuteBash(s.Value, "", nil)
 		ec := exitCode
-		return AgentEvent{
+		return types.AgentEvent{
 			ID:       id,
-			Type:     ActionToolCall,
+			Type:     types.ActionToolCall,
 			Tool:     "bash",
 			ToolInput: map[string]any{"command": s.Value},
 			Output:   stdout,
@@ -154,7 +155,7 @@ func (g *Generator) execProbe(s probe.Suggestion) (AgentEvent, string) {
 	}
 }
 
-func (g *Generator) generateThink(id, topic string) AgentEvent {
+func (g *Generator) generateThink(id, topic string) types.AgentEvent {
 	steps := []string{
 		fmt.Sprintf("Let me analyze the request regarding %s.", topic),
 		fmt.Sprintf("I need to understand the requirements for %s.", topic),
@@ -164,14 +165,14 @@ func (g *Generator) generateThink(id, topic string) AgentEvent {
 	}
 
 	fullText := strings.Join(g.shufflePick(steps, 3), "\n")
-	return AgentEvent{
+	return types.AgentEvent{
 		ID:   id,
-		Type: ActionThink,
+		Type: types.ActionThink,
 		Text: fullText,
 	}
 }
 
-func (g *Generator) generateMessage(id, topic string) AgentEvent {
+func (g *Generator) generateMessage(id, topic string) types.AgentEvent {
 	responses := []string{
 		fmt.Sprintf("I've completed the task related to %s. Let me know if you need any adjustments.", topic),
 		fmt.Sprintf("Here's the result for your request about %s. I've made the necessary changes.", topic),
@@ -181,9 +182,9 @@ func (g *Generator) generateMessage(id, topic string) AgentEvent {
 	}
 
 	text := g.pick(responses)
-	return AgentEvent{
+	return types.AgentEvent{
 		ID:   id,
-		Type: ActionMessage,
+		Type: types.ActionMessage,
 		Text: text,
 	}
 }

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	types "github.com/xhd2015/agent-pro/agent/event/types"
+	opencode_types "github.com/xhd2015/agent-pro/agent/event/opencode_types"
 	"github.com/xhd2015/agent-pro/pkgs/fake-agent/events"
 	faketoolexec "github.com/xhd2015/agent-pro/pkgs/fake-agent/fake-tool-exec"
 	"github.com/xhd2015/less-gen/flags"
@@ -162,7 +164,7 @@ func handleRun(args []string) error {
 			Runner:       "fake-opencode",
 			SessionID:    fmt.Sprintf("session_%d", seed),
 			Model:        "openai/gpt-5",
-			StdoutEvents: events.ToOpencode(agentEvents, ""),
+			StdoutEvents: opencode_types.ToOpencode(agentEvents, ""),
 		}
 	}
 	if cfg.Runner == "" {
@@ -566,11 +568,11 @@ func resolveOpencodeStdoutEvents(raw json.RawMessage) ([]map[string]any, error) 
 		} else if _, hasDone := probe["done"]; hasDone {
 			result = append(result, probe)
 		} else {
-			var ae events.AgentEvent
+			var ae types.AgentEvent
 			if err := json.Unmarshal(rawEvt, &ae); err != nil {
 				return nil, fmt.Errorf("parse stdout_events[%d] as agent event: %w", i, err)
 			}
-			result = append(result, events.ToOpencode([]events.AgentEvent{ae}, "")...)
+			result = append(result, opencode_types.ToOpencode([]types.AgentEvent{ae}, "")...)
 		}
 	}
 
