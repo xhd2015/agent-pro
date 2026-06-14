@@ -11,7 +11,7 @@ import "testing"
 
 func Setup(t *testing.T, req *Request) error {
 	writeFile(t, req.MarkerPath, "UNIQUE_GREP_MARKER_AE\n")
-	writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_grep_ae","stdout_events":[{"type":"tool_call","tool":"grep","tool_input":{"pattern":"UNIQUE_GREP_MARKER_AE","path":"`+req.MarkerPath+`"}}]}`)
+	writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_grep_ae","llm_events":[{"type":"tool_call","tool":"grep","tool_input":{"pattern":"UNIQUE_GREP_MARKER_AE","path":"`+req.MarkerPath+`"}}]}`)
 	return nil
 }
 ```

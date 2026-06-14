@@ -140,7 +140,8 @@ type MockConfig struct {
 	Stderr           string          `json:"stderr,omitempty"`
 	IgnoreHookErrors bool            `json:"ignore_hook_errors,omitempty"`
 	HookCommand      string          `json:"hook_command,omitempty"`
-	StdoutEvents     json.RawMessage `json:"stdout_events,omitempty"`
+	StdoutEvents     json.RawMessage `json:"stdout_events,omitempty"` // Deprecated: use LLMEvents
+	LLMEvents        json.RawMessage `json:"llm_events,omitempty"`
 	Hooks            []MockHook      `json:"hooks,omitempty"`
 }
 

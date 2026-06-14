@@ -17,7 +17,7 @@ import (
 )
 
 func Setup(t *testing.T, req *Request) error {
-    writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_delay","stdout_events":[{"type":"message","text":"delayed","delay_ms":2000}]}`)
+    writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_delay","llm_events":[{"type":"message","text":"delayed","delay_ms":2000}]}`)
     return nil
 }
 

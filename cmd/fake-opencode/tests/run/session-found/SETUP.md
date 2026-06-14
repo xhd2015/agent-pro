@@ -18,7 +18,7 @@ func Setup(t *testing.T, req *Request) error {
     if err := os.MkdirAll(sessDir, 0755); err != nil {
         return err
     }
-    writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","stdout_events":[{"type":"message","text":"session found no error"}]}`)
+    writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","llm_events":[{"type":"message","text":"session found no error"}]}`)
     req.Args = []string{"run", "--format", "json", "--session", "sess_known", "--mock-config", req.MockConfigPath, "hello"}
     return nil
 }

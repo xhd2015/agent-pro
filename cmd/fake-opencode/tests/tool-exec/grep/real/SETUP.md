@@ -14,7 +14,7 @@ func Setup(t *testing.T, req *Request) error {
     filePath := createTestFile(t, req, "grep-test/file.txt", content)
     searchDir := req.TempDir + "/grep-test"
     _ = filePath
-    mockJSON := `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_grep_real","stdout_events":[{"type":"tool_call","tool":"grep","tool_input":{"pattern":"UNIQUE_MARKER_FOR_GREP","path":"` + searchDir + `"}}]}`
+    mockJSON := `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_grep_real","llm_events":[{"type":"tool_call","tool":"grep","tool_input":{"pattern":"UNIQUE_MARKER_FOR_GREP","path":"` + searchDir + `"}}]}`
     writeMockConfig(t, req, mockJSON)
     return nil
 }

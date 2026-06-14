@@ -12,7 +12,7 @@ import (
 )
 
 func Setup(t *testing.T, req *Request) error {
-    mockJSON := `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_write_mock","stdout_events":[{"type":"tool_call","tool":"write","mock":{"output":"mocked write done"}}]}`
+    mockJSON := `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_write_mock","llm_events":[{"type":"tool_call","tool":"write","mock":{"output":"mocked write done"}}]}`
     writeMockConfig(t, req, mockJSON)
     return nil
 }

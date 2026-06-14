@@ -17,7 +17,7 @@ import (
 
 func Setup(t *testing.T, req *Request) error {
     marker := filepath.Join(req.TempDir, "thread-id.txt")
-    writeMockConfig(t, req, fmt.Sprintf(`{"version":"agent-pro.fake-runner.v1","runner":"fake-codex","session_id":"sess_thread_test","hook_command":"echo $CODEX_THREAD_ID > %s","hooks":[{"at":"before_start","event":"capture","payload":{}}],"stdout_events":[{"type":"item.completed","item":{"id":"m1","type":"message","text":"done","status":"completed"}}]}`, marker))
+    writeMockConfig(t, req, fmt.Sprintf(`{"version":"agent-pro.fake-runner.v1","runner":"fake-codex","session_id":"sess_thread_test","hook_command":"echo $CODEX_THREAD_ID > %s","hooks":[{"at":"before_start","event":"capture","payload":{}}],"llm_events":[{"type":"message","text":"done"}]}`, marker))
     return nil
 }
 ```

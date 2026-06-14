@@ -41,7 +41,7 @@ export const AgentHubPlugin = async () => {
     req.Env = append(req.Env, "OPENCODE_CONFIG_DIR="+opencodeConfigDir)
     req.MarkerPath = markerPath
 
-    writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_autodiscover","stdout_events":[{"type":"message","done":true}]}`)
+    writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_autodiscover","llm_events":[{"type":"message","done":true}]}`)
     return nil
 }
 ```

@@ -9,7 +9,7 @@
 import "testing"
 
 func Setup(t *testing.T, req *Request) error {
-    writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_sleep","stdout_events":[{"type":"message","text":"before"},{"type":"sleep","delay_ms":500},{"type":"message","text":"after"}]}`)
+    writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_sleep","llm_events":[{"type":"message","text":"before"},{"type":"sleep","delay_ms":500},{"type":"message","text":"after"}]}`)
     return nil
 }
 ```

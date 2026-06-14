@@ -69,10 +69,10 @@ export const AgentHubPlugin = async () => {
     writeFile(t, pluginPath, testPlugin)
 
     // write run1 mock config with sleep for mid-flight checks
-    writeFile(t, filepath.Join(req.TempDir, "run1-mock.json"), `{"version":"agent-pro.fake-runner.v1","runner":"opencode","session_id":"sess_full","stdout_events":[{"type":"step_start"},{"type":"sleep","delay_ms":3000},{"type":"message","text":"working on it"},{"type":"done"}]}`)
+    writeFile(t, filepath.Join(req.TempDir, "run1-mock.json"), `{"version":"agent-pro.fake-runner.v1","runner":"opencode","session_id":"sess_full","llm_events":[{"type":"step_start"},{"type":"sleep","delay_ms":3000},{"type":"message","text":"working on it"},{"type":"done"}]}`)
 
     // write run2 mock config (resume)
-    writeFile(t, filepath.Join(req.TempDir, "run2-mock.json"), `{"version":"agent-pro.fake-runner.v1","runner":"opencode","session_id":"sess_full","stdout_events":[{"type":"message","text":"resumed work"}]}`)
+    writeFile(t, filepath.Join(req.TempDir, "run2-mock.json"), `{"version":"agent-pro.fake-runner.v1","runner":"opencode","session_id":"sess_full","llm_events":[{"type":"message","text":"resumed work"}]}`)
 
     req.Command = req.FakeOpencode
     req.Args = []string{"run", "--format", "json", "--mock-config", filepath.Join(req.TempDir, "run1-mock.json"), "--plugin", pluginPath, "do the task"}

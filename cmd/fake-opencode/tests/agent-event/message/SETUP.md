@@ -8,7 +8,7 @@
 import "testing"
 
 func Setup(t *testing.T, req *Request) error {
-    writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_msg","stdout_events":[{"type":"message","text":"all tasks complete"}]}`)
+    writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_msg","llm_events":[{"type":"message","text":"all tasks complete"}]}`)
     return nil
 }
 ```

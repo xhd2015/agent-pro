@@ -10,7 +10,7 @@
 import "testing"
 
 func Setup(t *testing.T, req *Request) error {
-    writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-codex","session_id":"codex_cmd_real","stdout_events":[{"type":"item.completed","item":{"id":"cmd_1","type":"command_execution","command":"echo hello real codex","status":"completed"}}]}`)
+    writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-codex","session_id":"codex_cmd_real","llm_events":[{"type":"tool_call","tool":"bash","tool_input":{"command":"echo hello real codex"}}]}`)
     return nil
 }
 ```

@@ -14,7 +14,7 @@ import (
 func Setup(t *testing.T, req *Request) error {
     readFile := filepath.Join(req.TempDir, "sample.txt")
     writeFile(t, readFile, "file contents here")
-    writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-codex","stdout_events":[{"type":"tool_call","tool":"read","tool_input":{"path":"`+readFile+`"}}]}`)
+    writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-codex","llm_events":[{"type":"tool_call","tool":"read","tool_input":{"path":"`+readFile+`"}}]}`)
     return nil
 }
 ```

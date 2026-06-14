@@ -13,7 +13,7 @@ import (
 
 func Setup(t *testing.T, req *Request) error {
     writeFile := filepath.Join(req.TempDir, "output.txt")
-    writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-codex","stdout_events":[{"type":"tool_call","tool":"write","tool_input":{"path":"`+writeFile+`","content":"generated content"}}]}`)
+    writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-codex","llm_events":[{"type":"tool_call","tool":"write","tool_input":{"path":"`+writeFile+`","content":"generated content"}}]}`)
     return nil
 }
 ```

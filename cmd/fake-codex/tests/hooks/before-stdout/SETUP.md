@@ -12,7 +12,7 @@ import (
 
 func Setup(t *testing.T, req *Request) error {
     hook := writeHookRecorder(t, req, 0)
-    writeMockConfig(t, req, fmt.Sprintf(`{"version":"agent-pro.fake-runner.v1","runner":"fake-codex","hook_command":%q,"hooks":[{"at":"before_stdout","event":"BeforeStdout","payload":{"ok":true}}],"stdout_events":[{"type":"item.completed","item":{"id":"m1","type":"message","text":"after hook","status":"completed"}}]}`, hook+" {{event}}"))
+    writeMockConfig(t, req, fmt.Sprintf(`{"version":"agent-pro.fake-runner.v1","runner":"fake-codex","hook_command":%q,"hooks":[{"at":"before_stdout","event":"BeforeStdout","payload":{"ok":true}}],"llm_events":[{"type":"message","text":"after hook"}]}`, hook+" {{event}}"))
     return nil
 }
 ```

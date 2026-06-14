@@ -11,7 +11,7 @@ import "testing"
 
 func Setup(t *testing.T, req *Request) error {
     _ = createTestFile(t, req, "grep-mock/file.txt", "this has REAL_MATCH in it")
-    mockJSON := `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_grep_mock","stdout_events":[{"type":"tool_call","tool":"grep","mock":{"output":"fake grep result\nfake_file.txt:1: fake match","exit_code":0}}]}`
+    mockJSON := `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_grep_mock","llm_events":[{"type":"tool_call","tool":"grep","mock":{"output":"fake grep result\nfake_file.txt:1: fake match","exit_code":0}}]}`
     writeMockConfig(t, req, mockJSON)
     return nil
 }

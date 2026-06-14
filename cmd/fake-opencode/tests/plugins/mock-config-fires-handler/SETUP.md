@@ -26,7 +26,7 @@ export const AgentHubPlugin = async () => {
     pluginPath := filepath.Join(req.TempDir, "plugin.ts")
     writeFile(t, pluginPath, pluginContent)
 
-    configJSON := `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_mock","stdout_events":[{"type":"message","done":true}],"plugins":["` + pluginPath + `"]}`
+    configJSON := `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_mock","llm_events":[{"type":"message","done":true}],"plugins":["` + pluginPath + `"]}`
     writeMockConfig(t, req, configJSON)
 
     req.MarkerPath = markerPath

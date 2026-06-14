@@ -1,5 +1,5 @@
 ## Preconditions
-- The mock config uses `stdout_events` with the neutral AgentEvent format.
+- The mock config uses `llm_events` with the neutral AgentEvent format.
 - A `sleep` event type with `delay_ms` produces no output and pauses event emission.
 - Individual events may carry a `delay_ms` field for a pre-emission delay.
 

@@ -12,7 +12,7 @@ import (
 )
 
 func Setup(t *testing.T, req *Request) error {
-    writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_bash_real","stdout_events":[{"type":"tool_call","tool":"bash","tool_input":{"command":"echo hello real bash"}}]}`)
+    writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_bash_real","llm_events":[{"type":"tool_call","tool":"bash","tool_input":{"command":"echo hello real bash"}}]}`)
     return nil
 }
 ```
