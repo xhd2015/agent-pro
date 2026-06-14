@@ -369,7 +369,11 @@ func hubHome() string {
 	if home := strings.TrimSpace(os.Getenv("AGENT_HUB_HOME")); home != "" {
 		return home
 	}
-	return ".agent-hub"
+	userHome, err := os.UserHomeDir()
+	if err != nil {
+		return ".agent-hub"
+	}
+	return filepath.Join(userHome, ".agent-hub")
 }
 
 func runDaemon(home string, args []string) error {
