@@ -10,6 +10,7 @@ const (
 	ActionDone       ActionType = "done"
 	ActionStepStart  ActionType = "step_start"
 	ActionStepFinish ActionType = "step_finish"
+	ActionSleep      ActionType = "sleep"
 )
 
 type AgentEvent struct {
@@ -22,6 +23,7 @@ type AgentEvent struct {
 	Output    string         `json:"output,omitempty"`
 	Stderr    string         `json:"stderr,omitempty"`
 	ExitCode  *int           `json:"exit_code,omitempty"`
+	DelayMs   int            `json:"delay_ms,omitempty"`
 	Mock      *MockConfig    `json:"mock,omitempty"`
 	Changes   []FileChange   `json:"changes,omitempty"`
 }

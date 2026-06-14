@@ -230,48 +230,56 @@ Show opencode plugin integration status.
 `
 
 const integrationOpenCodeInstallHelp = `
-Usage: agent-hub integration opencode install [--global]
+Usage: agent-hub integration opencode install [--global] [--opencode-home <dir>]
 
-Install the agent-hub plugin for opencode. Without --global,
+Install the agent-hub plugin for opencode. Without --global or --opencode-home,
 installs to the local .opencode/plugins/ directory. With --global,
-installs to ~/.config/opencode/plugins/.
+installs to ~/.config/opencode/plugins/. With --opencode-home,
+installs to <dir>/plugins/. --global and --opencode-home are mutually exclusive.
 
 Options:
-  --global   install to global plugins directory
+  --global             install to global plugins directory
+  --opencode-home <dir> install to a custom opencode home directory
 `
 
 const integrationOpenCodeUninstallHelp = `
-Usage: agent-hub integration opencode uninstall [--global]
+Usage: agent-hub integration opencode uninstall [--global] [--opencode-home <dir>]
 
 Remove the agent-hub plugin and disabled plugin file. Without
---global, removes from the local .opencode/plugins/ directory.
+--global or --opencode-home, removes from the local .opencode/plugins/ directory.
 With --global, removes from ~/.config/opencode/plugins/.
+With --opencode-home, removes from <dir>/plugins/. --global and --opencode-home are mutually exclusive.
 
 Options:
-  --global   uninstall from global plugins directory
+  --global             uninstall from global plugins directory
+  --opencode-home <dir> uninstall from a custom opencode home directory
 `
 
 const integrationOpenCodeEnableHelp = `
-Usage: agent-hub integration opencode enable [--global]
+Usage: agent-hub integration opencode enable [--global] [--opencode-home <dir>]
 
 Enable a disabled plugin by renaming agent-hub.ts.disabled to
-agent-hub.ts. Without --global, operates on local .opencode/plugins/.
+agent-hub.ts. Without --global or --opencode-home, operates on local .opencode/plugins/.
 With --global, operates on ~/.config/opencode/plugins/.
+With --opencode-home, operates on <dir>/plugins/. --global and --opencode-home are mutually exclusive.
 
 Options:
-  --global   enable plugin in global plugins directory
+  --global             enable plugin in global plugins directory
+  --opencode-home <dir> enable plugin in a custom opencode home directory
 `
 
 const integrationOpenCodeDisableHelp = `
-Usage: agent-hub integration opencode disable [--global]
+Usage: agent-hub integration opencode disable [--global] [--opencode-home <dir>]
 
 Disable an enabled plugin by renaming agent-hub.ts to
-agent-hub.ts.disabled. Without --global, operates on local
+agent-hub.ts.disabled. Without --global or --opencode-home, operates on local
 .opencode/plugins/. With --global, operates on
-~/.config/opencode/plugins/.
+~/.config/opencode/plugins/. With --opencode-home, operates on <dir>/plugins/.
+--global and --opencode-home are mutually exclusive.
 
 Options:
-  --global   disable plugin in global plugins directory
+  --global             disable plugin in global plugins directory
+  --opencode-home <dir> disable plugin in a custom opencode home directory
 `
 
 func main() {
@@ -946,7 +954,13 @@ func runIntegrationOpenCode(args []string) error {
 	}
 }
 
-func integrationPluginsDir(global bool) (string, error) {
+func integrationPluginsDir(global bool, opencodeHome string) (string, error) {
+	if global && opencodeHome != "" {
+		return "", fmt.Errorf("--global and --opencode-home are mutually exclusive")
+	}
+	if opencodeHome != "" {
+		return filepath.Join(opencodeHome, "plugins"), nil
+	}
 	if global {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -955,6 +969,22 @@ func integrationPluginsDir(global bool) (string, error) {
 		return filepath.Join(home, ".config", "opencode", "plugins"), nil
 	}
 	return integrationLocalPluginsDir()
+}
+
+func parseIntegrationFlags(args []string) (global bool, opencodeHome string, err error) {
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--global":
+			global = true
+		case "--opencode-home":
+			i++
+			if i >= len(args) {
+				return false, "", fmt.Errorf("--opencode-home requires a value")
+			}
+			opencodeHome = args[i]
+		}
+	}
+	return global, opencodeHome, nil
 }
 
 func integrationLocalPluginsDir() (string, error) {
@@ -998,13 +1028,11 @@ func runIntegrationStatus() error {
 }
 
 func runIntegrationOpenCodeInstall(args []string) error {
-	globalFlag := false
-	for _, a := range args {
-		if a == "--global" {
-			globalFlag = true
-		}
+	globalFlag, opencodeHome, err := parseIntegrationFlags(args)
+	if err != nil {
+		return err
 	}
-	pluginsDir, err := integrationPluginsDir(globalFlag)
+	pluginsDir, err := integrationPluginsDir(globalFlag, opencodeHome)
 	if err != nil {
 		return err
 	}
@@ -1020,13 +1048,11 @@ func runIntegrationOpenCodeInstall(args []string) error {
 }
 
 func runIntegrationOpenCodeUninstall(args []string) error {
-	globalFlag := false
-	for _, a := range args {
-		if a == "--global" {
-			globalFlag = true
-		}
+	globalFlag, opencodeHome, err := parseIntegrationFlags(args)
+	if err != nil {
+		return err
 	}
-	pluginsDir, err := integrationPluginsDir(globalFlag)
+	pluginsDir, err := integrationPluginsDir(globalFlag, opencodeHome)
 	if err != nil {
 		return err
 	}
@@ -1048,13 +1074,11 @@ func runIntegrationOpenCodeUninstall(args []string) error {
 }
 
 func runIntegrationOpenCodeEnable(args []string) error {
-	globalFlag := false
-	for _, a := range args {
-		if a == "--global" {
-			globalFlag = true
-		}
+	globalFlag, opencodeHome, err := parseIntegrationFlags(args)
+	if err != nil {
+		return err
 	}
-	pluginsDir, err := integrationPluginsDir(globalFlag)
+	pluginsDir, err := integrationPluginsDir(globalFlag, opencodeHome)
 	if err != nil {
 		return err
 	}
@@ -1076,13 +1100,11 @@ func runIntegrationOpenCodeEnable(args []string) error {
 }
 
 func runIntegrationOpenCodeDisable(args []string) error {
-	globalFlag := false
-	for _, a := range args {
-		if a == "--global" {
-			globalFlag = true
-		}
+	globalFlag, opencodeHome, err := parseIntegrationFlags(args)
+	if err != nil {
+		return err
 	}
-	pluginsDir, err := integrationPluginsDir(globalFlag)
+	pluginsDir, err := integrationPluginsDir(globalFlag, opencodeHome)
 	if err != nil {
 		return err
 	}

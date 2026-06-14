@@ -168,6 +168,7 @@ func handleRun(args []string) error {
 			SessionID:    fmt.Sprintf("session_%d", seed),
 			Model:        "openai/gpt-5",
 			StdoutEvents: opencode_types.ToOpencode(agentEvents, ""),
+			AgentEvents:  agentEvents,
 		}
 	}
 	if cfg.Runner == "" {
@@ -187,6 +188,32 @@ func handleRun(args []string) error {
 	}
 
 	allPlugins := mergePlugins(cfg.Plugins, pluginFlags)
+
+	configHome := resolveConfigHome()
+	pluginsDir := filepath.Join(configHome, "plugins")
+	if entries, err := os.ReadDir(pluginsDir); err == nil {
+		seen := make(map[string]bool)
+		for _, p := range allPlugins {
+			seen[p] = true
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			if filepath.Ext(entry.Name()) != ".ts" {
+				continue
+			}
+			absPath, err := filepath.Abs(filepath.Join(pluginsDir, entry.Name()))
+			if err != nil {
+				continue
+			}
+			if seen[absPath] {
+				continue
+			}
+			seen[absPath] = true
+			allPlugins = append(allPlugins, absPath)
+		}
+	}
 	var pluginRunner string
 	if len(allPlugins) > 0 {
 		var err error
@@ -218,7 +245,23 @@ func handleRun(args []string) error {
 		})
 	}
 
-	for i, event := range cfg.StdoutEvents {
+	stdoutIdx := 0
+	for i, ae := range cfg.AgentEvents {
+		if ae.Type == types.ActionSleep {
+			time.Sleep(time.Duration(ae.DelayMs) * time.Millisecond)
+			continue
+		}
+
+		if stdoutIdx >= len(cfg.StdoutEvents) {
+			break
+		}
+		event := cfg.StdoutEvents[stdoutIdx]
+		stdoutIdx++
+
+		if ae.DelayMs > 0 {
+			time.Sleep(time.Duration(ae.DelayMs) * time.Millisecond)
+		}
+
 		if pluginRunner != "" {
 			evt := cfg.withSession(event)
 			firePluginEvent(pluginRunner, string(evt.Type), map[string]any{
@@ -233,7 +276,7 @@ func handleRun(args []string) error {
 			return fmt.Errorf("marshal stdout_events[%d]: %w", i, err)
 		}
 		fmt.Println(string(line))
-		if cfg.DelayMS > 0 && i < len(cfg.StdoutEvents)-1 {
+		if cfg.DelayMS > 0 && stdoutIdx < len(cfg.StdoutEvents) {
 			time.Sleep(time.Duration(cfg.DelayMS) * time.Millisecond)
 		}
 	}
@@ -302,6 +345,7 @@ type mockConfig struct {
 	LLMEventsRaw     json.RawMessage        `json:"llm_events"`
 	StdoutEvents     []opencode_types.Event `json:"-"`
 	LLMEvents        []opencode_types.Event `json:"-"`
+	AgentEvents      []types.AgentEvent     `json:"-"`
 	Hooks            []mockHook             `json:"hooks"`
 	Plugins          []string               `json:"plugins"`
 }
@@ -328,19 +372,18 @@ func loadMockConfig(path string) (*mockConfig, error) {
 	hasStdoutEvents := cfg.StdoutEventsRaw != nil && string(cfg.StdoutEventsRaw) != "null"
 	hasLLMEvents := cfg.LLMEventsRaw != nil
 
+	var rawEvents json.RawMessage
 	if hasLLMEvents {
-		events, err := resolveOpencodeLLMEvents(cfg.LLMEventsRaw)
-		if err != nil {
-			return nil, fmt.Errorf("resolve llm_events: %w", err)
-		}
-		cfg.StdoutEvents = events
+		rawEvents = cfg.LLMEventsRaw
 	} else {
-		events, err := resolveOpencodeStdoutEvents(cfg.StdoutEventsRaw)
-		if err != nil {
-			return nil, fmt.Errorf("resolve stdout_events: %w", err)
-		}
-		cfg.StdoutEvents = events
+		rawEvents = cfg.StdoutEventsRaw
 	}
+	agentEvents, events, err := resolveEvents(rawEvents)
+	if err != nil {
+		return nil, err
+	}
+	cfg.AgentEvents = agentEvents
+	cfg.StdoutEvents = events
 
 	if hasStdoutEvents {
 		fmt.Fprintf(os.Stderr, "Warning: stdout_events is deprecated, use llm_events instead\n")
@@ -470,57 +513,47 @@ func resolveSessionsRoot() string {
 	return filepath.Join(home, ".config", "opencode", "sessions")
 }
 
-func resolveOpencodeStdoutEvents(raw json.RawMessage) ([]opencode_types.Event, error) {
-	if len(raw) == 0 || string(raw) == "null" {
-		return nil, nil
+func resolveConfigHome() string {
+	if configDir := os.Getenv("OPENCODE_CONFIG_DIR"); configDir != "" {
+		return configDir
 	}
-
-	var rawEvents []json.RawMessage
-	if err := json.Unmarshal(raw, &rawEvents); err != nil {
-		return nil, fmt.Errorf("parse stdout_events array: %w", err)
-	}
-
-	var result []opencode_types.Event
-	for i, rawEvt := range rawEvents {
-		var ae types.AgentEvent
-		if err := json.Unmarshal(rawEvt, &ae); err != nil {
-			return nil, fmt.Errorf("parse stdout_events[%d] as agent event: %w", i, err)
-		}
-		result = append(result, opencode_types.ToOpencode([]types.AgentEvent{ae}, "")...)
-	}
-
-	return result, nil
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".config", "opencode")
 }
 
-func resolveOpencodeLLMEvents(raw json.RawMessage) ([]opencode_types.Event, error) {
+func resolveEvents(raw json.RawMessage) ([]types.AgentEvent, []opencode_types.Event, error) {
 	if len(raw) == 0 || string(raw) == "null" {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	var rawEvents []json.RawMessage
 	if err := json.Unmarshal(raw, &rawEvents); err != nil {
-		return nil, fmt.Errorf("parse llm_events array: %w", err)
+		return nil, nil, fmt.Errorf("parse events array: %w", err)
 	}
 
-	var result []opencode_types.Event
+	var agentEvents []types.AgentEvent
+	var events []opencode_types.Event
 	for i, rawEvt := range rawEvents {
 		var ae types.AgentEvent
 		if err := json.Unmarshal(rawEvt, &ae); err != nil {
-			return nil, fmt.Errorf("parse llm_events[%d] as agent event: %w", i, err)
+			return nil, nil, fmt.Errorf("parse event[%d]: %w", i, err)
 		}
 		if !isValidActionType(ae.Type) {
-			return nil, fmt.Errorf("llm_events[%d]: unrecognized event type %q", i, ae.Type)
+			return nil, nil, fmt.Errorf("events[%d]: unrecognized event type %q", i, ae.Type)
 		}
-		result = append(result, opencode_types.ToOpencode([]types.AgentEvent{ae}, "")...)
+		agentEvents = append(agentEvents, ae)
+		events = append(events, opencode_types.ToOpencode([]types.AgentEvent{ae}, "")...)
 	}
 
-	return result, nil
+	return agentEvents, events, nil
 }
+
 
 func isValidActionType(t types.ActionType) bool {
 	switch t {
 	case types.ActionThink, types.ActionToolCall, types.ActionMessage,
-		types.ActionError, types.ActionDone, types.ActionStepStart, types.ActionStepFinish:
+		types.ActionError, types.ActionDone, types.ActionStepStart, types.ActionStepFinish,
+		types.ActionSleep:
 		return true
 	}
 	return false

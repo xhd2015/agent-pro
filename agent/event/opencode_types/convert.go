@@ -20,8 +20,10 @@ func ToOpencode(events []types.AgentEvent, sessionID string) []Event {
 			evt.SessionID = sessionID
 		}
 		evt.Timestamp = e.Timestamp
-		switch e.Type {
-		case types.ActionThink:
+	switch e.Type {
+	case types.ActionSleep:
+		continue
+	case types.ActionThink:
 			evt.Type = EvtReasoning
 			evt.Part = ReasoningPart{
 				ID:   id,
