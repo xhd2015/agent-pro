@@ -34,6 +34,7 @@ type Request struct {
     AgentHub     string
     FakeOpencode string
     RepoRoot     string
+    Operation    string
 }
 
 type Response struct {
@@ -76,6 +77,9 @@ func execCmd(t *testing.T, command string, args []string, dir string, env []stri
 }
 
 func Run(t *testing.T, req *Request) (*Response, error) {
+    if req.Operation == "full_workflow" {
+        return runFullWorkflow(t, req)
+    }
     if req.Command == "" {
         req.Command = req.AgentHub
     }
@@ -214,5 +218,92 @@ func Setup(t *testing.T, req *Request) error {
         "PATH="+filepath.Dir(req.AgentHub)+":"+os.Getenv("PATH"),
     )
     return nil
+}
+
+func runFullWorkflow(t *testing.T, req *Request) (*Response, error) {
+    ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+    defer cancel()
+    cmd := exec.CommandContext(ctx, req.Command, req.Args...)
+    cmd.Dir = req.TempDir
+    cmd.Env = append(os.Environ(), req.Env...)
+    var stdout, stderr bytes.Buffer
+    cmd.Stdout = &stdout
+    cmd.Stderr = &stderr
+
+    mkErrResp := func(format string, args ...any) (*Response, error) {
+        msg := fmt.Sprintf(format, args...)
+        return &Response{Stdout: stdout.String(), Stderr: stderr.String() + msg, Err: fmt.Errorf("%s", msg)}, fmt.Errorf("%s", msg)
+    }
+
+    if err := cmd.Start(); err != nil {
+        return mkErrResp("cmd.Start: %v", err)
+    }
+
+    time.Sleep(1000 * time.Millisecond)
+
+    sr, err := runAgentHub(t, req, "session", "show", "--runner", "fake-opencode", "--session-id", "sess_full")
+    if err != nil {
+        _ = cmd.Process.Kill()
+        _ = cmd.Wait()
+        return mkErrResp("session show (mid-flight): %v", err)
+    }
+    if sr.ExitCode != 0 {
+        _ = cmd.Process.Kill()
+        _ = cmd.Wait()
+        return mkErrResp("session show failed (exit %d): %s", sr.ExitCode, sr.Stderr)
+    }
+    so := parseJSON(t, sr.Stdout)
+    if so["status"] != "running" {
+        _ = cmd.Process.Kill()
+        _ = cmd.Wait()
+        return mkErrResp("expected session status running mid-flight, got %v", so["status"])
+    }
+
+    fr, err := runAgentHub(t, req, "fetch", "--consumer-id", "consumer-full-"+t.Name(), "--limit", "10")
+    if err != nil {
+        _ = cmd.Process.Kill()
+        _ = cmd.Wait()
+        return mkErrResp("fetch (mid-flight): %v", err)
+    }
+    if fr.ExitCode != 0 {
+        _ = cmd.Process.Kill()
+        _ = cmd.Wait()
+        return mkErrResp("fetch failed (exit %d): %s", fr.ExitCode, fr.Stderr)
+    }
+    frObj := parseJSON(t, fr.Stdout)
+    events, _ := frObj["events"].([]any)
+    if events == nil || len(events) == 0 {
+        _ = cmd.Process.Kill()
+        _ = cmd.Wait()
+        return mkErrResp("expected at least 1 event mid-flight, got 0")
+    }
+    hasStarted := false
+    for _, e := range events {
+        ev := e.(map[string]any)
+        nev, _ := ev["event"].(map[string]any)
+        if nev["event_type"] == "agent.session.started" {
+            hasStarted = true
+        }
+    }
+    if !hasStarted {
+        _ = cmd.Process.Kill()
+        _ = cmd.Wait()
+        return mkErrResp("expected agent.session.started event mid-flight")
+    }
+
+    err = cmd.Wait()
+    resp := &Response{Stdout: stdout.String(), Stderr: stderr.String(), Err: err}
+    if err == nil {
+        return resp, nil
+    }
+    var exitErr *exec.ExitError
+    if errors.As(err, &exitErr) {
+        resp.ExitCode = exitErr.ExitCode()
+        return resp, nil
+    }
+    if ctx.Err() != nil {
+        return resp, ctx.Err()
+    }
+    return resp, err
 }
 ```
