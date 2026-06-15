@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
+	"github.com/xhd2015/agent-pro/agent/event/pi_types"
 	"github.com/xhd2015/agent-pro/agent/exec"
 )
 
@@ -93,100 +94,78 @@ func (a *PiAgent) Ask(ctx context.Context, question string, opts *registry.AskOp
 			continue
 		}
 
-		var rawEvent map[string]any
+		var rawEvent pi_types.Event
 		if err := json.Unmarshal([]byte(trimmed), &rawEvent); err != nil {
 			continue
 		}
 
-		eventType, _ := rawEvent["type"].(string)
-		if eventType == "" {
+		if rawEvent.Type == "" {
 			continue
 		}
 
-		if eventType == "session" {
-			if id, ok := rawEvent["id"].(string); ok && id != "" {
-				a.LastSessionID = id
+		if rawEvent.Type == pi_types.EventTypeSession {
+			if rawEvent.ID != "" {
+				a.LastSessionID = rawEvent.ID
 			}
 			continue
 		}
 
-		switch eventType {
-		case "agent_start", "turn_start":
-		case "message_start":
-			if msg, ok := rawEvent["message"].(map[string]any); ok {
-				if sessionID, ok := msg["session_id"].(string); ok && sessionID != "" {
-					a.LastSessionID = sessionID
-				}
+		switch rawEvent.Type {
+		case pi_types.EventTypeAgentStart, pi_types.EventTypeTurnStart:
+		case pi_types.EventTypeMessageStart:
+			if rawEvent.Message != nil && rawEvent.Message.SessionID != "" {
+				a.LastSessionID = rawEvent.Message.SessionID
 			}
-		case "message_update":
-			if msg, ok := rawEvent["message"].(map[string]any); ok {
-				role, _ := msg["role"].(string)
-				if role == "assistant" {
-					content, _ := msg["content"].([]any)
-					for _, c := range content {
-						block, ok := c.(map[string]any)
-						if !ok {
-							continue
-						}
-						blockType, _ := block["type"].(string)
-						if blockType == "text" {
-							text, _ := block["text"].(string)
-							if text != "" {
-								fullAnswer.WriteString(text)
-								if onDelta != nil {
-									onDelta(text)
-								}
-							}
+		case pi_types.EventTypeMessageUpdate:
+			if rawEvent.Message != nil && rawEvent.Message.Role == "assistant" {
+				for _, c := range rawEvent.Message.Content {
+					if c.Type == "text" && c.Text != "" {
+						fullAnswer.WriteString(c.Text)
+						if onDelta != nil {
+							onDelta(c.Text)
 						}
 					}
 				}
 			}
-		case "message_end":
-		case "tool_execution_start":
+		case pi_types.EventTypeMessageEnd:
+		case pi_types.EventTypeToolExecStart:
 			if opts != nil && opts.OnToolCall != nil {
-				toolName, _ := rawEvent["toolName"].(string)
-				callID, _ := rawEvent["toolCallId"].(string)
 				summary := ""
-				if args, ok := rawEvent["args"]; ok {
-					argsBytes, _ := json.Marshal(args)
+				if rawEvent.Args != nil {
+					argsBytes, _ := json.Marshal(rawEvent.Args)
 					summary = truncateSummary(string(argsBytes))
 				}
 				opts.OnToolCall(registry.ToolCallEvent{
 					Subtype:  "started",
-					CallID:   callID,
-					ToolName: toolName,
+					CallID:   rawEvent.ToolCallID,
+					ToolName: rawEvent.ToolName,
 					Summary:  summary,
 				})
 			}
-		case "tool_execution_end":
+		case pi_types.EventTypeToolExecEnd:
 			if opts != nil && opts.OnToolCall != nil {
-				toolName, _ := rawEvent["toolName"].(string)
-				callID, _ := rawEvent["toolCallId"].(string)
-				isError, _ := rawEvent["isError"].(bool)
 				summary := ""
-				if result, ok := rawEvent["result"]; ok {
-					resultBytes, _ := json.Marshal(result)
+				if rawEvent.Result != nil {
+					resultBytes, _ := json.Marshal(rawEvent.Result)
 					summary = truncateSummary(string(resultBytes))
 				}
 				status := "completed"
-				if isError {
+				if rawEvent.IsError {
 					status = "failed"
 				}
 				opts.OnToolCall(registry.ToolCallEvent{
 					Subtype:  "completed",
-					CallID:   callID,
-					ToolName: toolName,
+					CallID:   rawEvent.ToolCallID,
+					ToolName: rawEvent.ToolName,
 					Summary:  summary,
 					Status:   status,
 				})
 			}
-		case "turn_end":
-			if msg, ok := rawEvent["message"].(map[string]any); ok {
-				if sessionID, ok := msg["session_id"].(string); ok && sessionID != "" {
-					a.LastSessionID = sessionID
-				}
+		case pi_types.EventTypeTurnEnd:
+			if rawEvent.Message != nil && rawEvent.Message.SessionID != "" {
+				a.LastSessionID = rawEvent.Message.SessionID
 			}
-		case "agent_end":
+		case pi_types.EventTypeAgentEnd:
 		}
 	}
 

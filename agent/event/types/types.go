@@ -1,5 +1,14 @@
 package types
 
+type EventPhase string
+
+const (
+	PhaseInstant EventPhase = ""
+	PhaseStart   EventPhase = "start"
+	PhaseUpdate  EventPhase = "update"
+	PhaseEnd     EventPhase = "end"
+)
+
 type ActionType string
 
 const (
@@ -16,6 +25,7 @@ const (
 type AgentEvent struct {
 	ID        string         `json:"id,omitempty"`
 	Type      ActionType     `json:"type"`
+	Phase     EventPhase     `json:"phase,omitempty"`
 	Timestamp int64          `json:"timestamp,omitempty"`
 	Text      string         `json:"text,omitempty"`
 	Tool      string         `json:"tool,omitempty"`
