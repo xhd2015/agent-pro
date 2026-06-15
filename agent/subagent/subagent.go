@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -23,6 +24,8 @@ type Config struct {
 	SessionEnvVar    string
 	SessionMetaField string
 	DebugSessionEnv  string
+	AgentRunnerEnv   string
+	ModelEnv         string
 }
 
 type Options struct {
@@ -65,11 +68,26 @@ func (c Config) metaSessionField() string {
 	return "subagent_role_" + c.RoleName + "_session_id"
 }
 
+// agentRunnerEnv returns the env var name used to override the auto-detected
+// agent runner. Returns empty string when not configured, which disables
+// the env-override feature.
+// Consumers (e.g. doctest) should configure this via Config.AgentRunnerEnv.
+func (c Config) agentRunnerEnv() string {
+	return c.AgentRunnerEnv
+}
+
+// modelEnv returns the env var name used to override the model passed to the
+// agent runner. Returns empty string when not configured.
+// Consumers (e.g. doctest) should configure this via Config.ModelEnv.
+func (c Config) modelEnv() string {
+	return c.ModelEnv
+}
+
 func PromptContent(c Config) string {
 	return c.PromptContent
 }
 
-func Run(c Config, opts Options) error {
+func Run(ctx context.Context, c Config, opts Options) error {
 	if opts.ListSessions {
 		if opts.SessionID != "" {
 			fmt.Fprintf(os.Stderr, "error: --list-sessions and --session-id are mutually exclusive\n")
@@ -110,10 +128,29 @@ func Run(c Config, opts Options) error {
 		return fmt.Errorf("agent %s requires <prompt>", c.RoleName)
 	}
 
+	// If no explicit agent runner is provided, try to auto-detect.
+	// If we can't detect an agent context, fail with a clear error.
 	agentRunner := strings.TrimSpace(opts.AgentRunner)
 	if agentRunner == "" {
-		agentRunner = "opencode"
+		runner, ok := autoDetectAgentRunner(c)
+		if !ok {
+			return fmt.Errorf("agent %s cannot resolve session: must be run inside an agent session (opencode, pi, codex, or crush)", c.RoleName)
+		}
+		agentRunner = runner
 	}
+
+	// Validate the agent runner before any session setup so callers get
+	// a clear "unknown agent runner" error rather than a confusing
+	// "cannot detect session" error.
+	validRunners := map[string]bool{
+		"opencode": true, "codex": true, "pi": true, "crush": true,
+		"cursor": true, "fake-codex": true,
+	}
+	if !validRunners[agentRunner] {
+		return fmt.Errorf("unknown agent runner id: %s", agentRunner)
+	}
+
+	model := os.Getenv(c.modelEnv())
 
 	srcs, err := resolveSessionID(c, opts.SessionID)
 	if err != nil {
@@ -150,7 +187,7 @@ func Run(c Config, opts Options) error {
 	fmt.Fprintf(f, "%s\n", string(msgData))
 	f.Close()
 
-	tempDir, err := os.MkdirTemp("", "doctest-agent-*")
+	tempDir, err := os.MkdirTemp("", "agent-pro-agent-*")
 	if err != nil {
 		return fmt.Errorf("create temp dir: %w", err)
 	}
@@ -188,7 +225,7 @@ func Run(c Config, opts Options) error {
 	progressFile := filepath.Join(progressDir, time.Now().Format("20060102_150405")+"_progress_update.jsonl")
 	os.Setenv("PROGRESS_FILE", progressFile)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	go func() {
@@ -229,7 +266,7 @@ func Run(c Config, opts Options) error {
 	} else {
 		fullPrompt = prompt
 	}
-	output, err := runAgent(agentRunner, fullPrompt, opencodeSessionID, capture)
+	output, err := runAgent(ctx, agentRunner, model, fullPrompt, opencodeSessionID, capture)
 	cancel()
 	if err != nil {
 		return fmt.Errorf("sub-agent failed: %w", err)
@@ -259,6 +296,52 @@ func Run(c Config, opts Options) error {
 	}
 
 	return nil
+}
+
+func autoDetectAgentRunner(c Config) (runner string, detected bool) {
+	// Priority 1: Env var override
+	if v := os.Getenv(c.agentRunnerEnv()); v != "" {
+		return strings.TrimSpace(v), true
+	}
+	// Priority 2: CODEX_THREAD_ID detection
+	if v := os.Getenv("CODEX_THREAD_ID"); v != "" {
+		return "codex", true
+	}
+	// Priority 3: Parent process detection
+	if ppid := os.Getppid(); ppid > 0 {
+		comm := getProcessName(ppid)
+		if comm != "" {
+			switch strings.ToLower(comm) {
+			case "opencode":
+				return "opencode", true
+			case "pi":
+				return "pi", true
+			case "crush":
+				return "crush", true
+			case "codex":
+				return "codex", true
+			}
+		}
+	}
+	return "", false
+}
+
+func getProcessName(pid int) string {
+	if runtime.GOOS == "darwin" {
+		out, err := exec.Command("ps", "-o", "comm=", "-p", fmt.Sprintf("%d", pid)).Output()
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(string(out))
+	}
+	if runtime.GOOS == "linux" {
+		data, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", pid))
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(string(data))
+	}
+	return ""
 }
 
 func Logf(fmtStr string, args ...interface{}) {

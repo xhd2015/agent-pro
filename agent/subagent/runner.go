@@ -48,7 +48,11 @@ func formatEventLine(line string) string {
 	return ""
 }
 
-func runAgent(agentRunner, prompt, sessionID string, rawLog *sessionLogWriter) (string, error) {
+func runAgent(ctx context.Context, agentRunner, model, prompt, sessionID string, rawLog *sessionLogWriter) (string, error) {
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
+
 	env := agentexec.NewEnv(&agentexec.PathsConfig{
 		RootDirName: ".agent-pro",
 		DataDirName: "data",
@@ -63,10 +67,11 @@ func runAgent(agentRunner, prompt, sessionID string, rawLog *sessionLogWriter) (
 	opts := &registry.AskOptions{
 		Workspace: ".",
 		SessionID: sessionID,
+		Model:     model,
 		RawLog:    rawLog,
 	}
 
-	output, err := runner.Agent.Ask(context.Background(), prompt, opts, func(delta string) {
+	output, err := runner.Agent.Ask(ctx, prompt, opts, func(delta string) {
 		fmt.Print(delta)
 	})
 	if err != nil {
