@@ -8,6 +8,7 @@ import (
 	crushagent "github.com/xhd2015/agent-pro/agent/cli/crush"
 	cursoragent "github.com/xhd2015/agent-pro/agent/cli/cursor"
 	opencodeagent "github.com/xhd2015/agent-pro/agent/cli/opencode"
+	piagent "github.com/xhd2015/agent-pro/agent/cli/pi"
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
 	"github.com/xhd2015/agent-pro/agent/exec"
 )
@@ -98,6 +99,23 @@ func Build(runnerID registry.AgentRunnerID, settingsPath, workspace string, env 
 			Name: "Crush",
 			Agent: &crushagent.CrushAgent{
 				AgentPath:    crushPath,
+				SettingsPath: settingsPath,
+				Workspace:    workspace,
+				Env:          env,
+			},
+		}, nil
+	case registry.AgentRunnerPi:
+		piPath, err := registry.ResolveConfiguredCLIPath(settingsPath, registry.PiCLIPathSettingKey, registry.EnvPiCLIPath, "", func() (string, error) {
+			return piagent.FindAgentPath(env)
+		})
+		if err != nil {
+			return registry.AgentRunner{}, fmt.Errorf("pi not found: %w (install it or add it to PATH)", err)
+		}
+		return registry.AgentRunner{
+			ID:   registry.AgentRunnerPi,
+			Name: "Pi",
+			Agent: &piagent.PiAgent{
+				AgentPath:    piPath,
 				SettingsPath: settingsPath,
 				Workspace:    workspace,
 				Env:          env,
