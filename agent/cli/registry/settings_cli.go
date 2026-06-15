@@ -10,22 +10,24 @@ import (
 type AgentRunnerID string
 
 const (
-	AgentRunnerCodex    AgentRunnerID = "codex"
-	AgentRunnerOpencode AgentRunnerID = "opencode"
-	AgentRunnerCursor   AgentRunnerID = "cursor"
+	AgentRunnerCodex     AgentRunnerID = "codex"
+	AgentRunnerOpencode  AgentRunnerID = "opencode"
+	AgentRunnerCursor    AgentRunnerID = "cursor"
 	AgentRunnerFakeCodex AgentRunnerID = "fake-codex"
+	AgentRunnerCrush     AgentRunnerID = "crush"
 )
 
 const (
-	CursorCLIPathSettingKey        = "cursor_cli_path"
-	CodexCLIPathSettingKey         = "codex_cli_path"
-	OpencodeCLIPathSettingKey      = "opencode_cli_path"
-	FakeCodexCLIPathSettingKey     = "fake_codex_cli_path"
-	CodexAPIKeySettingKey          = "codex_api_key"
-	AgentRunnerIDSettingKey        = "agent_runner_id"
+	CursorCLIPathSettingKey         = "cursor_cli_path"
+	CodexCLIPathSettingKey          = "codex_cli_path"
+	OpencodeCLIPathSettingKey       = "opencode_cli_path"
+	FakeCodexCLIPathSettingKey      = "fake_codex_cli_path"
+	CrushCLIPathSettingKey          = "crush_cli_path"
+	CodexAPIKeySettingKey           = "codex_api_key"
+	AgentRunnerIDSettingKey         = "agent_runner_id"
 	KBDefaultAgentRunnerIDSettingKey = "kb_default_agent_runner_id"
-	ModelSettingKey                = "model"
-	ModelsByAgentRunnerSettingKey  = "models_by_agent_runner"
+	ModelSettingKey                 = "model"
+	ModelsByAgentRunnerSettingKey   = "models_by_agent_runner"
 )
 
 type Settings struct {
@@ -37,6 +39,7 @@ type Settings struct {
 	CodexCLIPath           string            `json:"codex_cli_path,omitempty"`
 	OpencodeCLIPath        string            `json:"opencode_cli_path,omitempty"`
 	FakeCodexCLIPath       string            `json:"fake_codex_cli_path,omitempty"`
+	CrushCLIPath           string            `json:"crush_cli_path,omitempty"`
 	CodexAPIKey            string            `json:"codex_api_key,omitempty"`
 	DisableSubAgents       bool              `json:"disable_sub_agents,omitempty"`
 	ModelsByAgentRunner    map[string]string `json:"models_by_agent_runner,omitempty"`
@@ -47,6 +50,7 @@ const (
 	EnvCodexCLIPath    = "AGENT_RUNNER_CODEX_PATH"
 	EnvOpencodeCLIPath = "AGENT_RUNNER_OPENCODE_PATH"
 	EnvFakeCodexCLIPath = "AGENT_RUNNER_FAKE_CODEX_PATH"
+	EnvCrushCLIPath    = "AGENT_RUNNER_CRUSH_PATH"
 )
 
 func LoadEnvCLIPath(envKey string) string {
@@ -84,6 +88,8 @@ func LoadConfiguredStringSetting(settingsPath string, settingKey string) string 
 		return strings.TrimSpace(settings.OpencodeCLIPath)
 	case FakeCodexCLIPathSettingKey:
 		return strings.TrimSpace(settings.FakeCodexCLIPath)
+	case CrushCLIPathSettingKey:
+		return strings.TrimSpace(settings.CrushCLIPath)
 	case CodexAPIKeySettingKey:
 		return strings.TrimSpace(settings.CodexAPIKey)
 	case AgentRunnerIDSettingKey:

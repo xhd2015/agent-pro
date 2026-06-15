@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	codexagent "github.com/xhd2015/agent-pro/agent/cli/codex"
+	crushagent "github.com/xhd2015/agent-pro/agent/cli/crush"
 	cursoragent "github.com/xhd2015/agent-pro/agent/cli/cursor"
 	opencodeagent "github.com/xhd2015/agent-pro/agent/cli/opencode"
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
@@ -80,6 +81,23 @@ func Build(runnerID registry.AgentRunnerID, settingsPath, workspace string, env 
 			Name: "Fake Codex",
 			Agent: &codexagent.CodexAgent{
 				AgentPath:    fakeCodexPath,
+				SettingsPath: settingsPath,
+				Workspace:    workspace,
+				Env:          env,
+			},
+		}, nil
+	case registry.AgentRunnerCrush:
+		crushPath, err := registry.ResolveConfiguredCLIPath(settingsPath, registry.CrushCLIPathSettingKey, registry.EnvCrushCLIPath, "", func() (string, error) {
+			return crushagent.FindAgentPath(env)
+		})
+		if err != nil {
+			return registry.AgentRunner{}, fmt.Errorf("crush not found: %w (install it or add it to PATH)", err)
+		}
+		return registry.AgentRunner{
+			ID:   registry.AgentRunnerCrush,
+			Name: "Crush",
+			Agent: &crushagent.CrushAgent{
+				AgentPath:    crushPath,
 				SettingsPath: settingsPath,
 				Workspace:    workspace,
 				Env:          env,
