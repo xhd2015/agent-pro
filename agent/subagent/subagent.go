@@ -121,9 +121,12 @@ func Run(c Config, opts Options) error {
 	}
 	srcs.agentRunner = agentRunner
 
-	Logf("Session ID: %s (source: %s)\n", srcs.sessionID, sourceLabel(srcs))
-
 	sessionDir, isNew, err := findOrCreateSession(c, opts, srcs.sessionID, srcs)
+	if isNew {
+		Logf("Session created: %s (source: %s)\n", srcs.sessionID, sourceLabel(srcs))
+	} else {
+		Logf("Session resumed: %s (source: %s)\n", srcs.sessionID, sourceLabel(srcs))
+	}
 	if err != nil {
 		return fmt.Errorf("session: %w", err)
 	}
