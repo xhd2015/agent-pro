@@ -20,6 +20,7 @@ type CrushAgent struct {
 	Workspace     string
 	Env           *exec.Env
 	LastSessionID string
+	ServerClient  *CrushServerClient
 }
 
 func FindAgentPath(env *exec.Env) (string, error) {
@@ -30,6 +31,13 @@ func FindAgentPath(env *exec.Env) (string, error) {
 }
 
 func (a *CrushAgent) Ask(ctx context.Context, question string, opts *registry.AskOptions, onDelta registry.DeltaCallback) (string, error) {
+	if a.ServerClient != nil {
+		return a.askViaServer(ctx, question, opts, onDelta)
+	}
+	return a.askViaSubprocess(ctx, question, opts, onDelta)
+}
+
+func (a *CrushAgent) askViaSubprocess(ctx context.Context, question string, opts *registry.AskOptions, onDelta registry.DeltaCallback) (string, error) {
 	workspace := a.Workspace
 	if opts != nil && opts.Workspace != "" {
 		workspace = opts.Workspace
@@ -87,7 +95,7 @@ func (a *CrushAgent) Ask(ctx context.Context, question string, opts *registry.As
 			_, _ = rawLog.Write([]byte(line + "\n"))
 		}
 
-		data := extractSSEData(line)
+		data := ExtractSSEData(line)
 		if data == "" {
 			trimmed := strings.TrimSpace(line)
 			if trimmed != "" && !isLogLine(trimmed) {
@@ -136,6 +144,97 @@ func (a *CrushAgent) Ask(ctx context.Context, question string, opts *registry.As
 	}
 
 	a.extractSessionIDFromStderr(stderrBuf.String())
+
+	return fullAnswer.String(), nil
+}
+
+func (a *CrushAgent) askViaServer(ctx context.Context, question string, opts *registry.AskOptions, onDelta registry.DeltaCallback) (string, error) {
+	client := a.ServerClient
+
+	fullQuestion := question
+	if opts != nil && opts.DisableSubAgents {
+		fullQuestion += "\n\n# CRITICAL RULE: DO NOT USE SUB-AGENTS\nYou MUST NOT use the Task tool (sub-agents/subagents) under any circumstances. Perform all work directly yourself without delegating to sub-agents."
+	}
+
+	if err := client.EnsureServer(ctx); err != nil {
+		return "", fmt.Errorf("ensure server: %w", err)
+	}
+
+	workspace := a.Workspace
+	if opts != nil && opts.Workspace != "" {
+		workspace = opts.Workspace
+	}
+	if workspace == "" {
+		workspace = "."
+	}
+	workspaceID, err := client.CreateWorkspace(ctx, workspace)
+	if err != nil {
+		return "", fmt.Errorf("create workspace: %w", err)
+	}
+
+	if err := client.InitAgent(ctx, workspaceID); err != nil {
+		return "", fmt.Errorf("init agent: %w", err)
+	}
+
+	eventCh, err := client.SubscribeEvents(ctx, workspaceID)
+	if err != nil {
+		return "", fmt.Errorf("subscribe events: %w", err)
+	}
+
+	sessionID := ""
+	if opts != nil {
+		sessionID = opts.SessionID
+	}
+	if sessionID == "" {
+		sessionID, err = client.CreateSession(ctx, workspaceID, "")
+		if err != nil {
+			return "", fmt.Errorf("create session: %w", err)
+		}
+	}
+	if err := client.SendMessage(ctx, workspaceID, fullQuestion, sessionID); err != nil {
+		return "", fmt.Errorf("send message: %w", err)
+	}
+
+	rawLog := io.Writer(nil)
+	if opts != nil {
+		rawLog = opts.RawLog
+	}
+
+	var fullAnswer strings.Builder
+	var streamError string
+eventLoop:
+	for dataLine := range eventCh {
+		if rawLog != nil {
+			_, _ = rawLog.Write([]byte(dataLine + "\n"))
+		}
+
+		data := ExtractSSEData(dataLine)
+		if data == "" {
+			continue
+		}
+
+		event, err := UnwrapEvent([]byte(data))
+		if err != nil {
+			continue
+		}
+		if event == nil {
+			continue
+		}
+
+		switch event.Type {
+		case crush_types.EventMessage:
+			a.processMessageEvent(event.Payload, opts, onDelta, &fullAnswer, &streamError)
+		case crush_types.EventAgentEvent:
+			a.processAgentEvent(event.Payload, &streamError)
+		case crush_types.EventRunComplete:
+			a.processRunComplete(event.Payload, &fullAnswer, &streamError)
+			break eventLoop
+		}
+	}
+
+	if streamError != "" {
+		return fullAnswer.String(), fmt.Errorf("%s", streamError)
+	}
 
 	return fullAnswer.String(), nil
 }
@@ -207,7 +306,9 @@ func (a *CrushAgent) processMessageEvent(payload json.RawMessage, opts *registry
 				text := strings.TrimSpace(d.Text)
 				if text != "" {
 					fullAnswer.WriteString(text)
-					onDelta(text)
+					if onDelta != nil {
+						onDelta(text)
+					}
 				}
 			}
 		case crush_types.PartToolCall:
@@ -275,7 +376,7 @@ func (a *CrushAgent) processRunComplete(payload json.RawMessage, fullAnswer *str
 	}
 }
 
-func extractSSEData(line string) string {
+func ExtractSSEData(line string) string {
 	trimmed := strings.TrimSpace(line)
 	if trimmed == "" {
 		return ""

@@ -1,5 +1,7 @@
 ## Expected
-- The answer references "french" or "capital" (case-insensitive).
+- First `Ask` returns the capital of France ("paris").
+- `LastSessionID` is non-empty after the first call.
+- Second `Ask` (resumed with `SessionID`) returns an answer that references the first query context ("french" or "capital").
 
 ```go
 import (
@@ -9,7 +11,7 @@ import (
 
 func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	if err != nil {
-		t.Fatalf("Ask failed: %v", err)
+		t.Fatalf("server-ask session-persist failed: %v", err)
 	}
 	lower := strings.ToLower(resp.Answer)
 	if !strings.Contains(lower, "french") && !strings.Contains(lower, "capital") {
