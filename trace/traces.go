@@ -13,7 +13,7 @@ import (
 	"time"
 
 	agenttrace "github.com/xhd2015/agent-pro/agent_trace"
-	"github.com/xhd2015/agent-pro/agent_trace/events"
+	"github.com/xhd2015/agent-pro/agent/event/logging"
 )
 
 const (
@@ -31,7 +31,7 @@ type AgentTraceSession struct {
 	mu       sync.Mutex
 	dir      string
 	metaPath string
-	log      events.Logger
+	log      logging.Logger
 	meta     AgentTraceMetadata
 }
 
@@ -53,7 +53,7 @@ func StartAgentTraceSession(dataDir string, meta AgentTraceMetadata, prompt stri
 	if err := os.WriteFile(promptPath, []byte(prompt), 0o644); err != nil {
 		return nil, err
 	}
-	logFile, err := events.Open(logPath)
+	logFile, err := logging.Open(logPath)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func ResumeAgentTraceSession(traceRef string, updates AgentTraceMetadata) (*Agen
 	if strings.TrimSpace(meta.LogPath) == "" {
 		meta.LogPath = filepath.Join(dir, traceLogFile)
 	}
-	logFile, err := events.Open(meta.LogPath)
+	logFile, err := logging.Open(meta.LogPath)
 	if err != nil {
 		return nil, err
 	}

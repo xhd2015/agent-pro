@@ -1,4 +1,4 @@
-package events
+package logging
 
 import (
 	"os"

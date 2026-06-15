@@ -5,13 +5,13 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/xhd2015/agent-pro/agent_trace/events"
+	"github.com/xhd2015/agent-pro/agent/event/logging"
 )
 
 type sessionLogWriter struct {
 	mu         sync.Mutex
 	sessionID  string
-	eventsFile events.Logger
+	eventsFile logging.Logger
 }
 
 func (w *sessionLogWriter) Write(p []byte) (int, error) {

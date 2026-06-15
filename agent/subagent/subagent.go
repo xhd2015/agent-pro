@@ -13,7 +13,7 @@ import (
 
 	"github.com/xhd2015/dot-pkgs/go-pkgs/logs"
 
-	"github.com/xhd2015/agent-pro/agent_trace/events"
+	"github.com/xhd2015/agent-pro/agent/event/logging"
 )
 
 type Config struct {
@@ -210,7 +210,7 @@ func Run(c Config, opts Options) error {
 	}
 
 	eventsPath := filepath.Join(sessionDir, "events.jsonl")
-	eventsLogger, err := events.Open(eventsPath)
+	eventsLogger, err := logging.Open(eventsPath)
 	if err != nil {
 		return fmt.Errorf("open events.jsonl: %w", err)
 	}
