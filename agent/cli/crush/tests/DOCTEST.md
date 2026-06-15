@@ -1,6 +1,6 @@
 # Crush Agent Tests
 
-These doc-style tests verify the `agent/cli/crush` package — event conversion (`UnwrapEvent`), server client integration (`CrushServerClient`), and the `CrushAgent.Ask()` method in both subprocess and server modes.
+These doc-style tests verify the `agent/cli/crush` package — event conversion (`UnwrapEvent`, `ToCrush`/`FromCrush` round-trip), server client integration (`CrushServerClient`), and the `CrushAgent.Ask()` method in both subprocess and server modes.
 
 ## Decision Tree
 
@@ -14,26 +14,35 @@ tests/
 └── server/                             (grouping: server-mode tests)
     │
     ├── convert/                        (grouping: Mode="convert")
-    │   ├── message-event/              3-level message SSE → EventMessage
-    │   │   └── ASSERT: type, role, session_id, parts
-    │   ├── agent-error/                3-level agent_event SSE → EventAgentEvent
-    │   │   └── ASSERT: type, error, run_id
-    │   ├── run-complete/               3-level run_complete SSE → EventRunComplete
-    │   │   └── ASSERT: session_id, run_id, text, error, cancelled
-    │   ├── drop-unknown/               unknown outer type → nil (dropped)
-    │   │   └── ASSERT: nil result, no error
-    │   └── malformed-json/             invalid JSON → nil (graceful drop)
-    │       └── ASSERT: nil result, no error
+    │   ├── ...                         (UnwrapEvent leaves — unchanged)
+    │   │
+    │   └── roundtrip/                  (grouping: Mode="convert-roundtrip")
+    │       ├── think/                  ActionThink → EventMessage(PartReasoning) → ActionThink
+    │       │   └── ASSERT: type, text preserved
+    │       ├── message/                ActionMessage → EventMessage(PartText) → ActionMessage
+    │       │   └── ASSERT: type, text preserved
+    │       ├── tool-call/              ActionToolCall → EventMessage(PartToolCall) → ActionToolCall
+    │       │   └── ASSERT: tool, input preserved
+    │       ├── error/                  ActionError → EventAgentEvent → ActionError
+    │       │   └── ASSERT: type, text preserved
+    │       ├── done/                   ActionDone → EventRunComplete → ActionDone
+    │       │   └── ASSERT: type preserved, text lost (known limitation)
+    │       ├── empty-id/               ActionMessage with empty ID → synthetic ID assigned
+    │       │   └── ASSERT: ID is "crush:evt_1"
+    │       ├── multi-event/            4 events of different types → round-trip all
+    │       │   └── ASSERT: count=4, types/order preserved
+    │       └── tool-call-empty-input/  ActionToolCall with nil ToolInput → no panic
+    │           └── ASSERT: empty map, no panic
     │
     ├── server-client/                  (grouping: Mode="server-client")
-    │   ├── health-check/               probe /v1/health → 200 OK
-    │   │   └── ASSERT: status 200
-    │   ├── auto-start/                 server missing → auto-starts
-    │   │   └── ASSERT: health passes after start
-    │   ├── create-workspace/           POST /v1/workspaces → workspace id
-    │   │   └── ASSERT: non-empty id
-    │   └── send-and-receive/           full SSE cycle: subscribe + send + read
-    │       └── ASSERT: message events with text, then run_complete
+    │   ├── ...                         (existing server-client leaves — unchanged)
+    │   │
+    │   ├── lifecycle/                  (grouping: server-lifecycle)
+    │   │   └── server-lifecycle/       daemon start → health → kill → confirm stopped
+    │   │       └── ASSERT: process counts, health status at each stage
+    │   └── reuse/                      (grouping: server-reuse)
+    │       └── server-reuse/           two clients share one daemon
+    │           └── ASSERT: exactly 1 process, both healthy
     │
     └── session-persist/                (Mode="server-ask", resume session)
         └── ASSERT: second answer references first query context
@@ -50,10 +59,20 @@ tests/
 | `server/convert/run-complete` | `convert` | `UnwrapEvent`: run_complete SSE → EventRunComplete |
 | `server/convert/drop-unknown` | `convert` | `UnwrapEvent`: unknown type → nil (dropped) |
 | `server/convert/malformed-json` | `convert` | `UnwrapEvent`: garbage input → nil (dropped) |
+| `server/convert/roundtrip/think` | `convert-roundtrip` | `ToCrush`/`FromCrush`: ActionThink round-trips with text preserved |
+| `server/convert/roundtrip/message` | `convert-roundtrip` | `ToCrush`/`FromCrush`: ActionMessage round-trips with text preserved |
+| `server/convert/roundtrip/tool-call` | `convert-roundtrip` | `ToCrush`/`FromCrush`: ActionToolCall round-trips with tool/input preserved |
+| `server/convert/roundtrip/error` | `convert-roundtrip` | `ToCrush`/`FromCrush`: ActionError round-trips with text preserved |
+| `server/convert/roundtrip/done` | `convert-roundtrip` | `ToCrush`/`FromCrush`: ActionDone type preserved, text lost |
+| `server/convert/roundtrip/empty-id` | `convert-roundtrip` | `ToCrush`/`FromCrush`: empty ID gets synthetic "evt_1" |
+| `server/convert/roundtrip/multi-event` | `convert-roundtrip` | `ToCrush`/`FromCrush`: 4 mixed events, count and order preserved |
+| `server/convert/roundtrip/tool-call-empty-input` | `convert-roundtrip` | `ToCrush`/`FromCrush`: nil ToolInput handled without panic |
 | `server/server-client/health-check` | `server-client` | `ensureServer`: probe /v1/health returns 200 |
 | `server/server-client/auto-start` | `server-client` | `ensureServer`: auto-start when server not running |
 | `server/server-client/create-workspace` | `server-client` | `createWorkspace`: POST returns valid id |
 | `server/server-client/send-and-receive` | `server-client` | Full cycle: subscribe, send, read SSE events |
+| `server/server-client/lifecycle/server-lifecycle` | `server-client` | Daemon lifecycle: start → health → kill → confirm stopped |
+| `server/server-client/reuse/server-reuse` | `server-client` | Two clients share one daemon, exactly 1 OS process |
 | `server/session-persist` | `server-ask` | Server-mode: Ask with session resume |
 
 ## How to Run
@@ -62,8 +81,8 @@ tests/
 doctest test ./agent/cli/crush/tests/...
 ```
 
-Integration tests (server-client leaves, session-persist) require a running crush server and the env var:
+Integration tests (server-client leaves, session-persist) require the `crush` binary in PATH.
 
 ```sh
-CRUSH_INTEGRATION_TEST=1 doctest test ./agent/cli/crush/tests/...
+doctest test ./agent/cli/crush/tests/...
 ```

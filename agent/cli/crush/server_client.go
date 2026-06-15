@@ -60,6 +60,9 @@ func NewCrushServerClient() (*CrushServerClient, error) {
 func (c *CrushServerClient) EnsureServer(ctx context.Context) error {
 	healthy, err := c.probeHealth(ctx)
 	if err == nil && healthy {
+		c.mu.Lock()
+		c.serverStarted = true
+		c.mu.Unlock()
 		return nil
 	}
 

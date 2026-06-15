@@ -2,8 +2,9 @@
 - The `crush` binary is available in PATH.
 - Default mode (`Mode=""`) runs real queries via subprocess.
 - `Mode="convert"` tests `UnwrapEvent` (no server needed).
-- `Mode="server-client"` tests `CrushServerClient` operations (requires `CRUSH_INTEGRATION_TEST=1`).
+- `Mode="server-client"` tests `CrushServerClient` operations (auto-detects `crush` in PATH; skips if not found).
 - `Mode="server-ask"` tests `CrushAgent.Ask()` with server client.
+- `Mode="convert-roundtrip"` tests `crush_types.ToCrush`/`crush_types.FromCrush` conversion round-trip (no server needed).
 
 ## Steps
 1. Dispatch based on `Mode` field:
@@ -11,17 +12,21 @@
    - `"convert"` → `runConvert`: call `crush.UnwrapEvent`, return result as JSON.
    - `"server-client"` → `runServerClient`: run specified CrushServerClient operation.
    - `"server-ask"` → `runServerAsk`: create CrushAgent with server client, call Ask.
+   - `"convert-roundtrip"` → `runConvertRoundtrip`: call `crush_types.ToCrush` then `crush_types.FromCrush`, return round-tripped events as JSON.
 
 ```go
 import (
 	"encoding/json"
 	"fmt"
+	osexec "os/exec"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/xhd2015/agent-pro/agent/cli/crush"
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
 	crush_types "github.com/xhd2015/agent-pro/agent/event/crush_types"
+	types "github.com/xhd2015/agent-pro/agent/event/types"
 	"github.com/xhd2015/agent-pro/agent/exec"
 )
 
@@ -31,9 +36,11 @@ type Request struct {
 	Model        string
 	Env          []string
 
-	Mode            string // "", "convert", "server-client", "server-ask"
+	Mode            string // "", "convert", "server-client", "server-ask", "convert-roundtrip"
 	SSEInput        string // raw SSE data line for convert mode
-	ServerOperation string // "health-check", "auto-start", "create-workspace", "send-and-receive"
+	ServerOperation string // "health-check", "auto-start", "create-workspace", "send-and-receive", "server-lifecycle", "server-reuse"
+	AgentEventsJSON string // JSON array of types.AgentEvent for convert-roundtrip mode
+	SessionID       string // session ID for convert-roundtrip mode
 }
 
 type Response struct {
@@ -54,6 +61,8 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 		return runServerClient(t, req)
 	case "server-ask":
 		return runServerAsk(t, req)
+	case "convert-roundtrip":
+		return runConvertRoundtrip(t, req)
 	default:
 		return runSubprocess(t, req)
 	}
@@ -102,6 +111,40 @@ func runSubprocess(t *testing.T, req *Request) (*Response, error) {
 	return &Response{Answer: answer}, nil
 }
 
+func runConvertRoundtrip(t *testing.T, req *Request) (*Response, error) {
+	var events []types.AgentEvent
+	if err := json.Unmarshal([]byte(req.AgentEventsJSON), &events); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal AgentEventsJSON: %w", err)
+	}
+	crushEvents := crush_types.ToCrush(events, req.SessionID)
+	resultEvents := crush_types.FromCrush(crushEvents, req.SessionID)
+	data, err := json.Marshal(resultEvents)
+	if err != nil {
+		return nil, err
+	}
+	return &Response{Output: string(data)}, nil
+}
+
+func errString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
+
+func countCrushServerProcesses() int {
+	cmd := osexec.Command("pgrep", "-x", "crush")
+	output, err := cmd.Output()
+	if err != nil {
+		return 0
+	}
+	trimmed := strings.TrimSpace(string(output))
+	if trimmed == "" {
+		return 0
+	}
+	return strings.Count(trimmed, "\n") + 1
+}
+
 func runConvert(t *testing.T, req *Request) (*Response, error) {
 	event, err := crush.UnwrapEvent([]byte(req.SSEInput))
 	if err != nil {
@@ -123,8 +166,12 @@ func runServerClient(t *testing.T, req *Request) (*Response, error) {
 		return nil, err
 	}
 	ctx := t.Context()
-	if err := client.EnsureServer(ctx); err != nil {
-		return nil, err
+	// server-lifecycle and server-reuse manage their own server lifecycle;
+	// all other operations require an already-running server.
+	if req.ServerOperation != "server-lifecycle" && req.ServerOperation != "server-reuse" {
+		if err := client.EnsureServer(ctx); err != nil {
+			return nil, err
+		}
 	}
 	switch req.ServerOperation {
 	case "health-check":
@@ -190,6 +237,59 @@ func runServerClient(t *testing.T, req *Request) (*Response, error) {
 		}
 		eventsJSON, _ := json.Marshal(events)
 		return &Response{Output: string(eventsJSON)}, nil
+	case "server-lifecycle":
+		// Kill any existing server from previous tests so we start clean.
+		osexec.Command("pkill", "-x", "crush").Run()
+		time.Sleep(200 * time.Millisecond)
+		beforeCount := countCrushServerProcesses()
+		if err := client.EnsureServer(ctx); err != nil {
+			return nil, err
+		}
+		afterEnsureCount := countCrushServerProcesses()
+		healthStatus, healthErr := client.HealthCheck(ctx)
+		osexec.Command("pkill", "-x", "crush").Run()
+		time.Sleep(200 * time.Millisecond)
+		afterKillCount := countCrushServerProcesses()
+		_, healthAfterKillErr := client.HealthCheck(ctx)
+		result, _ := json.Marshal(map[string]any{
+			"before_count":         beforeCount,
+			"after_ensure_count":   afterEnsureCount,
+			"health_status":        healthStatus,
+			"health_err":           errString(healthErr),
+			"after_kill_count":     afterKillCount,
+			"health_after_kill_err": errString(healthAfterKillErr),
+		})
+		return &Response{Output: string(result)}, nil
+	case "server-reuse":
+		clientA, err := crush.NewCrushServerClient()
+		if err != nil {
+			return nil, err
+		}
+		clientB, err := crush.NewCrushServerClient()
+		if err != nil {
+			return nil, err
+		}
+		beforeCount := countCrushServerProcesses()
+		if err := clientA.EnsureServer(ctx); err != nil {
+			return nil, err
+		}
+		afterACount := countCrushServerProcesses()
+		if err := clientB.EnsureServer(ctx); err != nil {
+			return nil, err
+		}
+		afterBCount := countCrushServerProcesses()
+		healthA, healthAErr := clientA.HealthCheck(ctx)
+		healthB, healthBErr := clientB.HealthCheck(ctx)
+		result, _ := json.Marshal(map[string]any{
+			"before_count":     beforeCount,
+			"after_A_count":    afterACount,
+			"after_B_count":    afterBCount,
+			"health_A_status":  healthA,
+			"health_A_err":     errString(healthAErr),
+			"health_B_status":  healthB,
+			"health_B_err":     errString(healthBErr),
+		})
+		return &Response{Output: string(result)}, nil
 	}
 	return nil, fmt.Errorf("unknown server operation: %s", req.ServerOperation)
 }

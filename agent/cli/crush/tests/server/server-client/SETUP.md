@@ -1,7 +1,6 @@
 ## Preconditions
 - These tests require a running crush server.
-- They are gated by `CRUSH_INTEGRATION_TEST=1` — leaves skip if not set.
-- The `crush` binary must be in PATH.
+- The `crush` binary is auto-detected via `exec.LookPath` — leaves skip if not found.
 
 ## Steps
 1. Set `req.Mode = "server-client"`.
@@ -10,13 +9,14 @@
 
 ```go
 import (
-	"os"
+	osexec "os/exec"
 	"testing"
 )
 
 func Setup(t *testing.T, req *Request) error {
-	if os.Getenv("CRUSH_INTEGRATION_TEST") != "1" {
-		t.Skip("CRUSH_INTEGRATION_TEST not set; skip integration test")
+	_, err := osexec.LookPath("crush")
+	if err != nil {
+		t.Skip("crush not in PATH; skip integration test")
 		return nil
 	}
 	req.Mode = "server-client"
