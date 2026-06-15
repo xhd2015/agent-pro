@@ -1,0 +1,268 @@
+package subagent
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/xhd2015/dot-pkgs/go-pkgs/logs"
+
+	"github.com/xhd2015/agent-pro/agent_trace/events"
+)
+
+type Config struct {
+	RoleName         string
+	Cmd              string
+	PromptContent    string
+	SessionEnvVar    string
+	SessionMetaField string
+	DebugSessionEnv  string
+}
+
+type Options struct {
+	Prompt       string
+	AgentRunner  string
+	MockConfig   string
+	SessionID    string
+	Requirement  string
+	CatchUp      bool
+	Status       bool
+	ListSessions bool
+	SessionBase  string
+}
+
+func (c Config) agentPrompt() string {
+	s := c.PromptContent
+	if strings.HasPrefix(s, "---\n") {
+		rest := s[4:]
+		if idx := strings.Index(rest, "\n---\n"); idx >= 0 {
+			s = rest[idx+5:]
+			if strings.HasPrefix(s, "\n") {
+				s = s[1:]
+			}
+		}
+	}
+	return s
+}
+
+func (c Config) sessionEnvVar() string {
+	if c.SessionEnvVar != "" {
+		return c.SessionEnvVar
+	}
+	return "AGENT_PRO_SUBAGENT_" + strings.ToUpper(c.RoleName) + "_SESSION_ID"
+}
+
+func (c Config) metaSessionField() string {
+	if c.SessionMetaField != "" {
+		return c.SessionMetaField
+	}
+	return "subagent_role_" + c.RoleName + "_session_id"
+}
+
+func PromptContent(c Config) string {
+	return c.PromptContent
+}
+
+func Run(c Config, opts Options) error {
+	if opts.ListSessions {
+		if opts.SessionID != "" {
+			fmt.Fprintf(os.Stderr, "error: --list-sessions and --session-id are mutually exclusive\n")
+			return nil
+		}
+		return listSessions(c, opts)
+	}
+
+	if opts.Status {
+		if opts.SessionID == "" && os.Getenv(c.sessionEnvVar()) == "" && os.Getenv("CODEX_THREAD_ID") == "" {
+			fmt.Fprintf(os.Stderr, "error: --status requires --session-id\n")
+			return nil
+		}
+		return showStatus(c, opts)
+	}
+
+	if opts.CatchUp {
+		if opts.SessionID == "" && os.Getenv(c.sessionEnvVar()) == "" && os.Getenv("CODEX_THREAD_ID") == "" {
+			return fmt.Errorf("--trace requires --session-id")
+		}
+		return traceSession(c, opts)
+	}
+
+	prompt := strings.TrimSpace(opts.Prompt)
+	if opts.Requirement != "" {
+		data, err := os.ReadFile(opts.Requirement)
+		if err != nil {
+			return fmt.Errorf("read requirement file %s: %w", opts.Requirement, err)
+		}
+		reqContent := strings.TrimSpace(string(data))
+		if prompt != "" {
+			prompt = reqContent + "\n\n---\n\n" + prompt
+		} else {
+			prompt = reqContent
+		}
+	}
+	if prompt == "" {
+		return fmt.Errorf("agent %s requires <prompt>", c.RoleName)
+	}
+
+	agentRunner := strings.TrimSpace(opts.AgentRunner)
+	if agentRunner == "" {
+		agentRunner = "opencode"
+	}
+
+	srcs, err := resolveSessionID(c, opts.SessionID)
+	if err != nil {
+		return err
+	}
+	srcs.agentRunner = agentRunner
+
+	Logf("Session ID: %s (source: %s)\n", srcs.sessionID, sourceLabel(srcs))
+
+	sessionDir, isNew, err := findOrCreateSession(c, opts, srcs.sessionID, srcs)
+	if err != nil {
+		return fmt.Errorf("session: %w", err)
+	}
+
+	if err := writeSessionPID(sessionDir); err != nil {
+		return fmt.Errorf("write pid: %w", err)
+	}
+	defer removeSessionPID(sessionDir)
+
+	msgPath := filepath.Join(sessionDir, "messages.jsonl")
+	msgEntry := map[string]string{
+		"type":        "message",
+		"content":     prompt,
+		"create_time": time.Now().Format(time.RFC3339),
+	}
+	msgData, _ := json.Marshal(msgEntry)
+	f, err := os.OpenFile(msgPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("write messages.jsonl: %w", err)
+	}
+	fmt.Fprintf(f, "%s\n", string(msgData))
+	f.Close()
+
+	tempDir, err := os.MkdirTemp("", "doctest-agent-*")
+	if err != nil {
+		return fmt.Errorf("create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("get executable: %w", err)
+	}
+	ypqPath := filepath.Join(tempDir, "yield-pending-questions")
+	if out, err := exec.Command("cp", exe, ypqPath).CombinedOutput(); err != nil {
+		return fmt.Errorf("copy yield-pending-questions: %w\n%s", err, string(out))
+	}
+
+	pathEntry := tempDir + string(filepath.ListSeparator)
+	os.Setenv("PATH", pathEntry+os.Getenv("PATH"))
+
+	questionsDir := filepath.Join(sessionDir, "questions")
+	if err := os.MkdirAll(questionsDir, 0755); err != nil {
+		return fmt.Errorf("create questions dir: %w", err)
+	}
+	questionFile := newQuestionsFile(questionsDir)
+	os.Setenv("QUESTION_FIFO", questionFile)
+
+	progressDir := filepath.Join(sessionDir, "progress")
+	if err := os.MkdirAll(progressDir, 0755); err != nil {
+		return fmt.Errorf("create progress dir: %w", err)
+	}
+
+	rpPath := filepath.Join(tempDir, "report-progress")
+	if out, err := exec.Command("cp", exe, rpPath).CombinedOutput(); err != nil {
+		return fmt.Errorf("copy report-progress: %w\n%s", err, string(out))
+	}
+
+	progressFile := filepath.Join(progressDir, time.Now().Format("20060102_150405")+"_progress_update.jsonl")
+	os.Setenv("PROGRESS_FILE", progressFile)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		logs.WatchLine(ctx, progressFile, logs.WatchLineOptions{}, func(line string) error {
+			var entry map[string]any
+			if err := json.Unmarshal([]byte(line), &entry); err != nil {
+				return nil
+			}
+			desc, _ := entry["description"].(string)
+			Logf("%s", desc)
+			return nil
+		})
+	}()
+
+	if opts.MockConfig != "" {
+		os.Setenv("FAKE_CODEX_MOCK_CONFIG", opts.MockConfig)
+	}
+
+	var opencodeSessionID string
+	if !isNew {
+		opencodeSessionID = readOpencodeSessionID(sessionDir)
+	}
+
+	eventsPath := filepath.Join(sessionDir, "events.jsonl")
+	eventsLogger, err := events.Open(eventsPath)
+	if err != nil {
+		return fmt.Errorf("open events.jsonl: %w", err)
+	}
+	defer eventsLogger.Close()
+
+	capture := &sessionLogWriter{
+		eventsFile: eventsLogger,
+	}
+
+	var fullPrompt string
+	if isNew {
+		fullPrompt = c.agentPrompt() + "\n\n---\n\n<user_request>\n" + prompt + "\n</user_request>\n"
+	} else {
+		fullPrompt = prompt
+	}
+	output, err := runAgent(agentRunner, fullPrompt, opencodeSessionID, capture)
+	cancel()
+	if err != nil {
+		return fmt.Errorf("sub-agent failed: %w", err)
+	}
+
+	if isNew {
+		sid := capture.sessionID
+		if sid == "" {
+			sid = srcs.sessionID
+		}
+		if updateErr := updateSessionMeta(sessionDir, sid, srcs); updateErr != nil {
+			return fmt.Errorf("update session meta: %w", updateErr)
+		}
+	}
+
+	fmt.Print(output)
+
+	f, fErr := os.Open(questionFile)
+	if fErr == nil {
+		defer f.Close()
+		var buf bytes.Buffer
+		buf.ReadFrom(f)
+		if buf.Len() > 0 {
+			fmt.Print("\n\n---\nQUESTIONS\n---\n\n")
+			fmt.Print(buf.String())
+		}
+	}
+
+	return nil
+}
+
+func Logf(fmtStr string, args ...interface{}) {
+	ts := time.Now().Format("2006-01-02T15:04:05")
+	s := fmt.Sprintf(fmtStr, args...)
+	if !strings.HasSuffix(s, "\n") {
+		s += "\n"
+	}
+	fmt.Print("[" + ts + "] " + s)
+}

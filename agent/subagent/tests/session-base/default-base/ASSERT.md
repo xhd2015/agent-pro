@@ -1,0 +1,21 @@
+## Expected
+- The output lists a session with ID `default_test_123`.
+- The session is found from `~/.agent-pro/subagent/testrole/sessions/`.
+- The default base is used when `SessionBase` is empty.
+
+```go
+import (
+    "strings"
+    "testing"
+)
+
+func Assert(t *testing.T, req *Request, resp *Response, err error) {
+    if err != nil {
+        t.Fatalf("run failed: %v", err)
+    }
+
+    if !strings.Contains(resp.Stdout, "default_test_123") {
+        t.Fatalf("expected session 'default_test_123' in output, got:\n%s", resp.Stdout)
+    }
+}
+```
