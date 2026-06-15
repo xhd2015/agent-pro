@@ -44,8 +44,9 @@ type Request struct {
 }
 
 type Response struct {
-	Answer string // for Ask results
-	Output string // for convert / server-client results (JSON)
+	Answer    string // for Ask results
+	Output    string // for convert / server-client results (JSON)
+	SessionID string // session ID from agent after Ask
 }
 
 func Setup(t *testing.T, req *Request) error {
@@ -95,7 +96,7 @@ func runSubprocess(t *testing.T, req *Request) (*Response, error) {
 	}
 	answer, err := agent.Ask(ctx, req.Prompt, opts, nil)
 	if err != nil {
-		return &Response{Answer: answer}, err
+		return &Response{Answer: answer, SessionID: agent.LastSessionID}, err
 	}
 
 	if req.ResumePrompt != "" {
@@ -105,10 +106,10 @@ func runSubprocess(t *testing.T, req *Request) (*Response, error) {
 		}
 		opts.SessionID = sessionID
 		answer2, err := agent.Ask(ctx, req.ResumePrompt, opts, nil)
-		return &Response{Answer: answer2}, err
+		return &Response{Answer: answer2, SessionID: agent.LastSessionID}, err
 	}
 
-	return &Response{Answer: answer}, nil
+	return &Response{Answer: answer, SessionID: agent.LastSessionID}, nil
 }
 
 func runConvertRoundtrip(t *testing.T, req *Request) (*Response, error) {
@@ -309,7 +310,7 @@ func runServerAsk(t *testing.T, req *Request) (*Response, error) {
 	}
 	answer, err := agent.Ask(ctx, req.Prompt, opts, nil)
 	if err != nil {
-		return &Response{Answer: answer}, err
+		return &Response{Answer: answer, SessionID: agent.LastSessionID}, err
 	}
 	if req.ResumePrompt != "" {
 		sessionID := agent.LastSessionID
@@ -318,8 +319,8 @@ func runServerAsk(t *testing.T, req *Request) (*Response, error) {
 		}
 		opts.SessionID = sessionID
 		answer2, err := agent.Ask(ctx, req.ResumePrompt, opts, nil)
-		return &Response{Answer: answer2}, err
+		return &Response{Answer: answer2, SessionID: agent.LastSessionID}, err
 	}
-	return &Response{Answer: answer}, nil
+	return &Response{Answer: answer, SessionID: agent.LastSessionID}, nil
 }
 ```
