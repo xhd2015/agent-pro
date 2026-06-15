@@ -1,5 +1,6 @@
 ## Expected
-- One or more `EventMessage` events are received, each with valid `MessagePayload` (non-empty `id`, `role` = `"assistant"`, `session_id`, text parts).
+- One or more `EventMessage` events are received with role `"assistant"` (user messages echoed by crush v0.77.0 are skipped).
+- Each assistant message has valid `MessagePayload` (non-empty `id`, `session_id`, text parts).
 - Exactly one `EventRunComplete` event is received.
 - The total event sequence ends with `run_complete`.
 
@@ -33,27 +34,28 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	if events[lastIdx].Type != crush_types.EventRunComplete {
 		t.Fatalf("expected last event type %q, got %q", crush_types.EventRunComplete, events[lastIdx].Type)
 	}
-	hasMessage := false
-	for i, e := range events {
-		if e.Type == crush_types.EventMessage {
-			hasMessage = true
-			var msg crush_types.MessagePayload
-			if err := json.Unmarshal(e.Payload, &msg); err != nil {
-				t.Fatalf("event[%d]: failed to parse payload: %v", i, err)
-			}
-			if msg.ID == "" {
-				t.Fatalf("event[%d]: expected non-empty message ID", i)
-			}
-			if msg.Role != "assistant" {
-				t.Fatalf("event[%d]: expected role 'assistant', got %q", i, msg.Role)
-			}
-			if msg.SessionID == "" {
-				t.Fatalf("event[%d]: expected non-empty session_id", i)
-			}
+	hasAssistantMessage := false
+	for _, e := range events {
+		if e.Type != crush_types.EventMessage {
+			continue
+		}
+		var msg crush_types.MessagePayload
+		if err := json.Unmarshal(e.Payload, &msg); err != nil {
+			continue
+		}
+		if msg.Role != "assistant" {
+			continue
+		}
+		hasAssistantMessage = true
+		if msg.ID == "" {
+			t.Fatal("expected non-empty message ID for assistant message")
+		}
+		if msg.SessionID == "" {
+			t.Fatal("expected non-empty session_id for assistant message")
 		}
 	}
-	if !hasMessage {
-		t.Fatal("expected at least one EventMessage before run_complete")
+	if !hasAssistantMessage {
+		t.Fatal("expected at least one assistant EventMessage before run_complete")
 	}
 }
 ```

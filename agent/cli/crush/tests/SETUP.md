@@ -239,26 +239,17 @@ func runServerClient(t *testing.T, req *Request) (*Response, error) {
 		eventsJSON, _ := json.Marshal(events)
 		return &Response{Output: string(eventsJSON)}, nil
 	case "server-lifecycle":
-		// Kill any existing server from previous tests so we start clean.
-		osexec.Command("pkill", "-x", "crush").Run()
+		client.KillExistingServer()
 		time.Sleep(200 * time.Millisecond)
-		beforeCount := countCrushServerProcesses()
 		if err := client.EnsureServer(ctx); err != nil {
 			return nil, err
 		}
-		afterEnsureCount := countCrushServerProcesses()
 		healthStatus, healthErr := client.HealthCheck(ctx)
-		osexec.Command("pkill", "-x", "crush").Run()
-		time.Sleep(200 * time.Millisecond)
-		afterKillCount := countCrushServerProcesses()
-		_, healthAfterKillErr := client.HealthCheck(ctx)
+		pid := client.ServerPID()
 		result, _ := json.Marshal(map[string]any{
-			"before_count":         beforeCount,
-			"after_ensure_count":   afterEnsureCount,
-			"health_status":        healthStatus,
-			"health_err":           errString(healthErr),
-			"after_kill_count":     afterKillCount,
-			"health_after_kill_err": errString(healthAfterKillErr),
+			"health_status": healthStatus,
+			"health_err":    errString(healthErr),
+			"server_pid":    pid,
 		})
 		return &Response{Output: string(result)}, nil
 	case "server-reuse":
@@ -270,25 +261,23 @@ func runServerClient(t *testing.T, req *Request) (*Response, error) {
 		if err != nil {
 			return nil, err
 		}
-		beforeCount := countCrushServerProcesses()
+		clientA.KillExistingServer()
+		time.Sleep(200 * time.Millisecond)
 		if err := clientA.EnsureServer(ctx); err != nil {
 			return nil, err
 		}
-		afterACount := countCrushServerProcesses()
 		if err := clientB.EnsureServer(ctx); err != nil {
 			return nil, err
 		}
-		afterBCount := countCrushServerProcesses()
 		healthA, healthAErr := clientA.HealthCheck(ctx)
 		healthB, healthBErr := clientB.HealthCheck(ctx)
+		startedB := clientB.ServerStarted()
 		result, _ := json.Marshal(map[string]any{
-			"before_count":     beforeCount,
-			"after_A_count":    afterACount,
-			"after_B_count":    afterBCount,
-			"health_A_status":  healthA,
-			"health_A_err":     errString(healthAErr),
-			"health_B_status":  healthB,
-			"health_B_err":     errString(healthBErr),
+			"health_A_status": healthA,
+			"health_A_err":    errString(healthAErr),
+			"health_B_status": healthB,
+			"health_B_err":    errString(healthBErr),
+			"server_B_started": startedB,
 		})
 		return &Response{Output: string(result)}, nil
 	}

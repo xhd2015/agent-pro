@@ -13,7 +13,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,6 +29,7 @@ type CrushServerClient struct {
 	workspaceCache map[string]string
 	mu             sync.Mutex
 	serverStarted  bool
+	serverPID      int
 }
 
 func getSocketPath() string {
@@ -79,6 +82,7 @@ func (c *CrushServerClient) EnsureServer(ctx context.Context) error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start crush server: %w", err)
 	}
+	c.serverPID = cmd.Process.Pid
 
 	waitCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -101,6 +105,31 @@ func (c *CrushServerClient) ServerStarted() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.serverStarted
+}
+
+func (c *CrushServerClient) ServerPID() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.serverPID
+}
+
+func (c *CrushServerClient) KillExistingServer() {
+	cmd := exec.Command("lsof", "-t", c.socketPath)
+	output, err := cmd.Output()
+	if err != nil {
+		return
+	}
+	pidStr := strings.TrimSpace(string(output))
+	if pidStr == "" {
+		return
+	}
+	pid, err := strconv.Atoi(pidStr)
+	if err != nil {
+		return
+	}
+	syscall.Kill(pid, syscall.SIGTERM)
+	time.Sleep(200 * time.Millisecond)
+	os.Remove(c.socketPath)
 }
 
 func (c *CrushServerClient) probeHealth(ctx context.Context) (bool, error) {
