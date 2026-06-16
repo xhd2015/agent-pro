@@ -1,8 +1,8 @@
 # Agent Runner Detection — Ancestor Walk
 
-Verify the `autoDetectAgentRunner` function in `github.com/xhd2015/agent-pro/agent/subagent` correctly identifies which agent runner (opencode, pi, codex, crush) is hosting the current process.
+Verify the `autoDetectAgentRunner` function in `github.com/xhd2015/agent-pro/agent/subagent` correctly identifies which agent runner (opencode, pi, codex, crush, grok) is hosting the current process.
 
-This test covers the **pi ancestor walk** enhancement: when the immediate parent is a shell (bash, zsh, etc.), walk up one more level to detect pi as the grandparent.
+This test covers **ancestor walk** enhancements: when the immediate parent is a shell (bash, zsh, etc.), walk up one more level to detect pi or grok as the grandparent.
 
 ## Detection Chain (Priority Order)
 
@@ -11,8 +11,8 @@ This test covers the **pi ancestor walk** enhancement: when the immediate parent
 2. CODEX_THREAD_ID env  →  returns "codex"
 3. PI_CODING_AGENT env  →  returns "pi"
 4. Parent process detection:
-   a. getProcessName(ppid)   →  match opencode/pi/codex/crush
-   b. if no match: getProcessName(pppid)  →  match "pi" only
+   a. getProcessName(ppid)   →  match opencode/pi/codex/crush/grok
+   b. if no match: getProcessName(pppid)  →  match "pi" or "grok"
 ```
 
 ## Decision Tree
@@ -65,7 +65,10 @@ agent-runner-detection/
     │   ├── codex/                       # ppid="codex" → "codex", true
     │   │   ├── SETUP.md
     │   │   └── ASSERT.md
-    │   └── crush/                       # ppid="crush" → "crush", true
+    │   ├── crush/                       # ppid="crush" → "crush", true
+    │   │   ├── SETUP.md
+    │   │   └── ASSERT.md
+    │   └── grok/                        # ppid="grok" → "grok", true
     │       ├── SETUP.md
     │       └── ASSERT.md
     ├── grandparent-pi/                  # ppid not agent, pppid = "pi"
@@ -76,7 +79,15 @@ agent-runner-detection/
     │   └── zsh-ppid/                    # ppid="zsh", pppid="pi" → "pi", true
     │       ├── SETUP.md
     │       └── ASSERT.md
-    └── grandparent-non-pi/              # ppid not agent, pppid not pi
+    ├── grandparent-grok/                # ppid not agent, pppid = "grok"
+    │   ├── SETUP.md                     # First call returns non-agent ppid name
+    │   ├── bash-ppid/                   # ppid="bash", pppid="grok" → "grok", true
+    │   │   ├── SETUP.md
+    │   │   └── ASSERT.md
+    │   └── zsh-ppid/                    # ppid="zsh", pppid="grok" → "grok", true
+    │       ├── SETUP.md
+    │       └── ASSERT.md
+    └── grandparent-non-pi/              # ppid not agent, pppid not pi/grok
         ├── SETUP.md                     # First call returns non-agent ppid name
         ├── non-agent-ancestry/          # ppid="bash", pppid="bash" → "", false
         │   ├── SETUP.md
@@ -113,15 +124,16 @@ agent-runner-detection/
 | `override-beats-codex` | Both P1 env override and CODEX_THREAD_ID set → P1 wins |
 | `codex-beats-pi-env` | Both CODEX_THREAD_ID and PI_CODING_AGENT set → P2 (codex) wins over P3 (pi) |
 
-### parent-process (Priority 4) — 9 leaves
+### parent-process (Priority 4) — 12 leaves
 
-#### direct-ppid (4 leaves)
+#### direct-ppid (5 leaves)
 | Leaf | Description |
 |------|-------------|
 | `pi` | ppid="pi" → returns "pi", true |
 | `opencode` | ppid="opencode" → returns "opencode", true |
 | `codex` | ppid="codex" → returns "codex", true |
 | `crush` | ppid="crush" → returns "crush", true |
+| `grok` | ppid="grok" → returns "grok", true |
 
 #### grandparent-pi (2 leaves)
 | Leaf | Description |
@@ -129,14 +141,20 @@ agent-runner-detection/
 | `bash-ppid` | ppid="bash", pppid="pi" → grandparent walk finds pi (bash shell) |
 | `zsh-ppid` | ppid="zsh", pppid="pi" → grandparent walk finds pi (zsh shell variant) |
 
+#### grandparent-grok (2 leaves)
+| Leaf | Description |
+|------|-------------|
+| `bash-ppid` | ppid="bash", pppid="grok" → grandparent walk finds grok (bash shell) |
+| `zsh-ppid` | ppid="zsh", pppid="grok" → grandparent walk finds grok (zsh shell variant) |
+
 #### grandparent-non-pi (3 leaves)
 | Leaf | Description |
 |------|-------------|
 | `non-agent-ancestry` | ppid="bash", pppid="bash" → no agent in ancestry, not detected |
-| `codex-grandparent` | ppid="bash", pppid="codex" → grandparent walk is pi-only, not detected |
-| `opencode-grandparent` | ppid="bash", pppid="opencode" → grandparent walk is pi-only, not detected |
+| `codex-grandparent` | ppid="bash", pppid="codex" → grandparent walk is pi/grok-only, not detected |
+| `opencode-grandparent` | ppid="bash", pppid="opencode" → grandparent walk is pi/grok-only, not detected |
 
-Total: **15 leaves** across **5 feature areas**.
+Total: **18 leaves** across **5 feature areas**.
 
 ## How to Run
 

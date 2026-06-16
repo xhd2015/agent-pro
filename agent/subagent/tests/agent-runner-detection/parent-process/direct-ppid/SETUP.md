@@ -1,7 +1,7 @@
 ## Preconditions
 - The immediate parent process (ppid) matches a known agent runner.
 - Only the ppid is checked; no grandparent walk is needed.
-- Covers all four known agents: pi, opencode, codex, crush.
+- Covers all five known agents: pi, opencode, codex, crush, grok.
 
 ## Steps
 1. Each leaf sets `req.ProcessNames` with a single entry: the agent process name.

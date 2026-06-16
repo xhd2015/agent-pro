@@ -135,7 +135,7 @@ func Run(ctx context.Context, c Config, opts Options) error {
 	if agentRunner == "" {
 		runner, ok := autoDetectAgentRunner(c)
 		if !ok {
-			return fmt.Errorf("agent %s cannot resolve session: must be run inside an agent session (opencode, pi, codex, or crush)", c.RoleName)
+			return fmt.Errorf("agent %s cannot resolve session: must be run inside an agent session (opencode, pi, codex, crush, or grok)", c.RoleName)
 		}
 		agentRunner = runner
 	}
@@ -145,7 +145,7 @@ func Run(ctx context.Context, c Config, opts Options) error {
 	// "cannot detect session" error.
 	validRunners := map[string]bool{
 		"opencode": true, "codex": true, "pi": true, "crush": true,
-		"cursor": true, "fake-codex": true,
+		"grok": true, "cursor": true, "fake-codex": true,
 	}
 	if !validRunners[agentRunner] {
 		return fmt.Errorf("unknown agent runner id: %s", agentRunner)
@@ -330,15 +330,19 @@ func autoDetectAgentRunner(c Config) (runner string, detected bool) {
 				return "pi", true
 			case "crush":
 				return "crush", true
-			case "codex":
-				return "codex", true
-			}
+		case "codex":
+			return "codex", true
+		case "grok":
+			return "grok", true
+		}
 		}
 		// Grandparent walk for pi only (pi spawns a shell which spawns doctest)
 		if pppid := getParentPid(ppid); pppid > 0 {
-			if pcomm := getProcessName(pppid); strings.ToLower(pcomm) == "pi" {
-				return "pi", true
-			}
+		if pcomm := getProcessName(pppid); strings.ToLower(pcomm) == "pi" {
+			return "pi", true
+		} else if strings.ToLower(pcomm) == "grok" {
+			return "grok", true
+		}
 		}
 	}
 	return "", false
