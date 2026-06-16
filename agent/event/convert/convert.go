@@ -22,7 +22,12 @@ func ConvertRawLine(raw []byte, agentRunner string) ([]types.AgentEvent, error) 
 	case "pi":
 		var events []pi_types.Event
 		if err := json.Unmarshal(raw, &events); err != nil {
-			return nil, fmt.Errorf("unmarshal pi events: %w", err)
+			// Fall back: try single event (pi writes one JSON object per line)
+			var single pi_types.Event
+			if err2 := json.Unmarshal(raw, &single); err2 != nil {
+				return nil, fmt.Errorf("unmarshal pi events: %w", err)
+			}
+			events = []pi_types.Event{single}
 		}
 		return pi_types.FromPi(events), nil
 	case "codex":

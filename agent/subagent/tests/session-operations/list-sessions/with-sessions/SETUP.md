@@ -18,7 +18,7 @@ func Setup(t *testing.T, req *Request) error {
     sess2 := filepath.Join(baseDir, "testrole", "sessions", "2026", "06", "14", "sess_sessB")
 
     req.HomeDir = baseDir
-    req.SessionBase = baseDir
+    req.SessionBase = filepath.Join(baseDir, "testrole", "sessions")
     req.PreCreateDirs = []string{sess1, sess2}
     req.PreCreateMeta = map[string]string{
         sess1: `{"explicit_session_id":"session_alpha","agent_runner":"opencode","created_at":"2026-06-15T10:00:00Z"}`,

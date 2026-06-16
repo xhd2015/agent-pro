@@ -1,9 +1,12 @@
 ## Preconditions
 - message_end → ActionMessage PhaseEnd.
+- After fix: message_end should NOT output full text (deltas already shown via message_update).
+- With no Delta available, Text must be empty.
 
 ## Steps
-1. Create a pi message_end event.
+1. Create a pi message_end event with Content text but no assistantMessageEvent (no delta).
 2. Call FromPi and marshal result.
+3. Verify Text is empty, not the full Content text "Hello".
 
 ```go
 import (

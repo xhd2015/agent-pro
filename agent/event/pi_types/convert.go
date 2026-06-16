@@ -227,7 +227,12 @@ func FromPi(events []Event) []types.AgentEvent {
 				Text:  lastMsgText,
 			})
 		case EventTypeMessageEnd:
-			text := extractText(e.Message)
+			// Prefer delta over full Content text; deltas are already shown via message_update.
+			// Don't output full accumulated text again to prevent duplication.
+			text := ""
+			if e.AssistantMessageEvent != nil {
+				text = e.AssistantMessageEvent.Delta
+			}
 			if lastWasMsgStart {
 				lastWasMsgStart = false
 				combined := lastMsgText
@@ -252,9 +257,13 @@ func FromPi(events []Event) []types.AgentEvent {
 			if e.Message == nil || e.Message.Role != "assistant" {
 				continue
 			}
-			text := extractText(e.Message)
-			if text == "" && e.AssistantMessageEvent != nil {
+			// Prefer delta over accumulated Content text (streaming UX)
+			text := ""
+			if e.AssistantMessageEvent != nil {
 				text = e.AssistantMessageEvent.Delta
+			}
+			if text == "" {
+				text = extractText(e.Message)
 			}
 			var agentEvent types.AgentEvent
 			if e.AssistantMessageEvent != nil {

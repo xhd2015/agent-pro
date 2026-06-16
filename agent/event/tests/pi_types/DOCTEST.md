@@ -99,8 +99,9 @@ Level 2 (roundtrip): Scenario
 | `to_pi/step-start` | ActionStepStart → turn_start |
 | `to_pi/step-finish` | ActionStepFinish → turn_end |
 | **from_pi** | |
-| `from_pi/msg-update-text` | msg_update text_delta → ActionMessage PhaseUpdate |
-| `from_pi/msg-update-think` | msg_update thinking_delta → ActionThink PhaseUpdate |
+| `from_pi/msg-update-text` | msg_update text_delta → ActionMessage PhaseUpdate (Text = Delta, not full Content) |
+| `from_pi/msg-update-accumulated-text` | msg_update with large accumulated Content → ActionMessage PhaseUpdate (Text = Delta " feature." only) |
+| `from_pi/msg-update-think` | msg_update thinking_delta → ActionThink PhaseUpdate (Text = Delta, not Content[0].Thinking) |
 | `from_pi/msg-start` | msg_start → ActionMessage PhaseStart |
 | `from_pi/msg-end` | msg_end → ActionMessage PhaseEnd |
 | `from_pi/tool-exec-start` | tool_exec_start → ActionToolCall PhaseStart |

@@ -24,6 +24,7 @@ type Response struct {
 func Setup(t *testing.T, req *Request) error {
 	_ = assertContains
 	_ = assertEmpty
+	_ = assertNotContains
 	return nil
 }
 
@@ -42,6 +43,13 @@ func assertEmpty(t *testing.T, got string) {
 	t.Helper()
 	if strings.TrimSpace(got) != "" {
 		t.Fatalf("expected empty output, got:\n%s", got)
+	}
+}
+
+func assertNotContains(t *testing.T, got string, want string) {
+	t.Helper()
+	if strings.Contains(got, want) {
+		t.Fatalf("unexpected %q in:\n%s", want, got)
 	}
 }
 ```

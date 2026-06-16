@@ -16,7 +16,8 @@ events-conversion/
 ├── converter-router/                     # === ConvertRawLine(raw, agentRunner) → AgentEvent ===
 │   ├── SETUP.md                          # Operation="convert_raw", sets up runner-specific paths
 │   ├── opencode/raw-to-agent-event/      # Feed opencode native JSON → verify AgentEvent fields
-│   ├── pi/raw-to-agent-event/            # Feed pi native JSON → verify AgentEvent fields
+│   ├── pi/raw-to-agent-event/            # Feed pi native JSON array → verify AgentEvent fields (backward compat)
+│   ├── pi/single-event-not-array/        # Feed pi single JSON object → verify accepted (Bug A fix)
 │   ├── codex/raw-to-agent-event/         # Feed codex native JSON → verify AgentEvent fields
 │   ├── crush/raw-to-agent-event/         # Feed crush native JSON → verify AgentEvent fields
 │   └── unknown-runner/                   # Unknown runner name → error
@@ -44,11 +45,12 @@ events-conversion/
 
 ## Test Index
 
-### converter-router — 5 leaves
+### converter-router — 6 leaves
 | Leaf | Description |
 |------|-------------|
 | `converter-router/opencode/raw-to-agent-event` | OpenCode native events → correct AgentEvent Type/Text/Tool |
-| `converter-router/pi/raw-to-agent-event` | Pi native events → correct AgentEvent fields |
+| `converter-router/pi/raw-to-agent-event` | Pi native events (array) → correct AgentEvent fields (backward compat) |
+| `converter-router/pi/single-event-not-array` | Pi single object (not array) → accepted + converted (Bug A fix) |
 | `converter-router/codex/raw-to-agent-event` | Codex native events → correct AgentEvent fields (tests FromCodex) |
 | `converter-router/crush/raw-to-agent-event` | Crush native events → correct AgentEvent fields |
 | `converter-router/unknown-runner` | Unknown runner name → non-nil error |
@@ -76,7 +78,7 @@ events-conversion/
 | `show-status/last-event-time` | Event with Timestamp → correct relative time ("Xs ago") |
 | `show-status/event-details` | Last 3 events → each shown with formatted summary |
 
-Total: **16 leaves** across **4 feature areas**.
+Total: **17 leaves** across **4 feature areas**.
 
 ## How to Run
 

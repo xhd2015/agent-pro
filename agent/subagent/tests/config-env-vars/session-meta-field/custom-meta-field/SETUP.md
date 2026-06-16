@@ -21,7 +21,7 @@ func Setup(t *testing.T, req *Request) error {
     sessDir := filepath.Join(baseDir, "testrole", "sessions", "2026", "06", "15", "sess_meta1")
 
     req.HomeDir = baseDir
-    req.SessionBase = baseDir
+    req.SessionBase = filepath.Join(baseDir, "testrole", "sessions")
     req.SessionID = ""
     req.SessionEnvVar = "MY_CUSTOM_ENV"
     req.SessionMetaField = "my_custom_meta_field"

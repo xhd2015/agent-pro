@@ -1,9 +1,11 @@
 ## Preconditions
 - message_update with thinking_delta assistant event → ActionThink PhaseUpdate.
+- After fix: FromPi must prefer Delta (" deeper") over Content[0].Thinking ("think").
 
 ## Steps
-1. Create a pi message_update event with thinking_delta.
+1. Create a pi message_update event with thinking_delta, Content[0].Thinking="think" but Delta=" deeper".
 2. Call FromPi and marshal result.
+3. Verify Text = Delta " deeper", not Content[0].Thinking "think".
 
 ```go
 import (

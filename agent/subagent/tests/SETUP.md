@@ -21,6 +21,7 @@
 ```go
 import (
     "bytes"
+    "context"
     "fmt"
     "os"
     "path/filepath"
@@ -156,7 +157,7 @@ func runSessionBase(t *testing.T, req *Request) (*Response, error) {
     }
     os.Stdout = w
 
-    runErr := subagent.Run(subagent.Config{
+    runErr := subagent.Run(context.Background(), subagent.Config{
         RoleName: req.RoleName,
     }, subagent.Options{
         ListSessions: true,
@@ -188,7 +189,7 @@ func runSessionIDResolution(t *testing.T, req *Request) (*Response, error) {
     rErr, wErr, _ := os.Pipe()
     os.Stderr = wErr
 
-    runErr := subagent.Run(subagent.Config{
+    runErr := subagent.Run(context.Background(), subagent.Config{
         RoleName: req.RoleName,
     }, subagent.Options{
         Status:    true,
@@ -271,18 +272,18 @@ func runSubagentOp(t *testing.T, req *Request) (*Response, error) {
 
     var runErr error
     if req.Status {
-        runErr = subagent.Run(cfg, subagent.Options{
+        runErr = subagent.Run(context.Background(), cfg, subagent.Options{
             Status:      true,
             SessionID:   req.SessionID,
             SessionBase: req.SessionBase,
         })
     } else if req.ListSessions {
-        runErr = subagent.Run(cfg, subagent.Options{
+        runErr = subagent.Run(context.Background(), cfg, subagent.Options{
             ListSessions: true,
             SessionBase:  req.SessionBase,
         })
     } else if req.CatchUp {
-        runErr = subagent.Run(cfg, subagent.Options{
+        runErr = subagent.Run(context.Background(), cfg, subagent.Options{
             CatchUp:     true,
             SessionID:   req.SessionID,
             SessionBase: req.SessionBase,

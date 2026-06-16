@@ -33,9 +33,10 @@ pi_types/                              Root: Pi adapter registration
 | `session` | `session` | empty |
 | `non-assistant` | `message_update` with `role:user` | empty |
 | `message-start` | `message_start` assistant text | `ASSISTANT` + `Hello` |
-| `message-update-text` | `message_update` text_delta | `ASSISTANT` + `world` |
-| `message-update-thinking` | `message_update` thinking_delta | `ASSISTANT` + `hmm` |
-| `message-end` | `message_end` assistant text | `ASSISTANT` + `Bye` |
+| `message-update-text` | `message_update` text_delta, delta = `"world"` | `ASSISTANT` + `world` (uses Delta) |
+| `message-update-accumulated-text` | `message_update` with large Content, small delta | `ASSISTANT` + ` feature.` (delta only, not accumulated) |
+| `message-update-thinking` | `message_update` thinking_delta, delta = `"hmm"` | `ASSISTANT` + `hmm` (uses Delta) |
+| `message-end` | `message_end` assistant text, no delta | empty (deltas already shown) |
 | `tool-exec-start` | `tool_execution_start` bash | `RUN` + `ls -la` |
 | `tool-exec-end-ok` | `tool_execution_end` ok | `RUN` + `file1.txt` |
 | `tool-exec-end-err` | `tool_execution_end` error | `RUN` + `not found` + `FAILED` |

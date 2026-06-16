@@ -1,5 +1,9 @@
 ## Preconditions
 - Roundtrip: ToPi then FromPi should preserve text message content.
+- After fix: FromPi uses Delta for message_update events. Since ToPi sets Delta = Text for PhaseUpdate,
+  the roundtrip correctly preserves the text via the delta path.
+- For instant phase (Phase=""), ToPi creates msg_start + msg_update + msg_end.
+  msg_update uses Delta, msg_end uses empty Text (deltas already shown).
 
 ## Steps
 1. Create an ActionMessage event with text content.
