@@ -307,7 +307,11 @@ func autoDetectAgentRunner(c Config) (runner string, detected bool) {
 	if v := os.Getenv("CODEX_THREAD_ID"); v != "" {
 		return "codex", true
 	}
-	// Priority 3: Parent process detection
+	// Priority 3: PI_CODING_AGENT env var (set by pi TUI)
+	if v := os.Getenv("PI_CODING_AGENT"); v != "" {
+		return "pi", true
+	}
+	// Priority 4: Parent process detection
 	if ppid := os.Getppid(); ppid > 0 {
 		comm := getProcessName(ppid)
 		if comm != "" {

@@ -100,13 +100,13 @@ func Run(t *testing.T, req *Request) (*Response, error) {
     if err == nil {
         return resp, nil
     }
+    if ctx.Err() != nil {
+        return resp, ctx.Err()
+    }
     var exitErr *exec.ExitError
     if errors.As(err, &exitErr) {
         resp.ExitCode = exitErr.ExitCode()
         return resp, nil
-    }
-    if ctx.Err() != nil {
-        return resp, ctx.Err()
     }
     return resp, err
 }
@@ -196,6 +196,9 @@ func runPerEventDelay(t *testing.T, req *Request) (*Response, error) {
         }
         return resp, nil
     }
+    if ctx.Err() != nil {
+        return resp, ctx.Err()
+    }
     var exitErr *exec.ExitError
     if errors.As(err, &exitErr) {
         resp.ExitCode = exitErr.ExitCode()
@@ -203,9 +206,6 @@ func runPerEventDelay(t *testing.T, req *Request) (*Response, error) {
             t.Fatalf("expected at least 1500ms elapsed due to delay_ms=2000, got %v", elapsed)
         }
         return resp, nil
-    }
-    if ctx.Err() != nil {
-        return resp, ctx.Err()
     }
     return resp, err
 }

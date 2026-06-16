@@ -99,13 +99,13 @@ func execCmd(t *testing.T, command string, args []string, dir string, env []stri
     if err == nil {
         return resp, nil
     }
+    if ctx.Err() != nil {
+        return resp, ctx.Err()
+    }
     var exitErr *exec.ExitError
     if errors.As(err, &exitErr) {
         resp.ExitCode = exitErr.ExitCode()
         return resp, nil
-    }
-    if ctx.Err() != nil {
-        return resp, ctx.Err()
     }
     return resp, err
 }
