@@ -2,7 +2,6 @@ package subagent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,48 +11,14 @@ import (
 
 	"github.com/xhd2015/dot-pkgs/go-pkgs/logs"
 
+	"github.com/xhd2015/agent-pro/agent/event/print"
 	agentprovider "github.com/xhd2015/agent-pro/agent/cli/provider"
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
-	"github.com/xhd2015/agent-pro/agent/event/print"
 	agentexec "github.com/xhd2015/agent-pro/agent/exec"
 )
 
 func formatEventLine(line string) string {
-	formatted := print.FormatTraceLine(line)
-	if formatted != "" {
-		return formatted
-	}
-	var raw map[string]interface{}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(line)), &raw); err != nil {
-		return ""
-	}
-	eventType, _ := raw["type"].(string)
-	var contentDisplay []string
-	if c, ok := raw["content"].(string); ok && c != "" {
-		contentDisplay = append(contentDisplay, c)
-	}
-	if d, ok := raw["delta"]; ok {
-		if dm, ok := d.(map[string]interface{}); ok {
-			if cmd, ok := dm["command"].(string); ok && cmd != "" {
-				contentDisplay = append(contentDisplay, cmd)
-			}
-		}
-	}
-	if c, ok := raw["tool"].(string); ok && c != "" {
-		contentDisplay = append(contentDisplay, "("+c+")")
-	}
-	if tn, ok := raw["toolName"].(string); ok && tn != "" {
-		contentDisplay = append(contentDisplay, "("+tn+")")
-	}
-	if ame, ok := raw["assistantMessageEvent"].(map[string]interface{}); ok {
-		if delta, ok := ame["delta"].(string); ok && delta != "" {
-			contentDisplay = append(contentDisplay, delta)
-		}
-	}
-	if len(contentDisplay) > 0 {
-		return eventType + ": " + strings.Join(contentDisplay, " ")
-	}
-	return ""
+	return print.FormatTraceLine(line)
 }
 
 func runAgent(ctx context.Context, agentRunner, model, prompt, sessionID string, rawLog *sessionLogWriter) (string, error) {

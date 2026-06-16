@@ -9,8 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/xhd2015/agent-pro/agent/event/print"
 )
 
 type meta struct {
@@ -31,7 +29,7 @@ func sessionsBase(c Config, opts Options) (string, error) {
 		return v, nil
 	}
 	if opts.SessionBase != "" {
-		return filepath.Join(opts.SessionBase, c.RoleName, "sessions"), nil
+		return opts.SessionBase, nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -343,7 +341,7 @@ func showStatus(c Config, opts Options) error {
 			lastEvents = eventLines[len(eventLines)-3:]
 		}
 		for i, line := range lastEvents {
-			formatted := print.FormatTraceLine(line)
+			formatted := formatEventLine(line)
 			if formatted == "" {
 				formatted = line
 			}

@@ -100,9 +100,23 @@ func mustMarshal(v any) json.RawMessage {
 	return data
 }
 
+// unmarshalWithStringFallback handles the case where raw is a string-encoded
+// JSON object (e.g., "{\"id\":\"m1\",...}") by first trying direct
+// unmarshal, then falling back to unmarshal-as-string-then-unmarshal.
+func unmarshalWithStringFallback(raw json.RawMessage, v any) error {
+	if err := json.Unmarshal(raw, v); err == nil {
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return err
+	}
+	return json.Unmarshal([]byte(s), v)
+}
+
 func (e Event) messagePayload() *MessagePayload {
 	var p MessagePayload
-	if err := json.Unmarshal(e.Payload, &p); err != nil {
+	if err := unmarshalWithStringFallback(e.Payload, &p); err != nil {
 		return nil
 	}
 	return &p
@@ -110,7 +124,7 @@ func (e Event) messagePayload() *MessagePayload {
 
 func (e Event) agentEventPayload() *AgentEventPayload {
 	var p AgentEventPayload
-	if err := json.Unmarshal(e.Payload, &p); err != nil {
+	if err := unmarshalWithStringFallback(e.Payload, &p); err != nil {
 		return nil
 	}
 	return &p
@@ -118,7 +132,7 @@ func (e Event) agentEventPayload() *AgentEventPayload {
 
 func (e Event) runCompletePayload() *RunCompletePayload {
 	var p RunCompletePayload
-	if err := json.Unmarshal(e.Payload, &p); err != nil {
+	if err := unmarshalWithStringFallback(e.Payload, &p); err != nil {
 		return nil
 	}
 	return &p
@@ -126,7 +140,7 @@ func (e Event) runCompletePayload() *RunCompletePayload {
 
 func (p Part) reasoningData() *ReasoningData {
 	var d ReasoningData
-	if err := json.Unmarshal(p.Data, &d); err != nil {
+	if err := unmarshalWithStringFallback(p.Data, &d); err != nil {
 		return nil
 	}
 	return &d
@@ -134,7 +148,7 @@ func (p Part) reasoningData() *ReasoningData {
 
 func (p Part) textData() *TextData {
 	var d TextData
-	if err := json.Unmarshal(p.Data, &d); err != nil {
+	if err := unmarshalWithStringFallback(p.Data, &d); err != nil {
 		return nil
 	}
 	return &d
@@ -142,7 +156,7 @@ func (p Part) textData() *TextData {
 
 func (p Part) toolCallData() *ToolCallData {
 	var d ToolCallData
-	if err := json.Unmarshal(p.Data, &d); err != nil {
+	if err := unmarshalWithStringFallback(p.Data, &d); err != nil {
 		return nil
 	}
 	return &d
@@ -150,7 +164,7 @@ func (p Part) toolCallData() *ToolCallData {
 
 func (p Part) finishData() *FinishData {
 	var d FinishData
-	if err := json.Unmarshal(p.Data, &d); err != nil {
+	if err := unmarshalWithStringFallback(p.Data, &d); err != nil {
 		return nil
 	}
 	return &d
@@ -158,7 +172,7 @@ func (p Part) finishData() *FinishData {
 
 func (p Part) parseDataMap() (map[string]any, bool) {
 	var m map[string]any
-	if err := json.Unmarshal(p.Data, &m); err != nil {
+	if err := unmarshalWithStringFallback(p.Data, &m); err != nil {
 		return nil, false
 	}
 	return m, true

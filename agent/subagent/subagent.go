@@ -257,7 +257,8 @@ func Run(ctx context.Context, c Config, opts Options) error {
 	defer eventsLogger.Close()
 
 	capture := &sessionLogWriter{
-		eventsFile: eventsLogger,
+		eventsFile:  eventsLogger,
+		agentRunner: agentRunner,
 	}
 
 	var fullPrompt string

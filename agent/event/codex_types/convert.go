@@ -233,3 +233,50 @@ func convertGrepToCodex(e types.AgentEvent, id string) []Event {
 	}
 	return []Event{started, completed}
 }
+
+func FromCodex(events []Event, _ string) []types.AgentEvent {
+	var result []types.AgentEvent
+	for _, e := range events {
+		switch e.Type {
+		case EventCompleted:
+			if e.Item == nil {
+				continue
+			}
+			switch e.Item.Type {
+			case ItemReasoning:
+				result = append(result, types.AgentEvent{
+					Type: types.ActionThink,
+					Text: e.Item.Text,
+				})
+			case ItemCommandExecution:
+				exitCode := e.Item.ExitCode
+				result = append(result, types.AgentEvent{
+					Type:      types.ActionToolCall,
+					Tool:      "bash",
+					ToolInput: map[string]any{"command": e.Item.Command},
+					Mock: &types.MockConfig{
+						Output:   e.Item.AggregatedOutput,
+						ExitCode: exitCode,
+					},
+				})
+			case ItemFileChange:
+				result = append(result, types.AgentEvent{
+					Type:    types.ActionToolCall,
+					Tool:    "write",
+					Changes: e.Item.Changes,
+				})
+			case ItemMessage:
+				result = append(result, types.AgentEvent{
+					Type: types.ActionMessage,
+					Text: e.Item.Text,
+				})
+			}
+		case EventError:
+			result = append(result, types.AgentEvent{
+				Type: types.ActionError,
+				Text: e.Message,
+			})
+		}
+	}
+	return result
+}

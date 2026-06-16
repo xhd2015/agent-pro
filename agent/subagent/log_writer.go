@@ -5,13 +5,15 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/xhd2015/agent-pro/agent/event/convert"
 	"github.com/xhd2015/agent-pro/agent/event/logging"
 )
 
 type sessionLogWriter struct {
-	mu         sync.Mutex
-	sessionID  string
-	eventsFile logging.Logger
+	mu          sync.Mutex
+	sessionID   string
+	agentRunner string
+	eventsFile  logging.Logger
 }
 
 func (w *sessionLogWriter) Write(p []byte) (int, error) {
@@ -19,7 +21,20 @@ func (w *sessionLogWriter) Write(p []byte) (int, error) {
 	defer w.mu.Unlock()
 
 	if w.eventsFile != nil {
-		_ = w.eventsFile.Append(p)
+		// Try to convert raw bytes to AgentEvent JSONL
+		events, err := convert.ConvertRawLine(p, w.agentRunner)
+		if err != nil {
+			// Fall back: append raw bytes as-is
+			_ = w.eventsFile.Append(p)
+		} else {
+			for _, event := range events {
+				data, err := json.Marshal(event)
+				if err != nil {
+					continue
+				}
+				_ = w.eventsFile.Append(append(data, '\n'))
+			}
+		}
 	}
 
 	if w.sessionID == "" {

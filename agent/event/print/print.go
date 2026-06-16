@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	eventtypes "github.com/xhd2015/agent-pro/agent/event/types"
 	"github.com/xhd2015/agent-pro/agent_trace/types"
 	_ "github.com/xhd2015/agent-pro/agent_trace/opencode"
 	_ "github.com/xhd2015/agent-pro/agent_trace/pi"
@@ -19,6 +20,13 @@ func FormatTraceLine(line string) string {
 	if trimmed == "" || !strings.HasPrefix(trimmed, "{") {
 		return ""
 	}
+	// PRIMARY: try AgentEvent (match known action types only, so old native
+	// formats like opencode type="text" or pi type="message_start" fall through)
+	var event eventtypes.AgentEvent
+	if err := json.Unmarshal([]byte(trimmed), &event); err == nil && isAgentEventType(event.Type) {
+		return FormatAgentEvent(event)
+	}
+	// FALLBACK: old adapter system
 	parsed, ok := types.ParseAgentTraceLine(json.RawMessage(trimmed))
 	if !ok {
 		return ""
@@ -157,6 +165,58 @@ func toolIcon(tool string) (string, string) {
 		return "🔧", strings.ToUpper(tool)
 	}
 }
+
+// isAgentEventType returns true for known AgentEvent action types, so that
+// old native event formats (e.g. opencode type="text", pi type="message_start")
+// are not matched by the AgentEvent primary path.
+func isAgentEventType(t eventtypes.ActionType) bool {
+	switch t {
+	case eventtypes.ActionThink, eventtypes.ActionToolCall, eventtypes.ActionMessage,
+		eventtypes.ActionError, eventtypes.ActionDone,
+		eventtypes.ActionStepStart, eventtypes.ActionStepFinish,
+		eventtypes.ActionSleep:
+		return true
+	}
+	return false
+}
+
+// FormatAgentEvent formats an AgentEvent into a human-readable string.
+func FormatAgentEvent(event eventtypes.AgentEvent) string {
+	switch event.Type {
+	case eventtypes.ActionToolCall:
+		icon, label := toolIcon(event.Tool)
+		var parts []string
+		parts = append(parts, fmt.Sprintf("%s %s", icon, label))
+		if event.Text != "" {
+			parts = append(parts, event.Text)
+		}
+		if event.Output != "" {
+			parts = append(parts, event.Output)
+		}
+		if len(event.Changes) > 0 {
+			for _, c := range event.Changes {
+				parts = append(parts, c.Kind+" "+c.Path)
+			}
+		}
+		if event.ExitCode != nil && *event.ExitCode != 0 {
+			parts = append(parts, "FAILED")
+		}
+		return strings.Join(parts, "\n")
+	case eventtypes.ActionMessage:
+		return fmt.Sprintf("💬 %s", event.Text)
+	case eventtypes.ActionThink:
+		return fmt.Sprintf("💭 %s", event.Text)
+	case eventtypes.ActionError:
+		return fmt.Sprintf("❌ %s\n✗ FAILED", event.Text)
+	case eventtypes.ActionStepStart:
+		return "▶ STEP START"
+	case eventtypes.ActionStepFinish:
+		return "◼ STEP FINISH"
+	default:
+		return fmt.Sprintf("[%s] %s", event.Type, event.Text)
+	}
+}
+
 
 func truncateLine(s string, max int) string {
 	if len(s) <= max {
