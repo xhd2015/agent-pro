@@ -15,6 +15,7 @@ import (
 	"github.com/xhd2015/agent-pro/agent/opencode/permissions"
 	"github.com/xhd2015/agent-pro/agent/opencode/plugins"
 	"github.com/xhd2015/agent-pro/frontend"
+	"github.com/xhd2015/agent-pro/pkgs/agentconfig"
 	"github.com/xhd2015/agent-pro/run"
 	"github.com/xhd2015/agent-pro/server"
 	"github.com/xhd2015/less-gen/flags"
@@ -24,7 +25,9 @@ const help = `
 Usage: agent-pro <command> [ARGS]
 
 Commands:
-  opencode          manage opencode hooks and permissions
+  opencode          manage opencode hooks, permissions, and config
+  pi                manage pi configuration
+  crush             manage crush configuration
   codex             manage codex configuration
   traces            view agent trace sessions (web viewer)
   show-agent-files  collect known agent files under ~/.agent-pro/agent-files-collection/
@@ -37,6 +40,7 @@ Usage: agent-pro opencode <command> [ARGS]
 
 Commands:
   commands          list opencode slash commands
+  config            manage opencode configuration (export/import)
   permissions       manage opencode permissions
   plugins           manage opencode plugins
   skills            list installed skills
@@ -63,6 +67,10 @@ func handle(args []string) error {
 		return handleOpenCode(args[1:])
 	case "codex":
 		return handleCodex(args[1:])
+	case "pi":
+		return handlePi(args[1:])
+	case "crush":
+		return handleCrush(args[1:])
 	case "traces":
 		return handleTraces(args[1:])
 	case "show-agent-files":
@@ -85,6 +93,8 @@ func handleOpenCode(args []string) error {
 		return handlePlugins(args[1:])
 	case "commands":
 		return handleCommands(args[1:])
+	case "config":
+		return handleOpenCodeConfig(args[1:])
 	case "skills":
 		return handleOpenCodeSkills(args[1:])
 	default:
@@ -1400,6 +1410,212 @@ func printSkillGroup(label string, skills []openskills.SkillInfo, home string) {
 		}
 	}
 	fmt.Println()
+}
+
+// --- opencode config ---
+
+const opencodeConfigHelp = `
+Usage: agent-pro opencode config <command> [ARGS]
+
+Commands:
+  export <file.zip>   export opencode configuration to a zip file
+  import <file.zip>   import opencode configuration from a zip file
+
+Options:
+  -h,--help           show help
+`
+
+func handleOpenCodeConfig(args []string) error {
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(strings.TrimPrefix(opencodeConfigHelp, "\n"))
+		return nil
+	}
+	switch args[0] {
+	case "export":
+		return handleOpenCodeConfigExport(args[1:])
+	case "import":
+		return handleOpenCodeConfigImport(args[1:])
+	default:
+		return fmt.Errorf("unknown opencode config command: %s", args[0])
+	}
+}
+
+func handleOpenCodeConfigExport(args []string) error {
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(strings.TrimPrefix(opencodeConfigHelp, "\n"))
+		return nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("find home dir: %w", err)
+	}
+	zipPath := args[0]
+	return agentconfig.Export("opencode", home, zipPath)
+}
+
+func handleOpenCodeConfigImport(args []string) error {
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(strings.TrimPrefix(opencodeConfigHelp, "\n"))
+		return nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("find home dir: %w", err)
+	}
+	zipPath := args[0]
+	return agentconfig.Import(home, zipPath)
+}
+
+// --- pi ---
+
+const piHelp = `
+Usage: agent-pro pi <command> [ARGS]
+
+Commands:
+  config            manage pi configuration (export/import)
+
+Run agent-pro pi <command> --help for command-specific options.
+`
+
+func handlePi(args []string) error {
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(strings.TrimPrefix(piHelp, "\n"))
+		return nil
+	}
+	switch args[0] {
+	case "config":
+		return handlePiConfig(args[1:])
+	default:
+		return fmt.Errorf("unknown pi command: %s", args[0])
+	}
+}
+
+const piConfigHelp = `
+Usage: agent-pro pi config <command> [ARGS]
+
+Commands:
+  export <file.zip>   export pi configuration to a zip file
+  import <file.zip>   import pi configuration from a zip file
+
+Options:
+  -h,--help           show help
+`
+
+func handlePiConfig(args []string) error {
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(strings.TrimPrefix(piConfigHelp, "\n"))
+		return nil
+	}
+	switch args[0] {
+	case "export":
+		return handlePiConfigExport(args[1:])
+	case "import":
+		return handlePiConfigImport(args[1:])
+	default:
+		return fmt.Errorf("unknown pi config command: %s", args[0])
+	}
+}
+
+func handlePiConfigExport(args []string) error {
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(strings.TrimPrefix(piConfigHelp, "\n"))
+		return nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("find home dir: %w", err)
+	}
+	zipPath := args[0]
+	return agentconfig.Export("pi", home, zipPath)
+}
+
+func handlePiConfigImport(args []string) error {
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(strings.TrimPrefix(piConfigHelp, "\n"))
+		return nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("find home dir: %w", err)
+	}
+	zipPath := args[0]
+	return agentconfig.Import(home, zipPath)
+}
+
+// --- crush ---
+
+const crushHelp = `
+Usage: agent-pro crush <command> [ARGS]
+
+Commands:
+  config            manage crush configuration (export/import)
+
+Run agent-pro crush <command> --help for command-specific options.
+`
+
+func handleCrush(args []string) error {
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(strings.TrimPrefix(crushHelp, "\n"))
+		return nil
+	}
+	switch args[0] {
+	case "config":
+		return handleCrushConfig(args[1:])
+	default:
+		return fmt.Errorf("unknown crush command: %s", args[0])
+	}
+}
+
+const crushConfigHelp = `
+Usage: agent-pro crush config <command> [ARGS]
+
+Commands:
+  export <file.zip>   export crush configuration to a zip file
+  import <file.zip>   import crush configuration from a zip file
+
+Options:
+  -h,--help           show help
+`
+
+func handleCrushConfig(args []string) error {
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(strings.TrimPrefix(crushConfigHelp, "\n"))
+		return nil
+	}
+	switch args[0] {
+	case "export":
+		return handleCrushConfigExport(args[1:])
+	case "import":
+		return handleCrushConfigImport(args[1:])
+	default:
+		return fmt.Errorf("unknown crush config command: %s", args[0])
+	}
+}
+
+func handleCrushConfigExport(args []string) error {
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(strings.TrimPrefix(crushConfigHelp, "\n"))
+		return nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("find home dir: %w", err)
+	}
+	zipPath := args[0]
+	return agentconfig.Export("crush", home, zipPath)
+}
+
+func handleCrushConfigImport(args []string) error {
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(strings.TrimPrefix(crushConfigHelp, "\n"))
+		return nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("find home dir: %w", err)
+	}
+	zipPath := args[0]
+	return agentconfig.Import(home, zipPath)
 }
 
 // --- show-agent-files ---

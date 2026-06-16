@@ -39,24 +39,34 @@ func EnsurePodman() error {
 	}
 
 	var versionBuf bytes.Buffer
-	versionCmd := exec.Command("podman", "version", "--format", "{{.Server.Version}}")
-	versionCmd.Stdout = &versionBuf
-	versionCmd.Stderr = &versionBuf
-	if err := versionCmd.Run(); err != nil {
-		fmt.Println("Podman machine is not running. Starting...")
-		if startErr := Run("podman", "machine", "start"); startErr != nil {
-			return fmt.Errorf("podman machine start failed: %v (original error: %v)", startErr, err)
+	var lastErr error
+	retryOK := false
+	for i := 0; i < 5; i++ {
+		versionBuf.Reset()
+		versionCmd := exec.Command("podman", "version", "--format", "{{.Server.Version}}")
+		versionCmd.Stdout = &versionBuf
+		versionCmd.Stderr = &versionBuf
+		err := versionCmd.Run()
+		if err == nil {
+			retryOK = true
+			break
 		}
-		fmt.Println("Podman machine started.")
+		lastErr = err
+		time.Sleep(500 * time.Millisecond)
+	}
+	if retryOK {
+		fmt.Printf("Podman ready (server version: %s)\n", strings.TrimSpace(versionBuf.String()))
+		if err := CheckVMNetwork(); err != nil {
+			return err
+		}
 		return nil
 	}
 
-	fmt.Printf("Podman ready (server version: %s)\n", strings.TrimSpace(versionBuf.String()))
-
-	if err := CheckVMNetwork(); err != nil {
-		return err
+	fmt.Println("Podman machine is not responding. Starting...")
+	if startErr := Run("podman", "machine", "start"); startErr != nil {
+		return fmt.Errorf("podman machine start failed: %v (original error: %v)", startErr, lastErr)
 	}
-
+	fmt.Println("Podman machine started.")
 	return nil
 }
 
