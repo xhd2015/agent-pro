@@ -1,0 +1,24 @@
+## Preconditions
+- Sequence: `PhaseEnd`(ID=a, "msg a") → `ActionError`("err") → `PhaseEnd`(ID=a, "msg a again").
+
+## Steps
+1. Feed first PhaseEnd — not skipped.
+2. Feed non-message ActionError — not skipped, resets coalescer state.
+3. Feed second PhaseEnd with same ID "a" — not skipped (state was reset).
+
+```go
+import (
+	"testing"
+
+	types "github.com/xhd2015/agent-pro/agent/event/types"
+)
+
+func Setup(t *testing.T, req *Request) error {
+	req.Events = []types.AgentEvent{
+		{Type: types.ActionMessage, ID: "a", Phase: types.PhaseEnd, Text: "msg a"},
+		{Type: types.ActionError, ID: "", Text: "err"},
+		{Type: types.ActionMessage, ID: "a", Phase: types.PhaseEnd, Text: "msg a again"},
+	}
+	return nil
+}
+```
