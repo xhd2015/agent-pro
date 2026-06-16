@@ -24,6 +24,9 @@ func FormatTraceLine(line string) string {
 	// formats like opencode type="text" or pi type="message_start" fall through)
 	var event eventtypes.AgentEvent
 	if err := json.Unmarshal([]byte(trimmed), &event); err == nil && isAgentEventType(event.Type) {
+		if isNonDisplayableAgentEvent(event.Type) {
+			return ""
+		}
 		return FormatAgentEvent(event)
 	}
 	// FALLBACK: old adapter system
@@ -180,6 +183,14 @@ func isAgentEventType(t eventtypes.ActionType) bool {
 	return false
 }
 
+func isNonDisplayableAgentEvent(t eventtypes.ActionType) bool {
+	switch t {
+	case eventtypes.ActionStepStart, eventtypes.ActionStepFinish:
+		return true
+	}
+	return false
+}
+
 // FormatAgentEvent formats an AgentEvent into a human-readable string.
 func FormatAgentEvent(event eventtypes.AgentEvent) string {
 	switch event.Type {
@@ -296,6 +307,10 @@ func (s *FormatState) FormatLine(line string) (header string, body string, isMsg
 				return "💬   ASSISTANT", "  " + event.Text, true
 			}
 			return "", event.Text, true
+		}
+		if isNonDisplayableAgentEvent(event.Type) {
+			s.closeMsg()
+			return "", "", false
 		}
 		s.closeMsg()
 		return FormatAgentEvent(event), "", false

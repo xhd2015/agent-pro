@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"crypto/rand"
 	"encoding/json"
 	"flag"
@@ -16,7 +17,13 @@ import (
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/shared/constant"
+	"github.com/xhd2015/skills/install"
 )
+
+//go:embed SKILL.md
+var skillContent string
+
+const skillName = "llm-mock"
 
 // Config represents the JSON configuration file.
 type Config struct {
@@ -66,6 +73,15 @@ type RecordedRequest struct {
 }
 
 func main() {
+	args := os.Args[1:]
+	if len(args) > 0 && args[0] == "skill" {
+		if err := handleSkillCommand(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "llm-mock: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	configPath := flag.String("config", "", "Path to JSON config file")
 	eventsFile := flag.String("events-file", "", "Path to write request events as JSON lines")
 	flag.Parse()
@@ -183,6 +199,28 @@ func main() {
 
 	if err := http.Serve(listener, mux); err != nil {
 		log.Fatalf("server error: %v", err)
+	}
+}
+
+func handleSkillCommand(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("expected skill show or skill install")
+	}
+	switch args[0] {
+	case "show":
+		if len(args) > 1 {
+			return fmt.Errorf("unexpected arguments after show")
+		}
+		fmt.Print(skillContent)
+		return nil
+	case "install":
+		return install.HandleInstall(install.InstallOptions{
+			SkillDirName: skillName,
+			SkillContent: skillContent,
+			Usage:        "llm-mock skill install",
+		}, args[1:])
+	default:
+		return fmt.Errorf("unknown skill sub-command: %s, expected skill show or skill install", args[0])
 	}
 }
 
