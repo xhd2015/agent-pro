@@ -25,6 +25,7 @@ for LLM calls.
 Options:
   --agent-runner <id>      override agent runner (opencode|pi|codex|crush)
   --model <model>          override model
+  --model-env <env>        override the env var used to pass the model
   --session-id <id>        resume an existing session
   --timeout <duration>     timeout (default: 1h, min: 1m, e.g. "30m", "2h")
   --catch-up               replay session events (requires --session-id)
@@ -55,7 +56,7 @@ func main() {
 			return
 		}
 	}
-	if err := run.Run(args); err != nil {
+	if err := run.RunArgs(args); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

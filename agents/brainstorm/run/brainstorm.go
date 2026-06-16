@@ -1,13 +1,14 @@
-// Package main implements the explore sub-agent CLI.
+// Package run implements the brainstorm sub-agent CLI.
 //
-// The explore agent is a file search specialist that excels at navigating
-// and exploring codebases. It auto-detects the parent agent runner
+// The brainstorm agent is a planning specialist that discusses approach,
+// data models, test scenarios, and expected outputs with the user before
+// any implementation begins. It auto-detects the parent agent runner
 // (opencode, pi, codex, crush) and delegates execution via the subagent
 // package.
 //
 // Usage:
 //
-//	explore [OPTIONS] <prompt>
+//	brainstorm [OPTIONS] <prompt>
 //
 // Options:
 //
@@ -46,11 +47,11 @@ func getPrompt() string {
 }
 
 var help = `
-Usage: explore [OPTIONS] <prompt>
+Usage: brainstorm [OPTIONS] <prompt>
 
-A file search specialist for exploring codebases. Uses glob patterns, regex
-searches, and file reads to answer questions about the codebase. Delegates
-to the parent agent runner (auto-detected) for LLM calls.
+A brainstorming specialist. Discusses approach, data models, test scenarios,
+and expected outputs before any implementation begins. Delegates to the
+parent agent runner (auto-detected) for LLM calls.
 
 Options:
   --agent-runner <id>      override agent runner (opencode|pi|codex|crush)
@@ -60,14 +61,14 @@ Options:
   --timeout <duration>     timeout (default: 1h, min: 1m, e.g. "30m", "2h")
   --catch-up               replay session events (requires --session-id)
   --status                 show session status (requires --session-id)
-  --list-sessions          list all explore sessions
+  --list-sessions          list all brainstorm sessions
   --session-base <dir>     override sessions directory
   -h, --help               show this help
 `
 
-const defaultModelEnv = "AGENT_PRO_SUBAGENT_EXPLORE_MODEL"
+const defaultModelEnv = "AGENT_PRO_SUBAGENT_BRAINSTORM_MODEL"
 
-// Config holds all customizable configuration for the explore agent.
+// Config holds all customizable configuration for the brainstorm agent.
 // Zero-value fields fall back to sensible defaults.
 type Config struct {
 	ModelEnv     string        // env var name for model; empty = default
@@ -82,7 +83,7 @@ type Config struct {
 	Prompt       string        // user prompt
 }
 
-// Run runs the explore agent programmatically with the given config.
+// Run runs the brainstorm agent programmatically with the given config.
 func Run(ctx context.Context, cfg Config) error {
 	modelEnv := cfg.ModelEnv
 	if modelEnv == "" {
@@ -100,8 +101,8 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	c := subagent.Config{
-		RoleName:      "explore",
-		Cmd:           "explore",
+		RoleName:      "brainstorm",
+		Cmd:           "brainstorm",
 		PromptContent: getPrompt(),
 		ModelEnv:      modelEnv,
 	}

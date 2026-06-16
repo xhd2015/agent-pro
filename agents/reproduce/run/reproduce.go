@@ -14,6 +14,7 @@
 //
 //	--agent-runner <id>      override agent runner (opencode|pi|codex|crush)
 //	--model <model>          override model
+//	--model-env <env>        override the env var used to pass the model
 //	--session-id <id>        resume an existing session
 //	--timeout <duration>     timeout (default: 1h, min: 1m)
 //	--catch-up               replay session events
@@ -37,12 +38,12 @@ import (
 )
 
 //go:embed SKILL.md
-var skillFile string
+var SkillFile string
 
 // getPrompt returns the embedded SKILL.md content with the YAML
 // frontmatter header stripped, leaving only the system prompt body.
 func getPrompt() string {
-	return skill_file.TrimHeader(skillFile)
+	return skill_file.TrimHeader(SkillFile)
 }
 
 var help = `
@@ -56,6 +57,7 @@ for LLM calls.
 Options:
   --agent-runner <id>      override agent runner (opencode|pi|codex|crush)
   --model <model>          override model (e.g. "anthropic/claude-sonnet-4-20250514")
+  --model-env <env>        override the env var used to pass the model
   --session-id <id>        resume an existing session
   --timeout <duration>     timeout (default: 1h, min: 1m, e.g. "30m", "2h")
   --catch-up               replay session events (requires --session-id)
@@ -65,9 +67,66 @@ Options:
   -h, --help               show this help
 `
 
-func Run(args []string) error {
+const defaultModelEnv = "AGENT_PRO_SUBAGENT_REPRODUCE_MODEL"
+
+// Config holds all customizable configuration for the reproduce agent.
+// Zero-value fields fall back to sensible defaults.
+type Config struct {
+	ModelEnv     string        // env var name for model; empty = default
+	AgentRunner  string        // override agent runner (opencode|pi|codex|crush)
+	Model        string        // model name (set via env var)
+	SessionID    string        // resume an existing session
+	Timeout      time.Duration // 0 = default 1h
+	CatchUp      bool          // replay session events
+	Status       bool          // show session status
+	ListSessions bool          // list all sessions
+	SessionBase  string        // override sessions directory
+	Prompt       string        // user prompt
+}
+
+// Run runs the reproduce agent programmatically with the given config.
+func Run(ctx context.Context, cfg Config) error {
+	modelEnv := cfg.ModelEnv
+	if modelEnv == "" {
+		modelEnv = defaultModelEnv
+	}
+
+	// Model is passed via env var so the subagent runner picks it up.
+	if cfg.Model != "" {
+		os.Setenv(modelEnv, cfg.Model)
+	}
+
+	timeout := cfg.Timeout
+	if timeout == 0 {
+		timeout = time.Hour
+	}
+
+	c := subagent.Config{
+		RoleName:      "reproduce",
+		Cmd:           "reproduce",
+		PromptContent: getPrompt(),
+		ModelEnv:      modelEnv,
+	}
+
+	opts := subagent.Options{
+		Prompt:       cfg.Prompt,
+		AgentRunner:  cfg.AgentRunner,
+		SessionID:    cfg.SessionID,
+		CatchUp:      cfg.CatchUp,
+		Status:       cfg.Status,
+		ListSessions: cfg.ListSessions,
+		SessionBase:  cfg.SessionBase,
+		Timeout:      timeout,
+	}
+
+	return subagent.Run(ctx, c, opts)
+}
+
+// RunArgs parses CLI arguments into a Config and delegates to Run.
+func RunArgs(args []string) error {
 	var agentRunner *string
 	var model *string
+	var modelEnv *string
 	var sessionID *string
 	var timeoutStr *string
 	var catchUp *bool
@@ -78,6 +137,7 @@ func Run(args []string) error {
 	remaining, err := flags.
 		String("--agent-runner", &agentRunner).
 		String("--model", &model).
+		String("--model-env", &modelEnv).
 		String("--session-id", &sessionID).
 		String("--timeout", &timeoutStr).
 		Bool("--catch-up", &catchUp).
@@ -90,49 +150,41 @@ func Run(args []string) error {
 		return err
 	}
 
-	cfg := subagent.Config{
-		RoleName:      "reproduce",
-		Cmd:           "reproduce",
-		PromptContent: getPrompt(),
-		ModelEnv:      "AGENT_PRO_SUBAGENT_REPRODUCE_MODEL",
+	cfg := Config{
+		Prompt: strings.Join(remaining, " "),
 	}
-
-	var opts subagent.Options
 
 	if agentRunner != nil {
-		opts.AgentRunner = strings.TrimSpace(*agentRunner)
+		cfg.AgentRunner = strings.TrimSpace(*agentRunner)
 	}
-	// Model is passed via env var so the subagent runner picks it up.
-	if model != nil && strings.TrimSpace(*model) != "" {
-		os.Setenv("AGENT_PRO_SUBAGENT_REPRODUCE_MODEL", strings.TrimSpace(*model))
+	if model != nil {
+		cfg.Model = strings.TrimSpace(*model)
+	}
+	if modelEnv != nil {
+		cfg.ModelEnv = strings.TrimSpace(*modelEnv)
 	}
 	if sessionID != nil {
-		opts.SessionID = strings.TrimSpace(*sessionID)
+		cfg.SessionID = strings.TrimSpace(*sessionID)
 	}
 	if timeoutStr != nil {
 		d, err := subagent.ParseTimeoutDuration(strings.TrimSpace(*timeoutStr))
 		if err != nil {
 			return fmt.Errorf("invalid --timeout: %w", err)
 		}
-		opts.Timeout = d
-	} else {
-		opts.Timeout = time.Hour
+		cfg.Timeout = d
 	}
 	if catchUp != nil && *catchUp {
-		opts.CatchUp = true
+		cfg.CatchUp = true
 	}
 	if status != nil && *status {
-		opts.Status = true
+		cfg.Status = true
 	}
 	if listSessions != nil && *listSessions {
-		opts.ListSessions = true
+		cfg.ListSessions = true
 	}
 	if sessionBase != nil {
-		opts.SessionBase = strings.TrimSpace(*sessionBase)
+		cfg.SessionBase = strings.TrimSpace(*sessionBase)
 	}
 
-	opts.Prompt = strings.Join(remaining, " ")
-
-	ctx := context.Background()
-	return subagent.Run(ctx, cfg, opts)
+	return Run(context.Background(), cfg)
 }

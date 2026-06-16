@@ -29,6 +29,8 @@ Commands:
   pi                manage pi configuration
   crush             manage crush configuration
   codex             manage codex configuration
+  skills            list available skills (explore, reproduce)
+  skill             show or install a skill
   traces            view agent trace sessions (web viewer)
   show-agent-files  collect known agent files under ~/.agent-pro/agent-files-collection/
 
@@ -71,6 +73,10 @@ func handle(args []string) error {
 		return handlePi(args[1:])
 	case "crush":
 		return handleCrush(args[1:])
+	case "skill":
+		return handleSkill(args[1:])
+	case "skills":
+		return handleSkills(args[1:])
 	case "traces":
 		return handleTraces(args[1:])
 	case "show-agent-files":
