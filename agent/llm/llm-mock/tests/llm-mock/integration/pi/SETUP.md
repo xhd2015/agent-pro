@@ -1,12 +1,37 @@
 ## Steps
-1. Write config with an exchange matching the pi integration scenario (role-match-any works for pi since pi may send messages with different roles).
-2. Send a chat completion request (simulating what pi sends: model gpt-4, user message about capital of France).
-3. Verify the response contains the expected answer.
+1. Create a temp PI_CODING_AGENT_DIR and write `models.json` inside it with the openai provider config pointing at the mock server.
+2. Write a mock config with an exchange matching "capital of France" → "Paris" (role-match-any: empty role so pi's message format always matches).
+3. Set BinaryCmd to run `pi --provider openai --model gpt-4 -p "What is the capital of France?"`.
+4. Set BinaryEnv with PI_CODING_AGENT_DIR.
 
 ```go
-import "testing"
+import (
+    "os"
+    "path/filepath"
+    "testing"
+)
 
 func Setup(t *testing.T, req *Request) error {
+    // Create temp config directory for pi
+    configDir := t.TempDir()
+
+    // Write models.json with the openai provider pointing at the mock.
+    // __MOCK_PORT__ is replaced with the actual port by runBinary.
+    modelsJSON := `{
+  "providers": {
+    "openai": {
+      "baseUrl": "http://localhost:__MOCK_PORT__/v1",
+      "api": "openai-completions",
+      "apiKey": "sk-test"
+    }
+  }
+}`
+    if err := os.WriteFile(filepath.Join(configDir, "models.json"), []byte(modelsJSON), 0644); err != nil {
+        return fmt.Errorf("write models.json: %w", err)
+    }
+
+    // Mock server config: one exchange matching "capital of France" → "Paris"
+    // Empty role = match-any, so pi's messages always match regardless of role.
     req.ConfigJSON = `{
   "port": 8080,
   "exchanges": [
@@ -22,8 +47,15 @@ func Setup(t *testing.T, req *Request) error {
     }
   ]
 }`
-    req.Requests = []string{
-        `{"model":"gpt-4","messages":[{"role":"user","content":"What is the capital of France?"}]}`,
+
+    req.BinaryCmd = []string{
+        "pi",
+        "--provider", "openai",
+        "--model", "gpt-4",
+        "-p", "What is the capital of France?",
+    }
+    req.BinaryEnv = map[string]string{
+        "PI_CODING_AGENT_DIR": configDir,
     }
     return nil
 }

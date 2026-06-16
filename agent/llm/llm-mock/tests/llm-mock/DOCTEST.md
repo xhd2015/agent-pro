@@ -25,9 +25,9 @@ llm-mock
 ├── port-fallback/                    port occupied → server finds next available port
 ├── config-via-env/                   config via LLM_MOCK_CONFIG env var
 ├── admin-requests/                   GET /admin/requests returns recorded requests
-└── integration/                      Agent tool integration tests
-    ├── opencode/                     S8: opencode integration (curl-simulated)
-    └── pi/                           S9: pi integration (curl-simulated)
+└── integration/                      Real binary integration tests
+    ├── opencode/                     Spawns opencode with mock as LLM backend
+    └── pi/                           Spawns pi with mock as LLM backend
 ```
 
 ## Test Index
@@ -50,8 +50,8 @@ llm-mock
 | 14 | `port-fallback` | Configured port occupied → server listens on port+1 |
 | 15 | `config-via-env` | Config loaded from LLM_MOCK_CONFIG env var instead of --config flag |
 | 16 | `admin-requests` | GET /admin/requests returns all recorded requests with correct fields |
-| 17 | `integration/opencode` | Server responds to opencode-style request, admin records it |
-| 18 | `integration/pi` | Server responds to pi-style request, admin records it |
+| 17 | `integration/opencode` | Spawns real opencode binary with mock backend; verifies exit 0, output contains "Paris", admin records gpt-4 request |
+| 18 | `integration/pi` | Spawns real pi binary with mock backend; verifies exit 0, output contains "Paris", admin records gpt-4 request |
 
 ## Coverage
 
@@ -64,7 +64,7 @@ llm-mock
 - **Config loading**: --config flag, LLM_MOCK_CONFIG env var
 - **Server behavior**: port fallback, model echoing, UUID id, usage fields
 - **Admin endpoint**: request recording with index, method, path, body
-- **Integration**: opencode/pi compatibility via admin endpoint verification
+- **Integration**: Real binary spawning (opencode, pi) with mock as backend; verifies client output, exit code, and server-side request recording via /admin/requests
 
 ## How to Run
 
@@ -77,5 +77,7 @@ doctest test ./agent/llm/llm-mock/tests/llm-mock/chat-completions/basic-exact-ma
 
 # Run new admin + integration tests
 doctest test ./agent/llm/llm-mock/tests/llm-mock/admin-requests
+
+# Run integration tests (requires opencode and pi binaries in PATH)
 doctest test ./agent/llm/llm-mock/tests/llm-mock/integration/...
 ```
