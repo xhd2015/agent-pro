@@ -38,6 +38,7 @@ type Options struct {
 	Status       bool
 	ListSessions bool
 	SessionBase  string
+	Timeout      time.Duration
 }
 
 func (c Config) agentPrompt() string {
@@ -224,6 +225,12 @@ func Run(ctx context.Context, c Config, opts Options) error {
 
 	progressFile := filepath.Join(progressDir, time.Now().Format("20060102_150405")+"_progress_update.jsonl")
 	os.Setenv("PROGRESS_FILE", progressFile)
+
+	if opts.Timeout > 0 {
+		var timeoutCancel context.CancelFunc
+		ctx, timeoutCancel = context.WithTimeout(ctx, opts.Timeout)
+		defer timeoutCancel()
+	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
