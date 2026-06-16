@@ -93,16 +93,30 @@ func traceSession(c Config, opts Options) error {
 		printHeader(eventCount)
 
 		n := 0
+		var state print.FormatState
 		for _, line := range lines {
 			if line == "" {
 				continue
 			}
-			formatted := formatEventLine(line)
-			if formatted != "" {
+			header, body, isMsg := state.FormatLine(line)
+			if header == "" && body == "" && !isMsg {
+				continue
+			}
+			if isMsg {
+				if header != "" {
+					n++
+					Logf("[%d]  %s", n, header)
+				}
+				fmt.Print(body)
+			} else {
 				n++
-				Logf("[%d]  %s", n, formatted)
+				Logf("[%d]  %s", n, header)
+				if body != "" {
+					fmt.Print(body)
+				}
 			}
 		}
+		state.Flush()
 	}
 
 	sessionLive := isSessionLive(sessionDir)
@@ -118,11 +132,16 @@ func traceSession(c Config, opts Options) error {
 	var n int
 	if data != nil {
 		lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+		var preState print.FormatState
 		for _, line := range lines {
-			if line != "" && formatEventLine(line) != "" {
-				n++
+			if line != "" {
+				header, _, isMsg := preState.FormatLine(line)
+				if (isMsg && header != "") || (!isMsg && header != "") {
+					n++
+				}
 			}
 		}
+		preState.Flush()
 	}
 	n = n + 1
 
@@ -134,11 +153,24 @@ func traceSession(c Config, opts Options) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		var watchState print.FormatState
 		watchErr = logs.WatchLine(ctx, eventsPath, logs.WatchLineOptions{}, func(line string) error {
-			formatted := formatEventLine(line)
-			if formatted != "" {
+			header, body, isMsg := watchState.FormatLine(line)
+			if header == "" && body == "" && !isMsg {
+				return nil
+			}
+			if isMsg {
+				if header != "" {
+					n++
+					Logf("[%d]  %s", n, header)
+				}
+				fmt.Print(body)
+			} else {
 				n++
-				Logf("[%d]  %s", n, formatted)
+				Logf("[%d]  %s", n, header)
+				if body != "" {
+					fmt.Print(body)
+				}
 			}
 			return nil
 		})

@@ -46,7 +46,10 @@ func (piTraceAdapter) Parse(raw json.RawMessage) (types.AgentTraceParsedEvent, b
 			// Prefer delta over accumulated Content text (streaming UX)
 			text := ""
 			if event.AssistantMessageEvent != nil {
-				text = strings.TrimSpace(event.AssistantMessageEvent.Delta)
+				text = event.AssistantMessageEvent.Delta
+				if strings.TrimSpace(text) == "" {
+					text = ""
+				}
 			}
 			if text == "" {
 				text = piExtractText(event.Message)
@@ -64,7 +67,10 @@ func (piTraceAdapter) Parse(raw json.RawMessage) (types.AgentTraceParsedEvent, b
 			// Don't output full accumulated text again to prevent duplication.
 			text := ""
 			if event.AssistantMessageEvent != nil {
-				text = strings.TrimSpace(event.AssistantMessageEvent.Delta)
+				text = event.AssistantMessageEvent.Delta
+				if strings.TrimSpace(text) == "" {
+					text = ""
+				}
 			}
 			if text != "" {
 				return types.AgentTraceParsedEvent{Message: &types.AgentTraceMessage{

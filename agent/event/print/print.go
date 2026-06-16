@@ -236,3 +236,105 @@ func shortPath(path string) string {
 	}
 	return strings.Join(parts, "/")
 }
+
+// FormatState provides streaming coalescing of consecutive assistant message
+// deltas into a single output block. Use FormatLine for each event line in a
+// loop; it returns a header, body, and a flag indicating the output type.
+// Call Flush after the last line to close any open message block.
+//
+// Usage:
+//
+//	var state print.FormatState
+//	for _, line := range lines {
+//	    header, body, isMsg := state.FormatLine(line)
+//	    if header == "" && body == "" && !isMsg {
+//	        continue
+//	    }
+//	    if isMsg {
+//	        if header != "" {
+//	            n++
+//	            Logf("[%d]  %s", n, header)
+//	        }
+//	        fmt.Print(body)
+//	    } else {
+//	        n++
+//	        Logf("[%d]  %s", n, header)
+//	        if body != "" {
+//	            fmt.Print(body)
+//	        }
+//	    }
+//	}
+//	state.Flush()
+type FormatState struct {
+	msgStarted bool
+}
+
+// FormatLine processes one JSONL event line.
+//
+// Returns:
+//   - header: the block header line (e.g. "💬   ASSISTANT", "⚡ RUN", "▶ STEP START")
+//   - body:   the text to print after the header (without trailing newline)
+//   - isMsg:  true if this is an assistant message (first delta or continuation);
+//             false for non-message events (tool calls, steps, etc.)
+//
+// For the first assistant message delta, header and body are both non-empty.
+// For subsequent deltas, only body is non-empty (continuation, no header).
+// For non-message events, header is the formatted block and body is empty.
+// Returns all-empty when nothing to output.
+func (s *FormatState) FormatLine(line string) (header string, body string, isMsg bool) {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" || !strings.HasPrefix(trimmed, "{") {
+		return "", "", false
+	}
+
+	// --- PRIMARY: AgentEvent path ---
+	var event eventtypes.AgentEvent
+	if err := json.Unmarshal([]byte(trimmed), &event); err == nil && isAgentEventType(event.Type) {
+		if event.Type == eventtypes.ActionMessage {
+			if !s.msgStarted {
+				s.msgStarted = true
+				return "💬   ASSISTANT", "  " + event.Text, true
+			}
+			return "", event.Text, true
+		}
+		s.closeMsg()
+		return FormatAgentEvent(event), "", false
+	}
+
+	// --- FALLBACK: adapter path ---
+	parsed, ok := types.ParseAgentTraceLine(json.RawMessage(trimmed))
+	if !ok {
+		return "", "", false
+	}
+	if parsed.Message != nil && parsed.Message.Role == types.RoleAssistant {
+		if !s.msgStarted {
+			s.msgStarted = true
+			return "💬   ASSISTANT", "  " + parsed.Message.Content, true
+		}
+		return "", parsed.Message.Content, true
+	}
+
+	s.closeMsg()
+	var formatted string
+	if parsed.Message != nil {
+		formatted = FormatMessageCompact(*parsed.Message)
+	} else if parsed.Activity != nil {
+		formatted = FormatMessageCompact(types.AgentTraceMessage{
+			Role:     types.RoleToolCall,
+			ToolCall: parsed.Activity,
+		})
+	}
+	return formatted, "", false
+}
+
+// Flush closes any pending message block by printing a trailing newline.
+func (s *FormatState) Flush() {
+	s.closeMsg()
+}
+
+func (s *FormatState) closeMsg() {
+	if s.msgStarted {
+		fmt.Print("\n")
+		s.msgStarted = false
+	}
+}
