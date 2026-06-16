@@ -7,6 +7,7 @@ import (
 	codexagent "github.com/xhd2015/agent-pro/agent/cli/codex"
 	crushagent "github.com/xhd2015/agent-pro/agent/cli/crush"
 	cursoragent "github.com/xhd2015/agent-pro/agent/cli/cursor"
+	grokagent "github.com/xhd2015/agent-pro/agent/cli/grok"
 	opencodeagent "github.com/xhd2015/agent-pro/agent/cli/opencode"
 	piagent "github.com/xhd2015/agent-pro/agent/cli/pi"
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
@@ -116,6 +117,23 @@ func Build(runnerID registry.AgentRunnerID, settingsPath, workspace string, env 
 			Name: "Pi",
 			Agent: &piagent.PiAgent{
 				AgentPath:    piPath,
+				SettingsPath: settingsPath,
+				Workspace:    workspace,
+				Env:          env,
+			},
+		}, nil
+	case registry.AgentRunnerGrok:
+		grokPath, err := registry.ResolveConfiguredCLIPath(settingsPath, registry.GrokCLIPathSettingKey, registry.EnvGrokCLIPath, "", func() (string, error) {
+			return grokagent.FindAgentPath(env)
+		})
+		if err != nil {
+			return registry.AgentRunner{}, fmt.Errorf("grok not found: %w (install it or add it to PATH)", err)
+		}
+		return registry.AgentRunner{
+			ID:   registry.AgentRunnerGrok,
+			Name: "Grok",
+			Agent: &grokagent.GrokAgent{
+				AgentPath:    grokPath,
 				SettingsPath: settingsPath,
 				Workspace:    workspace,
 				Env:          env,
