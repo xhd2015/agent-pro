@@ -1,0 +1,11 @@
+## Preconditions
+- A `tool_execution_end` event with successful bash result is supplied.
+
+```go
+import "testing"
+
+func Setup(t *testing.T, req *Request) error {
+	req.Line = `{"type":"tool_execution_end","toolCallId":"c1","toolName":"bash","result":"file1.txt\nfile2.txt","isError":false}`
+	return nil
+}
+```

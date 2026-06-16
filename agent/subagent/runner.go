@@ -42,6 +42,14 @@ func formatEventLine(line string) string {
 	if c, ok := raw["tool"].(string); ok && c != "" {
 		contentDisplay = append(contentDisplay, "("+c+")")
 	}
+	if tn, ok := raw["toolName"].(string); ok && tn != "" {
+		contentDisplay = append(contentDisplay, "("+tn+")")
+	}
+	if ame, ok := raw["assistantMessageEvent"].(map[string]interface{}); ok {
+		if delta, ok := ame["delta"].(string); ok && delta != "" {
+			contentDisplay = append(contentDisplay, delta)
+		}
+	}
 	if len(contentDisplay) > 0 {
 		return eventType + ": " + strings.Join(contentDisplay, " ")
 	}

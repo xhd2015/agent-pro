@@ -6,6 +6,7 @@ import (
 	_ "github.com/xhd2015/agent-pro/agent_trace/codex"
 	_ "github.com/xhd2015/agent-pro/agent_trace/cursor"
 	_ "github.com/xhd2015/agent-pro/agent_trace/opencode"
+	_ "github.com/xhd2015/agent-pro/agent_trace/pi"
 )
 
 type AgentTraceMetadata = types.AgentTraceMetadata

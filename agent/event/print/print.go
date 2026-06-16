@@ -9,6 +9,7 @@ import (
 
 	"github.com/xhd2015/agent-pro/agent_trace/types"
 	_ "github.com/xhd2015/agent-pro/agent_trace/opencode"
+	_ "github.com/xhd2015/agent-pro/agent_trace/pi"
 )
 
 const TRUNCATE_LINE_MAX = 1024

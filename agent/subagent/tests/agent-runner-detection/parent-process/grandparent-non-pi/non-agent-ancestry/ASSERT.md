@@ -1,0 +1,19 @@
+## Expected
+- `resp.Runner` is `""` (no agent in ancestry).
+- `resp.Detected` is `false`.
+
+```go
+import "testing"
+
+func Assert(t *testing.T, req *Request, resp *Response, err error) {
+    if err != nil {
+        t.Fatalf("unexpected error: %v", err)
+    }
+    if resp.Runner != "" {
+        t.Fatalf("expected runner '', got %q", resp.Runner)
+    }
+    if resp.Detected {
+        t.Fatalf("expected detected=false, got true")
+    }
+}
+```

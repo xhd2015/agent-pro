@@ -7,3 +7,45 @@ strings.
 Tests import the print package and the opencode adapter (for side-effect
 adapter registration) and call `FormatTraceLine` with various JSONL event
 lines.
+
+## Decision Tree
+
+The `pi_types/` subtree tests the Pi trace adapter, which handles Pi agent
+events (type:\`message_start\`, \`tool_execution_start\`, etc.).
+
+```
+pi_types/                              Root: Pi adapter registration
+├── session                            type=session → skip
+├── non-assistant                      message_update, role=user → skip
+├── message-start                      message_start, role=assistant, text → ASSISTANT
+├── message-update-text               message_update, role=assistant, text_delta → ASSISTANT
+├── message-update-thinking           message_update, role=assistant, thinking_delta → ASSISTANT
+├── message-end                        message_end, role=assistant, text → ASSISTANT
+├── tool-exec-start                    tool_execution_start, bash → RUN
+├── tool-exec-end-ok                   tool_execution_end, ok → RUN + result
+└── tool-exec-end-err                  tool_execution_end, error → RUN + FAILED
+```
+
+### Leaf Index
+
+| Leaf | Event Type | Expected Output |
+|---|---|---|
+| `session` | `session` | empty |
+| `non-assistant` | `message_update` with `role:user` | empty |
+| `message-start` | `message_start` assistant text | `ASSISTANT` + `Hello` |
+| `message-update-text` | `message_update` text_delta | `ASSISTANT` + `world` |
+| `message-update-thinking` | `message_update` thinking_delta | `ASSISTANT` + `hmm` |
+| `message-end` | `message_end` assistant text | `ASSISTANT` + `Bye` |
+| `tool-exec-start` | `tool_execution_start` bash | `RUN` + `ls -la` |
+| `tool-exec-end-ok` | `tool_execution_end` ok | `RUN` + `file1.txt` |
+| `tool-exec-end-err` | `tool_execution_end` error | `RUN` + `not found` + `FAILED` |
+
+## How to Run
+
+```sh
+# All print package tests (existing + pi)
+doctest test ./agent/event/print/tests/...
+
+# Pi adapter tests only
+doctest test ./agent/event/print/tests/pi_types
+```
