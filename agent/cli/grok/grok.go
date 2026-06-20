@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
+	grok_types "github.com/xhd2015/agent-pro/agent/event/grok_types"
 	"github.com/xhd2015/agent-pro/agent/exec"
 )
 
@@ -100,9 +101,7 @@ func (a *GrokAgent) Ask(ctx context.Context, question string, opts *registry.Ask
 	scanner.Buffer(make([]byte, 256*1024), 2*1024*1024)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if rawLog != nil {
-			_, _ = rawLog.Write([]byte(line + "\n"))
-		}
+		writeAgentEventsFromGrokLine(rawLog, line)
 
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
@@ -157,6 +156,37 @@ func (a *GrokAgent) Ask(ctx context.Context, question string, opts *registry.Ask
 	}
 
 	return fullAnswer.String(), nil
+}
+
+func writeAgentEventsFromGrokLine(rawLog io.Writer, line string) {
+	if rawLog == nil {
+		return
+	}
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" || !strings.HasPrefix(trimmed, "{") {
+		return
+	}
+
+	var ev grok_types.Event
+	if err := json.Unmarshal([]byte(trimmed), &ev); err != nil {
+		return
+	}
+
+	switch ev.Type {
+	case grok_types.EventText, grok_types.EventThought:
+		if strings.TrimSpace(ev.Data) == "" {
+			return
+		}
+	}
+
+	for _, agentEvent := range grok_types.FromGrok([]grok_types.Event{ev}) {
+		data, err := json.Marshal(agentEvent)
+		if err != nil {
+			continue
+		}
+		_, _ = rawLog.Write(data)
+		_, _ = rawLog.Write([]byte("\n"))
+	}
 }
 
 // ListModels runs "grok models" and parses the output to return model IDs.
