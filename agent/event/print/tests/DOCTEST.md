@@ -10,10 +10,17 @@ lines.
 
 ## Decision Tree
 
+The `format-state-streaming/` subtree tests `FormatState.FormatLine` streaming
+coalescing for consecutive AgentEvent deltas (grok thought, message streaming).
+
 The `pi_types/` subtree tests the Pi trace adapter, which handles Pi agent
 events (type:\`message_start\`, \`tool_execution_start\`, etc.).
 
 ```
+format-state-streaming/                  FormatState streaming coalescing
+├── grok-thought-deltas                ActionThink per-word deltas → 1 think block (RED)
+└── message-deltas-coalesced           ActionMessage deltas → 1 ASSISTANT block
+
 pi_types/                              Root: Pi adapter registration
 ├── session                            type=session → skip
 ├── non-assistant                      message_update, role=user → skip

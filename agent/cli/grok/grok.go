@@ -10,6 +10,7 @@ import (
 
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
 	grok_types "github.com/xhd2015/agent-pro/agent/event/grok_types"
+	eventtypes "github.com/xhd2015/agent-pro/agent/event/types"
 	"github.com/xhd2015/agent-pro/agent/exec"
 )
 
@@ -91,9 +92,9 @@ func (a *GrokAgent) Ask(ctx context.Context, question string, opts *registry.Ask
 		return "", fmt.Errorf("failed to start grok: %w", err)
 	}
 
-	rawLog := io.Writer(nil)
-	if opts != nil {
-		rawLog = opts.RawLog
+	var eventWriter *GrokEventWriter
+	if opts != nil && opts.RawLog != nil {
+		eventWriter = NewGrokEventWriter(opts.RawLog)
 	}
 
 	var fullAnswer strings.Builder
@@ -101,7 +102,9 @@ func (a *GrokAgent) Ask(ctx context.Context, question string, opts *registry.Ask
 	scanner.Buffer(make([]byte, 256*1024), 2*1024*1024)
 	for scanner.Scan() {
 		line := scanner.Text()
-		writeAgentEventsFromGrokLine(rawLog, line)
+		if eventWriter != nil {
+			eventWriter.WriteGrokLine(line)
+		}
 
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
@@ -146,6 +149,9 @@ func (a *GrokAgent) Ask(ctx context.Context, question string, opts *registry.Ask
 	if scanErr := scanner.Err(); scanErr != nil {
 		return fullAnswer.String(), fmt.Errorf("failed to read grok output: %w", scanErr)
 	}
+	if eventWriter != nil {
+		eventWriter.Flush()
+	}
 
 	if err := cmd.Wait(); err != nil {
 		stderrMsg := strings.TrimSpace(stderrBuf.String())
@@ -158,10 +164,20 @@ func (a *GrokAgent) Ask(ctx context.Context, question string, opts *registry.Ask
 	return fullAnswer.String(), nil
 }
 
-func writeAgentEventsFromGrokLine(rawLog io.Writer, line string) {
-	if rawLog == nil {
-		return
-	}
+// GrokEventWriter converts grok streaming JSON lines into coalesced AgentEvent JSONL.
+type GrokEventWriter struct {
+	w            io.Writer
+	pendingThink strings.Builder
+}
+
+// NewGrokEventWriter creates a writer that buffers consecutive grok thought deltas
+// into a single ActionThink event before writing to w.
+func NewGrokEventWriter(w io.Writer) *GrokEventWriter {
+	return &GrokEventWriter{w: w}
+}
+
+// WriteGrokLine parses one grok streaming JSON line and writes AgentEvent JSONL.
+func (g *GrokEventWriter) WriteGrokLine(line string) {
 	trimmed := strings.TrimSpace(line)
 	if trimmed == "" || !strings.HasPrefix(trimmed, "{") {
 		return
@@ -172,21 +188,60 @@ func writeAgentEventsFromGrokLine(rawLog io.Writer, line string) {
 		return
 	}
 
+	if ev.Type == grok_types.EventThought {
+		if strings.TrimSpace(ev.Data) == "" {
+			return
+		}
+		g.pendingThink.WriteString(ev.Data)
+		return
+	}
+
+	g.flushThink()
+
 	switch ev.Type {
-	case grok_types.EventText, grok_types.EventThought:
+	case grok_types.EventText:
 		if strings.TrimSpace(ev.Data) == "" {
 			return
 		}
 	}
 
 	for _, agentEvent := range grok_types.FromGrok([]grok_types.Event{ev}) {
-		data, err := json.Marshal(agentEvent)
-		if err != nil {
-			continue
-		}
-		_, _ = rawLog.Write(data)
-		_, _ = rawLog.Write([]byte("\n"))
+		writeAgentEvent(g.w, agentEvent)
 	}
+}
+
+// Flush writes any buffered thought text as a single ActionThink event.
+func (g *GrokEventWriter) Flush() {
+	g.flushThink()
+}
+
+func (g *GrokEventWriter) flushThink() {
+	if g.pendingThink.Len() == 0 {
+		return
+	}
+	writeAgentEvent(g.w, eventtypes.AgentEvent{
+		Type: eventtypes.ActionThink,
+		Text: g.pendingThink.String(),
+	})
+	g.pendingThink.Reset()
+}
+
+func writeAgentEventsFromGrokLine(rawLog io.Writer, line string) {
+	if rawLog == nil {
+		return
+	}
+	w := NewGrokEventWriter(rawLog)
+	w.WriteGrokLine(line)
+	w.Flush()
+}
+
+func writeAgentEvent(w io.Writer, event eventtypes.AgentEvent) {
+	data, err := json.Marshal(event)
+	if err != nil {
+		return
+	}
+	_, _ = w.Write(data)
+	_, _ = w.Write([]byte("\n"))
 }
 
 // ListModels runs "grok models" and parses the output to return model IDs.

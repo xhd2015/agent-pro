@@ -34,7 +34,8 @@ events-conversion/
 ├── trace-session/                        # === traceSession() e2e ===
 │   ├── SETUP.md                          # Operation="trace"
 │   ├── no-events/                        # No events.jsonl → "(no events yet)"
-│   └── with-agent-events/               # events.jsonl AgentEvent lines → formatted trace
+│   ├── with-agent-events/               # events.jsonl AgentEvent lines → formatted trace
+│   └── with-streaming-grok-thought-events/  # Grok per-word think deltas → coalesced trace (RED)
 │
 └── show-status/                          # === showStatus() e2e ===
     ├── SETUP.md                          # Operation="status"
@@ -65,11 +66,13 @@ events-conversion/
 | `format-event-line/step-start-finish` | `step_start`/`step_finish` events → formatted string |
 | `format-event-line/with-timestamp` | Event with Timestamp field → timestamp in output |
 
-### trace-session — 2 leaves
+### trace-session — 4 leaves
 | Leaf | Description |
 |------|-------------|
 | `trace-session/no-events` | No events.jsonl → "(no events yet)", Done footer |
 | `trace-session/with-agent-events` | events.jsonl with AgentEvent lines → formatted lines in order |
+| `trace-session/with-streaming-pi-events` | Pi per-token message deltas → coalesced ASSISTANT block |
+| `trace-session/with-streaming-grok-thought-events` | Grok per-word think deltas → coalesced think block (RED) |
 
 ### show-status — 3 leaves
 | Leaf | Description |
@@ -78,7 +81,7 @@ events-conversion/
 | `show-status/last-event-time` | Event with Timestamp → correct relative time ("Xs ago") |
 | `show-status/event-details` | Last 3 events → each shown with formatted summary |
 
-Total: **17 leaves** across **4 feature areas**.
+Total: **19 leaves** across **4 feature areas**.
 
 ## How to Run
 

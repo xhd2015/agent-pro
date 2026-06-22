@@ -277,7 +277,8 @@ func shortPath(path string) string {
 //	}
 //	state.Flush()
 type FormatState struct {
-	msgStarted bool
+	msgStarted   bool
+	thinkStarted bool
 }
 
 // FormatLine processes one JSONL event line.
@@ -302,17 +303,28 @@ func (s *FormatState) FormatLine(line string) (header string, body string, isMsg
 	var event eventtypes.AgentEvent
 	if err := json.Unmarshal([]byte(trimmed), &event); err == nil && isAgentEventType(event.Type) {
 		if event.Type == eventtypes.ActionMessage {
+			s.closeThink()
 			if !s.msgStarted {
 				s.msgStarted = true
 				return "💬   ASSISTANT", "  " + event.Text, true
 			}
 			return "", event.Text, true
 		}
+		if event.Type == eventtypes.ActionThink {
+			s.closeMsg()
+			if !s.thinkStarted {
+				s.thinkStarted = true
+				return "💭", "  " + event.Text, true
+			}
+			return "", event.Text, true
+		}
 		if isNonDisplayableAgentEvent(event.Type) {
 			s.closeMsg()
+			s.closeThink()
 			return "", "", false
 		}
 		s.closeMsg()
+		s.closeThink()
 		return FormatAgentEvent(event), "", false
 	}
 
@@ -322,6 +334,7 @@ func (s *FormatState) FormatLine(line string) (header string, body string, isMsg
 		return "", "", false
 	}
 	if parsed.Message != nil && parsed.Message.Role == types.RoleAssistant {
+		s.closeThink()
 		if !s.msgStarted {
 			s.msgStarted = true
 			return "💬   ASSISTANT", "  " + parsed.Message.Content, true
@@ -330,6 +343,7 @@ func (s *FormatState) FormatLine(line string) (header string, body string, isMsg
 	}
 
 	s.closeMsg()
+	s.closeThink()
 	var formatted string
 	if parsed.Message != nil {
 		formatted = FormatMessageCompact(*parsed.Message)
@@ -342,14 +356,22 @@ func (s *FormatState) FormatLine(line string) (header string, body string, isMsg
 	return formatted, "", false
 }
 
-// Flush closes any pending message block by printing a trailing newline.
+// Flush closes any pending streaming blocks by printing trailing newlines.
 func (s *FormatState) Flush() {
 	s.closeMsg()
+	s.closeThink()
 }
 
 func (s *FormatState) closeMsg() {
 	if s.msgStarted {
 		fmt.Print("\n")
 		s.msgStarted = false
+	}
+}
+
+func (s *FormatState) closeThink() {
+	if s.thinkStarted {
+		fmt.Print("\n")
+		s.thinkStarted = false
 	}
 }

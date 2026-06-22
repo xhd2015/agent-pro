@@ -77,6 +77,32 @@ func TestWriteAgentEventsFromGrokLine_NilWriter(t *testing.T) {
 	writeAgentEventsFromGrokLine(nil, `{"type":"text","data":"hello"}`)
 }
 
+func TestWriteAgentEventsFromGrokLine_StreamedThoughtDeltas(t *testing.T) {
+	input := []string{
+		`{"type":"thought","data":"The"}`,
+		`{"type":"thought","data":" user"}`,
+		`{"type":"thought","data":" acts"}`,
+	}
+	var buf bytes.Buffer
+	w := NewGrokEventWriter(&buf)
+	for _, line := range input {
+		w.WriteGrokLine(line)
+	}
+	w.Flush()
+
+	converted := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(converted) != 1 {
+		t.Fatalf("got %d converted lines, want 1", len(converted))
+	}
+	var ev eventtypes.AgentEvent
+	if err := json.Unmarshal([]byte(converted[0]), &ev); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if ev.Type != eventtypes.ActionThink || ev.Text != "The user acts" {
+		t.Fatalf("event = %+v, want think 'The user acts'", ev)
+	}
+}
+
 func TestWriteAgentEventsFromGrokLine_StreamedTextDeltas(t *testing.T) {
 	input := []string{
 		`{"type":"text","data":"Hel"}`,

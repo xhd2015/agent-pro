@@ -11,6 +11,9 @@ Tests are skipped if the binary is not found.
 ## Decision Tree
 
 ```
+write-events/                            writeAgentEventsFromGrokLine (no CLI required)
+└── thought-streaming-deltas             Per-word thought lines → 1 coalesced think event (RED)
+
 operation mode?
 ├── Ask() ──► ask/                        (grouping: Ask() operation)
 │   │
@@ -54,6 +57,7 @@ operation mode?
 | 2 | `ask/fresh/model-override` | Fresh `Ask()` with `Model="grok-build"` — validates answer non-empty, no error |
 | 3 | `ask/session-resume` | Multi-turn: initial query establishes session, resume verifies context retention — validates answer references prior question, session persisted |
 | 4 | `list-models` | `ListModels()` returns model list containing `grok-composer-2.5-fast` |
+| 5 | `write-events/thought-streaming-deltas` | Per-word grok `thought` lines → one coalesced `ActionThink` in events.jsonl (RED) |
 
 ## How to Run
 

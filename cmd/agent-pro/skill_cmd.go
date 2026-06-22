@@ -9,6 +9,7 @@ import (
 	followup_run "github.com/xhd2015/agent-pro/agents/followup/run"
 	intentroute_run "github.com/xhd2015/agent-pro/agents/intent-route/run"
 	reproduce_run "github.com/xhd2015/agent-pro/agents/reproduce/run"
+	reproducewithdoctest_run "github.com/xhd2015/agent-pro/agents/reproduce-with-doctest/run"
 	"github.com/xhd2015/less-gen/flags"
 	"github.com/xhd2015/skills/install"
 )
@@ -44,6 +45,11 @@ var knownSkills = map[string]skillInfo{
 		Name:        "reproduce",
 		Description: extractDescription(reproduce_run.SkillFile),
 		Content:     reproduce_run.SkillFile,
+	},
+	"reproduce-with-doctest": {
+		Name:        "reproduce-with-doctest",
+		Description: extractDescription(reproducewithdoctest_run.SkillFile),
+		Content:     reproducewithdoctest_run.SkillFile,
 	},
 }
 
@@ -90,7 +96,7 @@ func extractDescription(skillMD string) string {
 }
 
 func knownSkillNames() []string {
-	return []string{"brainstorm", "explore", "followup", "intent-route", "reproduce"}
+	return []string{"brainstorm", "explore", "followup", "intent-route", "reproduce", "reproduce-with-doctest"}
 }
 
 const skillHelp = `
@@ -101,7 +107,7 @@ Commands:
   <name> show         print the SKILL.md content of a skill
   <name> install      install a skill to a skill directory
 
-Skill names: brainstorm, explore, followup, intent-route, reproduce
+Skill names: brainstorm, explore, followup, intent-route, reproduce, reproduce-with-doctest
 
 Run agent-pro skill <name> <command> --help for command-specific options.
 `
@@ -113,7 +119,7 @@ Commands (without arguments, lists all available skill names):
   <name> show         print the SKILL.md content of a skill
   <name> install      install a skill to a skill directory
 
-Skill names: brainstorm, explore, followup, intent-route, reproduce
+Skill names: brainstorm, explore, followup, intent-route, reproduce, reproduce-with-doctest
 
 Run agent-pro skills <name> <command> --help for command-specific options.
 `
@@ -145,7 +151,7 @@ func handleSkill(args []string) error {
 	name := args[0]
 	sk, ok := knownSkills[name]
 	if !ok {
-		return fmt.Errorf("unknown skill: %s (available: brainstorm, explore, followup, intent-route, reproduce)", name)
+		return fmt.Errorf("unknown skill: %s (available: brainstorm, explore, followup, intent-route, reproduce, reproduce-with-doctest)", name)
 	}
 
 	if len(args) == 1 {
@@ -180,7 +186,7 @@ func handleSkills(args []string) error {
 		return handleSkill(args)
 	}
 
-	return fmt.Errorf("unknown skills command: %s (expected brainstorm, explore, followup, intent-route or reproduce)", args[0])
+	return fmt.Errorf("unknown skills command: %s (expected brainstorm, explore, followup, intent-route, reproduce, or reproduce-with-doctest)", args[0])
 }
 
 func listSkills() error {
