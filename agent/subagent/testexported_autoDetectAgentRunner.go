@@ -3,7 +3,7 @@ package subagent
 // TestExported_autoDetectAgentRunner wraps the unexported autoDetectAgentRunner
 // for doctest access.
 func TestExported_autoDetectAgentRunner(c Config) (string, bool) {
-	return autoDetectAgentRunner(c)
+	return AutoDetectAgentRunner(c)
 }
 
 // TestProcessNameFunc is a test hook that, when non-nil, overrides the

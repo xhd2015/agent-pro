@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -133,7 +132,7 @@ func Run(ctx context.Context, c Config, opts Options) error {
 	// If we can't detect an agent context, fail with a clear error.
 	agentRunner := strings.TrimSpace(opts.AgentRunner)
 	if agentRunner == "" {
-		runner, ok := autoDetectAgentRunner(c)
+		runner, ok := AutoDetectAgentRunner(c)
 		if !ok {
 			return fmt.Errorf("agent %s cannot resolve session: must be run inside an agent session (opencode, pi, codex, crush, or grok)", c.RoleName)
 		}
@@ -304,111 +303,6 @@ func Run(ctx context.Context, c Config, opts Options) error {
 	}
 
 	return nil
-}
-
-func autoDetectAgentRunner(c Config) (runner string, detected bool) {
-	// Priority 1: Env var override
-	if v := os.Getenv(c.agentRunnerEnv()); v != "" {
-		return strings.TrimSpace(v), true
-	}
-	// Priority 2: CODEX_THREAD_ID detection
-	if v := os.Getenv("CODEX_THREAD_ID"); v != "" {
-		return "codex", true
-	}
-	// Priority 3: PI_CODING_AGENT env var (set by pi TUI)
-	if v := os.Getenv("PI_CODING_AGENT"); v != "" {
-		return "pi", true
-	}
-	// Priority 4: Parent process detection
-	if ppid := os.Getppid(); ppid > 0 {
-		comm := getProcessName(ppid)
-		if comm != "" {
-			switch strings.ToLower(comm) {
-			case "opencode":
-				return "opencode", true
-			case "pi":
-				return "pi", true
-			case "crush":
-				return "crush", true
-		case "codex":
-			return "codex", true
-		case "grok":
-			return "grok", true
-		}
-		}
-		// Grandparent walk for pi only (pi spawns a shell which spawns doctest)
-		if pppid := getParentPid(ppid); pppid > 0 {
-		if pcomm := getProcessName(pppid); strings.ToLower(pcomm) == "pi" {
-			return "pi", true
-		} else if strings.ToLower(pcomm) == "grok" {
-			return "grok", true
-		}
-		}
-	}
-	return "", false
-}
-
-func getProcessName(pid int) string {
-	if TestProcessNameFunc != nil {
-		return TestProcessNameFunc(pid)
-	}
-	if runtime.GOOS == "darwin" {
-		out, err := exec.Command("ps", "-o", "comm=", "-p", fmt.Sprintf("%d", pid)).Output()
-		if err != nil {
-			return ""
-		}
-		return strings.TrimSpace(string(out))
-	}
-	if runtime.GOOS == "linux" {
-		data, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", pid))
-		if err != nil {
-			return ""
-		}
-		return strings.TrimSpace(string(data))
-	}
-	return ""
-}
-
-// getParentPid returns the parent PID of the given PID.
-func getParentPid(pid int) int {
-	if runtime.GOOS == "darwin" {
-		out, err := exec.Command("ps", "-o", "ppid=", "-p", fmt.Sprintf("%d", pid)).Output()
-		if err != nil {
-			return -1
-		}
-		ppidStr := strings.TrimSpace(string(out))
-		var ppid int
-		if _, err := fmt.Sscanf(ppidStr, "%d", &ppid); err != nil {
-			return -1
-		}
-		return ppid
-	}
-	if runtime.GOOS == "linux" {
-		data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
-		if err != nil {
-			return -1
-		}
-		// /proc/PID/stat format: PID (comm) state ppid ...
-		// We need the 4th field (ppid). The comm field may contain spaces inside ().
-		s := string(data)
-		// Find the closing ')' of the comm field, the ppid is right after.
-		closeParen := strings.LastIndex(s, ")")
-		if closeParen < 0 {
-			return -1
-		}
-		rest := strings.TrimSpace(s[closeParen+1:])
-		// rest starts with " state ppid ..."
-		fields := strings.Fields(rest)
-		if len(fields) < 2 {
-			return -1
-		}
-		var ppid int
-		if _, err := fmt.Sscanf(fields[1], "%d", &ppid); err != nil {
-			return -1
-		}
-		return ppid
-	}
-	return -1
 }
 
 func Logf(fmtStr string, args ...interface{}) {
