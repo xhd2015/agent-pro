@@ -9,7 +9,8 @@ No grok CLI binary required.
 write-events/
 ├── DOCTEST.md
 ├── SETUP.md
-└── thought-streaming-deltas/   Per-word thought lines → 1 coalesced think event (RED)
+├── thought-streaming-deltas/   Per-word thought lines → 1 coalesced think event (RED)
+└── tool-call-streaming-lines/  tool_started/completed lines → tool_call AgentEvents (RED)
 ```
 
 ## How to Run

@@ -35,7 +35,9 @@ events-conversion/
 │   ├── SETUP.md                          # Operation="trace"
 │   ├── no-events/                        # No events.jsonl → "(no events yet)"
 │   ├── with-agent-events/               # events.jsonl AgentEvent lines → formatted trace
-│   └── with-streaming-grok-thought-events/  # Grok per-word think deltas → coalesced trace (RED)
+│   ├── with-streaming-grok-thought-events/  # Grok per-word think deltas → coalesced trace (RED)
+│   ├── with-grok-tool-events/               # AgentEvent tool_calls → READ/GREP/EDIT in trace
+│   └── with-grok-native-tool-pipeline/      # grok tool lines → trace shows tools (RED)
 │
 └── show-status/                          # === showStatus() e2e ===
     ├── SETUP.md                          # Operation="status"
@@ -73,6 +75,8 @@ events-conversion/
 | `trace-session/with-agent-events` | events.jsonl with AgentEvent lines → formatted lines in order |
 | `trace-session/with-streaming-pi-events` | Pi per-token message deltas → coalesced ASSISTANT block |
 | `trace-session/with-streaming-grok-thought-events` | Grok per-word think deltas → coalesced think block (RED) |
+| `trace-session/with-grok-tool-events` | events.jsonl with tool_call AgentEvents → READ/GREP/EDIT in trace |
+| `trace-session/with-grok-native-tool-pipeline` | grok native tool lines through GrokEventWriter → trace shows tools (RED) |
 
 ### show-status — 3 leaves
 | Leaf | Description |

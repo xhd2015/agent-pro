@@ -12,6 +12,8 @@ The grok CLI emits lines of JSON with a `type` field:
 | `text` | `data` (string) | Text response chunk |
 | `thought` | `data` (string) | Reasoning / thinking text |
 | `end` | `sessionId` (string), `stopReason` (string), `requestId` (string) | Session end marker |
+| `tool_started` | `tool_name` (string) | Tool invocation started |
+| `tool_completed` | `tool_name`, `outcome`, `duration_ms` | Tool finished (paired with `tool_started`) |
 
 ## Decision Tree
 
@@ -35,7 +37,8 @@ Level 2 (from_grok): Grok Event Type
 ├── thought               thought event → ActionThink
 ├── end                   end event → ActionDone (sessionId captured in ToolInput)
 ├── unknown               unknown type → skipped (no output)
-└── empty-data            text event with empty data → ActionMessage with empty text
+├── empty-data            text event with empty data → ActionMessage with empty text
+└── tool-started-read     tool_started Read → ActionToolCall (RED)
 
 Level 2 (roundtrip): Scenario
 ├── text-msg              ActionMessage → ToGrok → FromGrok preserves text
@@ -62,6 +65,7 @@ Level 2 (roundtrip): Scenario
 | `from_grok/end` | grok `end` event → ActionDone (sessionId in ToolInput) |
 | `from_grok/unknown` | grok unknown type → no agent events emitted |
 | `from_grok/empty-data` | grok `text` event with empty data → ActionMessage with empty Text |
+| `from_grok/tool-started-read` | grok `tool_started` Read → ActionToolCall with tool read (RED) |
 | **roundtrip** | |
 | `roundtrip/text-msg` | ActionMessage → ToGrok → FromGrok preserves text content |
 | `roundtrip/thinking` | ActionThink → ToGrok → FromGrok preserves thinking text |

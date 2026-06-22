@@ -103,6 +103,30 @@ func TestWriteAgentEventsFromGrokLine_StreamedThoughtDeltas(t *testing.T) {
 	}
 }
 
+func TestWriteAgentEventsFromGrokLine_ToolStarted(t *testing.T) {
+	var buf bytes.Buffer
+	w := NewGrokEventWriter(&buf)
+	w.WriteGrokLine(`{"type":"tool_started","tool_name":"Read"}`)
+	w.WriteGrokLine(`{"type":"tool_completed","tool_name":"Read","duration_ms":1,"outcome":"success"}`)
+	w.WriteGrokLine(`{"type":"tool_started","tool_name":"Grep"}`)
+	w.WriteGrokLine(`{"type":"tool_completed","tool_name":"Grep","duration_ms":2,"outcome":"success"}`)
+	w.Flush()
+
+	converted := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(converted) != 2 {
+		t.Fatalf("got %d converted lines, want 2 tool_call events:\n%s", len(converted), buf.String())
+	}
+	for i, wantTool := range []string{"read", "grep"} {
+		var ev eventtypes.AgentEvent
+		if err := json.Unmarshal([]byte(converted[i]), &ev); err != nil {
+			t.Fatalf("unmarshal line %d: %v", i, err)
+		}
+		if ev.Type != eventtypes.ActionToolCall || ev.Tool != wantTool {
+			t.Fatalf("line %d = %+v, want tool_call %q", i, ev, wantTool)
+		}
+	}
+}
+
 func TestWriteAgentEventsFromGrokLine_StreamedTextDeltas(t *testing.T) {
 	input := []string{
 		`{"type":"text","data":"Hel"}`,
