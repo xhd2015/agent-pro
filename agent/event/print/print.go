@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	eventtypes "github.com/xhd2015/agent-pro/agent/event/types"
-	"github.com/xhd2015/agent-pro/agent_trace/types"
 	_ "github.com/xhd2015/agent-pro/agent_trace/opencode"
 	_ "github.com/xhd2015/agent-pro/agent_trace/pi"
+	"github.com/xhd2015/agent-pro/agent_trace/types"
 )
 
 const TRUNCATE_LINE_MAX = 1024
@@ -201,6 +201,9 @@ func FormatAgentEvent(event eventtypes.AgentEvent) string {
 		if event.Text != "" {
 			parts = append(parts, event.Text)
 		}
+		if summary := toolInputSummary(event.Tool, event.ToolInput); summary != "" {
+			parts = append(parts, summary)
+		}
 		if event.Output != "" {
 			parts = append(parts, event.Output)
 		}
@@ -228,6 +231,43 @@ func FormatAgentEvent(event eventtypes.AgentEvent) string {
 	}
 }
 
+func toolInputSummary(tool string, input map[string]any) string {
+	if len(input) == 0 {
+		return ""
+	}
+	tool = strings.ToLower(strings.TrimSpace(tool))
+	switch tool {
+	case "bash", "shell", "execute", "exec", "run":
+		return stringInputValue(input, "command", "cmd")
+	case "read", "read_file", "read file":
+		return stringInputValue(input, "filePath", "path", "file")
+	case "write", "edit", "write_file", "write file", "patch":
+		return stringInputValue(input, "filePath", "path", "file")
+	case "glob", "search":
+		return stringInputValue(input, "pattern", "query", "path")
+	case "grep":
+		return stringInputValue(input, "pattern", "query", "path")
+	default:
+		return ""
+	}
+}
+
+func stringInputValue(input map[string]any, keys ...string) string {
+	for _, key := range keys {
+		v, ok := input[key]
+		if !ok {
+			continue
+		}
+		s, ok := v.(string)
+		if !ok {
+			continue
+		}
+		if s = strings.TrimSpace(s); s != "" {
+			return s
+		}
+	}
+	return ""
+}
 
 func truncateLine(s string, max int) string {
 	if len(s) <= max {
@@ -287,7 +327,7 @@ type FormatState struct {
 //   - header: the block header line (e.g. "💬   ASSISTANT", "⚡ RUN", "▶ STEP START")
 //   - body:   the text to print after the header (without trailing newline)
 //   - isMsg:  true if this is an assistant message (first delta or continuation);
-//             false for non-message events (tool calls, steps, etc.)
+//     false for non-message events (tool calls, steps, etc.)
 //
 // For the first assistant message delta, header and body are both non-empty.
 // For subsequent deltas, only body is non-empty (continuation, no header).

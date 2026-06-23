@@ -102,8 +102,8 @@ func opencodeToolActivity(part *opencodeRunPart) *types.AgentTraceActivity {
 		var parts []string
 
 		if part.State.Input != nil {
-			if cmd, ok := part.State.Input["command"].(string); ok && cmd != "" {
-				parts = append(parts, cmd)
+			if inputSummary := opencodeToolInputSummary(part.Tool, part.State.Input); inputSummary != "" {
+				parts = append(parts, inputSummary)
 			}
 		}
 
@@ -176,6 +176,76 @@ func opencodeFriendlyName(tool string) string {
 	default:
 		return tool
 	}
+}
+
+func opencodeToolInputSummary(tool string, input map[string]any) string {
+	if len(input) == 0 {
+		return ""
+	}
+	switch strings.ToLower(strings.TrimSpace(tool)) {
+	case "skill":
+		return opencodeSkillInputSummary(input)
+	case "todowrite":
+		return opencodeTodoWriteInputSummary(input)
+	default:
+		return stringInputValue(input, "command")
+	}
+}
+
+func opencodeSkillInputSummary(input map[string]any) string {
+	var parts []string
+	if name := stringInputValue(input, "skill", "name"); name != "" {
+		parts = append(parts, name)
+	}
+	if args := stringInputValue(input, "arguments", "args", "command"); args != "" {
+		parts = append(parts, args)
+	}
+	return strings.Join(parts, "\n")
+}
+
+func opencodeTodoWriteInputSummary(input map[string]any) string {
+	rawTodos, ok := input["todos"]
+	if !ok {
+		return ""
+	}
+	todos, ok := rawTodos.([]any)
+	if !ok {
+		return ""
+	}
+	var parts []string
+	for _, rawTodo := range todos {
+		todo, ok := rawTodo.(map[string]any)
+		if !ok {
+			continue
+		}
+		content := stringInputValue(todo, "content", "text", "task")
+		if content == "" {
+			continue
+		}
+		if status := stringInputValue(todo, "status"); status != "" {
+			parts = append(parts, status+": "+content)
+		} else {
+			parts = append(parts, content)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+func stringInputValue(input map[string]any, keys ...string) string {
+	for _, key := range keys {
+		value, ok := input[key]
+		if !ok {
+			continue
+		}
+		text, ok := value.(string)
+		if !ok {
+			continue
+		}
+		if text = strings.TrimSpace(text); text != "" {
+			return text
+		}
+	}
+	return ""
 }
 
 func opencodeErrorEvent(errData map[string]any) types.AgentTraceParsedEvent {

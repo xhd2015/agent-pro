@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	codexcfg "github.com/xhd2015/agent-pro/agent/codex/config"
+	codexsessions "github.com/xhd2015/agent-pro/agent/codex/sessions"
 	codexskills "github.com/xhd2015/agent-pro/agent/codex/skills"
 	"github.com/xhd2015/agent-pro/agent/opencode/commands"
 	opencodecfg "github.com/xhd2015/agent-pro/agent/opencode/config"
@@ -729,6 +730,7 @@ Commands:
   projects          list trusted project paths
   plugins           list installed plugins
   skills            list installed skills
+  sessions          list, brief, or log Codex CLI rollout sessions
   features          show enabled/disabled feature flags
   doc               show codex config.toml reference documentation
 
@@ -754,6 +756,8 @@ func handleCodex(args []string) error {
 		return handleCodexPlugins(args[1:])
 	case "skills":
 		return handleCodexSkills(args[1:])
+	case "sessions":
+		return handleCodexSessions(args[1:])
 	case "features":
 		return handleCodexFeatures(args[1:])
 	case "doc":
@@ -1133,6 +1137,114 @@ For full reference: https://developers.openai.com/codex/config-reference
 
 func handleCodexDoc(args []string) error {
 	fmt.Print(strings.TrimPrefix(codexDoc, "\n"))
+	return nil
+}
+
+// --- codex sessions ---
+
+const codexSessionsHelp = `
+Usage: agent-pro codex sessions [SESSION-ID] [OPTIONS]
+
+List, briefly show, or print full logs for Codex CLI rollout sessions.
+
+Modes:
+  agent-pro codex sessions [--limit N] [--json]
+      List recent sessions (default limit 20, max 100).
+
+  agent-pro codex sessions <session-id> [--json]
+      Show a brief summary with the last few displayable messages.
+
+  agent-pro codex sessions <session-id> --log
+      Print the full human-readable session log.
+
+  agent-pro codex sessions <session-id> --tail <n>
+      Print the last N displayable log events (--log is implied).
+
+Options:
+  --limit <n>   max sessions to list (default 20)
+  --json        output JSON instead of a table or brief text
+  --log         print full session log (requires session id)
+  --tail <n>    print last N displayable log events (implies --log)
+  -h,--help     show help
+`
+
+func handleCodexSessions(args []string) error {
+	var limitFlag *int
+	var jsonFlag *bool
+	var logFlag *bool
+	var tailFlag *int
+	remaining, err := flags.Int("--limit", &limitFlag).
+		Bool("--json", &jsonFlag).
+		Bool("--log", &logFlag).
+		Int("--tail", &tailFlag).
+		Help("-h,--help", codexSessionsHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+
+	home := homeDir()
+	codexHome := codexsessions.CodexHomeFromEnv(home)
+	useJSON := jsonFlag != nil && *jsonFlag
+	tail := 0
+	if tailFlag != nil && *tailFlag > 0 {
+		tail = *tailFlag
+	}
+	useLog := (logFlag != nil && *logFlag) || tail > 0
+
+	if len(remaining) == 0 {
+		limit := 20
+		if limitFlag != nil && *limitFlag > 0 {
+			limit = *limitFlag
+		}
+		sessions, err := codexsessions.List(codexHome, limit)
+		if err != nil {
+			return fmt.Errorf("list codex sessions: %w", err)
+		}
+		if useJSON {
+			data, err := codexsessions.FormatListJSON(sessions)
+			if err != nil {
+				return fmt.Errorf("format codex sessions json: %w", err)
+			}
+			fmt.Println(string(data))
+			return nil
+		}
+		fmt.Println(codexsessions.FormatListTable(sessions, home))
+		return nil
+	}
+
+	if len(remaining) != 1 {
+		return fmt.Errorf("expected at most one session id, got %d arguments", len(remaining))
+	}
+	sessionID := strings.TrimSpace(remaining[0])
+	if sessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+
+	if useLog {
+		if useJSON {
+			return fmt.Errorf("--tail and --log cannot be used with --json")
+		}
+		path, err := codexsessions.Find(codexHome, sessionID)
+		if err != nil {
+			return err
+		}
+		return codexsessions.PrintLog(path, os.Stdout, tail)
+	}
+
+	brief, err := codexsessions.Brief(codexHome, sessionID, 3)
+	if err != nil {
+		return err
+	}
+	if useJSON {
+		data, err := codexsessions.FormatBriefJSON(brief)
+		if err != nil {
+			return fmt.Errorf("format codex session brief json: %w", err)
+		}
+		fmt.Println(string(data))
+		return nil
+	}
+	fmt.Println(codexsessions.FormatBriefText(brief, home))
 	return nil
 }
 
