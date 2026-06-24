@@ -5,8 +5,10 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/xhd2015/agent-pro/agent/exec/tool_resolve"
 )
@@ -319,6 +321,64 @@ func Reset(paths ...string) *Command {
 
 func Commit(message string) *Command {
 	return NewCommand("commit", "-m", message)
+}
+
+func IndexLockPath(dir string) (string, error) {
+	out, err := NewCommand("rev-parse", "--git-path", "index.lock").Dir(dir).Output()
+	if err != nil {
+		return "", fmt.Errorf("resolve index.lock path: %w", err)
+	}
+	lockPath := strings.TrimSpace(string(out))
+	if lockPath == "" {
+		return "", fmt.Errorf("resolve index.lock path: empty path")
+	}
+	if !filepath.IsAbs(lockPath) {
+		lockPath = filepath.Join(dir, lockPath)
+	}
+	return filepath.Clean(lockPath), nil
+}
+
+func RemoveStaleIndexLock(dir string) error {
+	lockPath, err := IndexLockPath(dir)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(lockPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove stale index.lock %s: %w", lockPath, err)
+	}
+	return nil
+}
+
+func CommitWithRetry(dir, message string, maxAttempts int) ([]byte, error) {
+	if maxAttempts < 1 {
+		maxAttempts = 1
+	}
+	var lastOutput []byte
+	var lastErr error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt) * 50 * time.Millisecond)
+		}
+		_ = RemoveStaleIndexLock(dir)
+		output, err := Commit(message).Dir(dir).Run()
+		if err == nil {
+			return output, nil
+		}
+		lastOutput = output
+		lastErr = err
+		if !isIndexLockContention(string(output), err) {
+			return output, err
+		}
+	}
+	return lastOutput, lastErr
+}
+
+func isIndexLockContention(output string, err error) bool {
+	combined := output
+	if err != nil {
+		combined += "\n" + err.Error()
+	}
+	return strings.Contains(combined, "index.lock")
 }
 
 func Diff(args ...string) *Command {

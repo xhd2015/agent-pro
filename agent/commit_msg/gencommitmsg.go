@@ -27,6 +27,10 @@ Options:
   --dir DIR    Git directory to use (defaults to current directory)
   --model MODEL
               Model to use for generation
+  --agent-runner RUNNER
+              Agent runner to use (opencode, default: opencode)
+  --agent-runner-binary PATH
+              Override the agent runner executable path
   --commit     Run git commit with the generated message after printing it
   -h, --help   Show this help message
 `
@@ -34,10 +38,14 @@ Options:
 func RunGenCommitMsg(args []string) error {
 	var dir string
 	var model string
+	var agentRunner string
+	var agentRunnerBinary string
 	var commit bool
 	_, err := flags.
 		String("--dir", &dir).
 		String("--model", &model).
+		String("--agent-runner", &agentRunner).
+		String("--agent-runner-binary", &agentRunnerBinary).
 		Bool("--commit", &commit).
 		Help("-h,--help", genCommitMsgHelp).
 		Parse(args)
@@ -48,10 +56,18 @@ func RunGenCommitMsg(args []string) error {
 	if dir == "" {
 		dir, _ = os.Getwd()
 	}
+	if agentRunner == "" {
+		agentRunner = "opencode"
+	}
+	if agentRunner != "opencode" {
+		return fmt.Errorf("unsupported agent runner: %s (supported: opencode)", agentRunner)
+	}
 
 	msg, err := Generate(dir, GenerateOptions{
-		Model:  model,
-		Logger: &stderrLogger{},
+		Model:              model,
+		AgentRunner:        agentRunner,
+		AgentRunnerBinary:  agentRunnerBinary,
+		Logger:             &stderrLogger{},
 	})
 	if err != nil {
 		return err
@@ -65,7 +81,7 @@ func RunGenCommitMsg(args []string) error {
 
 	if commit {
 		fmt.Fprintf(os.Stderr, "\nRunning git commit...\n")
-		output, err := git_runner.Commit(msg).Dir(dir).Run()
+		output, err := git_runner.CommitWithRetry(dir, msg, 5)
 		if len(output) > 0 {
 			fmt.Fprint(os.Stderr, string(output))
 		}
@@ -101,8 +117,11 @@ type Logger interface {
 }
 
 type GenerateOptions struct {
-	Model  string
-	Logger Logger
+	Model             string
+	AgentRunner       string
+	AgentRunnerBinary string
+	AgentEnv          map[string]string
+	Logger            Logger
 }
 
 func Generate(dir string, options GenerateOptions) (string, error) {
@@ -167,10 +186,12 @@ Respond with ONLY a JSON object in this exact format (no other text):
 
 	ctx := context.Background()
 	output, sessionID, err := run.Run(ctx, run.Options{
-		Dir:    dir,
-		Model:  actualModel,
-		Prompt: commitPrompt,
-		Logger: logger,
+		Dir:       dir,
+		Model:     actualModel,
+		Prompt:    commitPrompt,
+		Logger:    logger,
+		AgentPath: options.AgentRunnerBinary,
+		Env:       options.AgentEnv,
 	})
 	_ = sessionID
 	if err != nil {
@@ -178,6 +199,9 @@ Respond with ONLY a JSON object in this exact format (no other text):
 	}
 
 	rawText := parseOpencodeJSONOutput(output)
+	if rawText == "" {
+		rawText = strings.TrimSpace(output)
+	}
 	if rawText == "" {
 		return "", fmt.Errorf("failed to parse commit message from opencode output")
 	}

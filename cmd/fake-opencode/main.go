@@ -38,6 +38,7 @@ Options:
   --session <id>                 session id
   --seed <int>                   random seed for deterministic output
   --mock-config <path>           JSON mock config with events, hooks, and exit behavior
+  --file <path>                  attached prompt file (accepted for compatibility)
   --plugin <path>                plugin file to load (can be specified multiple times)
   --dangerously-skip-permissions accepted for compatibility
   -h,--help                      show help
@@ -98,12 +99,14 @@ func handleRun(args []string) error {
 	var skipPermissionsFlag *bool
 	var seedFlag *int64
 	var pluginFlags []string
+	var fileFlags []string
 
 	remaining, err := flags.String("--format", &formatFlag).
 		String("--dir", &dirFlag).
 		String("--model", &modelFlag).
 		String("--session", &sessionFlag).
 		String("--mock-config", &mockConfigFlag).
+		StringSlice("--file", &fileFlags).
 		Bool("--dangerously-skip-permissions", &skipPermissionsFlag).
 		Int("--seed", &seedFlag).
 		StringSlice("--plugin", &pluginFlags).
@@ -139,6 +142,22 @@ func handleRun(args []string) error {
 	}
 
 	prompt := strings.Join(remaining, " ")
+	for _, filePath := range fileFlags {
+		filePath = strings.TrimSpace(filePath)
+		if filePath == "" {
+			continue
+		}
+		content, readErr := os.ReadFile(filePath)
+		if readErr != nil {
+			return fmt.Errorf("read --file %s: %w", filePath, readErr)
+		}
+		if len(content) > 0 {
+			if prompt != "" {
+				prompt += "\n\n"
+			}
+			prompt += string(content)
+		}
+	}
 	if prompt == "" {
 		prompt = "help with the task"
 	}

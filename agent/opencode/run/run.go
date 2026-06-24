@@ -22,6 +22,8 @@ type Options struct {
 	Prompt    string
 	SessionID string
 	Logger    Logger
+	AgentPath string
+	Env       map[string]string
 }
 
 func Run(ctx context.Context, opts Options) (string, string, error) {
@@ -45,7 +47,11 @@ func Run(ctx context.Context, opts Options) (string, string, error) {
 		args = append(args, "--session", opts.SessionID)
 	}
 
-	cmd, err := tool_exec.New("opencode", args, &tool_exec.Options{Dir: opts.Dir})
+	cmd, err := tool_exec.New("opencode", args, &tool_exec.Options{
+		Dir:        opts.Dir,
+		CustomPath: opts.AgentPath,
+		Env:        opts.Env,
+	})
 	if err != nil {
 		return "", "", fmt.Errorf("failed to run opencode: %w", err)
 	}
