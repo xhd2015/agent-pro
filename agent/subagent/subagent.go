@@ -25,6 +25,13 @@ type Config struct {
 	DebugSessionEnv  string
 	AgentRunnerEnv   string
 	ModelEnv         string
+	// SessionRetryHint formats the suggested retry CLI when session id cannot be
+	// auto-detected. Receives sessionID and prompt. When nil, defaults to
+	// `doctest agent <Cmd> --session-id <id> <prompt>`.
+	SessionRetryHint func(sessionID, prompt string) string
+	// AutoGenerateSessionID when true generates a session ID when flag, env var,
+	// and CODEX_THREAD_ID are all unset. Default false returns an error with retry hint.
+	AutoGenerateSessionID bool
 }
 
 type Options struct {
@@ -97,7 +104,7 @@ func Run(ctx context.Context, c Config, opts Options) error {
 	}
 
 	if opts.Status {
-		if opts.SessionID == "" && os.Getenv(c.sessionEnvVar()) == "" && os.Getenv("CODEX_THREAD_ID") == "" {
+		if opts.SessionID == "" && os.Getenv(c.sessionEnvVar()) == "" && os.Getenv("CODEX_THREAD_ID") == "" && !c.AutoGenerateSessionID {
 			fmt.Fprintf(os.Stderr, "error: --status requires --session-id\n")
 			return nil
 		}
@@ -152,7 +159,7 @@ func Run(ctx context.Context, c Config, opts Options) error {
 
 	model := os.Getenv(c.modelEnv())
 
-	srcs, err := resolveSessionID(c, opts.SessionID)
+	srcs, err := resolveSessionID(c, opts.SessionID, prompt)
 	if err != nil {
 		return err
 	}

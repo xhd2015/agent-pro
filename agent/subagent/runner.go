@@ -54,7 +54,7 @@ func runAgent(ctx context.Context, agentRunner, model, prompt, sessionID string,
 }
 
 func traceSession(c Config, opts Options) error {
-	srcs, err := resolveSessionID(c, opts.SessionID)
+	srcs, err := resolveSessionID(c, opts.SessionID, opts.Prompt)
 	if err != nil {
 		return err
 	}

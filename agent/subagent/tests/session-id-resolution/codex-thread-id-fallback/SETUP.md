@@ -1,3 +1,12 @@
+# Scenario
+
+**Feature**: CODEX_THREAD_ID fallback when flag and env miss
+
+```
+# CODEX_THREAD_ID is third priority source
+CODEX_THREAD_ID=codex_thread_abc -> resolveSessionID -> showStatus
+```
+
 ## Preconditions
 - No `--session-id` flag and no `AGENT_PRO_SUBAGENT_TESTROLE_SESSION_ID` env var.
 - `CODEX_THREAD_ID` env var is set.

@@ -232,7 +232,7 @@ func updateSessionMeta(sessionDir, innerSessionID string, srcs *sessionIDSources
 }
 
 func showStatus(c Config, opts Options) error {
-	srcs, err := resolveSessionID(c, opts.SessionID)
+	srcs, err := resolveSessionID(c, opts.SessionID, opts.Prompt)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return nil

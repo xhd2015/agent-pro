@@ -1,3 +1,12 @@
+# Scenario
+
+**Feature**: --session-id flag overrides env var
+
+```
+# flag has highest priority
+--session-id flag_session_456 + env var -> resolveSessionID uses flag
+```
+
 ## Preconditions
 - Both `AGENT_PRO_SUBAGENT_TESTROLE_SESSION_ID` env var and `--session-id` flag are set.
 - The flag should take priority.

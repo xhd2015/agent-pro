@@ -1,3 +1,15 @@
+# Scenario
+
+**Feature**: subagent library session management, env vars, and Logf behavior
+
+```
+# harness dispatches by Operation, builds Config/Options, captures I/O
+test Request -> Run(operation) -> subagent.Run -> stdout/stderr
+
+# session ID resolution checks flag, env var, CODEX_THREAD_ID, then policy
+resolveSessionID(Config, flag, prompt) -> sessionIDSources | error | generated
+```
+
 ## Preconditions
 - The subagent package is at `github.com/xhd2015/agent-pro/agent/subagent`.
 - The root `Run` dispatches to operation-specific handlers based on `req.Operation`.
@@ -17,6 +29,7 @@
 - `Req.Operation`: one of "debug_session_env", "session_env_var", "session_meta_field", "list_sessions", "show_status", "trace_session", "logf", "session_base", "session_id_resolution"
 - `Req.LogMessage` / `Req.LogArgs`: for Logf tests
 - `Req.PreCreateDirs`: paths to pre-create as session directories (for testing session listing/status)
+- `Req.AutoGenerateSessionID`: passed to `Config.AutoGenerateSessionID` for session ID policy
 
 ```go
 import (
@@ -129,6 +142,14 @@ func runSessionBase(t *testing.T, req *Request) (*Response, error) {
 }
 
 func runSessionIDResolution(t *testing.T, req *Request) (*Response, error) {
+    roleName := req.RoleName
+    if roleName == "" {
+        roleName = "testrole"
+    }
+
+    os.Unsetenv("AGENT_PRO_SUBAGENT_" + strings.ToUpper(roleName) + "_SESSION_ID")
+    os.Unsetenv("CODEX_THREAD_ID")
+
     for _, e := range req.Env {
         parts := splitEnv(e)
         if len(parts) == 2 {
@@ -145,7 +166,8 @@ func runSessionIDResolution(t *testing.T, req *Request) (*Response, error) {
     os.Stderr = wErr
 
     runErr := subagent.Run(context.Background(), subagent.Config{
-        RoleName: req.RoleName,
+        RoleName:              roleName,
+        AutoGenerateSessionID: req.AutoGenerateSessionID,
     }, subagent.Options{
         Status:    true,
         SessionID: req.SessionID,

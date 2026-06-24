@@ -1,3 +1,12 @@
+# Scenario
+
+**Feature**: session ID from role-specific env var
+
+```
+# env var wins when flag absent
+AGENT_PRO_SUBAGENT_TESTROLE_SESSION_ID -> resolveSessionID -> showStatus -> session not found
+```
+
 ## Preconditions
 - `AGENT_PRO_SUBAGENT_TESTROLE_SESSION_ID` env var is set to a known session ID.
 - No `--session-id` flag is provided.

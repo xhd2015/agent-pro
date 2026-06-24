@@ -14,6 +14,23 @@ import (
 	"github.com/google/uuid"
 )
 
+func shellQuote(s string) string {
+	if s == "" {
+		return "''"
+	}
+	return strconv.Quote(s)
+}
+
+func formatSessionRetryHint(c Config, sessionID, prompt string) string {
+	if c.SessionRetryHint != nil {
+		return c.SessionRetryHint(sessionID, prompt)
+	}
+	if strings.TrimSpace(prompt) != "" {
+		return fmt.Sprintf("doctest agent %s --session-id %s %s", c.Cmd, sessionID, shellQuote(prompt))
+	}
+	return fmt.Sprintf("doctest agent %s --session-id %s <prompt>", c.Cmd, sessionID)
+}
+
 func processExists(pid int) bool {
 	process, err := os.FindProcess(pid)
 	if err != nil {
@@ -70,7 +87,7 @@ type sessionIDSources struct {
 	agentRunner       string
 }
 
-func resolveSessionID(c Config, flagSessionID string) (*sessionIDSources, error) {
+func resolveSessionID(c Config, flagSessionID, prompt string) (*sessionIDSources, error) {
 	if flagSessionID != "" {
 		codexID := os.Getenv("CODEX_THREAD_ID")
 		return &sessionIDSources{
@@ -93,8 +110,14 @@ func resolveSessionID(c Config, flagSessionID string) (*sessionIDSources, error)
 			codexThreadID: v,
 		}, nil
 	}
+	if c.AutoGenerateSessionID {
+		return &sessionIDSources{
+			sessionID: generateSessionID(),
+		}, nil
+	}
 	genID := generateSessionID()
-	return nil, fmt.Errorf("cannot detect session id, if you're running inside opencode, try again with: `doctest agent %s --session-id %s <prompt>`, and use the same session id in subsequent followups, don't generate your session id, use the provided session id %s explicitly.", c.Cmd, genID, genID)
+	hint := formatSessionRetryHint(c, genID, prompt)
+	return nil, fmt.Errorf("cannot detect session id, if you're running inside opencode, try again with: `%s`, and use the same session id in subsequent followups, don't generate your session id, use the provided session id %s explicitly.", hint, genID)
 }
 
 func sourceLabel(srcs *sessionIDSources) string {
