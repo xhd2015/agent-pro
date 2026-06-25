@@ -20,3 +20,63 @@ demonstrations of platform behavior.
 ```sh
 doctest test ./tests/proof-of-home-dir
 ```
+
+```go
+import (
+    "bytes"
+    "context"
+    "errors"
+    "fmt"
+    "os"
+    "os/exec"
+    "path/filepath"
+    "strings"
+    "testing"
+    "time"
+)
+
+
+type Request struct {
+    TmpHome string // temporary directory used as fake HOME
+    Cmd     string // path to the runtime binary (bash, go, node, bun)
+    Args    []string
+    WorkDir string // if set, the command runs from this directory
+    Env     []string // additional env vars (HOME is always appended)
+}
+
+type Response struct {
+    ExitCode int
+    Stdout   string
+    Stderr   string
+    Err      error
+}
+
+func Run(t *testing.T, req *Request) (*Response, error) {
+    ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+    defer cancel()
+
+    cmd := exec.CommandContext(ctx, req.Cmd, req.Args...)
+    if req.WorkDir != "" {
+        cmd.Dir = req.WorkDir
+    }
+    cmd.Env = append(os.Environ(), req.Env...)
+    cmd.Env = append(cmd.Env, "HOME="+req.TmpHome)
+
+    var stdout, stderr bytes.Buffer
+    cmd.Stdout = &stdout
+    cmd.Stderr = &stderr
+
+    err := cmd.Run()
+    resp := &Response{Stdout: stdout.String(), Stderr: stderr.String(), Err: err}
+    if err != nil {
+        if ctx.Err() != nil {
+            return resp, ctx.Err()
+        }
+        var exitErr *exec.ExitError
+        if errors.As(err, &exitErr) {
+            resp.ExitCode = exitErr.ExitCode()
+        }
+    }
+    return resp, nil
+}
+```

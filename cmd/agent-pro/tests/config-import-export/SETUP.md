@@ -26,34 +26,10 @@ import (
 	agentconfig "github.com/xhd2015/agent-pro/pkgs/agentconfig"
 )
 
-type Request struct {
-	Agent     string // "opencode", "pi", "crush"
-	Operation string // "export", "import"
-	ZipPath   string
-	HomeDir   string
-}
-
-type Response struct {
-	Err error
-}
-
 func Setup(t *testing.T, req *Request) error {
 	req.HomeDir = t.TempDir()
 	req.ZipPath = filepath.Join(req.HomeDir, "config.zip")
 	return nil
-}
-
-func Run(t *testing.T, req *Request) (*Response, error) {
-	var err error
-	switch req.Operation {
-	case "export":
-		err = agentconfig.Export(req.Agent, req.HomeDir, req.ZipPath)
-	case "import":
-		err = agentconfig.Import(req.HomeDir, req.ZipPath)
-	default:
-		return nil, fmt.Errorf("unknown operation: %s", req.Operation)
-	}
-	return &Response{Err: err}, nil
 }
 
 func createSourceFile(t *testing.T, homeDir string, relPath string, content string) {

@@ -92,3 +92,64 @@ Total: **19 leaves** across **4 feature areas**.
 ```sh
 doctest test -v ./agent/subagent/tests/events-conversion/
 ```
+
+```go
+import (
+    "bytes"
+    "encoding/json"
+    "fmt"
+    "os"
+    "path/filepath"
+    "strconv"
+    "testing"
+    "time"
+
+    types "github.com/xhd2015/agent-pro/agent/event/types"
+
+    "github.com/xhd2015/agent-pro/agent/event/convert"
+    "github.com/xhd2015/agent-pro/agent/subagent"
+)
+
+
+type Request struct {
+    Operation   string // "convert_raw" | "format_event" | "trace" | "status"
+
+    // For convert_raw
+    RawJSON     string
+    AgentRunner string
+
+    // For format_event
+    AgentEventJSON string
+
+    // For trace / status
+    RoleName        string
+    SessionBase     string
+    SessionID       string
+    HomeDir         string
+    PreCreateDirs   []string
+    PreCreateMeta   map[string]string
+    PreCreateEvents map[string]string
+    PreCreatePID    bool
+}
+
+type Response struct {
+    Stdout string
+    Stderr string
+    Err    error
+}
+
+func Run(t *testing.T, req *Request) (*Response, error) {
+    switch req.Operation {
+    case "convert_raw":
+        return runConvertRaw(t, req)
+    case "format_event":
+        return runFormatEvent(t, req)
+    case "trace":
+        return runTrace(t, req)
+    case "status":
+        return runStatus(t, req)
+    default:
+        return nil, fmt.Errorf("unknown operation: %s", req.Operation)
+    }
+}
+```

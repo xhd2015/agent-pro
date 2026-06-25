@@ -3,6 +3,9 @@
   actual agent binary (`opencode` or `pi`) is spawned to talk to it.
 - Each leaf verifies the binary's stdout output and that the mock server's events file
   records the incoming LLM requests.
+- Spawns must not use the developer's real agent home. The opencode leaf sets temporary
+  `HOME` and `OPENCODE_CONFIG_DIR` so user plugins/hooks under `~/.config/opencode` are
+  not loaded.
 
 ## Steps
 1. The root `runBinary` creates a temp events file, passes `--events-file` to the mock server,

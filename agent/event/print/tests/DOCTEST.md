@@ -57,3 +57,25 @@ doctest test ./agent/event/print/tests/...
 # Pi adapter tests only
 doctest test ./agent/event/print/tests/pi_types
 ```
+
+```go
+import (
+	"strings"
+	"testing"
+
+	"github.com/xhd2015/agent-pro/agent/event/print"
+)
+
+
+type Request struct {
+	Line string
+}
+
+type Response struct {
+	Output string
+}
+
+func Run(t *testing.T, req *Request) (*Response, error) {
+	return &Response{Output: print.FormatTraceLine(req.Line)}, nil
+}
+```

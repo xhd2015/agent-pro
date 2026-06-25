@@ -61,3 +61,30 @@ Level 1: Scenario category
 ```sh
 doctest test ./agent/event/tests/coalescer
 ```
+
+```go
+import (
+	"testing"
+
+	print "github.com/xhd2015/agent-pro/agent/event/print"
+	types "github.com/xhd2015/agent-pro/agent/event/types"
+)
+
+
+type Request struct {
+	Events []types.AgentEvent
+}
+
+type Response struct {
+	Skipped []bool
+}
+
+func Run(t *testing.T, req *Request) (*Response, error) {
+	var c print.Coalescer
+	skipped := make([]bool, len(req.Events))
+	for i, ev := range req.Events {
+		skipped[i] = c.ShouldSkip(ev)
+	}
+	return &Response{Skipped: skipped}, nil
+}
+```

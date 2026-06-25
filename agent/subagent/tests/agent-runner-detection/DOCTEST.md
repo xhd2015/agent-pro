@@ -165,3 +165,57 @@ doctest vet ./external/agent-pro/agent/subagent/tests/agent-runner-detection/
 # Run tests
 doctest test -v ./external/agent-pro/agent/subagent/tests/agent-runner-detection/
 ```
+
+```go
+import (
+    "os"
+    "strings"
+    "testing"
+
+    "github.com/xhd2015/agent-pro/agent/subagent"
+)
+
+
+type Request struct {
+    Env            []string
+    AgentRunnerEnv string
+    ProcessNames   []string
+}
+
+type Response struct {
+    Runner   string
+    Detected bool
+}
+
+func Run(t *testing.T, req *Request) (*Response, error) {
+    // Clean detection env vars that may leak from the host environment
+    os.Unsetenv("CODEX_THREAD_ID")
+    os.Unsetenv("PI_CODING_AGENT")
+
+    for _, e := range req.Env {
+        parts := splitEnv(e)
+        if len(parts) == 2 {
+            os.Setenv(parts[0], parts[1])
+        }
+    }
+
+    if len(req.ProcessNames) > 0 {
+        callIdx := 0
+        subagent.TestProcessNameFunc = func(pid int) string {
+            if callIdx < len(req.ProcessNames) {
+                name := req.ProcessNames[callIdx]
+                callIdx++
+                return name
+            }
+            return ""
+        }
+        defer func() { subagent.TestProcessNameFunc = nil }()
+    }
+
+    runner, detected := subagent.TestExported_autoDetectAgentRunner(subagent.Config{
+        AgentRunnerEnv: req.AgentRunnerEnv,
+    })
+
+    return &Response{Runner: runner, Detected: detected}, nil
+}
+```

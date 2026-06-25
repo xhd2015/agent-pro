@@ -20,69 +20,9 @@ import (
 	"github.com/xhd2015/agent-pro/agent/exec"
 )
 
-type Request struct {
-	Prompt       string
-	ResumePrompt string
-	Model        string
-	Env          []string
-}
-
-type Response struct {
-	Answer    string
-	SessionID string
-	Events    []json.RawMessage
-}
-
 func Setup(t *testing.T, req *Request) error {
 	req.Model = os.Getenv("PI_MODEL")
 	return nil
-}
-
-func Run(t *testing.T, req *Request) (*Response, error) {
-	paths := &exec.PathsConfig{
-		RootDirName: ".pi-agent-test",
-		DataDirName: "data",
-		BinDirName:  "bin",
-	}
-	env := exec.NewEnv(paths, "PI_AGENT_TEST_ROOT")
-
-	piPath, err := pi.FindAgentPath(env)
-	if err != nil {
-		t.Skip("pi not found in PATH; skip integration test")
-		return &Response{}, nil
-	}
-
-	agent := &pi.PiAgent{
-		AgentPath:    piPath,
-		SettingsPath: "",
-		Workspace:    t.TempDir(),
-		Env:          env,
-	}
-
-	ctx := t.Context()
-	var rawLogBuf bytes.Buffer
-	opts := &registry.AskOptions{
-		Model:  req.Model,
-		RawLog: &rawLogBuf,
-	}
-	answer, err := agent.Ask(ctx, req.Prompt, opts, nil)
-	events := parseRawLog(rawLogBuf)
-	if err != nil {
-		return &Response{Answer: answer, SessionID: agent.LastSessionID, Events: events}, err
-	}
-
-	if req.ResumePrompt != "" {
-		sessionID := agent.LastSessionID
-		if sessionID == "" {
-			t.Fatalf("expected session ID to be captured from first query response:\n%s", answer)
-		}
-		opts.SessionID = sessionID
-		answer2, err := agent.Ask(ctx, req.ResumePrompt, opts, nil)
-		events2 := parseRawLog(rawLogBuf)
-		return &Response{Answer: answer2, SessionID: agent.LastSessionID, Events: events2}, err
-	}
-
-	return &Response{Answer: answer, SessionID: agent.LastSessionID, Events: events}, nil
 }
 
 func parseRawLog(buf bytes.Buffer) []json.RawMessage {

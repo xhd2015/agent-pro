@@ -220,16 +220,27 @@ type unstagedItem struct {
 }
 
 func detectAndUnstage(dir string, logger Logger) error {
+	dir = filepath.Clean(dir)
+
+	repoRootOut, err := git_runner.RevParse("--show-toplevel").Dir(dir).Output()
+	if err != nil {
+		return fmt.Errorf("failed to resolve git toplevel: %w", err)
+	}
+	repoRoot := strings.TrimSpace(string(repoRootOut))
+	if repoRoot == "" {
+		return fmt.Errorf("empty git toplevel")
+	}
+
 	origDir, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("getwd: %w", err)
 	}
-	if err := os.Chdir(dir); err != nil {
-		return fmt.Errorf("chdir %s: %w", dir, err)
+	if err := os.Chdir(repoRoot); err != nil {
+		return fmt.Errorf("chdir %s: %w", repoRoot, err)
 	}
 	defer os.Chdir(origDir)
 
-	output, err := git_runner.NewCommand("diff", "--cached", "--name-only", "--diff-filter=ACMRT", "--").Output()
+	output, err := git_runner.NewCommand("diff", "--cached", "--name-only", "--diff-filter=ACMRT", "--").Dir(dir).Output()
 	if err != nil {
 		return fmt.Errorf("failed to list staged files: %w", err)
 	}
@@ -323,19 +334,19 @@ func detectAndUnstage(dir string, logger Logger) error {
 	}
 
 	logger.Log("Unstaging binary/submodule entries...")
-	if err := unstageFiles(toUnstage); err != nil {
+	if err := unstageFiles(dir, toUnstage); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func unstageFiles(files []string) error {
+func unstageFiles(dir string, files []string) error {
 	if len(files) == 0 {
 		return nil
 	}
 	args := append([]string{"restore", "--staged", "--"}, files...)
-	output, err := git_runner.NewCommand(args...).Run()
+	output, err := git_runner.NewCommand(args...).Dir(dir).Run()
 	if err != nil {
 		return fmt.Errorf("git restore --staged failed: %s: %w", string(output), err)
 	}

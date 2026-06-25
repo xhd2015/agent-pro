@@ -32,38 +32,6 @@ import (
     "github.com/xhd2015/agent-pro/agent/subagent"
 )
 
-type Request struct {
-    RoleName    string
-    SessionBase string
-    SessionID   string
-    Env         []string
-
-    Operation      string
-    ListSessions   bool
-    Status         bool
-    CatchUp        bool
-
-    LogMessage string
-    LogArgs    []any
-
-    PreCreateDirs    []string
-    PreCreateMeta    map[string]string
-    PreCreateEvents  map[string]string
-    PreCreatePID     bool
-
-    HomeDir string
-
-    SessionEnvVar   string
-    SessionMetaField string
-    DebugSessionEnv  string
-}
-
-type Response struct {
-    Stdout string
-    Stderr string
-    Err    error
-}
-
 func Setup(t *testing.T, req *Request) error {
     _ = runLogf
     _ = runSessionBase
@@ -71,19 +39,6 @@ func Setup(t *testing.T, req *Request) error {
     _ = runSubagentOp
     _ = splitEnv
     return nil
-}
-
-func Run(t *testing.T, req *Request) (*Response, error) {
-    switch req.Operation {
-    case "logf":
-        return runLogf(t, req)
-    case "session_base":
-        return runSessionBase(t, req)
-    case "session_id_resolution":
-        return runSessionIDResolution(t, req)
-    default:
-        return runSubagentOp(t, req)
-    }
 }
 
 func splitEnv(e string) []string {

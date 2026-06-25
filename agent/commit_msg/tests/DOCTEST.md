@@ -22,6 +22,8 @@ spawn a background `git status` loop during the agent phase to reproduce
 agent/commit_msg/tests/
 ├── DOCTEST.md
 ├── SETUP.md
+├── auto-unstage/
+│   └── subdir-repo-root-paths/ nested --dir + repo-root staged paths → auto unstage succeeds
 ├── commit-with-fake-opencode/
 │   └── succeeds/              fake-opencode returns JSON → message printed, no --commit
 └── commit-race/
@@ -34,9 +36,10 @@ agent/commit_msg/tests/
 
 | # | Leaf | Description |
 |---|------|-------------|
-| 1 | `commit-with-fake-opencode/succeeds` | fake-opencode mock returns commit JSON; generation succeeds |
-| 2 | `commit-race/background-git-loop` | Background git status loop during agent run must not break `--commit` |
-| 3 | `commit-race/worktree-concurrent-git` | Same race reproduced from a linked git worktree |
+| 1 | `auto-unstage/subdir-repo-root-paths` | Nested `--dir` with repo-root staged paths must not fail auto unstage |
+| 2 | `commit-with-fake-opencode/succeeds` | fake-opencode mock returns commit JSON; generation succeeds |
+| 3 | `commit-race/background-git-loop` | Background git status loop during agent run must not break `--commit` |
+| 4 | `commit-race/worktree-concurrent-git` | Same race reproduced from a linked git worktree |
 
 ## How to Run
 

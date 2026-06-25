@@ -27,43 +27,10 @@ import (
     "github.com/xhd2015/agent-pro/agent/subagent"
 )
 
-type Request struct {
-    Input string
-}
-
-type Response struct {
-    Duration time.Duration
-    Stderr   string
-    Err      error
-}
-
 func Setup(t *testing.T, req *Request) error {
     // Root Setup: grouping nodes and leaves provide their own Setup
     _ = t
     _ = req
     return nil
-}
-
-func Run(t *testing.T, req *Request) (*Response, error) {
-    oldErr := os.Stderr
-    rErr, wErr, err := os.Pipe()
-    if err != nil {
-        return nil, fmt.Errorf("create pipe: %w", err)
-    }
-    os.Stderr = wErr
-
-    d, parseErr := subagent.ParseTimeoutDuration(req.Input)
-
-    wErr.Close()
-    os.Stderr = oldErr
-
-    var bufErr bytes.Buffer
-    bufErr.ReadFrom(rErr)
-
-    return &Response{
-        Duration: d,
-        Stderr:   bufErr.String(),
-        Err:      parseErr,
-    }, nil
 }
 ```

@@ -59,3 +59,42 @@ doctest vet ./cmd/agent-pro/tests/config-import-export
 # Build and run (will fail with RED until pkgs/agentconfig is implemented):
 doctest test -v ./cmd/agent-pro/tests/config-import-export
 ```
+
+```go
+import (
+	"archive/zip"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	agentconfig "github.com/xhd2015/agent-pro/pkgs/agentconfig"
+)
+
+
+type Request struct {
+	Agent     string // "opencode", "pi", "crush"
+	Operation string // "export", "import"
+	ZipPath   string
+	HomeDir   string
+}
+
+type Response struct {
+	Err error
+}
+
+func Run(t *testing.T, req *Request) (*Response, error) {
+	var err error
+	switch req.Operation {
+	case "export":
+		err = agentconfig.Export(req.Agent, req.HomeDir, req.ZipPath)
+	case "import":
+		err = agentconfig.Import(req.HomeDir, req.ZipPath)
+	default:
+		return nil, fmt.Errorf("unknown operation: %s", req.Operation)
+	}
+	return &Response{Err: err}, nil
+}
+```

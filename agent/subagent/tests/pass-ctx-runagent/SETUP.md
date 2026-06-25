@@ -26,44 +26,8 @@ import (
     "github.com/xhd2015/agent-pro/agent/subagent"
 )
 
-type Request struct {
-    AgentRunner string
-    Prompt      string
-    CancelCtx   bool
-    SessionID   string
-}
-
-type Response struct {
-    Output string
-    Err    error
-}
-
 func Setup(t *testing.T, req *Request) error {
     _ = req.AgentRunner
     return nil
-}
-
-func Run(t *testing.T, req *Request) (*Response, error) {
-    fakeCodexPath := filepath.Clean(DOCTEST_ROOT + "/../../../../fake-codex")
-    if _, err := os.Stat(fakeCodexPath); err != nil {
-        return nil, fmt.Errorf("fake-codex not found at %s: %w", fakeCodexPath, err)
-    }
-    os.Setenv("AGENT_RUNNER_FAKE_CODEX_PATH", fakeCodexPath)
-
-    prompt := req.Prompt
-    if prompt == "" {
-        prompt = "write hello world"
-    }
-
-    ctx := context.Background()
-    if req.CancelCtx {
-        var cancel context.CancelFunc
-        ctx, cancel = context.WithCancel(ctx)
-        cancel()
-    }
-
-    rawLog := subagent.TestExported_NewSessionLogWriter()
-    output, err := subagent.TestExported_runAgent(ctx, req.AgentRunner, "", prompt, req.SessionID, rawLog)
-	return &Response{Output: output, Err: err}, err
 }
 ```

@@ -1,16 +1,27 @@
 ## Steps
 1. Create a temp working directory for opencode.
-2. Write a mock config with an exchange matching "capital of France" → "Paris".
-3. Set BinaryCmd to run `opencode run "What is the capital of France?" --model openai/gpt-4 --dir <temp>`.
-4. Set BinaryEnv with OPENCODE_CONFIG_CONTENT (inline provider config pointing at the mock) and OPENCODE_DISABLE_PROJECT_CONFIG=true.
+2. Isolate opencode from the user's real home: `HOME` and `OPENCODE_CONFIG_DIR` point at empty temp dirs so global plugins/hooks under `~/.config/opencode` are not loaded.
+3. Write a mock config with an exchange matching "capital of France" → "Paris".
+4. Set BinaryCmd to run `opencode run "What is the capital of France?" --model openai/gpt-4 --dir <temp>`.
+5. Set BinaryEnv with OPENCODE_CONFIG_CONTENT (inline provider config pointing at the mock) and OPENCODE_DISABLE_PROJECT_CONFIG=true.
 
 ```go
 import (
+    "os"
+    "path/filepath"
     "testing"
 )
 
 func Setup(t *testing.T, req *Request) error {
     workDir := t.TempDir()
+    isolatedHome := filepath.Join(workDir, "home")
+    opencodeConfigDir := filepath.Join(workDir, "opencode-config")
+    if err := os.MkdirAll(isolatedHome, 0755); err != nil {
+        return err
+    }
+    if err := os.MkdirAll(opencodeConfigDir, 0755); err != nil {
+        return err
+    }
 
     // Mock server config: one exchange matching "capital of France" → "Paris"
     req.ConfigJSON = `{
@@ -64,7 +75,9 @@ func Setup(t *testing.T, req *Request) error {
         "--dir", workDir,
     }
     req.BinaryEnv = map[string]string{
-        "OPENCODE_CONFIG_CONTENT":       opencodeConfig,
+        "HOME":                            isolatedHome,
+        "OPENCODE_CONFIG_DIR":             opencodeConfigDir,
+        "OPENCODE_CONFIG_CONTENT":         opencodeConfig,
         "OPENCODE_DISABLE_PROJECT_CONFIG": "true",
     }
     return nil

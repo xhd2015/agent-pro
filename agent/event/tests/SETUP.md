@@ -30,62 +30,10 @@ import (
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 )
 
-type Request struct {
-	Events     []types.AgentEvent
-	Target     string // "opencode"→ToOpencode, "crush"→ToCrush, "from_crush"→FromCrush, "crush_server"→StartCrushServer; default→ToCodex
-	SessionID  string
-	Value      any
-	Output     string
-	CrushInput string // raw JSON for FromCrush parsing
-	HostPort   int    // crush server HTTP port (0 = auto-assign)
-	Prompt     string // prompt text for crush server
-	ModelName  string // model override (default: "deepseek-v4-pro")
-	CrushPath  string // path to crush binary (default: LookPath("crush"))
-}
-
-type Response struct {
-	Output string
-}
-
 func Setup(t *testing.T, req *Request) error {
 	_ = assertContains
 	_ = assertNotContains
 	return nil
-}
-
-func Run(t *testing.T, req *Request) (*Response, error) {
-	var output string
-	if req.Target == "from_crush" && req.CrushInput != "" {
-		var crushEvents []crush_types.Event
-		if err := json.Unmarshal([]byte(req.CrushInput), &crushEvents); err != nil {
-			return &Response{Output: ""}, nil
-		}
-		result := crush_types.FromCrush(crushEvents, req.SessionID)
-		data, _ := json.Marshal(result)
-		output = string(data)
-	} else if len(req.Events) > 0 {
-		if req.Target == "opencode" {
-			result := opencode_types.ToOpencode(req.Events, req.SessionID)
-			data, _ := json.Marshal(result)
-			output = string(data)
-		} else if req.Target == "crush" {
-			result := crush_types.ToCrush(req.Events, req.SessionID)
-			data, _ := json.Marshal(result)
-			output = string(data)
-		} else {
-			result := codex_types.ToCodex(req.Events)
-			data, _ := json.Marshal(result)
-			output = string(data)
-		}
-	} else if req.Value != nil {
-		data, _ := json.Marshal(req.Value)
-		output = string(data)
-	} else if req.Target == "crush_server" {
-		return runCrushServer(t, req)
-	} else {
-		output = req.Output
-	}
-	return &Response{Output: output}, nil
 }
 
 func assertContains(t *testing.T, got string, want string) {

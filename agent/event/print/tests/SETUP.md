@@ -13,23 +13,11 @@ import (
 	"github.com/xhd2015/agent-pro/agent/event/print"
 )
 
-type Request struct {
-	Line string
-}
-
-type Response struct {
-	Output string
-}
-
 func Setup(t *testing.T, req *Request) error {
 	_ = assertContains
 	_ = assertEmpty
 	_ = assertNotContains
 	return nil
-}
-
-func Run(t *testing.T, req *Request) (*Response, error) {
-	return &Response{Output: print.FormatTraceLine(req.Line)}, nil
 }
 
 func assertContains(t *testing.T, got string, want string) {

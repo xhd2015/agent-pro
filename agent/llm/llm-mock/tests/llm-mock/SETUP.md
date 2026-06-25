@@ -47,45 +47,6 @@ import (
     "time"
 )
 
-type HTTPResponse struct {
-    StatusCode int
-    Body       string
-    Headers    map[string]string
-}
-
-type Request struct {
-    RepoRoot     string
-    BinaryPath   string
-    ConfigJSON   string
-    Port         int
-    BlockPort    int
-    Requests     []string
-    Endpoint     string
-    Method       string
-    UseEnvConfig bool
-    // BinaryCmd is the command+args to spawn for binary integration tests.
-    // When set, Run executes the external binary instead of making HTTP requests directly.
-    BinaryCmd []string
-    // BinaryEnv holds extra environment variables for the spawned binary.
-    BinaryEnv map[string]string
-    // EventsFile is the path to a JSON-lines events file written by the mock server
-    // when started with --events-file. runBinary reads this instead of querying /admin/requests.
-    EventsFile string
-    // ExpectedOutputContains is a string that must appear in the combined stdout+stderr.
-    ExpectedOutputContains string
-    // ExpectedExitCode is the expected exit code of the binary (default 0).
-    ExpectedExitCode int
-}
-
-type Response struct {
-    Responses []HTTPResponse
-    ExitCode  int
-    Stdout    string
-    Stderr    string
-    Port      int
-    Err       error
-}
-
 func Setup(t *testing.T, req *Request) error {
     _ = assertSuccess
     _ = assertContains
@@ -114,104 +75,6 @@ func Setup(t *testing.T, req *Request) error {
         return fmt.Errorf("build llm-mock: %w\n%s", err, string(out))
     }
     return nil
-}
-
-func Run(t *testing.T, req *Request) (*Response, error) {
-    if len(req.BinaryCmd) > 0 {
-        return runBinary(t, req)
-    }
-
-    resp := &Response{}
-
-    // Write config JSON to temp file
-    configPath := filepath.Join(t.TempDir(), "llm-mock-config.json")
-    if err := os.WriteFile(configPath, []byte(req.ConfigJSON), 0644); err != nil {
-        return nil, fmt.Errorf("write config: %w", err)
-    }
-
-    // If BlockPort is set, bind it to force port fallback
-    var blockListener net.Listener
-    if req.BlockPort > 0 {
-        var err error
-        blockListener, err = net.Listen("tcp", fmt.Sprintf(":%d", req.BlockPort))
-        if err != nil {
-            return nil, fmt.Errorf("block port %d: %w", req.BlockPort, err)
-        }
-        defer blockListener.Close()
-    }
-
-    // Start the server
-    ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-    defer cancel()
-
-    args := []string{}
-    if !req.UseEnvConfig {
-        args = append(args, "--config", configPath)
-    }
-
-    cmd := exec.CommandContext(ctx, req.BinaryPath, args...)
-    cmd.Dir = t.TempDir()
-
-    env := os.Environ()
-    if req.UseEnvConfig {
-        env = append(env, "LLM_MOCK_CONFIG="+configPath)
-    }
-    cmd.Env = env
-
-    var stderrBuf bytes.Buffer
-    cmd.Stderr = &stderrBuf
-
-    stdoutPipe, err := cmd.StdoutPipe()
-    if err != nil {
-        return nil, fmt.Errorf("stdout pipe: %w", err)
-    }
-
-    if err := cmd.Start(); err != nil {
-        return nil, fmt.Errorf("start server: %w", err)
-    }
-
-    // Read the port from server stdout
-    port, err := readPort(stdoutPipe)
-    if err != nil {
-        cancel()
-        cmd.Wait()
-        resp.Stderr = stderrBuf.String()
-        resp.Err = fmt.Errorf("read port: %w\nstderr: %s", err, resp.Stderr)
-        return resp, nil
-    }
-    resp.Port = port
-
-    // Make HTTP requests
-    baseURL := fmt.Sprintf("http://localhost:%d", port)
-    for i, bodyJSON := range req.Requests {
-        httpResp, err := makeHTTPRequest(baseURL, req.Endpoint, req.Method, bodyJSON)
-        if err != nil {
-            cancel()
-            cmd.Wait()
-            resp.Stderr = stderrBuf.String()
-            resp.Err = fmt.Errorf("HTTP request %d: %w", i, err)
-            return resp, nil
-        }
-        resp.Responses = append(resp.Responses, httpResp)
-    }
-
-    // Cancel and wait for server shutdown
-    cancel()
-    err = cmd.Wait()
-    resp.Stderr = stderrBuf.String()
-
-    if err != nil {
-        if ctx.Err() != nil {
-            return resp, nil
-        }
-        var exitErr *exec.ExitError
-        if errors.As(err, &exitErr) {
-            resp.ExitCode = exitErr.ExitCode()
-            return resp, nil
-        }
-        resp.Err = err
-    }
-    return resp, nil
 }
 
 // readPort reads from the server's stdout pipe looking for a port announcement.
@@ -331,6 +194,25 @@ func assertNotContains(t *testing.T, got string, want string) {
     }
 }
 
+func envWithOverrides(base []string, overrides map[string]string) []string {
+    merged := make(map[string]string, len(base)+len(overrides))
+    for _, kv := range base {
+        key, value, ok := strings.Cut(kv, "=")
+        if !ok || key == "" {
+            continue
+        }
+        merged[key] = value
+    }
+    for key, value := range overrides {
+        merged[key] = value
+    }
+    out := make([]string, 0, len(merged))
+    for key, value := range merged {
+        out = append(out, key+"="+value)
+    }
+    return out
+}
+
 // runBinary starts the mock server, spawns the external binary configured in
 // req.BinaryCmd, waits for it to finish, queries the admin endpoint, then
 // shuts down the server. It populates resp.Stdout (combined output), resp.ExitCode,
@@ -425,11 +307,7 @@ func runBinary(t *testing.T, req *Request) (*Response, error) {
         }
     }
 
-    binaryEnv := os.Environ()
-    for k, v := range expandedEnv {
-        binaryEnv = append(binaryEnv, fmt.Sprintf("%s=%s", k, v))
-    }
-    binaryCmd.Env = binaryEnv
+    binaryCmd.Env = envWithOverrides(os.Environ(), expandedEnv)
 
     var combinedOut bytes.Buffer
     binaryCmd.Stdout = &combinedOut

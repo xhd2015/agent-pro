@@ -21,41 +21,10 @@ import (
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 )
 
-type Request struct {
-	Target     string              // "to_grok", "from_grok", "roundtrip"
-	Events     []types.AgentEvent   // input for ToGrok / roundtrip
-	GrokEvents []grok_types.Event   // input for FromGrok
-	SessionID  string              // session ID for ToGrok
-}
-
-type Response struct {
-	Output string
-}
-
 func Setup(t *testing.T, req *Request) error {
 	_ = assertContains
 	_ = assertNotContains
 	return nil
-}
-
-func Run(t *testing.T, req *Request) (*Response, error) {
-	var output string
-	switch req.Target {
-	case "to_grok":
-		grokEvts := grok_types.ToGrok(req.Events, req.SessionID)
-		data, _ := json.Marshal(grokEvts)
-		output = string(data)
-	case "from_grok":
-		agentEvts := grok_types.FromGrok(req.GrokEvents)
-		data, _ := json.Marshal(agentEvts)
-		output = string(data)
-	case "roundtrip":
-		grokEvts := grok_types.ToGrok(req.Events, req.SessionID)
-		agentEvts := grok_types.FromGrok(grokEvts)
-		data, _ := json.Marshal(agentEvts)
-		output = string(data)
-	}
-	return &Response{Output: output}, nil
 }
 
 func assertContains(t *testing.T, got string, want string) {

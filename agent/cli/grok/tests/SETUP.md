@@ -23,62 +23,12 @@ import (
 	"github.com/xhd2015/agent-pro/agent/exec"
 )
 
-type Operation string
-
-const (
-	OpAsk        Operation = "ask"
-	OpListModels Operation = "list-models"
-)
-
-type Request struct {
-	Prompt       string
-	ResumePrompt string
-	Model        string
-	Operation    Operation
-}
-
-type Response struct {
-	Answer    string
-	SessionID string
-	Events    []json.RawMessage
-	Models    []string
-}
-
 func Setup(t *testing.T, req *Request) error {
 	// Validate that Operation is set; default to ask if unset
 	if req.Operation == "" {
 		req.Operation = OpAsk
 	}
 	return nil
-}
-
-func Run(t *testing.T, req *Request) (*Response, error) {
-	paths := &exec.PathsConfig{
-		RootDirName: ".grok-agent-test",
-		DataDirName: "data",
-		BinDirName:  "bin",
-	}
-	env := exec.NewEnv(paths, "GROK_AGENT_TEST_ROOT")
-
-	grokPath, err := grok.FindAgentPath(env)
-	if err != nil {
-		t.Skip("grok not found in PATH; skip integration test")
-		return &Response{}, nil
-	}
-
-	agent := &grok.GrokAgent{
-		AgentPath:    grokPath,
-		SettingsPath: "",
-		Workspace:    t.TempDir(),
-		Env:          env,
-	}
-
-	switch req.Operation {
-	case OpListModels:
-		return runListModels(t, agent)
-	default:
-		return runAsk(t, agent, req)
-	}
 }
 
 func parseRawLog(buf bytes.Buffer) []json.RawMessage {

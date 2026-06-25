@@ -109,3 +109,40 @@ doctest test -v ./agent/event/print/tests/format-agentevent
 # All print package tests (existing + new)
 doctest test -v ./agent/event/print/tests/...
 ```
+
+```go
+import (
+	"strings"
+	"testing"
+
+	types "github.com/xhd2015/agent-pro/agent/event/types"
+
+	"github.com/xhd2015/agent-pro/agent/event/print"
+)
+
+
+type Request struct {
+	Type     types.ActionType
+	Text     string
+	Tool     string
+	Output   string
+	ExitCode *int
+	Changes  []types.FileChange
+}
+
+type Response struct {
+	Output string
+}
+
+func Run(t *testing.T, req *Request) (*Response, error) {
+	event := types.AgentEvent{
+		Type:     req.Type,
+		Text:     req.Text,
+		Tool:     req.Tool,
+		Output:   req.Output,
+		ExitCode: req.ExitCode,
+		Changes:  req.Changes,
+	}
+	return &Response{Output: print.FormatAgentEvent(event)}, nil
+}
+```

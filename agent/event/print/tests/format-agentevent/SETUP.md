@@ -28,36 +28,11 @@ import (
 	"github.com/xhd2015/agent-pro/agent/event/print"
 )
 
-type Request struct {
-	Type     types.ActionType
-	Text     string
-	Tool     string
-	Output   string
-	ExitCode *int
-	Changes  []types.FileChange
-}
-
-type Response struct {
-	Output string
-}
-
 func Setup(t *testing.T, req *Request) error {
 	_ = assertContains
 	_ = assertNotContains
 	_ = assertEmpty
 	return nil
-}
-
-func Run(t *testing.T, req *Request) (*Response, error) {
-	event := types.AgentEvent{
-		Type:     req.Type,
-		Text:     req.Text,
-		Tool:     req.Tool,
-		Output:   req.Output,
-		ExitCode: req.ExitCode,
-		Changes:  req.Changes,
-	}
-	return &Response{Output: print.FormatAgentEvent(event)}, nil
 }
 
 func assertContains(t *testing.T, got string, want string) {

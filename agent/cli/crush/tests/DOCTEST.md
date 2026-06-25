@@ -86,3 +86,55 @@ Integration tests (server-client leaves, session-persist) require the `crush` bi
 ```sh
 doctest test ./agent/cli/crush/tests/...
 ```
+
+```go
+import (
+	"encoding/json"
+	"fmt"
+	osexec "os/exec"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/xhd2015/agent-pro/agent/cli/crush"
+	"github.com/xhd2015/agent-pro/agent/cli/registry"
+	crush_types "github.com/xhd2015/agent-pro/agent/event/crush_types"
+	types "github.com/xhd2015/agent-pro/agent/event/types"
+	"github.com/xhd2015/agent-pro/agent/exec"
+)
+
+
+type Request struct {
+	Prompt       string
+	ResumePrompt string
+	Model        string
+	Env          []string
+
+	Mode            string // "", "convert", "server-client", "server-ask", "convert-roundtrip"
+	SSEInput        string // raw SSE data line for convert mode
+	ServerOperation string // "health-check", "auto-start", "create-workspace", "send-and-receive", "server-lifecycle", "server-reuse"
+	AgentEventsJSON string // JSON array of types.AgentEvent for convert-roundtrip mode
+	SessionID       string // session ID for convert-roundtrip mode
+}
+
+type Response struct {
+	Answer    string // for Ask results
+	Output    string // for convert / server-client results (JSON)
+	SessionID string // session ID from agent after Ask
+}
+
+func Run(t *testing.T, req *Request) (*Response, error) {
+	switch req.Mode {
+	case "convert":
+		return runConvert(t, req)
+	case "server-client":
+		return runServerClient(t, req)
+	case "server-ask":
+		return runServerAsk(t, req)
+	case "convert-roundtrip":
+		return runConvertRoundtrip(t, req)
+	default:
+		return runSubprocess(t, req)
+	}
+}
+```

@@ -24,26 +24,6 @@ import (
     "time"
 )
 
-type Request struct {
-    Home         string
-    Command      string
-    Args         []string
-    Stdin        string
-    Env          []string
-    TempDir      string
-    AgentHub     string
-    FakeOpencode string
-    RepoRoot     string
-    Operation    string
-}
-
-type Response struct {
-    Stdout   string
-    Stderr   string
-    ExitCode int
-    Err      error
-}
-
 func execCmd(t *testing.T, command string, args []string, dir string, env []string, stdin string) (*Response, error) {
     ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
     defer cancel()
@@ -74,16 +54,6 @@ func execCmd(t *testing.T, command string, args []string, dir string, env []stri
         return resp, nil
     }
     return resp, err
-}
-
-func Run(t *testing.T, req *Request) (*Response, error) {
-    if req.Operation == "full_workflow" {
-        return runFullWorkflow(t, req)
-    }
-    if req.Command == "" {
-        req.Command = req.AgentHub
-    }
-    return execCmd(t, req.Command, req.Args, req.TempDir, req.Env, req.Stdin)
 }
 
 func runAgentHub(t *testing.T, req *Request, args ...string) (*Response, error) {

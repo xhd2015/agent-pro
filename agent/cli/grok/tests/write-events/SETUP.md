@@ -17,37 +17,8 @@ import (
 	eventtypes "github.com/xhd2015/agent-pro/agent/event/types"
 )
 
-type Request struct {
-	GrokLines []string
-}
-
-type Response struct {
-	Lines []string
-}
-
 func Setup(t *testing.T, req *Request) error {
 	_ = req.GrokLines
 	return nil
-}
-
-func Run(t *testing.T, req *Request) (*Response, error) {
-	var buf bytes.Buffer
-	w := grok.NewGrokEventWriter(&buf)
-	for _, line := range req.GrokLines {
-		w.WriteGrokLine(line)
-	}
-	w.Flush()
-	var lines []string
-	for _, line := range bytes.Split(bytes.TrimSpace(buf.Bytes()), []byte("\n")) {
-		if len(line) == 0 {
-			continue
-		}
-		var ev eventtypes.AgentEvent
-		if err := json.Unmarshal(line, &ev); err != nil {
-			t.Fatalf("unmarshal agent event: %v", err)
-		}
-		lines = append(lines, string(line))
-	}
-	return &Response{Lines: lines}, nil
 }
 ```

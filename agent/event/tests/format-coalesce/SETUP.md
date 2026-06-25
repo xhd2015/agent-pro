@@ -28,14 +28,6 @@ import (
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 )
 
-type Request struct {
-	Lines []string
-}
-
-type Response struct {
-	Output []string
-}
-
 func Setup(t *testing.T, req *Request) error {
 	_ = assertOutputNotEmpty
 	_ = assertOutputEmpty
@@ -61,24 +53,5 @@ func assertOutputContains(t *testing.T, idx int, output []string, substr string)
 	if !strings.Contains(output[idx], substr) {
 		t.Fatalf("output[%d] must contain %q, got: %q", idx, substr, output[idx])
 	}
-}
-
-func Run(t *testing.T, req *Request) (*Response, error) {
-	var c print.Coalescer
-	output := make([]string, len(req.Lines))
-	for i, line := range req.Lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || !strings.HasPrefix(trimmed, "{") {
-			output[i] = ""
-			continue
-		}
-		var ev types.AgentEvent
-		if err := json.Unmarshal([]byte(trimmed), &ev); err == nil && ev.Type == types.ActionMessage && c.ShouldSkip(ev) {
-			output[i] = "" // suppressed by coalescer
-			continue
-		}
-		output[i] = print.FormatTraceLine(line)
-	}
-	return &Response{Output: output}, nil
 }
 ```

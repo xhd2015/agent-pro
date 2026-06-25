@@ -128,3 +128,64 @@ Total: **25 leaves** across **5 feature areas**.
 ```sh
 doctest test -v ./external/agent-pro/agent/subagent/tests/
 ```
+
+```go
+import (
+    "bytes"
+    "context"
+    "fmt"
+    "os"
+    "path/filepath"
+    "strconv"
+    "strings"
+    "testing"
+
+    "github.com/xhd2015/agent-pro/agent/subagent"
+)
+
+
+type Request struct {
+    RoleName    string
+    SessionBase string
+    SessionID   string
+    Env         []string
+
+    Operation      string
+    ListSessions   bool
+    Status         bool
+    CatchUp        bool
+
+    LogMessage string
+    LogArgs    []any
+
+    PreCreateDirs    []string
+    PreCreateMeta    map[string]string
+    PreCreateEvents  map[string]string
+    PreCreatePID     bool
+
+    HomeDir string
+
+    SessionEnvVar   string
+    SessionMetaField string
+    DebugSessionEnv  string
+}
+
+type Response struct {
+    Stdout string
+    Stderr string
+    Err    error
+}
+
+func Run(t *testing.T, req *Request) (*Response, error) {
+    switch req.Operation {
+    case "logf":
+        return runLogf(t, req)
+    case "session_base":
+        return runSessionBase(t, req)
+    case "session_id_resolution":
+        return runSessionIDResolution(t, req)
+    default:
+        return runSubagentOp(t, req)
+    }
+}
+```
