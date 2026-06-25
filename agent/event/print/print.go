@@ -247,9 +247,60 @@ func toolInputSummary(tool string, input map[string]any) string {
 		return stringInputValue(input, "pattern", "query", "path")
 	case "grep":
 		return stringInputValue(input, "pattern", "query", "path")
+	case "skill":
+		return skillInputSummary(input)
+	case "webfetch":
+		return stringInputValue(input, "url")
+	case "websearch":
+		return stringInputValue(input, "query", "search_term")
+	case "todowrite", "todo":
+		return todoWriteInputSummary(input)
 	default:
+		return genericToolInputSummary(input)
+	}
+}
+
+func skillInputSummary(input map[string]any) string {
+	var parts []string
+	if name := stringInputValue(input, "name", "skill"); name != "" {
+		parts = append(parts, name)
+	}
+	if args := stringInputValue(input, "arguments", "args", "command"); args != "" {
+		parts = append(parts, args)
+	}
+	return strings.Join(parts, "\n")
+}
+
+func todoWriteInputSummary(input map[string]any) string {
+	rawTodos, ok := input["todos"]
+	if !ok {
 		return ""
 	}
+	todos, ok := rawTodos.([]any)
+	if !ok {
+		return ""
+	}
+	var parts []string
+	for _, rawTodo := range todos {
+		todo, ok := rawTodo.(map[string]any)
+		if !ok {
+			continue
+		}
+		content := stringInputValue(todo, "content", "text", "task")
+		if content == "" {
+			continue
+		}
+		if status := stringInputValue(todo, "status"); status != "" {
+			parts = append(parts, status+": "+content)
+		} else {
+			parts = append(parts, content)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+func genericToolInputSummary(input map[string]any) string {
+	return stringInputValue(input, "doc", "url", "query", "pattern", "path", "command", "name")
 }
 
 func stringInputValue(input map[string]any, keys ...string) string {

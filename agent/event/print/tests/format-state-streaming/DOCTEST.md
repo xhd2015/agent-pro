@@ -10,8 +10,10 @@ events.jsonl lines.
 format-state-streaming/
 ├── DOCTEST.md
 ├── SETUP.md
-├── grok-thought-deltas/        ActionThink per-word deltas → 1 think block (RED)
-└── message-deltas-coalesced/   ActionMessage deltas → 1 ASSISTANT block
+├── grok-thought-deltas/              ActionThink per-word deltas → 1 think block (RED)
+├── message-deltas-coalesced/         ActionMessage deltas → 1 ASSISTANT block
+├── skill-tool-call-details/          skill tool_call events → SKILL blocks with names
+└── maintain-topic-web-todo-details/    web search, todo, webfetch → blocks with input details
 ```
 
 ## How to Run
@@ -28,7 +30,10 @@ import (
 	"github.com/xhd2015/agent-pro/agent/event/print"
 )
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 662428c (print: show input details for more tool calls)
 type Request struct {
 	Lines []string
 }

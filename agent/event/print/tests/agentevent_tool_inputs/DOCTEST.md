@@ -20,8 +20,16 @@ debugging a maintain-topic trace.
 
 ```
 canonical AgentEvent tool_call line
-└── tool=glob
-    └── input has pattern  -> SEARCH block includes pattern
+├── tool=glob
+│   └── input has pattern              -> SEARCH block includes pattern
+├── tool=skill
+│   └── input has name                 -> SKILL block includes skill name
+├── tool=webfetch
+│   └── input has url                  -> WEBFETCH block includes URL
+├── tool=todowrite
+│   └── input has todos[]              -> TODO block includes todo details
+└── tool=skynet-base_get_doc_content
+    └── input has doc                  -> tool block includes search/doc URL
 ```
 
 ## Test Leaves
@@ -29,6 +37,10 @@ canonical AgentEvent tool_call line
 | Leaf | Description |
 |---|---|
 | `glob-pattern-details` | `glob` tool input pattern is visible below the `SEARCH` header. |
+| `skill-name-details` | `skill` tool input name is visible below the `SKILL` header. |
+| `webfetch-url-details` | `webfetch` tool input URL is visible below the `WEBFETCH` header. |
+| `todowrite-todos-details` | `todowrite` todos are visible below the `TODO` header. |
+| `skynet-doc-search-details` | Confluence search/doc URL is visible below the skynet tool header. |
 
 ## How to Run
 
