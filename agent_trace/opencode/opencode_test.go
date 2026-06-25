@@ -194,3 +194,31 @@ func TestOpencodeToolActivityFallbackInput(t *testing.T) {
 		})
 	}
 }
+
+func TestOpencodeToolActivitySearchPatternBeforeOutput(t *testing.T) {
+	part := &opencodeRunPart{
+		Type: "tool",
+		Tool: "glob",
+		State: &opencodePartState{
+			Status: "completed",
+			Input: map[string]any{
+				"pattern": "**/*.md",
+			},
+			Output: "No files found",
+		},
+	}
+
+	activity := opencodeToolActivity(part)
+	if activity == nil {
+		t.Fatal("expected activity, got nil")
+	}
+	if !strings.Contains(activity.Summary, "**/*.md") {
+		t.Fatalf("summary missing pattern: %q", activity.Summary)
+	}
+	if !strings.Contains(activity.Summary, "No files found") {
+		t.Fatalf("summary missing output: %q", activity.Summary)
+	}
+	if strings.Index(activity.Summary, "**/*.md") > strings.Index(activity.Summary, "No files found") {
+		t.Fatalf("pattern should appear before output: %q", activity.Summary)
+	}
+}

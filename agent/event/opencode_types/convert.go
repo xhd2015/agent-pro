@@ -286,7 +286,10 @@ func FromOpencode(events []Event, _ string) []types.AgentEvent {
 				if p.State.Input != nil {
 					evt.ToolInput = p.State.Input
 				}
+				evt.Output = p.State.Output
+				evt.Stderr = p.State.Stderr
 				exitCode := p.State.ExitCode
+				evt.ExitCode = &exitCode
 				evt.Mock = &types.MockConfig{
 					Output:   p.State.Output,
 					Stderr:   p.State.Stderr,

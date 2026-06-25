@@ -204,8 +204,12 @@ func FormatAgentEvent(event eventtypes.AgentEvent) string {
 		if summary := toolInputSummary(event.Tool, event.ToolInput); summary != "" {
 			parts = append(parts, summary)
 		}
-		if event.Output != "" {
-			parts = append(parts, event.Output)
+		output := event.Output
+		if output == "" && event.Mock != nil {
+			output = event.Mock.Output
+		}
+		if output != "" {
+			parts = append(parts, output)
 		}
 		if len(event.Changes) > 0 {
 			for _, c := range event.Changes {

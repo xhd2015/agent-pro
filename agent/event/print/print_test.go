@@ -81,6 +81,25 @@ func TestFormatAgentEventToolCallShowsTodoDetails(t *testing.T) {
 	requireContains(t, got, "in_progress: Search docs")
 }
 
+func TestFormatAgentEventToolCallShowsGlobPatternWithOutput(t *testing.T) {
+	got := FormatAgentEvent(eventtypes.AgentEvent{
+		Type: eventtypes.ActionToolCall,
+		Tool: "glob",
+		ToolInput: map[string]any{
+			"pattern": "**/*.md",
+		},
+		Mock: &eventtypes.MockConfig{
+			Output: "No files found",
+		},
+	})
+	requireContains(t, got, "SEARCH")
+	requireContains(t, got, "**/*.md")
+	requireContains(t, got, "No files found")
+	if strings.Index(got, "**/*.md") > strings.Index(got, "No files found") {
+		t.Fatalf("pattern should appear before output:\n%s", got)
+	}
+}
+
 func TestFormatAgentEventToolCallShowsMCPToolDoc(t *testing.T) {
 	got := FormatAgentEvent(eventtypes.AgentEvent{
 		Type: eventtypes.ActionToolCall,

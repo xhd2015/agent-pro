@@ -52,7 +52,7 @@ func parseEventTimestamp(line string) int64 {
 
 func relativeTime(timestampMs int64) string {
 	if timestampMs <= 0 {
-		return "\u2014"
+		return EmptyDisplay
 	}
 	now := time.Now().UnixMilli()
 	diff := now - timestampMs

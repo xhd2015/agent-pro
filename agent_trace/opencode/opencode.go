@@ -182,14 +182,33 @@ func opencodeToolInputSummary(tool string, input map[string]any) string {
 	if len(input) == 0 {
 		return ""
 	}
-	switch strings.ToLower(strings.TrimSpace(tool)) {
+	tool = strings.ToLower(strings.TrimSpace(tool))
+	switch tool {
+	case "bash", "shell", "execute", "exec", "run":
+		return stringInputValue(input, "command", "cmd")
+	case "read", "read_file", "read file":
+		return stringInputValue(input, "filePath", "path", "file")
+	case "write", "edit", "write_file", "write file", "patch":
+		return stringInputValue(input, "filePath", "path", "file")
+	case "glob", "grep", "search":
+		return stringInputValue(input, "pattern", "query", "path")
+	case "list", "ls", "list_files", "list files":
+		return stringInputValue(input, "path", "pattern")
+	case "webfetch":
+		return stringInputValue(input, "url")
+	case "websearch":
+		return stringInputValue(input, "query", "search_term")
 	case "skill":
 		return opencodeSkillInputSummary(input)
-	case "todowrite":
+	case "todowrite", "todo":
 		return opencodeTodoWriteInputSummary(input)
 	default:
-		return stringInputValue(input, "command")
+		return opencodeGenericToolInputSummary(input)
 	}
+}
+
+func opencodeGenericToolInputSummary(input map[string]any) string {
+	return stringInputValue(input, "doc", "url", "query", "pattern", "path", "command", "name")
 }
 
 func opencodeSkillInputSummary(input map[string]any) string {

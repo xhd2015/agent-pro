@@ -34,8 +34,10 @@ func (l *fileLogger) Append(line []byte) error {
 	if l == nil || l.f == nil {
 		return nil
 	}
-	_, err := l.f.Write(line)
-	return err
+	if _, err := l.f.Write(line); err != nil {
+		return err
+	}
+	return l.f.Sync()
 }
 
 func (l *fileLogger) Sync() error {

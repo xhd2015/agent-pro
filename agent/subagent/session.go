@@ -373,7 +373,7 @@ func showStatus(c Config, opts Options) error {
 	}
 
 	eventCount := len(eventLines)
-	lastRelative := "\u2014"
+	lastRelative := EmptyDisplay
 	if lastTimestampMs > 0 {
 		lastRelative = relativeTime(lastTimestampMs)
 	}
@@ -385,7 +385,7 @@ func showStatus(c Config, opts Options) error {
 		status = fmt.Sprintf("running (PID %s)", pidStr)
 	}
 
-	fmt.Fprintf(os.Stdout, "\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n")
+	fmt.Fprintf(os.Stdout, "\n%s\n", TraceHeaderRule)
 	fmt.Fprintf(os.Stdout, "  Session:  %s\n", sesID)
 	fmt.Fprintf(os.Stdout, "  Status:   %s\n", status)
 	fmt.Fprintf(os.Stdout, "  Runner:   %s\n", runner)
@@ -393,16 +393,16 @@ func showStatus(c Config, opts Options) error {
 
 	codexDisplay := codex
 	if codexDisplay == "" {
-		codexDisplay = "\u2014"
+		codexDisplay = EmptyDisplay
 	}
 	fmt.Fprintf(os.Stdout, "  Codex:    %s\n", codexDisplay)
 	opencodeDisplay := opencodeSID
 	if opencodeDisplay == "" {
-		opencodeDisplay = "\u2014"
+		opencodeDisplay = EmptyDisplay
 	}
 	fmt.Fprintf(os.Stdout, "  Opencode: %s\n", opencodeDisplay)
 	fmt.Fprintf(os.Stdout, "  Events:  %d lines (last: %s)\n", eventCount, lastRelative)
-	fmt.Fprintf(os.Stdout, "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\n")
+	fmt.Fprintf(os.Stdout, "%s\n\n", TraceHeaderRule)
 
 	if eventCount == 0 {
 		Logf("No events yet")
@@ -417,12 +417,12 @@ func showStatus(c Config, opts Options) error {
 				formatted = line
 			}
 			ts := parseEventTimestamp(line)
-			rel := "\u2014"
+			rel := EmptyDisplay
 			if ts > 0 {
 				rel = relativeTime(ts)
 			}
 			lines := strings.Split(formatted, "\n")
-			Logf("  [%d] %s \u2014 %s", eventCount-len(lastEvents)+i+1, lines[0], rel)
+			Logf("  [%d] %s - %s", eventCount-len(lastEvents)+i+1, lines[0], rel)
 			for _, l := range lines[1:] {
 				Logf("       %s", l)
 			}
