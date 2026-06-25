@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -60,12 +59,26 @@ func traceSession(c Config, opts Options) error {
 		return err
 	}
 
-	sessionDir, _, err := findOrCreateSession(c, opts, srcs.sessionID, srcs)
-	if err != nil {
-		return fmt.Errorf("session: %w", err)
+	var sessionDir string
+	if opts.SessionLayout.flatDir() {
+		sessionDir = opts.SessionLayout.Dir
+	} else {
+		base, baseErr := sessionsBase(c, opts)
+		if baseErr != nil {
+			return baseErr
+		}
+		var found bool
+		sessionDir, found = findSession(c, base, srcs.sessionID, srcs)
+		if !found || sessionDir == "" {
+			sessionDir, _, err = findOrCreateSession(c, opts, srcs.sessionID, srcs)
+			if err != nil {
+				return fmt.Errorf("session: %w", err)
+			}
+		}
 	}
 
-	eventsPath := filepath.Join(sessionDir, "events.jsonl")
+	paths := resolvedSessionPaths(sessionDir, opts.SessionLayout)
+	eventsPath := paths.eventsPath
 
 	printHeader := func(eventCount int) {
 		fmt.Fprintf(os.Stdout, "\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n")
@@ -120,7 +133,7 @@ func traceSession(c Config, opts Options) error {
 		state.Flush()
 	}
 
-	sessionLive := isSessionLive(sessionDir)
+	sessionLive := isSessionLiveAt(paths.pidPath)
 	if !sessionLive || !hasEvents {
 		fmt.Fprintf(os.Stdout, "\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n")
 		Logf("Done (session finished)")
@@ -179,7 +192,7 @@ func traceSession(c Config, opts Options) error {
 
 	for {
 		time.Sleep(2 * time.Second)
-		if !isSessionLive(sessionDir) {
+		if !isSessionLiveAt(paths.pidPath) {
 			cancel()
 			break
 		}

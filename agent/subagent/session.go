@@ -39,6 +39,10 @@ func sessionsBase(c Config, opts Options) (string, error) {
 }
 
 func findOrCreateSession(c Config, opts Options, threadID string, srcs *sessionIDSources) (dir string, isNew bool, err error) {
+	if opts.SessionLayout.flatDir() {
+		return findOrCreateFlatSession(c, opts, threadID, srcs)
+	}
+
 	base, err := sessionsBase(c, opts)
 	if err != nil {
 		return "", false, err
@@ -52,6 +56,33 @@ func findOrCreateSession(c Config, opts Options, threadID string, srcs *sessionI
 	dir, err = createSession(c, base, threadID, srcs)
 	if err != nil {
 		return "", false, err
+	}
+	return dir, true, nil
+}
+
+func findOrCreateFlatSession(c Config, opts Options, threadID string, srcs *sessionIDSources) (string, bool, error) {
+	dir := opts.SessionLayout.Dir
+	if opts.HostOwnsMeta {
+		return dir, opts.ResumeInnerSessionID == "", nil
+	}
+
+	metaPath := opts.SessionLayout.metaPath()
+	matchField := sessionMatchField(c, srcs)
+
+	data, err := os.ReadFile(metaPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return dir, true, nil
+		}
+		return "", false, fmt.Errorf("read meta.json: %w", err)
+	}
+
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		return "", false, fmt.Errorf("parse meta.json: %w", err)
+	}
+	if metaMatchesSessionID(m, threadID, matchField) {
+		return dir, false, nil
 	}
 	return dir, true, nil
 }
@@ -153,7 +184,9 @@ func createSession(c Config, base, threadID string, srcs *sessionIDSources) (str
 		"agent_runner": srcs.agentRunner,
 		"created_at":   now,
 	}
-	if srcs.explicitSessionID != "" {
+	if threadID != "" {
+		m["explicit_session_id"] = threadID
+	} else if srcs.explicitSessionID != "" {
 		m["explicit_session_id"] = srcs.explicitSessionID
 	}
 	if srcs.codexThreadID != "" {
@@ -176,16 +209,28 @@ func createSession(c Config, base, threadID string, srcs *sessionIDSources) (str
 }
 
 func writeSessionPID(sessionDir string) error {
+	return writeSessionPIDAt(filepath.Join(sessionDir, "pid"))
+}
+
+func writeSessionPIDAt(pidPath string) error {
 	pid := os.Getpid()
-	return os.WriteFile(filepath.Join(sessionDir, "pid"), []byte(fmt.Sprintf("%d", pid)), 0644)
+	return os.WriteFile(pidPath, []byte(fmt.Sprintf("%d", pid)), 0644)
 }
 
 func removeSessionPID(sessionDir string) {
-	os.Remove(filepath.Join(sessionDir, "pid"))
+	removeSessionPIDAt(filepath.Join(sessionDir, "pid"))
+}
+
+func removeSessionPIDAt(pidPath string) {
+	os.Remove(pidPath)
 }
 
 func isSessionLive(sessionDir string) bool {
-	data, err := os.ReadFile(filepath.Join(sessionDir, "pid"))
+	return isSessionLiveAt(filepath.Join(sessionDir, "pid"))
+}
+
+func isSessionLiveAt(pidPath string) bool {
+	data, err := os.ReadFile(pidPath)
 	if err != nil {
 		return false
 	}
@@ -197,13 +242,12 @@ func isSessionLive(sessionDir string) bool {
 }
 
 func readOpencodeSessionID(sessionDir string) string {
-	metaPath := filepath.Join(sessionDir, "meta.json")
-	data, err := os.ReadFile(metaPath)
+	return readOpencodeSessionIDAt(filepath.Join(sessionDir, "meta.json"))
+}
+
+func readOpencodeSessionIDAt(metaPath string) string {
+	m, err := readMetaMap(metaPath)
 	if err != nil {
-		return ""
-	}
-	var m map[string]any
-	if err := json.Unmarshal(data, &m); err != nil {
 		return ""
 	}
 	s, _ := m["opencode_session_id"].(string)
@@ -211,18 +255,40 @@ func readOpencodeSessionID(sessionDir string) string {
 }
 
 func updateSessionMeta(sessionDir, innerSessionID string, srcs *sessionIDSources) error {
-	metaPath := filepath.Join(sessionDir, "meta.json")
+	return updateSessionMetaAt(filepath.Join(sessionDir, "meta.json"), innerSessionID, srcs)
+}
+
+func updateSessionMetaAt(metaPath, innerSessionID string, srcs *sessionIDSources) error {
+	var m map[string]any
 	data, err := os.ReadFile(metaPath)
 	if err != nil {
-		return err
-	}
-	var m map[string]any
-	if err := json.Unmarshal(data, &m); err != nil {
-		return err
+		if !os.IsNotExist(err) {
+			return err
+		}
+		m = map[string]any{}
+	} else {
+		if err := json.Unmarshal(data, &m); err != nil {
+			return err
+		}
 	}
 	m["opencode_session_id"] = innerSessionID
-	if srcs != nil && srcs.codexThreadID != "" {
-		m["main_agent_codex_thread_id"] = srcs.codexThreadID
+	if srcs != nil {
+		if srcs.agentRunner != "" {
+			m["agent_runner"] = srcs.agentRunner
+		}
+		if _, hasAgent := m["agent_session_id"]; !hasAgent {
+			if srcs.explicitSessionID != "" {
+				m["explicit_session_id"] = srcs.explicitSessionID
+			} else if srcs.sessionID != "" && metaExplicitSessionID(m) == "" {
+				m["explicit_session_id"] = srcs.sessionID
+			}
+		}
+		if srcs.codexThreadID != "" {
+			m["main_agent_codex_thread_id"] = srcs.codexThreadID
+		}
+		if _, ok := m["created_at"]; !ok {
+			m["created_at"] = time.Now()
+		}
 	}
 	newData, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
@@ -238,24 +304,29 @@ func showStatus(c Config, opts Options) error {
 		return nil
 	}
 
-	base, err := sessionsBase(c, opts)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return nil
+	var sessionDir string
+	var codexFallback bool
+	if opts.SessionLayout.flatDir() {
+		sessionDir = opts.SessionLayout.Dir
+	} else {
+		base, err := sessionsBase(c, opts)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			return nil
+		}
+		sessionDir, codexFallback = findSession(c, base, srcs.sessionID, srcs)
+		if sessionDir == "" {
+			fmt.Fprintf(os.Stderr, "error: session not found: %s\n", srcs.sessionID)
+			return nil
+		}
 	}
-
-	sessionDir, codexFallback := findSession(c, base, srcs.sessionID, srcs)
-	if sessionDir == "" {
-		fmt.Fprintf(os.Stderr, "error: session not found: %s\n", srcs.sessionID)
-		return nil
-	}
+	paths := resolvedSessionPaths(sessionDir, opts.SessionLayout)
 
 	if codexFallback {
 		fmt.Fprintf(os.Stdout, "from --session-id, matching CODEX_THREAD_ID\n")
 	}
 
-	metaPath := filepath.Join(sessionDir, "meta.json")
-	metaData, err := os.ReadFile(metaPath)
+	metaData, err := os.ReadFile(paths.metaPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: read meta.json: %v\n", err)
 		return nil
@@ -267,7 +338,7 @@ func showStatus(c Config, opts Options) error {
 		return nil
 	}
 
-	sesID, _ := metaMap["explicit_session_id"].(string)
+	sesID := metaExplicitSessionID(metaMap)
 	if sesID == "" {
 		sesID = srcs.sessionID
 	}
@@ -285,7 +356,7 @@ func showStatus(c Config, opts Options) error {
 		createdAtStr = t.Format("2006-01-02 15:04:05")
 	}
 
-	eventsPath := filepath.Join(sessionDir, "events.jsonl")
+	eventsPath := paths.eventsPath
 	var eventLines []string
 	var lastTimestampMs int64
 	eventsData, evErr := os.ReadFile(eventsPath)
@@ -308,8 +379,8 @@ func showStatus(c Config, opts Options) error {
 	}
 
 	status := "finished"
-	if isSessionLive(sessionDir) {
-		pidData, _ := os.ReadFile(filepath.Join(sessionDir, "pid"))
+	if isSessionLiveAt(paths.pidPath) {
+		pidData, _ := os.ReadFile(paths.pidPath)
 		pidStr := strings.TrimSpace(string(pidData))
 		status = fmt.Sprintf("running (PID %s)", pidStr)
 	}

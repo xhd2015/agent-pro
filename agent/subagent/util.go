@@ -133,6 +133,33 @@ func sourceLabel(srcs *sessionIDSources) string {
 	return "generated"
 }
 
+func readMockConfigSessionID(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var cfg struct {
+		SessionID string `json:"session_id"`
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(cfg.SessionID)
+}
+
+func resolveInnerSessionID(captureID string, isNew bool, srcs *sessionIDSources) string {
+	if s := strings.TrimSpace(captureID); s != "" {
+		return s
+	}
+	if s := readMockConfigSessionID(os.Getenv("FAKE_CODEX_MOCK_CONFIG")); s != "" {
+		return s
+	}
+	if isNew && srcs != nil {
+		return srcs.sessionID
+	}
+	return ""
+}
+
 func newQuestionsFile(dir string) string {
 	base := time.Now().Format("2006_01_02_15_04_05")
 	name := base + ".json"

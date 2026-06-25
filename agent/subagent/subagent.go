@@ -35,6 +35,11 @@ type Config struct {
 	AutoGenerateSessionID bool
 }
 
+type AgentRunInfo struct {
+	InnerSessionID string
+	AgentRunner    string
+}
+
 type Options struct {
 	Prompt       string
 	AgentRunner  string
@@ -45,9 +50,18 @@ type Options struct {
 	Status       bool
 	ListSessions bool
 	SessionBase  string
+	SessionLayout SessionLayout
 	Timeout      time.Duration
 	// StdoutWriter receives streamed agent output instead of os.Stdout when set.
 	StdoutWriter io.Writer
+
+	// When true, subagent must not read or write meta.json. Session match/resume
+	// uses SessionID and ResumeInnerSessionID; host persists via OnAgentComplete.
+	HostOwnsMeta bool
+	// Inner runner session for resume (from host meta.opencode_session_id).
+	ResumeInnerSessionID string
+	// Called after successful agent run; host persists to its meta.
+	OnAgentComplete func(AgentRunInfo) error
 }
 
 func (c Config) agentPrompt() string {
@@ -168,6 +182,7 @@ func Run(ctx context.Context, c Config, opts Options) error {
 	}
 	srcs.agentRunner = agentRunner
 
+	layout := opts.SessionLayout
 	sessionDir, isNew, err := findOrCreateSession(c, opts, srcs.sessionID, srcs)
 	if isNew {
 		Logf("Session created: %s (source: %s)\n", srcs.sessionID, sourceLabel(srcs))
@@ -178,62 +193,77 @@ func Run(ctx context.Context, c Config, opts Options) error {
 		return fmt.Errorf("session: %w", err)
 	}
 
-	if err := writeSessionPID(sessionDir); err != nil {
+	paths := resolvedSessionPaths(sessionDir, layout)
+	if err := writeSessionPIDAt(paths.pidPath); err != nil {
 		return fmt.Errorf("write pid: %w", err)
 	}
-	defer removeSessionPID(sessionDir)
+	defer removeSessionPIDAt(paths.pidPath)
 
-	msgPath := filepath.Join(sessionDir, "messages.jsonl")
-	msgEntry := map[string]string{
-		"type":        "message",
-		"content":     prompt,
-		"create_time": time.Now().Format(time.RFC3339),
-	}
-	msgData, _ := json.Marshal(msgEntry)
-	f, err := os.OpenFile(msgPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return fmt.Errorf("write messages.jsonl: %w", err)
-	}
-	fmt.Fprintf(f, "%s\n", string(msgData))
-	f.Close()
-
-	tempDir, err := os.MkdirTemp("", "agent-pro-agent-*")
-	if err != nil {
-		return fmt.Errorf("create temp dir: %w", err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	exe, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("get executable: %w", err)
-	}
-	ypqPath := filepath.Join(tempDir, "yield-pending-questions")
-	if out, err := exec.Command("cp", exe, ypqPath).CombinedOutput(); err != nil {
-		return fmt.Errorf("copy yield-pending-questions: %w\n%s", err, string(out))
+	if !layout.skipMessages() {
+		msgPath := paths.messagesPath
+		msgEntry := map[string]string{
+			"type":        "message",
+			"content":     prompt,
+			"create_time": time.Now().Format(time.RFC3339),
+		}
+		msgData, _ := json.Marshal(msgEntry)
+		f, err := os.OpenFile(msgPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			return fmt.Errorf("write messages.jsonl: %w", err)
+		}
+		fmt.Fprintf(f, "%s\n", string(msgData))
+		f.Close()
 	}
 
-	pathEntry := tempDir + string(filepath.ListSeparator)
-	os.Setenv("PATH", pathEntry+os.Getenv("PATH"))
+	var questionFile string
+	var progressFile string
+	if layout.questionsEnabled() || layout.progressEnabled() {
+		tempDir, err := os.MkdirTemp("", "agent-pro-agent-*")
+		if err != nil {
+			return fmt.Errorf("create temp dir: %w", err)
+		}
+		defer os.RemoveAll(tempDir)
 
-	questionsDir := filepath.Join(sessionDir, "questions")
-	if err := os.MkdirAll(questionsDir, 0755); err != nil {
-		return fmt.Errorf("create questions dir: %w", err)
+		exe, err := os.Executable()
+		if err != nil {
+			return fmt.Errorf("get executable: %w", err)
+		}
+		pathEntry := tempDir + string(filepath.ListSeparator)
+		os.Setenv("PATH", pathEntry+os.Getenv("PATH"))
+
+		if layout.questionsEnabled() {
+			ypqPath := filepath.Join(tempDir, "yield-pending-questions")
+			if out, err := exec.Command("cp", exe, ypqPath).CombinedOutput(); err != nil {
+				return fmt.Errorf("copy yield-pending-questions: %w\n%s", err, string(out))
+			}
+			questionsDir := paths.questionsDir
+			if err := os.MkdirAll(questionsDir, 0755); err != nil {
+				return fmt.Errorf("create questions dir: %w", err)
+			}
+			questionFile = newQuestionsFile(questionsDir)
+			os.Setenv("QUESTION_FIFO", questionFile)
+		} else {
+			os.Unsetenv("QUESTION_FIFO")
+		}
+
+		if layout.progressEnabled() {
+			rpPath := filepath.Join(tempDir, "report-progress")
+			if out, err := exec.Command("cp", exe, rpPath).CombinedOutput(); err != nil {
+				return fmt.Errorf("copy report-progress: %w\n%s", err, string(out))
+			}
+			progressDir := paths.progressDir
+			if err := os.MkdirAll(progressDir, 0755); err != nil {
+				return fmt.Errorf("create progress dir: %w", err)
+			}
+			progressFile = filepath.Join(progressDir, time.Now().Format("20060102_150405")+"_progress_update.jsonl")
+			os.Setenv("PROGRESS_FILE", progressFile)
+		} else {
+			os.Unsetenv("PROGRESS_FILE")
+		}
+	} else {
+		os.Unsetenv("QUESTION_FIFO")
+		os.Unsetenv("PROGRESS_FILE")
 	}
-	questionFile := newQuestionsFile(questionsDir)
-	os.Setenv("QUESTION_FIFO", questionFile)
-
-	progressDir := filepath.Join(sessionDir, "progress")
-	if err := os.MkdirAll(progressDir, 0755); err != nil {
-		return fmt.Errorf("create progress dir: %w", err)
-	}
-
-	rpPath := filepath.Join(tempDir, "report-progress")
-	if out, err := exec.Command("cp", exe, rpPath).CombinedOutput(); err != nil {
-		return fmt.Errorf("copy report-progress: %w\n%s", err, string(out))
-	}
-
-	progressFile := filepath.Join(progressDir, time.Now().Format("20060102_150405")+"_progress_update.jsonl")
-	os.Setenv("PROGRESS_FILE", progressFile)
 
 	if opts.Timeout > 0 {
 		var timeoutCancel context.CancelFunc
@@ -244,17 +274,19 @@ func Run(ctx context.Context, c Config, opts Options) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	go func() {
-		logs.WatchLine(ctx, progressFile, logs.WatchLineOptions{}, func(line string) error {
-			var entry map[string]any
-			if err := json.Unmarshal([]byte(line), &entry); err != nil {
+	if layout.progressEnabled() && progressFile != "" {
+		go func() {
+			logs.WatchLine(ctx, progressFile, logs.WatchLineOptions{}, func(line string) error {
+				var entry map[string]any
+				if err := json.Unmarshal([]byte(line), &entry); err != nil {
+					return nil
+				}
+				desc, _ := entry["description"].(string)
+				Logf("%s", desc)
 				return nil
-			}
-			desc, _ := entry["description"].(string)
-			Logf("%s", desc)
-			return nil
-		})
-	}()
+			})
+		}()
+	}
 
 	if opts.MockConfig != "" {
 		os.Setenv("FAKE_CODEX_MOCK_CONFIG", opts.MockConfig)
@@ -262,10 +294,14 @@ func Run(ctx context.Context, c Config, opts Options) error {
 
 	var opencodeSessionID string
 	if !isNew {
-		opencodeSessionID = readOpencodeSessionID(sessionDir)
+		if opts.HostOwnsMeta {
+			opencodeSessionID = opts.ResumeInnerSessionID
+		} else {
+			opencodeSessionID = readOpencodeSessionIDAt(paths.metaPath)
+		}
 	}
 
-	eventsPath := filepath.Join(sessionDir, "events.jsonl")
+	eventsPath := paths.eventsPath
 	eventsLogger, err := logging.Open(eventsPath)
 	if err != nil {
 		return fmt.Errorf("open events.jsonl: %w", err)
@@ -289,26 +325,39 @@ func Run(ctx context.Context, c Config, opts Options) error {
 		return fmt.Errorf("sub-agent failed: %w", err)
 	}
 
-	if isNew {
-		sid := capture.sessionID
-		if sid == "" {
-			sid = srcs.sessionID
-		}
-		if updateErr := updateSessionMeta(sessionDir, sid, srcs); updateErr != nil {
-			return fmt.Errorf("update session meta: %w", updateErr)
+	innerID := resolveInnerSessionID(capture.sessionID, isNew, srcs)
+	if innerID != "" {
+		if opts.HostOwnsMeta {
+			if opts.OnAgentComplete != nil {
+				if cbErr := opts.OnAgentComplete(AgentRunInfo{
+					InnerSessionID: innerID,
+					AgentRunner:    agentRunner,
+				}); cbErr != nil {
+					return fmt.Errorf("on agent complete: %w", cbErr)
+				}
+			}
+		} else {
+			current := readOpencodeSessionIDAt(paths.metaPath)
+			if isNew || current == "" {
+				if updateErr := updateSessionMetaAt(paths.metaPath, innerID, srcs); updateErr != nil {
+					return fmt.Errorf("update session meta: %w", updateErr)
+				}
+			}
 		}
 	}
 
 	writeStdout(opts.StdoutWriter, output)
 
-	f, fErr := os.Open(questionFile)
-	if fErr == nil {
-		defer f.Close()
-		var buf bytes.Buffer
-		buf.ReadFrom(f)
-		if buf.Len() > 0 {
-			writeStdout(opts.StdoutWriter, "\n\n---\nQUESTIONS\n---\n\n")
-			writeStdout(opts.StdoutWriter, buf.String())
+	if layout.questionsEnabled() && questionFile != "" {
+		f, fErr := os.Open(questionFile)
+		if fErr == nil {
+			defer f.Close()
+			var buf bytes.Buffer
+			buf.ReadFrom(f)
+			if buf.Len() > 0 {
+				writeStdout(opts.StdoutWriter, "\n\n---\nQUESTIONS\n---\n\n")
+				writeStdout(opts.StdoutWriter, buf.String())
+			}
 		}
 	}
 
