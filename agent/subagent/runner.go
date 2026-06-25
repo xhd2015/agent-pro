@@ -3,6 +3,7 @@ package subagent
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,7 +22,7 @@ func formatEventLine(line string) string {
 	return print.FormatTraceLine(line)
 }
 
-func runAgent(ctx context.Context, agentRunner, model, prompt, sessionID string, rawLog *sessionLogWriter) (string, error) {
+func runAgent(ctx context.Context, agentRunner, model, prompt, sessionID string, rawLog *sessionLogWriter, stdout io.Writer) (string, error) {
 	if ctx.Err() != nil {
 		return "", ctx.Err()
 	}
@@ -45,7 +46,7 @@ func runAgent(ctx context.Context, agentRunner, model, prompt, sessionID string,
 	}
 
 	output, err := runner.Agent.Ask(ctx, prompt, opts, func(delta string) {
-		fmt.Print(delta)
+		writeStdout(stdout, delta)
 	})
 	if err != nil {
 		return output, err

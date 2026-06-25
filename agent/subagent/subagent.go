@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -45,6 +46,8 @@ type Options struct {
 	ListSessions bool
 	SessionBase  string
 	Timeout      time.Duration
+	// StdoutWriter receives streamed agent output instead of os.Stdout when set.
+	StdoutWriter io.Writer
 }
 
 func (c Config) agentPrompt() string {
@@ -280,7 +283,7 @@ func Run(ctx context.Context, c Config, opts Options) error {
 	} else {
 		fullPrompt = prompt
 	}
-	output, err := runAgent(ctx, agentRunner, model, fullPrompt, opencodeSessionID, capture)
+	output, err := runAgent(ctx, agentRunner, model, fullPrompt, opencodeSessionID, capture, opts.StdoutWriter)
 	cancel()
 	if err != nil {
 		return fmt.Errorf("sub-agent failed: %w", err)
@@ -296,7 +299,7 @@ func Run(ctx context.Context, c Config, opts Options) error {
 		}
 	}
 
-	fmt.Print(output)
+	writeStdout(opts.StdoutWriter, output)
 
 	f, fErr := os.Open(questionFile)
 	if fErr == nil {
@@ -304,12 +307,20 @@ func Run(ctx context.Context, c Config, opts Options) error {
 		var buf bytes.Buffer
 		buf.ReadFrom(f)
 		if buf.Len() > 0 {
-			fmt.Print("\n\n---\nQUESTIONS\n---\n\n")
-			fmt.Print(buf.String())
+			writeStdout(opts.StdoutWriter, "\n\n---\nQUESTIONS\n---\n\n")
+			writeStdout(opts.StdoutWriter, buf.String())
 		}
 	}
 
 	return nil
+}
+
+func writeStdout(w io.Writer, s string) {
+	if w != nil {
+		_, _ = w.Write([]byte(s))
+		return
+	}
+	fmt.Print(s)
 }
 
 func Logf(fmtStr string, args ...interface{}) {
