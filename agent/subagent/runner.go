@@ -2,6 +2,7 @@ package subagent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -12,13 +13,32 @@ import (
 	"github.com/xhd2015/dot-pkgs/go-pkgs/logs"
 
 	"github.com/xhd2015/agent-pro/agent/event/print"
+	eventtypes "github.com/xhd2015/agent-pro/agent/event/types"
 	agentprovider "github.com/xhd2015/agent-pro/agent/cli/provider"
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
 	agentexec "github.com/xhd2015/agent-pro/agent/exec"
 )
 
 func formatEventLine(line string) string {
+	trimmed := strings.TrimSpace(line)
+	if trimmed != "" && strings.HasPrefix(trimmed, "{") {
+		var event eventtypes.AgentEvent
+		if err := json.Unmarshal([]byte(trimmed), &event); err == nil && isFormatEventAgentType(event.Type) {
+			return print.FormatAgentEvent(event)
+		}
+	}
 	return print.FormatTraceLine(line)
+}
+
+func isFormatEventAgentType(t eventtypes.ActionType) bool {
+	switch t {
+	case eventtypes.ActionThink, eventtypes.ActionToolCall, eventtypes.ActionMessage,
+		eventtypes.ActionError, eventtypes.ActionDone,
+		eventtypes.ActionStepStart, eventtypes.ActionStepFinish,
+		eventtypes.ActionSleep:
+		return true
+	}
+	return false
 }
 
 func runAgent(ctx context.Context, agentRunner, model, prompt, sessionID string, rawLog *sessionLogWriter, stdout io.Writer) (string, error) {

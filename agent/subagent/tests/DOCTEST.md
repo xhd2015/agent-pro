@@ -229,9 +229,10 @@ type Request struct {
 
     HomeDir string
 
-    SessionEnvVar   string
-    SessionMetaField string
-    DebugSessionEnv  string
+    SessionEnvVar        string
+    SessionMetaField     string
+    DebugSessionEnv      string
+    AutoGenerateSessionID bool
 }
 
 type Response struct {

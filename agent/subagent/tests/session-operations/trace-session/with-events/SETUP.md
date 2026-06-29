@@ -17,7 +17,7 @@ import (
 
 func Setup(t *testing.T, req *Request) error {
     baseDir := filepath.Join(t.TempDir(), "custom_base")
-    sessDir := filepath.Join(baseDir, "testrole", "sessions", "2026", "06", "15", "sess_trace2")
+    sessDir := filepath.Join(baseDir, "testrole", "sessions", "sess_trace2")
 
     req.HomeDir = baseDir
     req.SessionBase = filepath.Join(baseDir, "testrole", "sessions")
@@ -27,8 +27,8 @@ func Setup(t *testing.T, req *Request) error {
         sessDir: `{"explicit_session_id":"trace_events_1","agent_runner":"opencode","created_at":"2026-06-15T12:00:00Z"}`,
     }
     req.PreCreateEvents = map[string]string{
-        sessDir: `{"type":"tool_use","tool":"bash","timestamp":1718444400000,"delta":{"command":"echo hello"}}` + "\n" +
-            `{"type":"tool_result","content":"hello","timestamp":1718444401000}` + "\n",
+        sessDir: `{"type":"tool_call","tool":"bash","tool_input":{"command":"echo hello"},"output":"hello"}` + "\n" +
+            `{"type":"message","text":"done"}` + "\n",
     }
     req.PreCreatePID = false
     return nil

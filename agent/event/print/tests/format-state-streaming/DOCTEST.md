@@ -1,8 +1,15 @@
 # FormatState Streaming Tests
 
-These doc-style tests verify `print.FormatState.FormatLine` streaming coalescing
-for consecutive `AgentEvent` deltas. Used by `traceSession` when rendering
-events.jsonl lines.
+# DSN (Domain Specific Notion)
+
+`FormatState.FormatLine` renders one JSONL `AgentEvent` at a time while coalescing
+consecutive assistant message and think deltas into a single streaming block.
+Tool-call events flush any open message/think block and emit a standalone formatted
+header. Used by `traceSession` when walking `events.jsonl`.
+
+## Version
+
+0.0.2
 
 ## Decision Tree
 
@@ -30,10 +37,6 @@ import (
 	"github.com/xhd2015/agent-pro/agent/event/print"
 )
 
-<<<<<<< HEAD
-
-=======
->>>>>>> 662428c (print: show input details for more tool calls)
 type Request struct {
 	Lines []string
 }

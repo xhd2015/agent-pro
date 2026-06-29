@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: web/todo tool_call events show input details below the header
+
 ## Preconditions
 - **Reproduces**: maintain-topic `--print` session lines for web fetch, Confluence
   search, and todo plan updates all render as bare tool headers.

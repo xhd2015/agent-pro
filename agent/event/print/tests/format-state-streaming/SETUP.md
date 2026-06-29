@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: `FormatState` streaming coalescence for trace JSONL rendering
+
 ## Preconditions
 - `print.FormatState.FormatLine` coalesces consecutive streaming events for trace display.
 - `traceSession` and `FollowEventLog` loop events through `FormatState`; this harness mirrors that loop.

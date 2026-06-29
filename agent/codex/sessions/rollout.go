@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	traceTypes "github.com/xhd2015/agent-pro/agent_trace/types"
+	traceTypes "github.com/xhd2015/agent-pro/agent/event/codex_types"
 )
 
 var rolloutUUIDPattern = regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)

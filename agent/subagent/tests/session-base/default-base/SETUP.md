@@ -16,7 +16,7 @@ import (
 
 func Setup(t *testing.T, req *Request) error {
     home := t.TempDir()
-    sessDir := filepath.Join(home, ".agent-pro", "subagent", "testrole", "sessions", "2026", "06", "15", "sess_default123")
+    sessDir := filepath.Join(home, ".agent-pro", "subagent", "testrole", "sessions", "sess_default123")
 
     req.HomeDir = home
     req.SessionBase = ""

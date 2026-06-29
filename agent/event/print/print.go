@@ -8,9 +8,10 @@ import (
 	"strings"
 
 	eventtypes "github.com/xhd2015/agent-pro/agent/event/types"
-	_ "github.com/xhd2015/agent-pro/agent_trace/opencode"
-	_ "github.com/xhd2015/agent-pro/agent_trace/pi"
+	"github.com/xhd2015/agent-pro/agent/event/traceparse"
 	"github.com/xhd2015/agent-pro/agent_trace/types"
+
+	_ "github.com/xhd2015/agent-pro/agent/event/traceparse"
 )
 
 const TRUNCATE_LINE_MAX = 1024
@@ -30,7 +31,7 @@ func FormatTraceLine(line string) string {
 		return FormatAgentEvent(event)
 	}
 	// FALLBACK: old adapter system
-	parsed, ok := types.ParseAgentTraceLine(json.RawMessage(trimmed))
+	parsed, ok := traceparse.ParseTraceLine(json.RawMessage(trimmed))
 	if !ok {
 		return ""
 	}
@@ -424,7 +425,7 @@ func (s *FormatState) FormatLine(line string) (header string, body string, isMsg
 	}
 
 	// --- FALLBACK: adapter path ---
-	parsed, ok := types.ParseAgentTraceLine(json.RawMessage(trimmed))
+	parsed, ok := traceparse.ParseTraceLine(json.RawMessage(trimmed))
 	if !ok {
 		return "", "", false
 	}

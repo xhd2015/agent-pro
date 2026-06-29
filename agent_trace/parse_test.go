@@ -1,3 +1,7 @@
+// Deprecated: integration tests for ParseMessages moved to agent/event/tests/traceparse
+// (parse-messages/* leaves). Keep these tests only to guard the thin agent_trace wrapper.
+//
+// Migration: run doctest test ./agent/event/tests/traceparse/...
 package agent_trace
 
 import (

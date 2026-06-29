@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: skill `tool_call` events show name and arguments below the header
+
 ## Preconditions
 - **Reproduces**: maintain-topic `--print` follows `events.jsonl` through
   `FormatState.FormatLine`, which currently prints bare `SKILL` headers for

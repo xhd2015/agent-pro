@@ -5,7 +5,7 @@
 ## Steps
 1. Use auto-assigned port (`HostPort = 0`).
 2. Use default `CrushPath` (empty → `LookPath`).
-3. Send the prompt `"one word of French capital"`.
+3. Send the prompt `"What is the capital city of France? Answer with exactly one word."`.
 
 ## Context
 - The root `Run` function auto-locates the crush binary and picks a free port.
@@ -16,7 +16,7 @@
 import "testing"
 
 func Setup(t *testing.T, req *Request) error {
-	req.Prompt = "one word of French capital"
+	req.Prompt = "What is the capital city of France? Answer with exactly one word."
 	req.HostPort = 0
 	return nil
 }

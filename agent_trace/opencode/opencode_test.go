@@ -1,15 +1,25 @@
-package opencode
+// Deprecated: opencode trace adapter tests moved to agent/event/tests/traceparse
+// (parse-line/opencode/* leaves) and agent/event/print/tests/opencode_types.
+//
+// These tests now exercise traceparse directly and guard behavior during the
+// agent_trace deprecation period.
+//
+// Migration: doctest test ./agent/event/tests/traceparse/parse-line/opencode/...
+package opencode_test
 
 import (
 	"strings"
 	"testing"
+
+	"github.com/xhd2015/agent-pro/agent/event/traceparse"
+	"github.com/xhd2015/agent-pro/agent/event/traceview"
 )
 
 func TestOpencodeToolActivityBashShowsCommand(t *testing.T) {
-	part := &opencodeRunPart{
+	part := &traceparse.OpencodeRunPart{
 		Type: "tool",
 		Tool: "bash",
-		State: &opencodePartState{
+		State: &traceparse.OpencodePartState{
 			Status: "completed",
 			Title:  "Run Go tests to verify changes",
 			Output: "ok  \texample.com/hello-world\t1.717s\n",
@@ -21,7 +31,7 @@ func TestOpencodeToolActivityBashShowsCommand(t *testing.T) {
 		},
 	}
 
-	activity := opencodeToolActivity(part)
+	activity := traceparse.OpencodeToolActivity(part)
 	if activity == nil {
 		t.Fatal("expected activity, got nil")
 	}
@@ -38,16 +48,16 @@ func TestOpencodeToolActivityBashShowsCommand(t *testing.T) {
 	if activity.ToolName != "Shell" {
 		t.Errorf("tool name = %q, want Shell", activity.ToolName)
 	}
-	if activity.Status != "completed" {
+	if activity.Status != traceview.StatusCompleted {
 		t.Errorf("status = %q, want completed", activity.Status)
 	}
 }
 
 func TestOpencodeToolActivityBashCommandOnly(t *testing.T) {
-	part := &opencodeRunPart{
+	part := &traceparse.OpencodeRunPart{
 		Type: "tool",
 		Tool: "bash",
-		State: &opencodePartState{
+		State: &traceparse.OpencodePartState{
 			Status: "running",
 			Input: map[string]any{
 				"command": "echo hello",
@@ -55,7 +65,7 @@ func TestOpencodeToolActivityBashCommandOnly(t *testing.T) {
 		},
 	}
 
-	activity := opencodeToolActivity(part)
+	activity := traceparse.OpencodeToolActivity(part)
 	if activity == nil {
 		t.Fatal("expected activity, got nil")
 	}
@@ -67,10 +77,10 @@ func TestOpencodeToolActivityBashCommandOnly(t *testing.T) {
 }
 
 func TestOpencodeToolActivityRead(t *testing.T) {
-	part := &opencodeRunPart{
+	part := &traceparse.OpencodeRunPart{
 		Type: "tool",
 		Tool: "read",
-		State: &opencodePartState{
+		State: &traceparse.OpencodePartState{
 			Status: "completed",
 			Title:  "path/to/main.go",
 			Output: "package main\n\nfunc main() {\n\tfmt.Println(\"hello\")\n}",
@@ -80,7 +90,7 @@ func TestOpencodeToolActivityRead(t *testing.T) {
 		},
 	}
 
-	activity := opencodeToolActivity(part)
+	activity := traceparse.OpencodeToolActivity(part)
 	if activity == nil {
 		t.Fatal("expected activity, got nil")
 	}
@@ -97,10 +107,10 @@ func TestOpencodeToolActivityRead(t *testing.T) {
 }
 
 func TestOpencodeToolActivityError(t *testing.T) {
-	part := &opencodeRunPart{
+	part := &traceparse.OpencodeRunPart{
 		Type: "tool",
 		Tool: "bash",
-		State: &opencodePartState{
+		State: &traceparse.OpencodePartState{
 			Status: "error",
 			Title:  "Run failing command",
 			Output: "some output",
@@ -111,12 +121,12 @@ func TestOpencodeToolActivityError(t *testing.T) {
 		},
 	}
 
-	activity := opencodeToolActivity(part)
+	activity := traceparse.OpencodeToolActivity(part)
 	if activity == nil {
 		t.Fatal("expected activity, got nil")
 	}
 
-	if activity.Status != "failed" {
+	if activity.Status != traceview.StatusFailed {
 		t.Errorf("status = %q, want failed", activity.Status)
 	}
 	if activity.Summary != "command not found" {
@@ -125,12 +135,12 @@ func TestOpencodeToolActivityError(t *testing.T) {
 }
 
 func TestOpencodeToolActivityNoState(t *testing.T) {
-	part := &opencodeRunPart{
+	part := &traceparse.OpencodeRunPart{
 		Type: "tool",
 		Tool: "unknown-tool",
 	}
 
-	activity := opencodeToolActivity(part)
+	activity := traceparse.OpencodeToolActivity(part)
 	if activity == nil {
 		t.Fatal("expected activity, got nil")
 	}
@@ -174,16 +184,16 @@ func TestOpencodeToolActivityFallbackInput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			part := &opencodeRunPart{
+			part := &traceparse.OpencodeRunPart{
 				Type: "tool",
 				Tool: "search",
-				State: &opencodePartState{
+				State: &traceparse.OpencodePartState{
 					Status: "completed",
 					Input:  tt.input,
 				},
 			}
 
-			activity := opencodeToolActivity(part)
+			activity := traceparse.OpencodeToolActivity(part)
 			if activity == nil {
 				t.Fatal("expected activity, got nil")
 			}
@@ -196,10 +206,10 @@ func TestOpencodeToolActivityFallbackInput(t *testing.T) {
 }
 
 func TestOpencodeToolActivitySearchPatternBeforeOutput(t *testing.T) {
-	part := &opencodeRunPart{
+	part := &traceparse.OpencodeRunPart{
 		Type: "tool",
 		Tool: "glob",
-		State: &opencodePartState{
+		State: &traceparse.OpencodePartState{
 			Status: "completed",
 			Input: map[string]any{
 				"pattern": "**/*.md",
@@ -208,7 +218,7 @@ func TestOpencodeToolActivitySearchPatternBeforeOutput(t *testing.T) {
 		},
 	}
 
-	activity := opencodeToolActivity(part)
+	activity := traceparse.OpencodeToolActivity(part)
 	if activity == nil {
 		t.Fatal("expected activity, got nil")
 	}

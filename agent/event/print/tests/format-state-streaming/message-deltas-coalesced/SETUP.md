@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: coalesce consecutive `ActionMessage` deltas into one assistant block
+
 ## Preconditions
 - Control case: consecutive `ActionMessage` streaming deltas are already coalesced by `FormatState`.
 - Same harness as grok-thought-deltas; verifies message coalescing works.

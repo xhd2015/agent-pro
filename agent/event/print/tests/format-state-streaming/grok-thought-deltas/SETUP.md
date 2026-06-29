@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: coalesce per-word `ActionThink` deltas into one think block
+
 ## Preconditions
 - **Reproduces**: Grok `thought` streaming writes per-token `ActionThink` events to events.jsonl.
 - Each delta is a single word. `FormatState` should coalesce them into one thinking block.

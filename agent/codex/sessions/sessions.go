@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/xhd2015/agent-pro/agent/event/print"
-	_ "github.com/xhd2015/agent-pro/agent_trace/codex"
+	_ "github.com/xhd2015/agent-pro/agent/event/traceparse"
 )
 
 const (

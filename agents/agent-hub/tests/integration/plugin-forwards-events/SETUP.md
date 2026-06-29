@@ -6,8 +6,8 @@
 
 ```go
 import (
-    "os/exec"
     "fmt"
+    "os/exec"
     "path/filepath"
     "testing"
 )
@@ -17,20 +17,26 @@ func Setup(t *testing.T, req *Request) error {
         t.Skipf("skipping plugin test: bun not installed")
     }
 
-    resp, err := runAgentHub(t, req, "integration", "opencode", "install")
+    opencodeHome := filepath.Join(req.TempDir, "opencode-home")
+    req.Env = append(req.Env, "OPENCODE_CONFIG_DIR="+opencodeHome)
+
+    instResp, err := runAgentHub(t, req, "integration", "opencode", "install", "--opencode-home", opencodeHome)
     if err != nil {
         return err
     }
-    if resp.ExitCode != 0 {
-        return fmt.Errorf("install failed: %s", resp.Stderr)
+    if instResp.ExitCode != 0 {
+        return fmt.Errorf("install failed: %s", instResp.Stderr)
     }
 
-    pluginPath := filepath.Join(req.TempDir, ".opencode", "plugins", "agent-hub.ts")
-    pluginContent := `const { execSync } = require("child_process");
+    pluginPath := filepath.Join(opencodeHome, "plugins", "agent-hub.ts")
+    pluginContent := fmt.Sprintf(`import { execSync } from "child_process";
+const agentHub = %q;
 function notify(eventType, payload) {
-  try {
-    execSync("agent-hub hook notify --runner opencode --event " + eventType, { input: JSON.stringify(payload), stdio: ["pipe","pipe","pipe"] });
-  } catch(e) {}
+  execSync(agentHub + " hook notify --runner opencode --event " + eventType, {
+    input: JSON.stringify(payload),
+    stdio: ["pipe", "pipe", "pipe"],
+    env: process.env,
+  });
 }
 export const AgentHubPlugin = async () => {
   return {
@@ -39,11 +45,11 @@ export const AgentHubPlugin = async () => {
     },
   };
 };
-`
+`, req.AgentHub)
     writeFile(t, pluginPath, pluginContent)
 
     mockConfigPath := filepath.Join(req.TempDir, "mock-e2e.json")
-    mockConfig := `{"version":"agent-pro.fake-runner.v1","runner":"opencode","session_id":"sess_e2e","stdout_events":[{"type":"message","done":true}]}`
+    mockConfig := `{"version":"agent-pro.fake-runner.v1","runner":"opencode","session_id":"sess_e2e","llm_events":[{"type":"message","text":"hello"},{"type":"done"}]}`
     writeFile(t, mockConfigPath, mockConfig)
 
     req.Command = req.FakeOpencode

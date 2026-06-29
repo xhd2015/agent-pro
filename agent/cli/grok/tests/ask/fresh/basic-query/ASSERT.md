@@ -3,8 +3,8 @@
 - Response.SessionID is non-empty (session ID captured from `end` event).
 - Response.Events is non-empty.
 - Every entry in Response.Events is valid JSON.
-- At least one event has `"type":"text"`.
-- At least one event has `"type":"end"` with a non-empty `sessionId`.
+- At least one event has `"type":"message"` (AgentEvent written to RawLog).
+- At least one event has `"type":"done"` with session ID in `tool_input`, or `SessionID` is set from the grok `end` line.
 
 ## Side Effects
 - None.
@@ -33,8 +33,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	if len(resp.Events) == 0 {
 		t.Fatal("expected non-empty Events after Ask()")
 	}
-	hasText := false
-	hasEnd := false
+	hasMessage := false
+	hasDone := false
 	for _, raw := range resp.Events {
 		if !json.Valid(raw) {
 			t.Fatalf("invalid JSON event: %s", string(raw))
@@ -44,21 +44,22 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 			t.Fatalf("failed to unmarshal event: %v", err)
 		}
 		typ, _ := ev["type"].(string)
-		if typ == "text" {
-			hasText = true
+		if typ == "message" {
+			hasMessage = true
 		}
-		if typ == "end" {
-			sid, _ := ev["sessionId"].(string)
-			if sid != "" {
-				hasEnd = true
+		if typ == "done" {
+			if toolInput, ok := ev["tool_input"].(map[string]any); ok {
+				if sid, _ := toolInput["session_id"].(string); sid != "" {
+					hasDone = true
+				}
 			}
 		}
 	}
-	if !hasText {
-		t.Fatal("expected at least one event with type 'text'")
+	if !hasMessage {
+		t.Fatal("expected at least one AgentEvent with type 'message' in RawLog")
 	}
-	if !hasEnd {
-		t.Fatal("expected at least one event with type 'end' containing sessionId")
+	if !hasDone && resp.SessionID == "" {
+		t.Fatal("expected done event with session_id in tool_input or non-empty SessionID")
 	}
 }
 ```

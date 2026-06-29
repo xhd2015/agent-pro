@@ -1,42 +1,6 @@
+// Deprecated: the generic trace adapter is implemented in agent/event/traceparse.
+// This file is an empty stub kept so existing blank imports of agent_trace still compile.
+//
+// Migration: blank-import agent/event/traceparse to register all provider adapters
+// (codex, cursor, opencode, pi, generic).
 package agent_trace
-
-import (
-	"encoding/json"
-	"strings"
-
-	"github.com/xhd2015/agent-pro/agent_trace/types"
-)
-
-type genericTraceAdapter struct{}
-
-func init() {
-	types.RegisterAgentTraceAdapter(1000, genericTraceAdapter{})
-}
-
-func (genericTraceAdapter) Name() string {
-	return "generic"
-}
-
-func (genericTraceAdapter) Parse(raw json.RawMessage) (types.AgentTraceParsedEvent, bool) {
-	var event types.TraceEvent
-	if err := json.Unmarshal(raw, &event); err != nil {
-		return types.AgentTraceParsedEvent{}, false
-	}
-	switch event.Type {
-	case "assistant":
-		if text := types.TraceMessageText(event.Message); text != "" {
-			return types.AgentTraceParsedEvent{Message: &types.AgentTraceMessage{
-				Role:    types.RoleAssistant,
-				Content: text,
-			}}, true
-		}
-	case "result":
-		if text := strings.TrimSpace(event.Result); text != "" {
-			return types.AgentTraceParsedEvent{Message: &types.AgentTraceMessage{
-				Role:    types.RoleAssistant,
-				Content: text,
-			}}, true
-		}
-	}
-	return types.AgentTraceParsedEvent{}, false
-}

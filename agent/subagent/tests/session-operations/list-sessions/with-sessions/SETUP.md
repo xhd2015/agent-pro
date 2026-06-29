@@ -14,8 +14,8 @@ import (
 
 func Setup(t *testing.T, req *Request) error {
     baseDir := filepath.Join(t.TempDir(), "custom_base")
-    sess1 := filepath.Join(baseDir, "testrole", "sessions", "2026", "06", "15", "sess_sessA")
-    sess2 := filepath.Join(baseDir, "testrole", "sessions", "2026", "06", "14", "sess_sessB")
+    sess1 := filepath.Join(baseDir, "testrole", "sessions", "sess_sessA")
+    sess2 := filepath.Join(baseDir, "testrole", "sessions", "sess_sessB")
 
     req.HomeDir = baseDir
     req.SessionBase = filepath.Join(baseDir, "testrole", "sessions")
