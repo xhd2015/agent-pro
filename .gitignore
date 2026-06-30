@@ -17,3 +17,6 @@ handoff_*
 
 /fake-opencode
 /fake-codex
+
+node_modules
+/frontend-agent-run/dist

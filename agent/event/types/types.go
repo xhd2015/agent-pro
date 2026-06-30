@@ -25,6 +25,7 @@ const (
 type AgentEvent struct {
 	ID        string         `json:"id,omitempty"`
 	Type      ActionType     `json:"type"`
+	Role      string         `json:"role,omitempty"`
 	Phase     EventPhase     `json:"phase,omitempty"`
 	Timestamp int64          `json:"timestamp,omitempty"`
 	Text      string         `json:"text,omitempty"`
