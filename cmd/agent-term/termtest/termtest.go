@@ -13,11 +13,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync/atomic"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/creack/pty"
 	"github.com/gorilla/websocket"
 	ptyclient "github.com/xhd2015/dot-pkgs/go-pkgs/shell/ptywrap/client"
 )
@@ -34,6 +35,10 @@ type Request struct {
 	EnsureNoDaemon     bool
 	RenameBeforeAttach string
 	WebSessionName     string
+	RunCommand         []string
+	DetachSignal       bool
+	RunProbeSeconds    int
+	RequireGrok        bool
 
 	AgentTermBin string
 	DaemonAddr   string
@@ -48,6 +53,10 @@ type Response struct {
 	HTTPStatus int
 	HTTPBody   string
 	DaemonPort int
+
+	DaemonStderr          string
+	SessionStillRunning   bool
+	DetachedSessionID     string
 }
 
 // Run executes an agent-term doctest phase.
@@ -59,34 +68,63 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 		return runCLI(t, req)
 	case "run-exit-id":
 		return runRunPrintsID(t, req)
+	case "wait-session":
+		return runWaitSession(t, req)
 	case "attach-by-name":
 		return runAttachByName(t, req)
 	case "web-xterm":
 		return runWebServesPage(t, req)
+	case "serve-logs-startup":
+		return runServeLogsStartup(t, req)
+	case "serve-logs-on-create":
+		return runServeLogsOnCreate(t, req)
+	case "run-pty":
+		return runWithPTY(t, req)
+	case "run-pty-probe":
+		return runWithPTYProbe(t, req)
+	case "run-requires-tty":
+		return runRequiresTTY(t, req)
+	case "run-detach-survives":
+		return runDetachSurvives(t, req)
 	default:
 		return nil, fmt.Errorf("unknown phase %q", req.Phase)
 	}
 }
 
+var (
+	cachedAgentTermBin     string
+	cachedAgentTermBinErr  error
+	cachedAgentTermBinOnce sync.Once
+)
+
 // BuildAgentTerm builds the agent-term binary for doctest harnesses.
 func BuildAgentTerm(t *testing.T) string {
 	t.Helper()
-	root, err := findModuleRoot()
-	if err != nil {
-		t.Fatal(err)
+	cachedAgentTermBinOnce.Do(func() {
+		root, err := findModuleRoot()
+		if err != nil {
+			cachedAgentTermBinErr = err
+			return
+		}
+		out := filepath.Join(os.TempDir(), "agent-term-doctest-shared")
+		cmd := exec.Command("go", "build", "-o", out, "./cmd/agent-term")
+		cmd.Dir = root
+		if combined, err := cmd.CombinedOutput(); err != nil {
+			cachedAgentTermBinErr = fmt.Errorf("build agent-term: %v\n%s", err, combined)
+			return
+		}
+		cachedAgentTermBin = out
+	})
+	if cachedAgentTermBinErr != nil {
+		t.Fatal(cachedAgentTermBinErr)
 	}
-	safe := strings.ReplaceAll(t.Name(), "/", "_")
-	out := filepath.Join(os.TempDir(), "agent-term-doctest-"+safe)
-	cmd := exec.Command("go", "build", "-o", out, "./cmd/agent-term")
-	cmd.Dir = root
-	if combined, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("build agent-term: %v\n%s", err, combined)
-	}
-	t.Cleanup(func() { os.Remove(out) })
-	return out
+	return cachedAgentTermBin
 }
 
 func runServeAcceptsTCP(t *testing.T, req *Request) (*Response, error) {
+	daemonStartMu.Lock()
+	defer daemonStartMu.Unlock()
+
 	resp := &Response{}
 	port, err := pickFreePort(37681)
 	if err != nil {
@@ -144,8 +182,20 @@ func runCLI(t *testing.T, req *Request) (*Response, error) {
 	}
 	resp.Stdout = stdout.String()
 	resp.Stderr = stderr.String()
-	resp.Combined = strings.TrimSpace(resp.Stdout + "\n" + resp.Stderr)
+	resp.Combined = combineCLIOutput(resp.Stdout, resp.Stderr)
 	return resp, nil
+}
+
+func combineCLIOutput(stdout, stderr string) string {
+	stdout = strings.TrimSpace(stdout)
+	switch {
+	case stdout != "" && stderr != "":
+		return strings.TrimRight(stdout+"\n"+stderr, "\n")
+	case stderr != "":
+		return strings.TrimRight(stderr, "\n")
+	default:
+		return stdout
+	}
 }
 
 func runRunPrintsID(t *testing.T, req *Request) (*Response, error) {
@@ -154,8 +204,12 @@ func runRunPrintsID(t *testing.T, req *Request) (*Response, error) {
 		return nil, err
 	}
 	defer daemon.cleanup()
+	runArgv := []string{"true"}
+	if len(req.RunCommand) > 0 {
+		runArgv = req.RunCommand
+	}
 	env := append(os.Environ(), "AGENT_TERM_SERVER=http://127.0.0.1:"+strconv.Itoa(port))
-	cmd := exec.Command(req.AgentTermBin, "run", "true")
+	cmd := exec.Command(req.AgentTermBin, append([]string{"run"}, runArgv...)...)
 	cmd.Env = env
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -169,7 +223,42 @@ func runRunPrintsID(t *testing.T, req *Request) (*Response, error) {
 			return nil, runErr
 		}
 	}
-	resp.Combined = strings.TrimSpace(resp.Stdout + "\n" + resp.Stderr)
+	resp.Combined = combineCLIOutput(resp.Stdout, resp.Stderr)
+	return resp, nil
+}
+
+func runWaitSession(t *testing.T, req *Request) (*Response, error) {
+	port, daemon, err := startDaemon(t, req)
+	if err != nil {
+		return nil, err
+	}
+	defer daemon.cleanup()
+
+	command := []string{"sleep", "2"}
+	if len(req.RunCommand) > 0 {
+		command = req.RunCommand
+	}
+	base := fmt.Sprintf("http://127.0.0.1:%d", port)
+	id, err := createSessionViaAPI(t, base, command, "")
+	if err != nil {
+		return nil, err
+	}
+
+	c := ptyclient.NewClient(base)
+	var waitErr error
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				waitErr = fmt.Errorf("panic: %v", r)
+			}
+		}()
+		waitErr = ptyclient.WaitSession(c, id)
+	}()
+	resp := &Response{Stdout: id}
+	if waitErr != nil {
+		resp.Stderr = waitErr.Error()
+		resp.ExitCode = 1
+	}
 	return resp, nil
 }
 
@@ -242,12 +331,18 @@ func runWebServesPage(t *testing.T, req *Request) (*Response, error) {
 	return &Response{HTTPStatus: httpResp.StatusCode, HTTPBody: string(body)}, nil
 }
 
+var daemonStartMu sync.Mutex
+
 type daemonHandle struct {
 	port    int
+	stderr  *bytes.Buffer
 	cleanup func()
 }
 
 func startDaemon(t *testing.T, req *Request) (int, *daemonHandle, error) {
+	daemonStartMu.Lock()
+	defer daemonStartMu.Unlock()
+
 	port := req.DaemonPort
 	if port <= 0 {
 		p, err := pickFreePort(37681)
@@ -274,8 +369,267 @@ func startDaemon(t *testing.T, req *Request) (int, *daemonHandle, error) {
 	}
 	return port, &daemonHandle{
 		port:    port,
+		stderr:  &stderr,
 		cleanup: func() { terminateProcess(cmd) },
 	}, nil
+}
+
+func runServeLogsStartup(t *testing.T, req *Request) (*Response, error) {
+	daemonStartMu.Lock()
+	defer daemonStartMu.Unlock()
+
+	port, err := pickFreePort(37681)
+	if err != nil {
+		return nil, err
+	}
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	cmd := exec.Command(req.AgentTermBin, "serve", "--listen", addr)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	t.Cleanup(func() { terminateProcess(cmd) })
+	if err := waitTCPReady(addr, 10*time.Second); err != nil {
+		return nil, fmt.Errorf("%w (stderr: %s)", err, stderr.String())
+	}
+	time.Sleep(50 * time.Millisecond)
+	return &Response{
+		DaemonPort:   port,
+		DaemonStderr: trimDaemonLog(stderr.String()),
+		Stderr:       stderr.String(),
+	}, nil
+}
+
+func runServeLogsOnCreate(t *testing.T, req *Request) (*Response, error) {
+	port, daemon, err := startDaemon(t, req)
+	if err != nil {
+		return nil, err
+	}
+	defer daemon.cleanup()
+	base := fmt.Sprintf("http://127.0.0.1:%d", port)
+	id, err := createSessionViaAPI(t, base, []string{"true"}, "")
+	if err != nil {
+		return nil, err
+	}
+	time.Sleep(100 * time.Millisecond)
+	return &Response{
+		DaemonPort:   port,
+		DaemonStderr: trimDaemonLog(daemon.stderr.String()),
+		HTTPBody:     id,
+	}, nil
+}
+
+func runWithPTY(t *testing.T, req *Request) (*Response, error) {
+	port, daemon, err := startDaemon(t, req)
+	if err != nil {
+		return nil, err
+	}
+	defer daemon.cleanup()
+	return execPTYRun(t, req.AgentTermBin, port, req)
+}
+
+func runWithPTYProbe(t *testing.T, req *Request) (*Response, error) {
+	if req.RequireGrok {
+		if _, err := exec.LookPath("grok"); err != nil {
+			t.Skip("grok not found in PATH")
+		}
+	}
+	port, daemon, err := startDaemon(t, req)
+	if err != nil {
+		return nil, err
+	}
+	defer daemon.cleanup()
+	return execPTYProbe(t, req.AgentTermBin, port, req)
+}
+
+func execPTYRun(t *testing.T, bin string, port int, req *Request) (*Response, error) {
+	runArgv := []string{"true"}
+	if len(req.RunCommand) > 0 {
+		runArgv = req.RunCommand
+	}
+	env := append(os.Environ(), "AGENT_TERM_SERVER=http://127.0.0.1:"+strconv.Itoa(port))
+	cmd := exec.Command(bin, append([]string{"run"}, runArgv...)...)
+	cmd.Env = env
+
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		return nil, err
+	}
+
+	var output bytes.Buffer
+	readDone := make(chan struct{})
+	go func() {
+		defer close(readDone)
+		_, _ = io.Copy(&output, ptmx)
+	}()
+
+	if req.DetachSignal {
+		time.Sleep(500 * time.Millisecond)
+		_ = cmd.Process.Signal(syscall.SIGINT)
+	}
+
+	runErr := cmd.Wait()
+	_ = ptmx.Close()
+	<-readDone
+
+	resp := &Response{
+		DaemonPort: port,
+		Stdout:     output.String(),
+		Combined:   strings.TrimSpace(output.String()),
+	}
+	if runErr != nil {
+		if exitErr, ok := runErr.(*exec.ExitError); ok {
+			resp.ExitCode = exitErr.ExitCode()
+		} else {
+			return nil, runErr
+		}
+	}
+	return resp, nil
+}
+
+func execPTYProbe(t *testing.T, bin string, port int, req *Request) (*Response, error) {
+	probe := req.RunProbeSeconds
+	if probe <= 0 {
+		probe = 4
+	}
+	runArgv := []string{"sleep", "60"}
+	if len(req.RunCommand) > 0 {
+		runArgv = req.RunCommand
+	}
+	env := append(os.Environ(), "AGENT_TERM_SERVER=http://127.0.0.1:"+strconv.Itoa(port))
+	cmd := exec.Command(bin, append([]string{"run"}, runArgv...)...)
+	cmd.Env = env
+
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		return nil, err
+	}
+
+	var output bytes.Buffer
+	readDone := make(chan struct{})
+	go func() {
+		defer close(readDone)
+		_, _ = io.Copy(&output, ptmx)
+	}()
+
+	time.Sleep(time.Duration(probe) * time.Second)
+	_ = cmd.Process.Signal(syscall.SIGTERM)
+	time.Sleep(200 * time.Millisecond)
+	terminateProcess(cmd)
+	_ = ptmx.Close()
+	<-readDone
+
+	text := output.String()
+	resp := &Response{
+		DaemonPort: port,
+		Stdout:     text,
+		Combined:   strings.TrimSpace(text),
+		ExitCode:   1,
+	}
+	return resp, nil
+}
+
+func runRequiresTTY(t *testing.T, req *Request) (*Response, error) {
+	port, daemon, err := startDaemon(t, req)
+	if err != nil {
+		return nil, err
+	}
+	defer daemon.cleanup()
+
+	runArgv := []string{"bash"}
+	if len(req.RunCommand) > 0 {
+		runArgv = req.RunCommand
+	}
+	stdinR, stdinW, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+	stdoutR, stdoutW, err := os.Pipe()
+	if err != nil {
+		stdinR.Close()
+		stdinW.Close()
+		return nil, err
+	}
+	t.Cleanup(func() {
+		stdinR.Close()
+		stdinW.Close()
+		stdoutR.Close()
+		stdoutW.Close()
+	})
+
+	env := append(os.Environ(), "AGENT_TERM_SERVER=http://127.0.0.1:"+strconv.Itoa(port))
+	cmd := exec.Command(req.AgentTermBin, append([]string{"run"}, runArgv...)...)
+	cmd.Env = env
+	cmd.Stdin = stdinR
+	cmd.Stdout = stdoutW
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	_ = stdinW.Close()
+	_ = stdoutW.Close()
+
+	go func() { _, _ = io.Copy(io.Discard, stdoutR) }()
+
+	done := make(chan error, 1)
+	go func() { done <- cmd.Run() }()
+
+	resp := &Response{DaemonPort: port}
+	select {
+	case runErr := <-done:
+		if runErr != nil {
+			if exitErr, ok := runErr.(*exec.ExitError); ok {
+				resp.ExitCode = exitErr.ExitCode()
+			} else {
+				return nil, runErr
+			}
+		}
+		resp.Stderr = strings.TrimSpace(stderr.String())
+		resp.Combined = strings.TrimRight(stderr.String(), "\n")
+	case <-time.After(8 * time.Second):
+		terminateProcess(cmd)
+		resp.ExitCode = 124
+		resp.Stderr = "timeout waiting for TTY requirement error"
+		resp.Combined = resp.Stderr
+	}
+	return resp, nil
+}
+
+func runDetachSurvives(t *testing.T, req *Request) (*Response, error) {
+	port, daemon, err := startDaemon(t, req)
+	if err != nil {
+		return nil, err
+	}
+	defer daemon.cleanup()
+
+	detachReq := *req
+	detachReq.RunCommand = []string{"sleep", "60"}
+	detachReq.DetachSignal = true
+	resp, err := execPTYRun(t, req.AgentTermBin, port, &detachReq)
+	if err != nil {
+		return nil, err
+	}
+
+	base := fmt.Sprintf("http://127.0.0.1:%d", port)
+	c := ptyclient.NewClient(base)
+	sessions, err := c.List()
+	if err != nil {
+		return nil, err
+	}
+	data, _ := json.Marshal(sessions)
+	resp.HTTPBody = string(data)
+	for _, s := range sessions {
+		if s.Status == "running" {
+			resp.SessionStillRunning = true
+			resp.DetachedSessionID = s.ID
+			break
+		}
+	}
+	return resp, nil
+}
+
+func trimDaemonLog(stderr string) string {
+	return strings.TrimRight(stderr, "\n")
 }
 
 func findModuleRoot() (string, error) {
@@ -314,19 +668,8 @@ func PickFreePort(base int) (int, error) {
 	return pickFreePort(base)
 }
 
-var portSeq atomic.Uint64
-
 func pickFreePort(base int) (int, error) {
-	offset := int(portSeq.Add(1) % 200)
-	for port := base + offset; port < base+400; port++ {
-		ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
-		if err == nil {
-			addr := ln.Addr().(*net.TCPAddr)
-			p := addr.Port
-			ln.Close()
-			return p, nil
-		}
-	}
+	_ = base
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return 0, err

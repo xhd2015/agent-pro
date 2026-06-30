@@ -6,7 +6,7 @@ require (
 	github.com/coder/acp-go-sdk v0.13.0
 	github.com/coder/websocket v1.8.14
 	github.com/tidwall/jsonc v0.3.3
-	github.com/xhd2015/dot-pkgs/go-pkgs v0.0.33
+	github.com/xhd2015/dot-pkgs/go-pkgs v0.0.34
 	github.com/xhd2015/less-gen v0.0.19
 	github.com/xhd2015/xgo v1.1.14
 	gopkg.in/yaml.v3 v3.0.1
@@ -17,20 +17,20 @@ require (
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
+	github.com/creack/pty v1.1.24
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/openai/openai-go/v3 v3.29.0
+	golang.org/x/term v0.43.0
 )
 
 require (
-	github.com/creack/pty v1.1.24 // indirect
 	github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
-	golang.org/x/term v0.43.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
 

@@ -8,18 +8,20 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/xhd2015/dot-pkgs/go-pkgs/shell/ptywrap"
 	ptyclient "github.com/xhd2015/dot-pkgs/go-pkgs/shell/ptywrap/client"
 	"github.com/xhd2015/less-gen/flags"
+	"golang.org/x/term"
 )
 
 const defaultListen = "127.0.0.1:7681"
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
+		fmt.Fprintf(os.Stderr, "\n%s\n", err.Error())
 		os.Exit(1)
 	}
 }
@@ -75,10 +77,33 @@ func runServe(args []string) error {
 	if err != nil {
 		return err
 	}
+	fmt.Fprintf(os.Stderr, "\nlistening on %s\n%s\n", listen, listen)
 	mux := http.NewServeMux()
 	ptywrap.RegisterAPI(mux)
-	srv := &http.Server{Handler: mux}
+	srv := &http.Server{Handler: loggingMiddleware(mux)}
 	return srv.Serve(ln)
+}
+
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		if isWebSocketUpgrade(r) && path == "/api/terminal" {
+			sessionID := r.URL.Query().Get("session_id")
+			if sessionID != "" {
+				fmt.Fprintf(os.Stderr, "agent-term: WS /api/terminal session_id=%s\n", sessionID)
+			} else {
+				fmt.Fprintf(os.Stderr, "agent-term: WS /api/terminal\n")
+			}
+		} else {
+			fmt.Fprintf(os.Stderr, "%s %s\n%s\n", r.Method, path, path)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func isWebSocketUpgrade(r *http.Request) bool {
+	return strings.EqualFold(r.Header.Get("Upgrade"), "websocket") &&
+		strings.Contains(strings.ToLower(r.Header.Get("Connection")), "upgrade")
 }
 
 func runList(args []string) error {
@@ -108,11 +133,80 @@ func runRun(args []string) error {
 	if err != nil {
 		return err
 	}
+	if isInteractiveTerminal(os.Stdin, os.Stdout) {
+		_, attachErr := ptyclient.Attach(c, ptyclient.ConnectOptions{
+			SessionID:      info.ID,
+			AttachSnapshot: true,
+			Wait:           true,
+		})
+		if attachErr != nil && !sessionExited(c, info.ID) {
+			return attachErr
+		}
+		fmt.Printf("\n%s\n", info.ID)
+		return nil
+	}
+	if commandNeedsInteractiveTTY(args) {
+		return fmt.Errorf("interactive terminal required on stdin/stdout\nterminal attach requires a TTY (same as attach)")
+	}
 	if err := ptyclient.WaitSession(c, info.ID); err != nil {
 		return err
 	}
 	fmt.Println(info.ID)
 	return nil
+}
+
+func isInteractiveTerminal(stdin io.Reader, stdout io.Writer) bool {
+	in, okIn := stdin.(*os.File)
+	out, okOut := stdout.(*os.File)
+	if !okIn || !okOut {
+		return false
+	}
+	if !term.IsTerminal(int(in.Fd())) || !term.IsTerminal(int(out.Fd())) {
+		return false
+	}
+	if st, err := in.Stat(); err == nil && st.Mode()&os.ModeNamedPipe != 0 {
+		return false
+	}
+	if st, err := out.Stat(); err == nil && st.Mode()&os.ModeNamedPipe != 0 {
+		return false
+	}
+	return true
+}
+
+func commandNeedsInteractiveTTY(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	switch filepath.Base(args[0]) {
+	case "bash", "zsh", "fish", "grok":
+		return !hasShellScriptArg(args[1:])
+	case "sh":
+		return len(args) == 1 || !hasShellScriptArg(args[1:])
+	default:
+		return false
+	}
+}
+
+func sessionExited(c *ptyclient.Client, sessionID string) bool {
+	sessions, err := c.List()
+	if err != nil {
+		return false
+	}
+	for _, s := range sessions {
+		if s.ID == sessionID && s.Status == "exited" {
+			return true
+		}
+	}
+	return false
+}
+
+func hasShellScriptArg(args []string) bool {
+	for i, arg := range args {
+		if arg == "-c" && i+1 < len(args) {
+			return true
+		}
+	}
+	return false
 }
 
 func runAttach(args []string) error {
