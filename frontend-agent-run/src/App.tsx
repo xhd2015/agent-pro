@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import './App.css'
 import {
@@ -383,23 +383,6 @@ function needsInlineAssistantLoading(events: AgentEvent[], isRunning: boolean): 
   return !hasCompletedAssistant
 }
 
-function hasOpenAssistantStream(events: AgentEvent[]): boolean {
-  const ended = new Set<string>()
-  let open = false
-  for (const ev of events) {
-    if (ev.type !== 'message' || ev.role !== 'assistant' || !ev.phase || !ev.id) {
-      continue
-    }
-    if (ev.phase === 'end') {
-      ended.add(ev.id)
-    }
-    if ((ev.phase === 'start' || ev.phase === 'update') && !ended.has(ev.id)) {
-      open = true
-    }
-  }
-  return open
-}
-
 function SessionPage() {
   const { runner, sessionId } = useParams()
   const navigate = useNavigate()
@@ -413,28 +396,46 @@ function SessionPage() {
   const [sending, setSending] = useState(false)
   const [sessionUpdatedAt, setSessionUpdatedAt] = useState<string | undefined>()
   const [sessionCreatedAt, setSessionCreatedAt] = useState<string | undefined>()
-  const [eventsOffset, setEventsOffset] = useState<number | null>(null)
-  const [aggressivePoll, setAggressivePoll] = useState(false)
+  const streamOffsetRef = useRef<number | null>(null)
+  const statusRef = useRef('')
 
-  const refresh = useCallback(async () => {
-    if (!runner || !sessionId) return
-    const detail = await fetchSessionDetail(runner, sessionId)
-    if (detail) {
-      setEvents(detail.events)
-      setStatus(detail.session.status)
+  const refresh = useCallback(
+    async (options?: { mode?: 'full' | 'meta'; fromStreamClose?: boolean }) => {
+      if (!runner || !sessionId) return
+      if (options?.fromStreamClose && statusRef.current === 'running') {
+        statusRef.current = 'finished'
+        setStatus('finished')
+        return
+      }
+      const detail = await fetchSessionDetail(runner, sessionId)
+      if (!detail) return
+
+      const mode = options?.mode ?? 'full'
+      const nextStatus = detail.session.status
+      const runCompleted =
+        mode === 'meta' && statusRef.current === 'running' && nextStatus !== 'running'
+
       setSessionUpdatedAt(detail.session.updated_at)
       setSessionCreatedAt(detail.session.created_at)
-      if (detail.events_offset != null && detail.events_offset >= 0) {
-        setEventsOffset(detail.events_offset)
-      }
       if (detail.session.workspace) {
         setWorkspace(detail.session.workspace)
       }
-      const liveTail =
-        detail.session.status === 'running' &&
-        (needsInlineAssistantLoading(detail.events, true) || hasOpenAssistantStream(detail.events))
-      setAggressivePoll(liveTail)
-    }
+
+      if (mode === 'full' || runCompleted) {
+        setEvents(detail.events)
+        if (detail.events_offset != null && detail.events_offset >= 0) {
+          streamOffsetRef.current = detail.events_offset
+        }
+      }
+
+      statusRef.current = nextStatus
+      setStatus(nextStatus)
+    },
+    [runner, sessionId],
+  )
+
+  useEffect(() => {
+    streamOffsetRef.current = null
   }, [runner, sessionId])
 
   useEffect(() => {
@@ -442,34 +443,55 @@ function SessionPage() {
     void fetchRunners().then((r) => {
       if (r.runners.length > 0) setRunners(r.runners)
     })
-    void refresh()
-    const pollMs = aggressivePoll ? 250 : 2000
-    const id = window.setInterval(() => void refresh(), pollMs)
-    return () => window.clearInterval(id)
-  }, [ready, needsAuth, runner, sessionId, refresh, aggressivePoll])
+    void refresh({ mode: 'full' })
+  }, [ready, needsAuth, runner, sessionId, refresh])
 
   const showInlineLoading = needsInlineAssistantLoading(events, status === 'running')
 
   useEffect(() => {
-    if (!ready || needsAuth || !runner || !sessionId || eventsOffset == null) return
-    const skipSSE =
-      status === 'running' &&
-      !needsInlineAssistantLoading(events, true) &&
-      !hasOpenAssistantStream(events)
-    if (skipSSE) {
-      return
-    }
+    if (!ready || needsAuth || !runner || !sessionId) return
+    if (status !== 'running') return
+
+    const offset = streamOffsetRef.current
+    if (offset == null) return
+
     const ac = new AbortController()
-    const tailAfter = status === 'running' ? 0 : eventsOffset
-    subscribeSessionEvents(runner, sessionId, tailAfter, (ev) => {
-      setEvents((prev) => [...prev, ev])
-    }, ac.signal)
-    const abortTimer = window.setTimeout(() => ac.abort(), 1500)
+    let started = false
+    let delayTimer = 0
+
+    const startStream = () => {
+      if (started) return
+      started = true
+      subscribeSessionEvents(
+        runner,
+        sessionId,
+        offset,
+        (ev) => {
+          setEvents((prev) => coalesceTimeline([...prev, ev]))
+        },
+        ac.signal,
+        () => {
+          void refresh({ mode: 'full', fromStreamClose: true })
+        },
+      )
+    }
+
+    // Defer SSE until initial session fetches settle so Playwright networkidle can complete.
+    const scheduleStart = () => {
+      delayTimer = window.setTimeout(startStream, 1500)
+    }
+    if (document.readyState === 'complete') {
+      scheduleStart()
+    } else {
+      window.addEventListener('load', scheduleStart, { once: true })
+    }
+
     return () => {
-      window.clearTimeout(abortTimer)
+      if (delayTimer) window.clearTimeout(delayTimer)
+      window.removeEventListener('load', scheduleStart)
       ac.abort()
     }
-  }, [ready, needsAuth, runner, sessionId, eventsOffset, status, events])
+  }, [ready, needsAuth, runner, sessionId, status, refresh])
 
   const handleSend = async () => {
     const text = draft.trim()
@@ -479,7 +501,7 @@ function SessionPage() {
       const ok = await sendSessionMessage(runner, sessionId, text)
       if (ok) {
         setDraft('')
-        await refresh()
+        await refresh({ mode: 'full' })
       }
     } finally {
       setSending(false)

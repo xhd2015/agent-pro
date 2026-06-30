@@ -360,6 +360,261 @@ if (loadBox.y < userBox.y + userBox.height - 2) {
 `
 }
 
+func assertUserMessageCount(expected int) string {
+	return fmt.Sprintf(`{
+const userBubbles = page.locator('[data-testid="message-item-user"]');
+const userCount = await userBubbles.count();
+if (userCount !== %d) {
+  throw new Error('expected %d user message bubbles, got ' + userCount);
+}
+}
+`, expected, expected)
+}
+
+func assertDistinctUserPromptsOnce(prompts []string) string {
+	var b strings.Builder
+	b.WriteString(`{
+const userBubbles = page.locator('[data-testid="message-item-user"]');
+const userTexts = await userBubbles.allInnerTexts();
+const normalized = userTexts.map((t) => t.trim());
+`)
+	for _, p := range prompts {
+		escaped := strings.ReplaceAll(p, `\`, `\\`)
+		escaped = strings.ReplaceAll(escaped, `'`, `\'`)
+		b.WriteString(fmt.Sprintf(`
+{
+  const needle = '%s';
+  const hits = normalized.filter((t) => t.includes(needle)).length;
+  if (hits !== 1) {
+    throw new Error('expected prompt to appear once: ' + needle + ' hits=' + hits);
+  }
+}
+`, escaped))
+	}
+	b.WriteString("}\n")
+	return b.String()
+}
+
+// assertNoDuplicateUserMessagesDuringRun polls while the session is running and fails
+// immediately if user bubble count exceeds maxExpected (catches mid-run duplication).
+func assertNoDuplicateUserMessagesDuringRun(maxExpected int) string {
+	return fmt.Sprintf(`{
+const userBubbles = page.locator('[data-testid="message-item-user"]');
+const runningCard = page.locator('[data-testid="agent-running-card"]');
+const inlineLoading = page.locator('[data-testid="message-item-assistant-loading"]');
+const statusPill = page.locator('.status-pill');
+const layoutIsSessionRunning = async () => {
+  if (await runningCard.isVisible().catch(() => false)) return true;
+  if (await inlineLoading.isVisible().catch(() => false)) return true;
+  if (await statusPill.isVisible().catch(() => false)) {
+    const text = (await statusPill.innerText()).trim().toLowerCase();
+    if (text === 'running') return true;
+  }
+  return false;
+};
+let sawRunning = false;
+for (let i = 0; i < 40; i++) {
+  if (await layoutIsSessionRunning()) {
+    sawRunning = true;
+    break;
+  }
+  await page.waitForTimeout(250);
+}
+if (!sawRunning) {
+  throw new Error('session run never started after follow-up');
+}
+for (let i = 0; i < 120; i++) {
+  const userCount = await userBubbles.count();
+  if (userCount > %d) {
+    throw new Error('duplicate user messages during run: count=' + userCount + ' max=%d');
+  }
+  if (!(await layoutIsSessionRunning())) break;
+  await page.waitForTimeout(250);
+}
+}
+`, maxExpected, maxExpected)
+}
+
+func sendComposerMessage(text string) string {
+	escaped := strings.ReplaceAll(text, `\`, `\\`)
+	escaped = strings.ReplaceAll(escaped, `'`, `\'`)
+	return fmt.Sprintf(`
+const composerInput = page.locator('[data-testid="composer-input"]');
+await composerInput.waitFor({ state: 'visible', timeout: 15000 });
+await composerInput.fill('%s');
+const sendBtn = page.locator('[data-testid="send-button"]');
+await sendBtn.waitFor({ state: 'visible', timeout: 15000 });
+await sendBtn.click();
+`, escaped)
+}
+
+func waitForSessionRunComplete() string {
+	return `
+const runningCard = page.locator('[data-testid="agent-running-card"]');
+let runDone = false;
+for (let i = 0; i < 120; i++) {
+  const cardVisible = await runningCard.isVisible().catch(() => false);
+  const assistantCount = await page.locator('[data-testid="message-item-assistant"]').count();
+  if (!cardVisible && assistantCount >= 1) {
+    runDone = true;
+    break;
+  }
+  await page.waitForTimeout(500);
+}
+if (!runDone) {
+  throw new Error('session run did not complete within poll window');
+}
+`
+}
+
+// initStreamingTransportMonitor registers page.on('request') counters. Call before navigation.
+func initStreamingTransportMonitor() string {
+	return `
+let __layoutDetailGetCount = 0;
+let __layoutSSECount = 0;
+page.on('request', (req) => {
+  const url = req.url();
+  if (!url.includes('/api/agent-run/sessions/')) return;
+  if (url.includes('/events/stream')) {
+    __layoutSSECount++;
+    return;
+  }
+  if (req.method() !== 'GET') return;
+  if (/\/api\/agent-run\/sessions\/[^/]+\/[^/?]+(?:\?|$)/.test(url)) {
+    __layoutDetailGetCount++;
+  }
+});
+`
+}
+
+// assertStreamingTransportProfile waits 8s then asserts SSE used and session-detail GETs are bounded.
+func assertStreamingTransportProfile() string {
+	return `
+await page.waitForTimeout(8000);
+if (__layoutSSECount < 1) {
+  throw new Error('expected >=1 events/stream request during streaming window, got ' + __layoutSSECount);
+}
+if (__layoutDetailGetCount > 3) {
+  throw new Error('expected session-detail GET count <= 3 during streaming window, got ' + __layoutDetailGetCount);
+}
+`
+}
+
+// initSSEPersistenceMonitor registers page.on('request') + requestfailed before navigation.
+// Tracks stream request starts and client-side aborts (net::ERR_ABORTED) on /events/stream URLs.
+func initSSEPersistenceMonitor() string {
+	return `
+let __layoutDetailGetCount = 0;
+let __layoutSSECount = 0;
+let __layoutSSEAbortedCount = 0;
+
+page.on('request', (req) => {
+  const url = req.url();
+  if (!url.includes('/api/agent-run/sessions/')) return;
+  if (url.includes('/events/stream')) {
+    __layoutSSECount++;
+    return;
+  }
+  if (req.method() !== 'GET') return;
+  if (/\/api\/agent-run\/sessions\/[^/]+\/[^/?]+(?:\?|$)/.test(url)) {
+    __layoutDetailGetCount++;
+  }
+});
+
+page.on('requestfailed', (req) => {
+  const url = req.url();
+  if (!url.includes('/events/stream')) return;
+  const failure = req.failure();
+  const errText = failure ? failure.errorText : '';
+  if (errText.includes('net::ERR_ABORTED') || /abort|cancel/i.test(errText)) {
+    __layoutSSEAbortedCount++;
+  }
+});
+`
+}
+
+// assertSSEStaysConnectedDuringRun waits 8s then asserts one persistent stream with no aborts.
+func assertSSEStaysConnectedDuringRun() string {
+	return `
+await page.waitForTimeout(8000);
+if (__layoutSSECount !== 1) {
+  throw new Error('expected exactly 1 events/stream request during run, got ' + __layoutSSECount);
+}
+if (__layoutSSEAbortedCount !== 0) {
+  throw new Error('expected 0 aborted/cancelled events/stream requests, got ' + __layoutSSEAbortedCount);
+}
+if (__layoutDetailGetCount > 3) {
+  throw new Error('expected session-detail GET count <= 3 during run window, got ' + __layoutDetailGetCount);
+}
+`
+}
+
+// initSessionDetailPollMonitor registers page.on('request') + requestfailed before navigation.
+// Tallies exact session-detail GETs for /api/agent-run/sessions/:runner/:id (excludes stream, messages, list).
+func initSessionDetailPollMonitor() string {
+	return `
+let __layoutDetailGetCount = 0;
+let __layoutDetailGetTimestamps = [];
+let __layoutSSECount = 0;
+let __layoutSSEAbortedCount = 0;
+
+const __layoutIsSessionDetailGet = (url, method) => {
+  if (!url.includes('/api/agent-run/sessions/')) return false;
+  if (url.includes('/events/stream')) return false;
+  if (url.includes('/messages')) return false;
+  if (method !== 'GET') return false;
+  return /\/api\/agent-run\/sessions\/[^/]+\/[^/?]+(?:\?|$)/.test(url);
+};
+
+page.on('request', (req) => {
+  const url = req.url();
+  if (!url.includes('/api/agent-run/sessions/')) return;
+  if (url.includes('/events/stream')) {
+    __layoutSSECount++;
+    return;
+  }
+  if (__layoutIsSessionDetailGet(url, req.method())) {
+    __layoutDetailGetCount++;
+    __layoutDetailGetTimestamps.push(Date.now());
+  }
+});
+
+page.on('requestfailed', (req) => {
+  const url = req.url();
+  if (!url.includes('/events/stream')) return;
+  const failure = req.failure();
+  const errText = failure ? failure.errorText : '';
+  if (errText.includes('net::ERR_ABORTED') || /abort|cancel/i.test(errText)) {
+    __layoutSSEAbortedCount++;
+  }
+});
+`
+}
+
+// assertNoSessionDetailPollWhileRunning waits windowMs then asserts no meta-poll detail GETs while SSE is active.
+func assertNoSessionDetailPollWhileRunning(expectedInitial int, windowMs int) string {
+	return fmt.Sprintf(`
+await page.waitForTimeout(%d);
+if (__layoutDetailGetCount !== %d) {
+  throw new Error('expected exactly %d session-detail GET during run window, got ' + __layoutDetailGetCount + ' timestamps=' + JSON.stringify(__layoutDetailGetTimestamps));
+}
+if (__layoutSSECount !== 1) {
+  throw new Error('expected exactly 1 events/stream request during run, got ' + __layoutSSECount);
+}
+if (__layoutSSEAbortedCount !== 0) {
+  throw new Error('expected 0 aborted/cancelled events/stream requests, got ' + __layoutSSEAbortedCount);
+}
+if (__layoutDetailGetTimestamps.length > 1) {
+  for (let i = 1; i < __layoutDetailGetTimestamps.length; i++) {
+    const gap = __layoutDetailGetTimestamps[i] - __layoutDetailGetTimestamps[i - 1];
+    if (gap >= 4000 && gap <= 6000) {
+      throw new Error('session-detail GETs at ~5s interval (meta poll): gapMs=' + gap + ' timestamps=' + JSON.stringify(__layoutDetailGetTimestamps));
+    }
+  }
+}
+`, windowMs, expectedInitial, expectedInitial)
+}
+
 func assertAssistantBubbleTextGrows() string {
 	return `
 const assistant = page.locator('[data-testid="message-item-assistant"]').last();
@@ -407,6 +662,33 @@ func seedRunningSession(t *testing.T, home, runner, sessionID string, runningFor
 		return err
 	}
 	eventsNDJSON := "{\"type\":\"message\",\"role\":\"assistant\",\"text\":\"Working on your request…\"}\n"
+	return os.WriteFile(filepath.Join(sessDir, "events.jsonl"), []byte(eventsNDJSON), 0644)
+}
+
+func seedIdleSessionWithUserMessage(t *testing.T, home, runner, sessionID, userText string) error {
+	t.Helper()
+	sessDir := filepath.Join(home, "sessions", runner, sessionID)
+	if err := os.MkdirAll(sessDir, 0755); err != nil {
+		return err
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	meta := map[string]any{
+		"runner":     runner,
+		"session_id": sessionID,
+		"status":     "idle",
+		"created_at": now,
+		"updated_at": now,
+	}
+	metaBytes, err := json.Marshal(meta)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(sessDir, "meta.json"), metaBytes, 0644); err != nil {
+		return err
+	}
+	escaped := strings.ReplaceAll(userText, `\`, `\\`)
+	escaped = strings.ReplaceAll(escaped, `"`, `\"`)
+	eventsNDJSON := fmt.Sprintf("{\"type\":\"message\",\"role\":\"user\",\"text\":\"%s\"}\n", escaped)
 	return os.WriteFile(filepath.Join(sessDir, "events.jsonl"), []byte(eventsNDJSON), 0644)
 }
 

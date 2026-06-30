@@ -146,48 +146,59 @@ export function subscribeSessionEvents(
   afterOffset: number,
   onEvent: (ev: AgentEvent) => void,
   signal?: AbortSignal,
+  onClose?: () => void,
 ): void {
   const url = `/api/agent-run/sessions/${encodeURIComponent(runner)}/${encodeURIComponent(sessionId)}/events/stream?after=${afterOffset}`
   void (async () => {
-    const res = await apiFetch(url, {
-      headers: { Accept: 'text/event-stream' },
-      signal,
-    })
-    if (!res.ok || !res.body) {
-      return
-    }
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) {
-        break
+    try {
+      const res = await apiFetch(url, {
+        headers: { Accept: 'text/event-stream' },
+        signal,
+      })
+      if (!res.ok || !res.body) {
+        return
       }
-      buffer += decoder.decode(value, { stream: true })
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
       for (;;) {
-        const idx = buffer.indexOf('\n\n')
-        if (idx < 0) {
+        const { done, value } = await reader.read()
+        if (done) {
           break
         }
-        const block = buffer.slice(0, idx)
-        buffer = buffer.slice(idx + 2)
-        for (const line of block.split('\n')) {
-          const trimmed = line.trim()
-          if (!trimmed.startsWith('data:')) {
-            continue
+        buffer += decoder.decode(value, { stream: true })
+        for (;;) {
+          const idx = buffer.indexOf('\n\n')
+          if (idx < 0) {
+            break
           }
-          const payload = trimmed.slice(5).trim()
-          if (!payload || payload === '[DONE]') {
-            continue
-          }
-          try {
-            onEvent(JSON.parse(payload) as AgentEvent)
-          } catch {
-            // ignore malformed chunks
+          const block = buffer.slice(0, idx)
+          buffer = buffer.slice(idx + 2)
+          for (const line of block.split('\n')) {
+            const trimmed = line.trim()
+            if (!trimmed.startsWith('data:')) {
+              continue
+            }
+            const payload = trimmed.slice(5).trim()
+            if (!payload || payload === '[DONE]') {
+              continue
+            }
+            try {
+              const ev = JSON.parse(payload) as AgentEvent
+              onEvent(ev)
+              // Yield between back-to-back SSE events so phased stream updates paint incrementally.
+              await new Promise((resolve) => setTimeout(resolve, 50))
+            } catch {
+              // ignore malformed chunks
+            }
           }
         }
       }
+      if (!signal?.aborted) {
+        onClose?.()
+      }
+    } catch {
+      // Aborted or failed — skip onClose so we don't refresh after intentional teardown.
     }
   })()
 }

@@ -59,6 +59,10 @@ cmd/agent-run/tests/web-layout/
 ├── mobile-running-card-absent-when-idle/  # session status≠running → no running card
 ├── mobile-inline-assistant-loading/       # running + user only → inline loading bubble in list
 ├── mobile-streaming-assistant-bubble/     # live phased stream → assistant text length grows
+├── mobile-follow-up-no-duplicate-user-messages/  # idle seed + composer follow-up → exactly 2 user bubbles
+├── mobile-streaming-uses-sse-not-poll/    # live run → SSE tail; session-detail GET ≤3 in 8s window
+├── mobile-sse-stays-connected-during-run/ # seeded running + no live writer → 1 SSE stream, 0 aborts in 8s idle gap
+├── mobile-no-session-detail-poll-while-running/  # live fake-codex run; 15s passive watch → detail GET === 1, SSE === 1
 └── mobile-home-runner-visible-long-workspace/  # long status.workspace on / → runner stays in viewport
 ```
 
@@ -85,6 +89,10 @@ Parameter ranking (most → least significant):
 | 8 | `mobile-running-card-absent-when-idle` | Seeded `idle` session; `agent-running-card` not in DOM (negative control) |
 | 9 | `mobile-inline-assistant-loading` | Seeded `running` with user bubble only; inline `message-item-assistant-loading` visible |
 | 10 | `mobile-streaming-assistant-bubble` | Live create-session run; assistant bubble text length increases over poll window |
+| 11 | `mobile-follow-up-no-duplicate-user-messages` | Seeded idle session + 1 user event; composer follow-up; exactly 2 user bubbles after run |
+| 12 | `mobile-streaming-uses-sse-not-poll` | Live `fake-codex` session; 8s network window: SSE used, session-detail GET ≤3 |
+| 13 | `mobile-sse-stays-connected-during-run` | Seeded `running` session (no live writer); 8s idle gap: exactly 1 SSE stream, 0 aborts, detail GET ≤3 |
+| 14 | `mobile-no-session-detail-poll-while-running` | Live `fake-codex` session; 15s passive watch: detail GET **=== 1**, SSE **=== 1**, 0 aborts (stricter than ≤3) |
 
 ## How to Run
 
@@ -95,6 +103,10 @@ doctest test -v ./cmd/agent-run/tests/web-layout/mobile-empty
 doctest test -v ./cmd/agent-run/tests/web-layout --label chromium
 doctest test -v ./cmd/agent-run/tests/web-layout/mobile-running-status-card --label chromium
 doctest test -v ./cmd/agent-run/tests/web-layout/mobile-home-runner-visible-long-workspace --label chromium
+doctest test -v ./cmd/agent-run/tests/web-layout/mobile-follow-up-no-duplicate-user-messages --label chromium
+doctest test -v ./cmd/agent-run/tests/web-layout/mobile-streaming-uses-sse-not-poll --label 'chromium && slow'
+doctest test -v ./cmd/agent-run/tests/web-layout/mobile-sse-stays-connected-during-run --label 'chromium && slow'
+doctest test -v ./cmd/agent-run/tests/web-layout/mobile-no-session-detail-poll-while-running --label 'chromium && slow'
 ```
 
 ```go
@@ -122,7 +134,7 @@ type Request struct {
 	WebTokenMode  string // "omit" | "explicit" | "auto" (default explicit)
 	BaseURL       string
 	Env        []string
-	Layout     string // empty | auth | chat-active | running-card | running-absent | home-long-workspace
+	Layout     string // empty | auth | chat-active | running-card | running-absent | home-long-workspace | follow-up-dedupe | sse-transport | sse-persistence | no-detail-poll | streaming-bubble | inline-loading | workspace-session
 	PlaywrightScript string
 	WebWorkingDir    string // optional process cwd for agent-run web (status.workspace)
 
@@ -136,7 +148,7 @@ type Response struct {
 	Err              error
 }
 
-func runPlaywrightScript(t *testing.T, script string) (stdout, stderr string, exitCode int, err error) {
+func runPlaywrightScript(t *testing.T, script string) (string, string, int, error) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
@@ -146,13 +158,12 @@ func runPlaywrightScript(t *testing.T, script string) (stdout, stderr string, ex
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
 	runErr := cmd.Run()
-	stdout = outBuf.String()
-	stderr = errBuf.String()
+	stdout := outBuf.String()
+	stderr := errBuf.String()
 	if runErr != nil {
 		var exitErr *exec.ExitError
 		if errors.As(runErr, &exitErr) {
-			exitCode = exitErr.ExitCode()
-			return stdout, stderr, exitCode, nil
+			return stdout, stderr, exitErr.ExitCode(), nil
 		}
 		if ctx.Err() != nil {
 			return stdout, stderr, -1, ctx.Err()
