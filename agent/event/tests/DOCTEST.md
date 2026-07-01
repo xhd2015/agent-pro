@@ -20,8 +20,9 @@ Participants and behaviors:
   assert on JSON-marshaled canonical events.
 - **Vendor native stream** — the wire format a CLI emits. The adapter knows how
   to walk it: `codex_types` (item.* events), `opencode_types`, `crush_types`
-  (SSE `{type,payload}` envelopes), and `claude_types` (headless NDJSON with
-  `system`/`assistant`/`user`/`result` lines).
+  (SSE `{type,payload}` envelopes), `claude_types` (headless NDJSON with
+  `system`/`assistant`/`user`/`result` lines), and `cmd_types` (JSONL session
+  events with `user`/`assistant`/`tool` roles and typed content blocks).
 - **From<Vendor>** — native → canonical. Walks the native stream and emits zero
   or more `AgentEvent`s per native event (some native constructs map to nothing,
   e.g. tool-result echoes that are folded back into the preceding tool call).
@@ -170,6 +171,42 @@ claude_types/
 | `claude-integration-real` | End-to-end: claude -p "say pong", stream-json, FromClaude, verify "pong" |
 | `claude-integration-binary-not-found` | Explicit ClaudePath points to nonexistent file → non-nil error |
 
+### Decision Tree: Cmd Event Types
+
+The `cmd` CLI (Command Code) stores sessions as JSONL files. Each line has `role` (`user`/`assistant`/`tool`)
+and `content` (an array of typed blocks). Conversion functions `FromCmd` (cmd→canonical) and `ToCmd`
+(canonical→cmd) are tested.
+
+```
+cmd_types/
+├── from_cmd/                        (Target="from_cmd", cmd→canonical)
+│   ├── assistant-text/              assistant text block → ActionMessage
+│   ├── assistant-reasoning/         assistant reasoning block → ActionThink
+│   ├── assistant-tool-call/         assistant tool-call block → ActionToolCall
+│   ├── reasoning-text-tool-call/    reasoning + text + tool-call → 3 events
+│   ├── tool-call-with-result/       tool-call + tool-result → ActionToolCall with Output
+│   └── user-text/                   user text → ActionStepStart
+│
+└── to_cmd/                          (Target="cmd", canonical→cmd)
+    ├── think/                        ActionThink → assistant reasoning block
+    ├── message/                      ActionMessage → assistant text block
+    └── tool-call/                    ActionToolCall → assistant tool-call block
+```
+
+### Cmd Test Leaves
+
+| Leaf | Description |
+|---|---|
+| `cmd_types-from-cmd-assistant-text` | FromCmd: assistant text → ActionMessage |
+| `cmd_types-from-cmd-assistant-reasoning` | FromCmd: assistant reasoning → ActionThink |
+| `cmd_types-from-cmd-assistant-tool-call` | FromCmd: assistant tool-call → ActionToolCall |
+| `cmd_types-from-cmd-reasoning-text-tool-call` | FromCmd: reasoning + text + tool-call → 3 canonical events |
+| `cmd_types-from-cmd-tool-call-with-result` | FromCmd: tool-call then tool-result → merged output |
+| `cmd_types-from-cmd-user-text` | FromCmd: user text → ActionStepStart |
+| `cmd_types-to-cmd-think` | ToCmd: ActionThink → assistant reasoning block |
+| `cmd_types-to-cmd-message` | ToCmd: ActionMessage → assistant text block |
+| `cmd_types-to-cmd-tool-call` | ToCmd: ActionToolCall → assistant tool-call block |
+
 ## How to Run
 
 ```sh
@@ -193,6 +230,7 @@ import (
 	"testing"
 	"time"
 
+	cmd_types "github.com/xhd2015/agent-pro/agent/event/cmd_types"
 	codex_types "github.com/xhd2015/agent-pro/agent/event/codex_types"
 	claude_types "github.com/xhd2015/agent-pro/agent/event/claude_types"
 	crush_types "github.com/xhd2015/agent-pro/agent/event/crush_types"
@@ -203,12 +241,13 @@ import (
 
 type Request struct {
 	Events      []types.AgentEvent
-	Target      string // "opencode"→ToOpencode, "crush"→ToCrush, "from_crush"→FromCrush, "crush_server"→StartCrushServer, "claude"→ToClaude, "from_claude"→FromClaude, "claude_headless"→runClaudeHeadless; default→ToCodex
+	Target      string // "opencode"→ToOpencode, "crush"→ToCrush, "from_crush"→FromCrush, "crush_server"→StartCrushServer, "claude"→ToClaude, "from_claude"→FromClaude, "claude_headless"→runClaudeHeadless, "cmd"→ToCmd, "from_cmd"→FromCmd; default→ToCodex
 	SessionID   string
 	Value       any
 	Output      string
 	CrushInput  string // raw JSON for FromCrush parsing
 	ClaudeInput string // raw NDJSON (one JSON object per line) for FromClaude parsing
+	CmdInput    string // raw JSON (one JSON object per line) for FromCmd parsing
 	HostPort    int    // crush server HTTP port (0 = auto-assign)
 	Prompt      string // prompt text for crush server / claude headless
 	ModelName   string // model override (default: "deepseek-v4-pro")
@@ -244,6 +283,26 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 			claudeEvents = append(claudeEvents, ev)
 		}
 		result := claude_types.FromClaude(claudeEvents, req.SessionID)
+		data, _ := json.Marshal(result)
+		output = string(data)
+	} else if req.Target == "from_cmd" && req.CmdInput != "" {
+		var cmdEvents []cmd_types.Event
+		for _, line := range strings.Split(req.CmdInput, "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			var ev cmd_types.Event
+			if err := json.Unmarshal([]byte(line), &ev); err != nil {
+				return &Response{Output: ""}, nil
+			}
+			cmdEvents = append(cmdEvents, ev)
+		}
+		result := cmd_types.FromCmd(cmdEvents, req.SessionID)
+		data, _ := json.Marshal(result)
+		output = string(data)
+	} else if req.Target == "cmd" && len(req.Events) > 0 {
+		result := cmd_types.ToCmd(req.Events, req.SessionID)
 		data, _ := json.Marshal(result)
 		output = string(data)
 	} else if req.Target == "claude" && len(req.Events) > 0 {

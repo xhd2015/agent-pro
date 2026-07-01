@@ -37,6 +37,7 @@ import (
 	"testing"
 	"time"
 
+	cmd_types "github.com/xhd2015/agent-pro/agent/event/cmd_types"
 	codex_types "github.com/xhd2015/agent-pro/agent/event/codex_types"
 	claude_types "github.com/xhd2015/agent-pro/agent/event/claude_types"
 	crush_types "github.com/xhd2015/agent-pro/agent/event/crush_types"

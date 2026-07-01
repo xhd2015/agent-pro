@@ -20,3 +20,5 @@ handoff_*
 
 node_modules
 /frontend-agent-run/dist
+
+.commandcode

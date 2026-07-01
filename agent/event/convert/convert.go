@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	types "github.com/xhd2015/agent-pro/agent/event/types"
+	"github.com/xhd2015/agent-pro/agent/event/cmd_types"
 	"github.com/xhd2015/agent-pro/agent/event/codex_types"
 	"github.com/xhd2015/agent-pro/agent/event/crush_types"
 	"github.com/xhd2015/agent-pro/agent/event/opencode_types"
@@ -42,6 +43,12 @@ func ConvertRawLine(raw []byte, agentRunner string) ([]types.AgentEvent, error) 
 			return nil, fmt.Errorf("unmarshal crush events: %w", err)
 		}
 		return crush_types.FromCrush(events, ""), nil
+	case "cmd":
+		var events []cmd_types.Event
+		if err := json.Unmarshal(raw, &events); err != nil {
+			return nil, fmt.Errorf("unmarshal cmd events: %w", err)
+		}
+		return cmd_types.FromCmd(events, ""), nil
 	default:
 		return nil, fmt.Errorf("unknown agent runner: %s", agentRunner)
 	}
