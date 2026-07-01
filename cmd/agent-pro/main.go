@@ -1588,7 +1588,7 @@ func handleOpenCodeConfigImport(args []string) error {
 }
 
 func handleOpenCodeConfigAddProvider(args []string) error {
-	var id, baseURL, apiShape, name, dir string
+	var id, baseURL, apiShape, name, dir, apiKey string
 	var models []string
 	_, err := flags.String("--id", &id).
 		String("--base-url", &baseURL).
@@ -1596,6 +1596,7 @@ func handleOpenCodeConfigAddProvider(args []string) error {
 		StringSlice("--model", &models).
 		String("--name", &name).
 		String("--dir", &dir).
+		String("--api-key", &apiKey).
 		Help("-h,--help", `
 Usage: agent-pro opencode config add-provider [OPTIONS]
 
@@ -1608,8 +1609,13 @@ Options:
   --api-shape <shape>  api shape: anthropic or openai (required)
   --model <id>         model id; repeatable, at least one required
   --name <name>        provider display name (default: --id)
+  --api-key <key>      API key written inline to options.apiKey (optional)
   --dir <project-dir>  project dir for local config (default: global ~/.config/opencode)
   -h,--help            show help
+
+Note: --base-url should be the full API base including the version path (e.g.
+/v1), because opencode appends only the endpoint path (/messages for anthropic,
+/chat/completions for openai-compatible). Example: --base-url http://127.0.0.1:15721/v1
 `).
 		Parse(args)
 	if err != nil {
@@ -1676,10 +1682,15 @@ Options:
 		modelsMap[m] = map[string]interface{}{"name": m}
 	}
 
+	options := map[string]interface{}{"baseURL": baseURL}
+	if apiKey != "" {
+		options["apiKey"] = apiKey
+	}
+
 	providers[id] = map[string]interface{}{
 		"npm":    npm,
 		"name":   displayName,
-		"options": map[string]interface{}{"baseURL": baseURL},
+		"options": options,
 		"models":  modelsMap,
 	}
 	data["provider"] = providers
