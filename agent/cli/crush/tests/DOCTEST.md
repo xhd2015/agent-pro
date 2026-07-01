@@ -2,6 +2,42 @@
 
 These doc-style tests verify the `agent/cli/crush` package — event conversion (`UnwrapEvent`, `ToCrush`/`FromCrush` round-trip), server client integration (`CrushServerClient`), and the `CrushAgent.Ask()` method in both subprocess and server modes.
 
+## Version
+
+0.0.2
+
+## DSN (Domain Specific Notion)
+
+Participants:
+
+- **CrushAgent** — an in-process adapter that implements `registry.Agent`. It
+  drives `crush` either as a subprocess (default `Mode=""`) or through a
+  long-lived `crush server` daemon via `CrushServerClient` (`Mode="server-ask"`).
+- **crush binary / crush server** — the CLI and its daemon. The server exposes
+  `/v1/health`, `/v1/workspaces`, sessions, and an SSE events stream; runs
+  emit a 3-level SSE envelope (`message` / `agent_event` / `run_complete`).
+- **UnwrapEvent** — converts one 3-level crush SSE data line into a canonical
+  `crush_types.Event`. Unknown outer types and malformed JSON are dropped
+  (return nil).
+- **ToCrush / FromCrush** — the `crush_types` conversion pair that round-trips
+  canonical `AgentEvent`s through crush's native event model and back
+  (`Mode="convert-roundtrip"`). Known gaps: `ActionDone` loses its text, and
+  empty IDs get a synthetic `"evt_1"` (prefixed `"crush:"` after `FromCrush`).
+- **CrushServerClient** — manages the daemon lifecycle: `EnsureServer`
+  (auto-start + health probe), `CreateWorkspace`, `CreateSession`,
+  `SubscribeEvents`, `SendMessage`, and `KillExistingServer`. Multiple clients
+  reuse one OS process.
+
+Behaviors:
+
+- `Ask(ctx, question, opts, onDelta)` in subprocess mode shells out to `crush`;
+  in server mode it creates a workspace/session, sends the prompt, and drains
+  SSE until `run_complete`.
+- Session resume: a second `Ask` reuses `LastSessionID` via
+  `AskOptions.SessionID`.
+- `FindAgentPath(env)` is `env.LookPath("crush")`, else an error mentioning
+  "crush".
+
 ## Decision Tree
 
 ```

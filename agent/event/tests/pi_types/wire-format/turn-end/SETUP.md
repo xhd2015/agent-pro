@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: turn_end has `message` and `toolResults` fields
+
 ## Preconditions
 - turn_end has `message` and `toolResults` fields.
 

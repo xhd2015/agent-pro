@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: tool_execution_start has `toolCallId`, `toolName`, and `args` fields
+
 ## Preconditions
 - tool_execution_start has `toolCallId`, `toolName`, and `args` fields.
 

@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: fresh CrushAgent subprocess Ask() for the capital of France
+
 ## Preconditions
 - The crush binary is available in PATH.
 

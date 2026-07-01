@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: message_start carries a `message` field
+
 ## Preconditions
 - message_start carries a `message` field.
 

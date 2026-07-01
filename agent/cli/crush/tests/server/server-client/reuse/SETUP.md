@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: server-client reuse leaves verifying daemon sharing across clients
+
 ## Preconditions
 - Parent `server/server-client/` already sets `Mode="server-client"` and gates on crush binary availability.
 - These leaves verify that multiple `CrushServerClient` instances reuse the same daemon server.

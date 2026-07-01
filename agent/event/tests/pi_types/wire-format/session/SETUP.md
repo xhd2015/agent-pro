@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: A session event JSON has `type` and `id` fields
+
 ## Preconditions
 - A session event JSON has `type` and `id` fields.
 

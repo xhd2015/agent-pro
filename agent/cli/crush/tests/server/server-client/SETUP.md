@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: CrushServerClient operations gated on the crush binary being in PATH
+
 ## Preconditions
 - These tests require a running crush server.
 - The `crush` binary is auto-detected via `exec.LookPath` — leaves skip if not found.

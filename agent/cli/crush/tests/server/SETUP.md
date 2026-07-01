@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: server-mode crush tests dispatched by Mode (convert, server-client, server-ask)
+
 ## Preconditions
 - All tests under this directory use server-mode (`Mode="convert"`, `Mode="server-client"`, or `Mode="server-ask"`).
 - `convert` sub-tests are pure unit tests — no server needed.

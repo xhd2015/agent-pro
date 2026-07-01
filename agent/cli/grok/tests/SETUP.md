@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: root grok test dispatch across Ask and ListModels operations
+
 ## Preconditions
 - The `grok` binary is available in PATH (install via `curl -fsSL https://x.ai/cli/install.sh | bash`).
 - Tests run real queries against the grok CLI through GrokAgent.

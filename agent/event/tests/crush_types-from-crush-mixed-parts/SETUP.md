@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: `FromCrush` handles a crush message with multiple parts (text + tool_call)
+
 ## Preconditions
 - `FromCrush` handles a crush message with multiple parts (text + tool_call).
 - Each part produces its own canonical AgentEvent.

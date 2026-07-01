@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: `ToCrush` converts ActionError to a crush agent_event with type `error`
+
 ## Preconditions
 - `ToCrush` converts ActionError to a crush agent_event with type `error`.
 

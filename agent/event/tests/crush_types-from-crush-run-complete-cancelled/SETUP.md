@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: `FromCrush` parses a crush run_complete event with cancelled=true
+
 ## Preconditions
 - `FromCrush` parses a crush run_complete event with cancelled=true.
 - Emits ActionDone with cancelled information.

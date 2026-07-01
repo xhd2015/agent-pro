@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: grok Ask() operation mode subtree of GrokAgent
+
 ## Preconditions
 - The grok binary is available in PATH.
 - This subtree covers the `Ask()` operation mode of GrokAgent.

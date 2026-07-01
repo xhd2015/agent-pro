@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: `FromCrush` parses a crush agent_event with type `error` and emits ActionError
+
 ## Preconditions
 - `FromCrush` parses a crush agent_event with type `error` and emits ActionError.
 

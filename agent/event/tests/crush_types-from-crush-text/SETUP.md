@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: `FromCrush` parses a crush message with a text part and emits ActionMessage
+
 ## Preconditions
 - `FromCrush` parses a crush message with a text part and emits ActionMessage.
 

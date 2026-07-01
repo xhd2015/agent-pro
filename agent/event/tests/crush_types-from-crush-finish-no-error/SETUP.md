@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: `FromCrush` parses a crush message with a finish part having reason `end_turn` (non-error)
+
 ## Preconditions
 - `FromCrush` parses a crush message with a finish part having reason `end_turn` (non-error).
 - Non-error finish reasons produce no canonical ActionType.

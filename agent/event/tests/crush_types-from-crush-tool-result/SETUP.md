@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: `FromCrush` parses a crush message with a tool_result part
+
 ## Preconditions
 - `FromCrush` parses a crush message with a tool_result part.
 - Tool results are informational only and produce no canonical ActionType.

@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: The `agent/event/print` package provides a `Coalescer` struct
+
 ## Preconditions
 
 - The `agent/event/print` package provides a `Coalescer` struct.

@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: ActionToolCall with PhaseStart produces tool_execution_start
+
 ## Preconditions
 - ActionToolCall with PhaseStart produces tool_execution_start.
 

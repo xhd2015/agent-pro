@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: agent_start → ActionStepStart PhaseStart
+
 ## Preconditions
 - agent_start → ActionStepStart PhaseStart.
 

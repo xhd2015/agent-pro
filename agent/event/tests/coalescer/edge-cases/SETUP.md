@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Grouping node for edge cases involving empty text and boundary conditions
+
 ## Preconditions
 - Grouping node for edge cases involving empty text and boundary conditions.
 - Coalescer behavior must be consistent regardless of text content.

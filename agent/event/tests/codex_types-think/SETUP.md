@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: The program calls `ToCodex` with a `think` AgentEvent
+
 ## Preconditions
 - The program calls `ToCodex` with a `think` AgentEvent.
 

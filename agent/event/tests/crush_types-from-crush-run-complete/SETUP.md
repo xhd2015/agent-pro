@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: `FromCrush` parses a crush run_complete event and emits ActionDone
+
 ## Preconditions
 - `FromCrush` parses a crush run_complete event and emits ActionDone.
 

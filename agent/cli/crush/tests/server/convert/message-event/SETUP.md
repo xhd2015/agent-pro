@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: UnwrapEvent on a 3-level message SSE line with text and reasoning parts
+
 ## Preconditions
 - Input is a valid 3-level SSE line with outer type `"message"`.
 - Inner payload contains a complete `MessagePayload` with `id`, `role`, `session_id`, `parts`.

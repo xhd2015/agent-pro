@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: session event is metadata and produces no AgentEvent
+
 ## Preconditions
 - session event is metadata and produces no AgentEvent.
 

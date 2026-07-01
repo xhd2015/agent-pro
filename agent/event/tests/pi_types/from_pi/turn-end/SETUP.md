@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: turn_end → ActionStepFinish PhaseEnd
+
 ## Preconditions
 - turn_end → ActionStepFinish PhaseEnd.
 

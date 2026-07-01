@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: `FromCrush` parses a crush message with a tool_call part and emits ActionToolCall
+
 ## Preconditions
 - `FromCrush` parses a crush message with a tool_call part and emits ActionToolCall.
 

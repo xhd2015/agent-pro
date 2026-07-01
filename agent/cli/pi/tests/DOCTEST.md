@@ -6,6 +6,33 @@ parses its JSON-lines output to implement the `registry.Agent` interface.
 These are integration tests that require a real `pi` binary on PATH and valid
 API keys configured in `~/.pi/agent/`. Tests are skipped if the binary is not found.
 
+## Version
+
+0.0.2
+
+## DSN (Domain Specific Notion)
+
+Participants:
+
+- **PiAgent** — an in-process adapter that implements `registry.Agent`. It
+  resolves the `pi` binary, spawns it, scans its JSON-lines stdout, and
+  converts each line into a canonical `AgentEvent` JSONL line on `RawLog`.
+- **pi binary** — the CLI subprocess invoked by `PiAgent.Ask`. It emits
+  JSON-lines events: `message_start`, `message_update` (assistant content
+  deltas), `message_end`, and a terminal `agent_end` carrying the session id.
+- **registry.Agent** — the contract `PiAgent` satisfies: `Ask`,
+  `FindAgentPath`.
+
+Behaviors:
+
+- `Ask(ctx, question, opts, onDelta)` resolves the binary, spawns the process
+  with optional `--session-id`, streams stdout line by line through the event
+  writer, accumulates `message_update` content into the answer, captures
+  `LastSessionID` from the session header, and returns the answer.
+- `FindAgentPath(env)` is `env.LookPath("pi")`, else an error mentioning "pi".
+- Session resume: a second `Ask` reuses `LastSessionID` via
+  `AskOptions.SessionID` (mapped to pi's `--session-id`).
+
 ## Decision Tree
 
 ```

@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: UnwrapEvent on a 3-level run_complete SSE line with session and text
+
 ## Preconditions
 - Input is a valid 3-level SSE line with outer type `"run_complete"`.
 - Inner payload contains a `RunCompletePayload` with session, text, and no error.

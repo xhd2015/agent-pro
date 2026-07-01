@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: subprocess CrushAgent two-turn session resume via LastSessionID
+
 ## Preconditions
 - The crush binary is available in PATH.
 - The session-resume test runs two queries: first captures a SessionID, then resumes.

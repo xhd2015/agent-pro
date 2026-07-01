@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: A `crush` binary is available on `PATH` (or `CrushPath` is configured)
+
 ## Preconditions
 - A `crush` binary is available on `PATH` (or `CrushPath` is configured).
 - The test will start `crush server` on a free port and manage the lifecycle.

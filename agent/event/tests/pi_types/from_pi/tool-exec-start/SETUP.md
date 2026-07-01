@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: tool_execution_start → ActionToolCall PhaseStart
+
 ## Preconditions
 - tool_execution_start → ActionToolCall PhaseStart.
 

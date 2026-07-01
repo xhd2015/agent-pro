@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: turn_start has no payload fields beyond `type`
+
 ## Preconditions
 - turn_start has no payload fields beyond `type`.
 

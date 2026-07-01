@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: The `opencode_types` package defines `Event` and `ReasoningPart` structs
+
 ## Preconditions
 - The `opencode_types` package defines `Event` and `ReasoningPart` structs.
 

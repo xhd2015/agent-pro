@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: `FromCrush` parses a crush agent_event with type `response`
+
 ## Preconditions
 - `FromCrush` parses a crush agent_event with type `response`.
 - Response events are informational and produce no canonical ActionType (or are forwarded as-is).

@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: ActionToolCall with Phase="" produces tool_execution_start + tool_execution_end
+
 ## Preconditions
 - ActionToolCall with Phase="" produces tool_execution_start + tool_execution_end.
 

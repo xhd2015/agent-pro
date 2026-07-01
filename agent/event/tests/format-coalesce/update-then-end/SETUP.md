@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Two JSON lines: a `PhaseUpdate` followed by a `PhaseEnd` for the same message ID
+
 ## Preconditions
 - Two JSON lines: a `PhaseUpdate` followed by a `PhaseEnd` for the same message ID.
 

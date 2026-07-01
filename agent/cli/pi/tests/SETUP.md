@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: root PiAgent test running real queries against the pi CLI
+
 ## Preconditions
 - The `pi` binary is available in PATH.
 - PI must have API keys configured in its own config (`~/.pi/agent/`).

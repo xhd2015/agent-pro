@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: `CrushPath` is set to a path that does NOT exist on the filesystem
+
 ## Preconditions
 - `CrushPath` is set to a path that does NOT exist on the filesystem.
 

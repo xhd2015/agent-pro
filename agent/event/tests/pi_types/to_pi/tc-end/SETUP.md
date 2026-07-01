@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: ActionToolCall with PhaseEnd produces tool_execution_end
+
 ## Preconditions
 - ActionToolCall with PhaseEnd produces tool_execution_end.
 

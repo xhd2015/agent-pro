@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: ActionThink with Phase="" produces message_start + message_update(thinking) + message_end
+
 ## Preconditions
 - ActionThink with Phase="" produces message_start + message_update(thinking) + message_end.
 

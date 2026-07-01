@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Sequence: `PhaseEnd`(ID=a, "msg a") → `ActionError`("err") → `PhaseEnd`(ID=a, "msg a again")
+
 ## Preconditions
 - Sequence: `PhaseEnd`(ID=a, "msg a") → `ActionError`("err") → `PhaseEnd`(ID=a, "msg a again").
 

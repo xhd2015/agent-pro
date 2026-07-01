@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: ActionThink with PhaseUpdate produces message_update (thinking_delta)
+
 ## Preconditions
 - ActionThink with PhaseUpdate produces message_update (thinking_delta).
 

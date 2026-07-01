@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: agent_end carries a `messages` array
+
 ## Preconditions
 - agent_end carries a `messages` array.
 

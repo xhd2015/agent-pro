@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: The `agent/event/print` package exposes `FormatTraceLine(line string) string`
+
 ## Preconditions
 
 - The `agent/event/print` package exposes `FormatTraceLine(line string) string`.

@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Roundtrip: ToPi then FromPi should preserve tool call fields
+
 ## Preconditions
 - Roundtrip: ToPi then FromPi should preserve tool call fields.
 

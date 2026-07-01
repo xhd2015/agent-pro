@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Grouping node for standalone single-event tests
+
 ## Preconditions
 - Grouping node for standalone single-event tests.
 - Each event is fed in isolation; no prior state in the coalescer.

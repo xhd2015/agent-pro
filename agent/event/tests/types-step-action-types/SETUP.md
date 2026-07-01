@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: The `types` package defines `ActionStepStart` and `ActionStepFinish`
+
 ## Preconditions
 - The `types` package defines `ActionStepStart` and `ActionStepFinish`.
 

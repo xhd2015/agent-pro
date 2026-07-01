@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: The `pi_types` package must exist under `agent/event/pi_types` with `types.go` and `convert.go`
+
 ## Preconditions
 
 - The `pi_types` package must exist under `agent/event/pi_types` with `types.go` and `convert.go`.

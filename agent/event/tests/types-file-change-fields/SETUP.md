@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: The program imports `agent/event/types` and marshals a `FileChange`
+
 ## Preconditions
 - The program imports `agent/event/types` and marshals a `FileChange`.
 

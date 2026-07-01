@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: `ToCrush` converts ActionDone to a crush run_complete event
+
 ## Preconditions
 - `ToCrush` converts ActionDone to a crush run_complete event.
 

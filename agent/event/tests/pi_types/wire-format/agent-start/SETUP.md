@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: agent_start has no payload fields beyond `type`
+
 ## Preconditions
 - agent_start has no payload fields beyond `type`.
 

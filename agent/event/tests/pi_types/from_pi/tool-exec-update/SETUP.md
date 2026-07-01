@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: tool_execution_update → ActionToolCall PhaseUpdate
+
 ## Preconditions
 - tool_execution_update → ActionToolCall PhaseUpdate.
 

@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: per-word grok thought streaming lines coalesce into think AgentEvents
+
 ## Preconditions
 - Grok CLI emits per-word `thought` events during streaming.
 - Each native line is converted to a separate AgentEvent in events.jsonl.

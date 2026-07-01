@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: two CrushServerClient instances share a single crush daemon process
+
 ## Preconditions
 - The crush server should not be running before the test.
 - Two separate `CrushServerClient` instances (A and B) are created.

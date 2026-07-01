@@ -8,6 +8,41 @@ These are integration tests that require a real `grok` binary on PATH
 (install with `curl -fsSL https://x.ai/cli/install.sh | bash`).
 Tests are skipped if the binary is not found.
 
+## Version
+
+0.0.2
+
+## DSN (Domain Specific Notion)
+
+Participants:
+
+- **GrokAgent** — an in-process adapter that implements `registry.Agent`. It
+  resolves the `grok` binary, spawns it, scans its streaming-JSON stdout, and
+  converts each line into a canonical `AgentEvent` JSONL line on `RawLog` via a
+  `GrokEventWriter`.
+- **grok binary** — the CLI subprocess invoked by `GrokAgent.Ask`. It emits one
+  JSON object per line: `thought` (per-word reasoning deltas), `text`
+  (assistant content), tool `tool_started`/`tool_completed` pairs, and a
+  terminal `end` event carrying the `sessionId`.
+- **GrokEventWriter / writeAgentEventsFromGrokLine** — the mapping layer that
+  turns native grok streaming lines into canonical `AgentEvent`s (`think`,
+  `message`, `tool_call`, `done`). Per-word `thought` deltas coalesce into one
+  think event; `end` carries the captured `LastSessionID`.
+- **registry.Agent** — the contract `GrokAgent` satisfies: `Ask`,
+  `ListModels`, `FindAgentPath`.
+
+Behaviors:
+
+- `Ask(ctx, question, opts, onDelta)` resolves the binary, builds the args
+  (optional `--model`, `--resume`), spawns the process, streams stdout line by
+  line through the event writer, accumulates assistant `text` into the answer,
+  captures `LastSessionID` from the `end` event, and returns the answer.
+- `ListModels(ctx)` queries the grok CLI for its available models.
+- `FindAgentPath(env)` is `env.LookPath("grok")`, else an error mentioning
+  "grok".
+- Session resume: a second `Ask` reuses `LastSessionID` via
+  `AskOptions.SessionID` (mapped to grok's `--resume`).
+
 ## Decision Tree
 
 ```

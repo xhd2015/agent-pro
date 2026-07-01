@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: ToCrush/FromCrush round-trip of a single ActionError event
+
 ## Preconditions
 - Input is a single `AgentEvent` with `Type=ActionError` and error text.
 

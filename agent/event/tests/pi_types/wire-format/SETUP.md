@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Grouping node for wire-format event type tests
+
 ## Preconditions
 - Grouping node for wire-format event type tests.
 

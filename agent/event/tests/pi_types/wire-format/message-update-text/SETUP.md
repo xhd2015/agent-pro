@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: message_update carries both `message` and `assistantMessageEvent` fields
+
 ## Preconditions
 - message_update carries both `message` and `assistantMessageEvent` fields.
 - text_delta events include `contentIndex`, `delta`, and `partial` message.

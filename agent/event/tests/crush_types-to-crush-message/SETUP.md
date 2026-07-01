@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: `ToCrush` converts ActionMessage to a crush message with a text part
+
 ## Preconditions
 - `ToCrush` converts ActionMessage to a crush message with a text part.
 

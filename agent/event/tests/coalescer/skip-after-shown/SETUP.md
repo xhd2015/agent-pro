@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Grouping node for sequences where a `PhaseEnd` follows a "show" phase (start/update/instant)
+
 ## Preconditions
 - Grouping node for sequences where a `PhaseEnd` follows a "show" phase (start/update/instant).
 - All events in a leaf share the same `ID`.

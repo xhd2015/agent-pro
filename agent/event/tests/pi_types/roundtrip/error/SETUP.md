@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Roundtrip: ToPi then FromPi should preserve error information
+
 ## Preconditions
 - Roundtrip: ToPi then FromPi should preserve error information.
 

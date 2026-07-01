@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: crush daemon lifecycle start, health-check, kill, and confirm stopped
+
 ## Preconditions
 - A crush server should NOT be running before the test.
 - After `EnsureServer`, the server should be running.

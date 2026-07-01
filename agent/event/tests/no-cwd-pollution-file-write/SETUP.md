@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: The `fakeagent` package generates file write events during probe simulation
+
 ## Preconditions
 - The `fakeagent` package generates file write events during probe simulation.
 - The prompt contains patterns that trigger `KindFileWrite` (e.g., "create output.txt").

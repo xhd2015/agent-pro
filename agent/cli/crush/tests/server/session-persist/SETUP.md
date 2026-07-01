@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: server-mode CrushAgent Ask resumes a session across two turns
+
 ## Preconditions
 - Server is running.
 - `CrushAgent.Ask()` uses the server client.

@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: `ToCrush` converts ActionThink to a crush message with a reasoning part
+
 ## Preconditions
 - `ToCrush` converts ActionThink to a crush message with a reasoning part.
 

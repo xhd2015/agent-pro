@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: message_update with non-assistant role (user/toolResult) produces no action
+
 ## Preconditions
 - message_update with non-assistant role (user/toolResult) produces no action.
 

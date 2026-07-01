@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: grok fresh-session Ask() subtree (no session resume)
+
 ## Preconditions
 - `Operation` is set to `"ask"` by the parent `ask/` node.
 - This subtree covers fresh session queries (no session resume).

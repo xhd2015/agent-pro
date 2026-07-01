@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Successful tool_execution_end has `result` and `isError: false`
+
 ## Preconditions
 - Successful tool_execution_end has `result` and `isError: false`.
 

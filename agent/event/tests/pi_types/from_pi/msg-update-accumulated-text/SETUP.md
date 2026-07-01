@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: A message_update event where the accumulated text (Content[0].Text) is larger than the delta
+
 ## Preconditions
 - A message_update event where the accumulated text (Content[0].Text) is larger than the delta.
 - This simulates real-world pi streaming: after several deltas have accumulated, each message_update carries the full running text.

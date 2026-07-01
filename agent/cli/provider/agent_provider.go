@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	codexagent "github.com/xhd2015/agent-pro/agent/cli/codex"
+	claudeagent "github.com/xhd2015/agent-pro/agent/cli/claude"
 	crushagent "github.com/xhd2015/agent-pro/agent/cli/crush"
 	cursoragent "github.com/xhd2015/agent-pro/agent/cli/cursor"
 	grokagent "github.com/xhd2015/agent-pro/agent/cli/grok"
@@ -134,6 +135,23 @@ func Build(runnerID registry.AgentRunnerID, settingsPath, workspace string, env 
 			Name: "Grok",
 			Agent: &grokagent.GrokAgent{
 				AgentPath:    grokPath,
+				SettingsPath: settingsPath,
+				Workspace:    workspace,
+				Env:          env,
+			},
+		}, nil
+	case registry.AgentRunnerClaude:
+		claudePath, err := registry.ResolveConfiguredCLIPath(settingsPath, registry.ClaudeCLIPathSettingKey, registry.EnvClaudeCLIPath, "", func() (string, error) {
+			return claudeagent.FindAgentPath(env)
+		})
+		if err != nil {
+			return registry.AgentRunner{}, fmt.Errorf("claude not found: %w (install it or add it to PATH)", err)
+		}
+		return registry.AgentRunner{
+			ID:   registry.AgentRunnerClaude,
+			Name: "Claude",
+			Agent: &claudeagent.ClaudeAgent{
+				AgentPath:    claudePath,
 				SettingsPath: settingsPath,
 				Workspace:    workspace,
 				Env:          env,

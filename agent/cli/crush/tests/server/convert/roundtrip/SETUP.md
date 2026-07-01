@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: crush_types ToCrush and FromCrush exercised directly on AgentEvent arrays
+
 ## Preconditions
 - These tests exercise `crush_types.ToCrush` and `crush_types.FromCrush` directly.
 - No server or external dependency needed.

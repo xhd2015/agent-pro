@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: ActionMessage with PhaseEnd produces message_end
+
 ## Preconditions
 - ActionMessage with PhaseEnd produces message_end.
 

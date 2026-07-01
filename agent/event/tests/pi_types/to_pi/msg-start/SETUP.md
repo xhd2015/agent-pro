@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: ActionMessage with PhaseStart produces message_start
+
 ## Preconditions
 - ActionMessage with PhaseStart produces message_start.
 

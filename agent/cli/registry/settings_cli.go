@@ -17,6 +17,7 @@ const (
 	AgentRunnerCrush     AgentRunnerID = "crush"
 	AgentRunnerPi        AgentRunnerID = "pi"
 	AgentRunnerGrok      AgentRunnerID = "grok"
+	AgentRunnerClaude    AgentRunnerID = "claude"
 )
 
 const (
@@ -27,6 +28,7 @@ const (
 	CrushCLIPathSettingKey          = "crush_cli_path"
 	PiCLIPathSettingKey             = "pi_cli_path"
 	GrokCLIPathSettingKey           = "grok_cli_path"
+	ClaudeCLIPathSettingKey         = "claude_cli_path"
 	CodexAPIKeySettingKey           = "codex_api_key"
 	AgentRunnerIDSettingKey         = "agent_runner_id"
 	KBDefaultAgentRunnerIDSettingKey = "kb_default_agent_runner_id"
@@ -46,6 +48,7 @@ type Settings struct {
 	CrushCLIPath           string            `json:"crush_cli_path,omitempty"`
 	PiCLIPath              string            `json:"pi_cli_path,omitempty"`
 	GrokCLIPath            string            `json:"grok_cli_path,omitempty"`
+	ClaudeCLIPath          string            `json:"claude_cli_path,omitempty"`
 	CodexAPIKey            string            `json:"codex_api_key,omitempty"`
 	DisableSubAgents       bool              `json:"disable_sub_agents,omitempty"`
 	ModelsByAgentRunner    map[string]string `json:"models_by_agent_runner,omitempty"`
@@ -59,6 +62,7 @@ const (
 	EnvCrushCLIPath    = "AGENT_RUNNER_CRUSH_PATH"
 	EnvPiCLIPath       = "AGENT_RUNNER_PI_PATH"
 	EnvGrokCLIPath     = "AGENT_RUNNER_GROK_PATH"
+	EnvClaudeCLIPath   = "AGENT_RUNNER_CLAUDE_PATH"
 )
 
 func LoadEnvCLIPath(envKey string) string {
@@ -102,6 +106,8 @@ func LoadConfiguredStringSetting(settingsPath string, settingKey string) string 
 		return strings.TrimSpace(settings.PiCLIPath)
 	case GrokCLIPathSettingKey:
 		return strings.TrimSpace(settings.GrokCLIPath)
+	case ClaudeCLIPathSettingKey:
+		return strings.TrimSpace(settings.ClaudeCLIPath)
 	case CodexAPIKeySettingKey:
 		return strings.TrimSpace(settings.CodexAPIKey)
 	case AgentRunnerIDSettingKey:

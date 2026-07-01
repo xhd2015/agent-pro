@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: `FromCrush` skips messages with role `user` or `system` — only `assistant` messages are converted
+
 ## Preconditions
 - `FromCrush` skips messages with role `user` or `system` — only `assistant` messages are converted.
 

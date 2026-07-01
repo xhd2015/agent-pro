@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Grouping node for ToPi conversion tests
+
 ## Preconditions
 - Grouping node for ToPi conversion tests.
 

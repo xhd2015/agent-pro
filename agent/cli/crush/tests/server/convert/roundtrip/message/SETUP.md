@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: ToCrush/FromCrush round-trip of a single ActionMessage event
+
 ## Preconditions
 - Input is a single `AgentEvent` with `Type=ActionMessage` and text content.
 

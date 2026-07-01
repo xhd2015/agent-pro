@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: message_start → ActionMessage PhaseStart
+
 ## Preconditions
 - message_start → ActionMessage PhaseStart.
 

@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: agent_end → ActionDone PhaseEnd
+
 ## Preconditions
 - agent_end → ActionDone PhaseEnd.
 

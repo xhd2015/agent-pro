@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: UnwrapEvent gracefully handles a non-JSON garbage input string
+
 ## Preconditions
 - Input is not valid JSON at all (garbage string).
 - The function must handle this gracefully.

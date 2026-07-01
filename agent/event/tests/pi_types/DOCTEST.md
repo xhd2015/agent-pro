@@ -1,7 +1,40 @@
 # Pi Types Tests
 
-These doc-style tests verify the `agent/event/pi_types` package: wire-format structs,
-`ToPi` (canonical AgentEvent → pi Event), and `FromPi` (pi Event → canonical AgentEvent).
+## Version
+
+0.0.2
+
+# DSN (Domain Specific Notion)
+
+This tree tests the **`agent/event/pi_types`** package — the adapter between the
+**pi CLI wire format** and the canonical `AgentEvent` stream.
+
+Participants and behaviors:
+
+- **Canonical AgentEvent** — the shared representation in `agent/event/types`,
+  with `ActionType` (`ActionMessage`, `ActionThink`, `ActionToolCall`,
+  `ActionError`, `ActionDone`, `ActionStepStart`, `ActionStepFinish`) and a
+  `Phase` (`PhaseStart`, `PhaseUpdate`, `PhaseEnd`, `PhaseInstant`).
+- **pi wire `Event`** — the native struct pi emits/accepts as JSON, with a
+  discriminating `type` (`session`, `agent_start`, `agent_end`, `turn_start`,
+  `turn_end`, `message_start`, `message_update`, `message_end`,
+  `tool_execution_start`/`_update`/`_end`) and optional `message`,
+  `assistantMessageEvent`, `messages`, and `toolResults` payloads.
+- **`FromPi`** — pi `Event` → canonical `AgentEvent`. One pi event maps to zero
+  or more `AgentEvent`s (e.g. `session` and non-assistant `message_update` map to
+  nothing; `message_update` with a `text_delta`/`thinking_delta` carries the
+  delta in `AssistantMessageEvent.Delta`, which `FromPi` must prefer over the
+  accumulated `Content[0].Text`/`Thinking`).
+- **`ToPi`** — canonical `AgentEvent` → pi `Event`. Each `ActionType`+`Phase`
+  pair maps to one pi event; an instant (`Phase=""`) expands to a
+  start/update/end triple so the full content is streamed.
+- **`roundtrip`** — `ToPi` followed by `FromPi` must preserve the key fields of
+  text messages, thinking, tool calls, step boundaries, and errors.
+- **`wire-format`** — JSON parse/marshal of pi `Event` structs, asserting each
+  pi event type's payload fields round-trip through the struct definitions.
+
+The `Run` function in the Go block below dispatches on `req.Target`
+(`wire`/`to_pi`/`from_pi`/`roundtrip`) and marshals the result to `resp.Output`.
 
 ## Decision Tree
 

@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: The program imports `agent/event/types` and prints all exported `ActionType` constants
+
 ## Preconditions
 - The program imports `agent/event/types` and prints all exported `ActionType` constants.
 

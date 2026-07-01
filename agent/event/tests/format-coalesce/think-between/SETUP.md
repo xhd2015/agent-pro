@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Three JSON lines: `PhaseEnd`(m1), `ActionThink`, `PhaseEnd`(m2)
+
 ## Preconditions
 - Three JSON lines: `PhaseEnd`(m1), `ActionThink`, `PhaseEnd`(m2).
 - The think event (non-ActionMessage) should reset the coalescer, so both PhaseEnd events produce output.

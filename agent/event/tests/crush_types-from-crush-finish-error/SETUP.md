@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: `FromCrush` parses a crush message with a finish part having reason `error`
+
 ## Preconditions
 - `FromCrush` parses a crush message with a finish part having reason `error`.
 - This should emit ActionError.

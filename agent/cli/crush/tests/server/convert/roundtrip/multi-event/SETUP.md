@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: ToCrush/FromCrush round-trip of a mixed-type AgentEvent array preserving count
+
 ## Preconditions
 - Input is an array of `AgentEvent` with different types to verify each round-trips correctly and event count is preserved.
 

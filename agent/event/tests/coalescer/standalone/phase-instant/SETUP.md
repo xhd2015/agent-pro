@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Input is a single `ActionMessage` event with `PhaseInstant` (empty string phase)
+
 ## Preconditions
 - Input is a single `ActionMessage` event with `PhaseInstant` (empty string phase).
 

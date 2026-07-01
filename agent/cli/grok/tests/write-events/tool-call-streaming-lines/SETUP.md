@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: grok tool_started/tool_completed lines convert to tool_call AgentEvents
+
 ## Preconditions
 - Grok sessions emit `tool_started` / `tool_completed` lines (see `~/.grok/sessions/.../events.jsonl`).
 - `GrokEventWriter` should convert those into `ActionToolCall` AgentEvent lines for `events.jsonl`.

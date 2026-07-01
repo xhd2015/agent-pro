@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: fresh grok Ask() query with no model override or session resume
+
 ## Preconditions
 - The grok binary is available in PATH.
 - This is a fresh session query (no model override, no session-resume).

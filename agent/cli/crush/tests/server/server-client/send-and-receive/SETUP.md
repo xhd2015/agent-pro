@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: full server-client cycle of subscribe, send prompt, and read SSE events
+
 ## Preconditions
 - Server is running.
 - A workspace is created.

@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Input is a single `ActionMessage` event with `PhaseEnd`
+
 ## Preconditions
 - Input is a single `ActionMessage` event with `PhaseEnd`.
 

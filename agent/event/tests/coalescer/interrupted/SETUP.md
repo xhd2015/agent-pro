@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Grouping node for sequences where a non-`ActionMessage` event interrupts message flow
+
 ## Preconditions
 - Grouping node for sequences where a non-`ActionMessage` event interrupts message flow.
 - Non-`ActionMessage` events always pass through and reset the coalescer state.

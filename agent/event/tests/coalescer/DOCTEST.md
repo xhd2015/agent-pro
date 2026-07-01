@@ -1,9 +1,39 @@
 # Coalescer Tests
 
-These doc-style tests verify the `agent/event/print.Coalescer` struct and its
-`ShouldSkip(event AgentEvent) bool` method. The coalescer statefully tracks
-consecutive `ActionMessage` events by `ID` to skip redundant `PhaseEnd` messages
-whose content was already shown via `PhaseStart`/`PhaseUpdate`/`PhaseInstant` deltas.
+## Version
+
+0.0.2
+
+# DSN (Domain Specific Notion)
+
+This tree tests the **`Coalescer`** in `agent/event/print`, a stateful filter
+that suppresses redundant `ActionMessage` phase events on the canonical
+`AgentEvent` stream.
+
+Participants and behaviors:
+
+- **Coalescer** — a struct with `ShouldSkip(event AgentEvent) bool`. It tracks
+  the last seen `ActionMessage` `ID` and whether that ID's content has already
+  been "shown" to the user.
+- **Phase semantics** — an `ActionMessage` carries a `Phase` of `PhaseStart`,
+  `PhaseUpdate`, `PhaseInstant`, or `PhaseEnd`. Start/update/instant phases are
+  deltas that *display* content and mark the ID as shown; `PhaseEnd` is the
+  terminal "full message" event that is redundant once the ID was shown.
+- **Skip rule** — `ShouldSkip` returns `true` for a `PhaseEnd` whose `ID` was
+  already shown by a prior start/update/instant in the same uninterrupted run.
+  A `PhaseEnd` with a fresh (or previously-unseen) ID is displayed.
+- **Duplicate-end handling** — two consecutive `PhaseEnd` events with the *same*
+  ID skip the second; with *different* IDs both display.
+- **Reset on interruption** — any non-`ActionMessage` event (e.g. `ActionError`,
+  `ActionToolCall`) passes through and resets coalescer state, so a subsequent
+  `PhaseEnd` with a repeated ID is displayed again.
+- **Empty text** — the skip rule is keyed on phase and ID, not on text content;
+  empty-text starts still mark an ID as shown, so an empty `PhaseEnd` is skipped
+  and an empty `PhaseStart` still suppresses a later non-empty `PhaseEnd`.
+
+The `Run` function in the Go block below feeds `req.Events` through a fresh
+`Coalescer` one at a time and records each `ShouldSkip` boolean in
+`resp.Skipped`.
 
 ## Decision Tree
 

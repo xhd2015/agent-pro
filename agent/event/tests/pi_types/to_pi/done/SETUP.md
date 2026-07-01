@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: ActionDone produces agent_end
+
 ## Preconditions
 - ActionDone produces agent_end.
 

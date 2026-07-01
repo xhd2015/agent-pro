@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: `crush` is available on `PATH` (or skip via `CRUSH_SKIP_INTEGRATION=1`)
+
 ## Preconditions
 - `crush` is available on `PATH` (or skip via `CRUSH_SKIP_INTEGRATION=1`).
 - A free TCP port is available for the server.

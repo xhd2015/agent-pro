@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: `FromCrush` parses a crush run_complete event with an error field
+
 ## Preconditions
 - `FromCrush` parses a crush run_complete event with an error field.
 - Still emits ActionDone since the run itself completed.

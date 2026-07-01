@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: UnwrapEvent drops a 3-level SSE line whose outer type is unknown
+
 ## Preconditions
 - Input has an outer type that is NOT one of `"message"`, `"agent_event"`, or `"run_complete"`.
 - Inner payload structure is irrelevant.

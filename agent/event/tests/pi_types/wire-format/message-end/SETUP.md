@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: message_end carries a `message` field with the full message
+
 ## Preconditions
 - message_end carries a `message` field with the full message.
 

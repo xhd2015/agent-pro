@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Roundtrip: ToPi then FromPi should preserve step start/finish actions
+
 ## Preconditions
 - Roundtrip: ToPi then FromPi should preserve step start/finish actions.
 

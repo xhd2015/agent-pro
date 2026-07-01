@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: A single `PhaseEnd` JSON line with no prior delta events for the same ID
+
 ## Preconditions
 - A single `PhaseEnd` JSON line with no prior delta events for the same ID.
 

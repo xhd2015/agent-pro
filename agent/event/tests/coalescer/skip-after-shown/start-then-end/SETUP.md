@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Sequence: `PhaseStart`(ID=x, text "hello") → `PhaseEnd`(ID=x, text "hello world")
+
 ## Preconditions
 - Sequence: `PhaseStart`(ID=x, text "hello") → `PhaseEnd`(ID=x, text "hello world").
 

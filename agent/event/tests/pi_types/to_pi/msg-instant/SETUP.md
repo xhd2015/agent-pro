@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: ActionMessage with Phase="" produces message_start + message_update(text) + message_end
+
 ## Preconditions
 - ActionMessage with Phase="" produces message_start + message_update(text) + message_end.
 

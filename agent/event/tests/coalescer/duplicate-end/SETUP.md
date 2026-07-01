@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Grouping node for consecutive `PhaseEnd` handling
+
 ## Preconditions
 - Grouping node for consecutive `PhaseEnd` handling.
 - Tests how the coalescer treats back-to-back PhaseEnd events with same or different IDs.

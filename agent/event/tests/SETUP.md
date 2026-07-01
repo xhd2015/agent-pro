@@ -1,11 +1,24 @@
+# Scenario
+
+**Feature**: shared dispatch harness for per-CLI event-type adapters
+
+```
+# leaf sets Request fields; root Run dispatches to the right adapter
+leaf SETUP -> Request{Target, Events|CrushInput|ClaudeInput|Prompt} -> Run
+
+# native stream -> canonical AgentEvent JSON for assertions
+Run -> FromCrush|FromClaude|ToCodex|ToCrush|ToClaude|runCrushServer|runClaudeHeadless -> resp.Output
+```
+
 ## Preconditions
 - Each leaf provides structured input data in request fields.
-- `Run` dispatches based on which fields are set: `Events` → ToCodex/ToOpencode, `Value` → marshal, `Output` → pass-through.
+- `Run` dispatches based on which fields are set: `Events` → ToCodex/ToOpencode/ToCrush/ToClaude, `CrushInput` → FromCrush, `ClaudeInput` → FromClaude, `Value` → marshal, `Output` → pass-through.
 
 ## Steps
-1. If `req.Events` is set, call `codex_types.ToCodex` or `opencode_types.ToOpencode` and marshal.
-2. If `req.Value` is set, marshal it to JSON.
-3. Otherwise, pass through `req.Output`.
+1. If `req.Events` is set, call the appropriate `To<Vendor>` and marshal.
+2. If `req.CrushInput` / `req.ClaudeInput` is set, parse and call `FromCrush` / `FromClaude`.
+3. If `req.Value` is set, marshal it to JSON.
+4. Otherwise, pass through `req.Output`.
 
 ```go
 import (
@@ -25,6 +38,7 @@ import (
 	"time"
 
 	codex_types "github.com/xhd2015/agent-pro/agent/event/codex_types"
+	claude_types "github.com/xhd2015/agent-pro/agent/event/claude_types"
 	crush_types "github.com/xhd2015/agent-pro/agent/event/crush_types"
 	opencode_types "github.com/xhd2015/agent-pro/agent/event/opencode_types"
 	types "github.com/xhd2015/agent-pro/agent/event/types"
@@ -246,6 +260,69 @@ func runCrushServer(t *testing.T, req *Request) (*Response, error) {
 	}
 
 	result := crush_types.FromCrush(events, req.SessionID)
+	data, _ := json.Marshal(result)
+	return &Response{Output: string(data)}, nil
+}
+
+func runClaudeHeadless(t *testing.T, req *Request) (*Response, error) {
+	if os.Getenv("CLAUDE_SKIP_INTEGRATION") == "1" {
+		t.Skip("CLAUDE_SKIP_INTEGRATION=1")
+		return nil, nil
+	}
+
+	claudePath := req.ClaudePath
+	if claudePath == "" {
+		var err error
+		claudePath, err = exec.LookPath("claude")
+		if err != nil {
+			t.Skip("claude binary not found on PATH")
+			return nil, nil
+		}
+	} else {
+		if _, err := os.Stat(claudePath); err != nil {
+			return nil, fmt.Errorf("claude binary not found at %s: %w", claudePath, err)
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, claudePath, "-p", req.Prompt, "--output-format", "stream-json", "--verbose")
+	cmd.Stderr = io.Discard
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("failed to pipe claude stdout: %w", err)
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("failed to start claude: %w", err)
+	}
+	defer func() {
+		cancel()
+		cmd.Wait()
+	}()
+
+	var events []claude_types.StreamEvent
+	scanner := bufio.NewScanner(stdout)
+	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var ev claude_types.StreamEvent
+		if err := json.Unmarshal([]byte(line), &ev); err != nil {
+			continue
+		}
+		events = append(events, ev)
+		if ev.Type == claude_types.EventResult {
+			break
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading claude stdout: %w", err)
+	}
+
+	result := claude_types.FromClaude(events, req.SessionID)
 	data, _ := json.Marshal(result)
 	return &Response{Output: string(data)}, nil
 }

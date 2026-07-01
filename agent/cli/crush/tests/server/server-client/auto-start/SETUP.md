@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: ensureServer auto-starts a detached crush daemon when none is running
+
 ## Preconditions
 - No crush server is currently running.
 - `ensureServer` should detect the absence, start the server as a detached daemon, and wait up to 10s for health.

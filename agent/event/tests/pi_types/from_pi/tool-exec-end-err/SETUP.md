@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Error tool_execution_end → ActionToolCall PhaseEnd with non-zero exit code
+
 ## Preconditions
 - Error tool_execution_end → ActionToolCall PhaseEnd with non-zero exit code.
 

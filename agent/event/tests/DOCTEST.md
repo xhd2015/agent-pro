@@ -1,6 +1,41 @@
 # Event Package Tests
 
-These doc-style tests verify the `agent/event/types`, `agent/event/codex_types`, `agent/event/opencode_types`, and `agent/event/crush_types` packages.
+These doc-style tests verify the `agent/event/types`, `agent/event/codex_types`, `agent/event/opencode_types`, `agent/event/crush_types`, and `agent/event/claude_types` packages.
+
+## Version
+
+0.0.2
+
+# DSN (Domain Specific Notion)
+
+The event layer models a CLI agent run as a stream of **canonical `AgentEvent`s**
+(the common currency of `agent/event/types`). Each per-CLI `*_types` package is an
+adapter between one vendor's native event format and that canonical stream.
+
+Participants and behaviors:
+
+- **Canonical AgentEvent** — the shared representation. Each event has a `type`
+  drawn from a fixed set: `step_start`, `think`, `message`, `tool_call`,
+  `error`, `done` (plus phase/role/text/tool fields). All leaves ultimately
+  assert on JSON-marshaled canonical events.
+- **Vendor native stream** — the wire format a CLI emits. The adapter knows how
+  to walk it: `codex_types` (item.* events), `opencode_types`, `crush_types`
+  (SSE `{type,payload}` envelopes), and `claude_types` (headless NDJSON with
+  `system`/`assistant`/`user`/`result` lines).
+- **From<Vendor>** — native → canonical. Walks the native stream and emits zero
+  or more `AgentEvent`s per native event (some native constructs map to nothing,
+  e.g. tool-result echoes that are folded back into the preceding tool call).
+- **To<Vendor>** — canonical → native. The inverse: each `AgentEvent` becomes
+  one native event of the appropriate shape.
+- **Integration leaves** — start the real CLI binary (or model it headless),
+  feed a prompt, capture the native stream, run it through `From<Vendor>`, and
+  assert the canonical output contains the expected answer. Skipped when the
+  binary is absent or `<VENDOR>_SKIP_INTEGRATION=1`.
+
+The `Run` function in the Go block below is the single dispatch point: it reads
+`req.Target` and the populated `Request` fields to decide which adapter or
+integration helper to invoke, then marshals the canonical result to
+`resp.Output`.
 
 ## Decision Tree: Crush Event Types
 
@@ -81,6 +116,60 @@ crush_integration/
 | `crush-integration-real` | End-to-end: start crush server, prompt, SSE capture, FromCrush, verify "paris" |
 | `crush-integration-binary-not-found` | Explicit CrushPath points to nonexistent file → error or skip |
 
+## Decision Tree: Claude Event Types
+
+The Claude Code **headless** runner (`claude -p --output-format stream-json --verbose`)
+emits one JSON object per stdout line with top-level `type` of `system`,
+`assistant`, `user`, or `result`. Conversion functions `FromClaude`
+(claude→canonical) and `ToClaude` (canonical→claude) are tested.
+
+```
+claude_types/
+├── claude_types-event-types/        leaf — constants + StreamEvent marshaling
+│
+├── from_claude/                     (Target="from_claude", claude→canonical)
+│   ├── system-init/                 system init → ActionStepStart
+│   ├── assistant-text/              assistant text block → ActionMessage
+│   ├── assistant-thinking/          thinking block → ActionThink
+│   ├── assistant-tool-use/          tool_use block → ActionToolCall
+│   ├── user-tool-result/            user tool_result → skipped (no action)
+│   ├── result-success/              result success → ActionDone
+│   ├── result-error/                result error → ActionError
+│   └── mixed/                       text + thinking + tool_use in one assistant msg
+│
+├── to_claude/                       (Target="claude", canonical→claude)
+│   ├── think/                       ActionThink → assistant thinking event
+│   ├── message/                     ActionMessage → assistant text event
+│   ├── tool-call/                   ActionToolCall → assistant tool_use event
+│   ├── error/                       ActionError → result error event
+│   └── done/                        ActionDone → result success event
+│
+└── claude_integration/              (Target="claude_headless")
+    ├── claude-integration-real/            ✓ live: claude -p "say pong", parse, verify "pong"  [slow && heavy]
+    └── claude-integration-binary-not-found/  ✗ ClaudePath="/nonexistent/claude" → error
+```
+
+### Claude Test Leaves
+
+| Leaf | Description |
+|---|---|
+| `claude_types-event-types` | Constants + StreamEvent marshaling round-trip |
+| `claude_types-from-claude-system-init` | FromClaude: system init → ActionStepStart |
+| `claude_types-from-claude-assistant-text` | FromClaude: assistant text block → ActionMessage |
+| `claude_types-from-claude-assistant-thinking` | FromClaude: thinking block → ActionThink |
+| `claude_types-from-claude-assistant-tool-use` | FromClaude: tool_use block → ActionToolCall |
+| `claude_types-from-claude-user-tool-result` | FromClaude: user tool_result → skipped (no action) |
+| `claude_types-from-claude-result-success` | FromClaude: result success → ActionDone |
+| `claude_types-from-claude-result-error` | FromClaude: result error → ActionError |
+| `claude_types-from-claude-mixed` | FromClaude: text + thinking + tool_use in one assistant message |
+| `claude_types-to-claude-think` | ToClaude: ActionThink → assistant thinking event |
+| `claude_types-to-claude-message` | ToClaude: ActionMessage → assistant text event |
+| `claude_types-to-claude-tool-call` | ToClaude: ActionToolCall → assistant tool_use event |
+| `claude_types-to-claude-error` | ToClaude: ActionError → result error event |
+| `claude_types-to-claude-done` | ToClaude: ActionDone → result success event |
+| `claude-integration-real` | End-to-end: claude -p "say pong", stream-json, FromClaude, verify "pong" |
+| `claude-integration-binary-not-found` | Explicit ClaudePath points to nonexistent file → non-nil error |
+
 ## How to Run
 
 ```sh
@@ -105,6 +194,7 @@ import (
 	"time"
 
 	codex_types "github.com/xhd2015/agent-pro/agent/event/codex_types"
+	claude_types "github.com/xhd2015/agent-pro/agent/event/claude_types"
 	crush_types "github.com/xhd2015/agent-pro/agent/event/crush_types"
 	opencode_types "github.com/xhd2015/agent-pro/agent/event/opencode_types"
 	types "github.com/xhd2015/agent-pro/agent/event/types"
@@ -112,16 +202,18 @@ import (
 
 
 type Request struct {
-	Events     []types.AgentEvent
-	Target     string // "opencode"→ToOpencode, "crush"→ToCrush, "from_crush"→FromCrush, "crush_server"→StartCrushServer; default→ToCodex
-	SessionID  string
-	Value      any
-	Output     string
-	CrushInput string // raw JSON for FromCrush parsing
-	HostPort   int    // crush server HTTP port (0 = auto-assign)
-	Prompt     string // prompt text for crush server
-	ModelName  string // model override (default: "deepseek-v4-pro")
-	CrushPath  string // path to crush binary (default: LookPath("crush"))
+	Events      []types.AgentEvent
+	Target      string // "opencode"→ToOpencode, "crush"→ToCrush, "from_crush"→FromCrush, "crush_server"→StartCrushServer, "claude"→ToClaude, "from_claude"→FromClaude, "claude_headless"→runClaudeHeadless; default→ToCodex
+	SessionID   string
+	Value       any
+	Output      string
+	CrushInput  string // raw JSON for FromCrush parsing
+	ClaudeInput string // raw NDJSON (one JSON object per line) for FromClaude parsing
+	HostPort    int    // crush server HTTP port (0 = auto-assign)
+	Prompt      string // prompt text for crush server / claude headless
+	ModelName   string // model override (default: "deepseek-v4-pro")
+	CrushPath   string // path to crush binary (default: LookPath("crush"))
+	ClaudePath  string // path to claude binary (default: LookPath("claude"))
 }
 
 type Response struct {
@@ -136,6 +228,26 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 			return &Response{Output: ""}, nil
 		}
 		result := crush_types.FromCrush(crushEvents, req.SessionID)
+		data, _ := json.Marshal(result)
+		output = string(data)
+	} else if req.Target == "from_claude" && req.ClaudeInput != "" {
+		var claudeEvents []claude_types.StreamEvent
+		for _, line := range strings.Split(req.ClaudeInput, "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			var ev claude_types.StreamEvent
+			if err := json.Unmarshal([]byte(line), &ev); err != nil {
+				return &Response{Output: ""}, nil
+			}
+			claudeEvents = append(claudeEvents, ev)
+		}
+		result := claude_types.FromClaude(claudeEvents, req.SessionID)
+		data, _ := json.Marshal(result)
+		output = string(data)
+	} else if req.Target == "claude" && len(req.Events) > 0 {
+		result := claude_types.ToClaude(req.Events, req.SessionID)
 		data, _ := json.Marshal(result)
 		output = string(data)
 	} else if len(req.Events) > 0 {
@@ -157,6 +269,8 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 		output = string(data)
 	} else if req.Target == "crush_server" {
 		return runCrushServer(t, req)
+	} else if req.Target == "claude_headless" {
+		return runClaudeHeadless(t, req)
 	} else {
 		output = req.Output
 	}

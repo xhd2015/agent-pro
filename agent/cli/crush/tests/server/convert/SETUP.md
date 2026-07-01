@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: crush UnwrapEvent exercised directly on 3-level SSE JSON strings
+
 ## Preconditions
 - These tests exercise `crush.UnwrapEvent` (or its exported equivalent) directly.
 - No server or external dependency needed.

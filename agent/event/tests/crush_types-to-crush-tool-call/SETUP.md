@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: `ToCrush` converts ActionToolCall to a crush message with a tool_call part
+
 ## Preconditions
 - `ToCrush` converts ActionToolCall to a crush message with a tool_call part.
 

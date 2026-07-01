@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: message_update with text_delta assistant event → ActionMessage PhaseUpdate
+
 ## Preconditions
 - message_update with text_delta assistant event → ActionMessage PhaseUpdate.
 - After fix: FromPi must prefer Delta (" world") over Content[0].Text ("Hello").

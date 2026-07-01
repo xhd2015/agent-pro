@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: ToCrush/FromCrush round-trip of a single ActionToolCall event with input map
+
 ## Preconditions
 - Input is a single `AgentEvent` with `Type=ActionToolCall`, a tool name, and a tool input map.
 

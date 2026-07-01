@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Roundtrip: ToPi then FromPi should preserve text message content
+
 ## Preconditions
 - Roundtrip: ToPi then FromPi should preserve text message content.
 - After fix: FromPi uses Delta for message_update events. Since ToPi sets Delta = Text for PhaseUpdate,

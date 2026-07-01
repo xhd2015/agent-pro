@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Successful tool_execution_end → ActionToolCall PhaseEnd with tool fields
+
 ## Preconditions
 - Successful tool_execution_end → ActionToolCall PhaseEnd with tool fields.
 

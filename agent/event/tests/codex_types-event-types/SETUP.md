@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: The `codex_types` package defines `Event`, `EventItem`, `EventType`, `ItemType` and all their constants
+
 ## Preconditions
 - The `codex_types` package defines `Event`, `EventItem`, `EventType`, `ItemType` and all their constants.
 

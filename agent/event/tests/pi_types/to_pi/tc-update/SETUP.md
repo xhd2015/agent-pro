@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: ActionToolCall with PhaseUpdate produces tool_execution_update
+
 ## Preconditions
 - ActionToolCall with PhaseUpdate produces tool_execution_update.
 

@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Sequence: `PhaseInstant`(ID=x, text "instant msg") → `PhaseEnd`(ID=x, text "full msg")
+
 ## Preconditions
 - Sequence: `PhaseInstant`(ID=x, text "instant msg") → `PhaseEnd`(ID=x, text "full msg").
 

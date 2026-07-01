@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: The program calls `ToOpencode` with a `tool_call` AgentEvent using `bash` tool and `mock` config
+
 ## Preconditions
 - The program calls `ToOpencode` with a `tool_call` AgentEvent using `bash` tool and `mock` config.
 

@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: fresh PiAgent Ask() query with no session resume
+
 ## Preconditions
 - The pi binary is available in PATH.
 - This is a fresh session query (no --session-id flag).

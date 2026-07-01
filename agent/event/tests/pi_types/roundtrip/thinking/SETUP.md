@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Roundtrip: ToPi then FromPi should preserve thinking content
+
 ## Preconditions
 - Roundtrip: ToPi then FromPi should preserve thinking content.
 

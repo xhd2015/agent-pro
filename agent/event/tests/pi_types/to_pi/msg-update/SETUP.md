@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: ActionMessage with PhaseUpdate produces message_update (text_delta)
+
 ## Preconditions
 - ActionMessage with PhaseUpdate produces message_update (text_delta).
 

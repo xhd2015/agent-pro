@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: ensureServer probes the /v1/health endpoint and starts the server if needed
+
 ## Preconditions
 - A crush server may or may not be running.
 - `ensureServer` should probe `/v1/health` and start the server if needed.

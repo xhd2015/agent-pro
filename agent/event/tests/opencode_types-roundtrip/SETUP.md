@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: `opencode_types.FromOpencode` converts opencode events → AgentEvent, and `ToOpencode` converts back
+
 ## Preconditions
 - `opencode_types.FromOpencode` converts opencode events → AgentEvent, and `ToOpencode` converts back.
 - The round trip preserves each event type identically.

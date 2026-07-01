@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: message_end → ActionMessage PhaseEnd
+
 ## Preconditions
 - message_end → ActionMessage PhaseEnd.
 - After fix: message_end should NOT output full text (deltas already shown via message_update).

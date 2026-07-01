@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: ToCrush/FromCrush of a tool-call event with nil ToolInput does not panic
+
 ## Preconditions
 - Input is a single `AgentEvent` with `Type=ActionToolCall`, a tool name, and `ToolInput` set to `nil`.
 - This verifies that nil ToolInput does not cause a panic.

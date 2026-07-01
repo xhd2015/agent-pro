@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: grok ListModels() operation returns the available models
+
 ## Preconditions
 - The grok binary is available in PATH.
 - This leaf tests the `ListModels()` operation.

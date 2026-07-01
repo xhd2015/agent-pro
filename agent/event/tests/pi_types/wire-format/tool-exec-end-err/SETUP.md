@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Error tool_execution_end has `isError: true` and may contain error details in result
+
 ## Preconditions
 - Error tool_execution_end has `isError: true` and may contain error details in result.
 

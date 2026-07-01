@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: PiAgent two-turn session resume reusing the captured SessionID
+
 ## Preconditions
 - The pi binary is available in PATH.
 - Session resume runs two queries: first captures SessionID from the session header line, second reuses it via `--session-id`.

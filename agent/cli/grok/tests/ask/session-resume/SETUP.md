@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: grok two-turn session resume reusing LastSessionID via --resume
+
 ## Preconditions
 - The grok binary is available in PATH.
 - Session resume runs two queries: first captures SessionID from the `end` event, second reuses it via `--resume`.

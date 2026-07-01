@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Grouping node for FromPi conversion tests
+
 ## Preconditions
 - Grouping node for FromPi conversion tests.
 

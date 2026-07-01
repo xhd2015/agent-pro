@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: message_update with thinking_delta assistant event → ActionThink PhaseUpdate
+
 ## Preconditions
 - message_update with thinking_delta assistant event → ActionThink PhaseUpdate.
 - After fix: FromPi must prefer Delta (" deeper") over Content[0].Thinking ("think").

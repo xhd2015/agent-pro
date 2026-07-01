@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: thinking_delta events include `contentIndex`, `delta`, and `partial` message
+
 ## Preconditions
 - thinking_delta events include `contentIndex`, `delta`, and `partial` message.
 

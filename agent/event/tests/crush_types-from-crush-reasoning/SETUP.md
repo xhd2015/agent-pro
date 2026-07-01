@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: `FromCrush` parses a crush message with a reasoning part and emits ActionThink
+
 ## Preconditions
 - `FromCrush` parses a crush message with a reasoning part and emits ActionThink.
 

@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: fresh grok Ask() with an explicit model override (grok-build)
+
 ## Preconditions
 - The grok binary is available in PATH.
 - This is a fresh session query with an explicit model override (`grok-build`).

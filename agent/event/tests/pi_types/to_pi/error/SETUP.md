@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: ActionError produces message_start + message_end (with error message)
+
 ## Preconditions
 - ActionError produces message_start + message_end (with error message).
 

@@ -3,6 +3,35 @@
 Unit tests for `writeAgentEventsFromGrokLine` in `agent/cli/grok/grok.go`.
 No grok CLI binary required.
 
+## Version
+
+0.0.2
+
+## DSN (Domain Specific Notion)
+
+Participants:
+
+- **writeAgentEventsFromGrokLine** — the pure conversion function that maps one
+  native grok streaming-JSON line to zero or more canonical `AgentEvent` JSONL
+  lines. It is the unit under test; no binary is spawned.
+- **GrokEventWriter** — the shared writer (`grok.NewGrokEventWriter`) that
+  buffers incoming native lines and flushes them as `AgentEvent`s. Each test
+  feeds a sequence of `GrokLines` through one writer, then `Flush()`.
+- **grok native lines** — JSON objects emitted by the grok CLI stream:
+  `thought` (per-word reasoning deltas that must coalesce), `text` (assistant
+  content), and `tool_started`/`tool_completed` (tool activity currently
+  dropped by the writer).
+
+Behaviors:
+
+- Per-word `thought` deltas accumulate and flush to a single `ActionThink`
+  AgentEvent.
+- `text` lines flush to `ActionMessage` AgentEvents.
+- `tool_started`/`tool_completed` lines are dropped today (RED leaves track the
+  desired `ActionToolCall` conversion).
+- Output is one JSON object per line on the writer's buffer, parsed back as
+  `AgentEvent` for assertion.
+
 ## Decision Tree
 
 ```

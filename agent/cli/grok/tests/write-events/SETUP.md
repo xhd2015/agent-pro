@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: writeAgentEventsFromGrokLine converts grok streaming JSON lines to AgentEvent JSONL
+
 ## Preconditions
 - `writeAgentEventsFromGrokLine` converts each grok streaming JSON line to AgentEvent JSONL.
 - Grok `thought` events arrive word-by-word; each line should eventually coalesce to one think event.

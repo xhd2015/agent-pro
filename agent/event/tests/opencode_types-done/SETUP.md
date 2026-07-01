@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: The program calls `ToOpencode` with a `done` AgentEvent
+
 ## Preconditions
 - The program calls `ToOpencode` with a `done` AgentEvent.
 

@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: The program imports `agent/event/types` and marshals an `AgentEvent` with all fields populated
+
 ## Preconditions
 - The program imports `agent/event/types` and marshals an `AgentEvent` with all fields populated.
 

@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: Grouping node for roundtrip conversion tests
+
 ## Preconditions
 - Grouping node for roundtrip conversion tests.
 

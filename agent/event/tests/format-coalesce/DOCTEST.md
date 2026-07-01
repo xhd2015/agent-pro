@@ -1,10 +1,35 @@
 # Format-Coalesce Integration Tests
 
-These doc-style tests verify that `FormatTraceLine` (from `agent/event/print`) correctly
-integrates with the `Coalescer` to skip redundant `PhaseEnd` messages during formatted output.
+## Version
 
-Each test feeds raw JSON lines through a coalescer-augmented formatting pipeline and
-checks which lines produce output vs which are suppressed.
+0.0.2
+
+# DSN (Domain Specific Notion)
+
+This tree tests the integration of **`FormatTraceLine`** (in `agent/event/print`)
+with the **`Coalescer`** — i.e. that formatting raw trace JSON lines correctly
+suppresses redundant `PhaseEnd` messages.
+
+Participants and behaviors:
+
+- **Raw JSON lines** — each test feeds a sequence of raw JSON strings (`req.Lines`),
+  one per canonical `AgentEvent`. Lines may be `ActionMessage` phase events or
+  non-message events such as `ActionThink`.
+- **Pipeline** — for each line: trim it, skip blanks/non-JSON, unmarshal into a
+  `types.AgentEvent`; if it is an `ActionMessage` and `Coalescer.ShouldSkip`
+  returns `true`, suppress it (output `""`); otherwise call
+  `print.FormatTraceLine(line)` and emit the formatted result.
+- **Coalescer** — stateful; marks an `ActionMessage` ID as "shown" on
+  start/update/instant phases and skips a subsequent `PhaseEnd` with the same ID
+  whose content was already streamed via deltas.
+- **Reset on non-message** — a non-`ActionMessage` line (e.g. `think`) passes
+  through formatted AND resets coalescer state, so a later `PhaseEnd` that
+  repeats a prior ID is displayed again rather than skipped.
+- **Output contract** — `resp.Output[i]` is the formatted line for `Lines[i]`, or
+  `""` when that line was suppressed by the coalescer.
+
+The `Run` function in the Go block below is the integration pipeline that walks
+`req.Lines` through the coalescer and formatter into `resp.Output`.
 
 ## Decision Tree
 

@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: root crush test dispatch across subprocess, convert, server-client, and roundtrip modes
+
 ## Preconditions
 - The `crush` binary is available in PATH.
 - Default mode (`Mode=""`) runs real queries via subprocess.

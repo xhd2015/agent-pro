@@ -1,3 +1,7 @@
+# Scenario
+
+**Feature**: createWorkspace POST creates a workspace for the current working directory
+
 ## Preconditions
 - Server is running (via `ensureServer`).
 - A workspace can be created via `POST /v1/workspaces` with the current working directory.
