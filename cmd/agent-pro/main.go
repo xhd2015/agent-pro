@@ -1536,11 +1536,12 @@ const opencodeConfigHelp = `
 Usage: agent-pro opencode config <command> [ARGS]
 
 Commands:
-  export <file.zip>   export opencode configuration to a zip file
-  import <file.zip>   import opencode configuration from a zip file
+  export <file.zip>     export opencode configuration to a zip file
+  import <file.zip>     import opencode configuration from a zip file
+  add-provider          add a custom provider to the opencode config (v1 format)
 
 Options:
-  -h,--help           show help
+  -h,--help             show help
 `
 
 func handleOpenCodeConfig(args []string) error {
@@ -1553,6 +1554,8 @@ func handleOpenCodeConfig(args []string) error {
 		return handleOpenCodeConfigExport(args[1:])
 	case "import":
 		return handleOpenCodeConfigImport(args[1:])
+	case "add-provider":
+		return handleOpenCodeConfigAddProvider(args[1:])
 	default:
 		return fmt.Errorf("unknown opencode config command: %s", args[0])
 	}
@@ -1582,6 +1585,112 @@ func handleOpenCodeConfigImport(args []string) error {
 	}
 	zipPath := args[0]
 	return agentconfig.Import(home, zipPath)
+}
+
+func handleOpenCodeConfigAddProvider(args []string) error {
+	var id, baseURL, apiShape, name, dir string
+	var models []string
+	_, err := flags.String("--id", &id).
+		String("--base-url", &baseURL).
+		String("--api-shape", &apiShape).
+		StringSlice("--model", &models).
+		String("--name", &name).
+		String("--dir", &dir).
+		Help("-h,--help", `
+Usage: agent-pro opencode config add-provider [OPTIONS]
+
+Add a custom provider entry (v1 format) to the opencode config file under the
+top-level "provider" key, mirroring opencode's connect custom-provider flow.
+
+Options:
+  --id <id>            provider id (required)
+  --base-url <url>     base URL written to options.baseURL (required)
+  --api-shape <shape>  api shape: anthropic or openai (required)
+  --model <id>         model id; repeatable, at least one required
+  --name <name>        provider display name (default: --id)
+  --dir <project-dir>  project dir for local config (default: global ~/.config/opencode)
+  -h,--help            show help
+`).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+
+	if id == "" {
+		return fmt.Errorf("--id is required")
+	}
+	if baseURL == "" {
+		return fmt.Errorf("--base-url is required")
+	}
+	if apiShape == "" {
+		return fmt.Errorf("--api-shape is required")
+	}
+	var npm string
+	switch apiShape {
+	case "anthropic":
+		npm = "@ai-sdk/anthropic"
+	case "openai":
+		npm = "@ai-sdk/openai-compatible"
+	default:
+		return fmt.Errorf("--api-shape %q is not valid; valid values are: anthropic, openai", apiShape)
+	}
+	if len(models) == 0 {
+		return fmt.Errorf("at least one --model is required")
+	}
+
+	displayName := name
+	if displayName == "" {
+		displayName = id
+	}
+
+	var opencodeDir string
+	if dir != "" {
+		opencodeDir = filepath.Join(dir, ".opencode")
+	} else {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("find home dir: %w", err)
+		}
+		opencodeDir = filepath.Join(home, ".config", "opencode")
+	}
+
+	cfg, err := opencodecfg.ReadDir(opencodeDir)
+	if err != nil {
+		return err
+	}
+	data := cfg.Data
+	if data == nil {
+		data = opencodecfg.Data{}
+	}
+
+	providers, _ := data["provider"].(map[string]interface{})
+	if providers == nil {
+		providers = map[string]interface{}{}
+	}
+	if _, exists := providers[id]; exists {
+		return fmt.Errorf("provider %q already exists in %s", id, cfg.Path)
+	}
+
+	modelsMap := make(map[string]interface{}, len(models))
+	for _, m := range models {
+		modelsMap[m] = map[string]interface{}{"name": m}
+	}
+
+	providers[id] = map[string]interface{}{
+		"npm":    npm,
+		"name":   displayName,
+		"options": map[string]interface{}{"baseURL": baseURL},
+		"models":  modelsMap,
+	}
+	data["provider"] = providers
+	cfg.Data = data
+
+	if err := cfg.Write(); err != nil {
+		return err
+	}
+
+	fmt.Printf("Added provider %s to %s\n", id, cfg.Path)
+	return nil
 }
 
 // --- pi ---
