@@ -30,8 +30,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 		t.Fatalf("expected scrollback-captured hi in events.jsonl:\n%s", strings.Join(lines, "\n"))
 	}
 
-	assert.Output(t, resp.Stdout, `
-<contains>
+	assert.Output(t, resp.Stdout, `` +
+`<contains>
 hi
 </contains>`)
 }

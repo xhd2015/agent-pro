@@ -37,8 +37,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 		t.Fatal(err)
 	}
 	assertSuccess(t, resp)
-	assert.Output(t, resp.Stdout, `
-<contains>
+	assert.Output(t, resp.Stdout, `` +
+`<contains>
 SCROLLBACK_FALLBACK_WITHOUT_TRANSCRIPT
 </contains>`)
 	_, lines := findCodexTTYEventsJSONL(t, req.Home)

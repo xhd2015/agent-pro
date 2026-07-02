@@ -6,7 +6,9 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -34,6 +36,63 @@ func registryDirFor(home, dirName string) string {
 
 func registryPathFor(home, dirName, sessionID string) string {
 	return filepath.Join(registryDirFor(home, dirName), sessionID+".json")
+}
+
+// ReserveRegistrySessionID returns the next session-N id for a registry dir.
+// The returned release function must be called after the registry entry is
+// written, so concurrent processes cannot choose the same id.
+func ReserveRegistrySessionID(home, dirName string) (string, func(), error) {
+	dir := registryDirFor(home, dirName)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", nil, err
+	}
+	lockPath := filepath.Join(dir, ".lock")
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0644)
+	if err != nil {
+		return "", nil, err
+	}
+	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX); err != nil {
+		_ = lockFile.Close()
+		return "", nil, err
+	}
+	release := func() {
+		_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+		_ = lockFile.Close()
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		release()
+		return "", nil, err
+	}
+	maxN := 0
+	for _, ent := range entries {
+		if ent.IsDir() {
+			continue
+		}
+		name := ent.Name()
+		if !strings.HasSuffix(name, ".json") {
+			continue
+		}
+		id := strings.TrimSuffix(name, ".json")
+		n, ok := registrySessionNumber(id)
+		if ok && n > maxN {
+			maxN = n
+		}
+	}
+	return fmt.Sprintf("session-%d", maxN+1), release, nil
+}
+
+func registrySessionNumber(id string) (int, bool) {
+	const prefix = "session-"
+	if !strings.HasPrefix(id, prefix) {
+		return 0, false
+	}
+	n, err := strconv.Atoi(id[len(prefix):])
+	if err != nil || n <= 0 {
+		return 0, false
+	}
+	return n, true
 }
 
 // WriteRegistry creates the registry file for a live grok-tty session.

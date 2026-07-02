@@ -73,6 +73,7 @@ cmd/agent-run/tests/codex-tty/
 │   ├── cleans-codex-scrollback/       # raw Codex TUI scrollback → useful lines only
 │   ├── waits-for-banner/              # delayed CODEX_TTY_BANNER before prompt inject
 │   ├── prompt-submits-on-enter/       # CR-only fake TUI → SUBMITTED:prompt (RED: bare \n)
+│   ├── concurrent-runs-unique-session-ids/ # parallel runs do not all publish session-1
 │   └── fallback-scrollback-when-no-session/  # scrollback capture works without sidecar stream
 ├── session-jsonl-streaming/
 │   ├── transcript-present/
@@ -140,6 +141,7 @@ Parameter ranking (most → least significant):
 | 24 | `session-jsonl-streaming/transcript-present/deduplicates-task-complete` | Duplicate `task_complete.last_agent_message` does not print the same final answer twice |
 | 25 | `session-jsonl-streaming/transcript-present/ignores-function-call-output` | `function_call_output` text is not emitted as an assistant message by default |
 | 26 | `session-jsonl-streaming/transcript-absent/falls-back-to-scrollback` | No rollout transcript keeps existing cleaned scrollback fallback |
+| 27 | `run/concurrent-runs-unique-session-ids` | Concurrent codex-tty processes sharing one home print unique registry session ids |
 
 ## How to Run
 
@@ -198,7 +200,8 @@ type Request struct {
 	StreamProbeSubstring string
 	StreamProbeTimeout   time.Duration
 	SkipCodexSessionDir   bool // asserts scrollback-only behavior; no structured sidecar required
-	Mode           string // "" | "registry-while-running" | "attach-probe" | "attach-cli-only-probe" | "attach-interactive-probe" | "attach-scrollback-probe" | "codex-jsonl-stream-probe"
+	Mode           string // "" | "registry-while-running" | "attach-probe" | "attach-cli-only-probe" | "attach-interactive-probe" | "attach-scrollback-probe" | "codex-jsonl-stream-probe" | "concurrent-run-unique-ids"
+	ConcurrentRuns int
 	ExecTimeout    time.Duration
 	BackgroundCmd    *exec.Cmd
 	BackgroundStderr *bytes.Buffer
@@ -224,6 +227,9 @@ type Response struct {
 	EventsFileLines  []string
 	BackgroundStderr string
 	BackgroundStdout string
+	ConcurrentSessionIDs []string
+	ConcurrentStderrs    []string
+	ConcurrentStdouts    []string
 	StreamProbeSeen       bool
 	StreamProbeBeforeExit bool
 	StreamProbeStdout     string
@@ -243,6 +249,8 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 		return runAttachScrollbackProbe(t, req)
 	case "codex-jsonl-stream-probe":
 		return runCodexJSONLStreamProbe(t, req)
+	case "concurrent-run-unique-ids":
+		return runConcurrentCodexTTYRuns(t, req)
 	default:
 		return runAgentRun(t, req, req.Args...)
 	}

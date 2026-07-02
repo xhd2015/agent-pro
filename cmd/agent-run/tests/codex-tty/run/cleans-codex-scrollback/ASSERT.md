@@ -34,8 +34,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	}
 	assertSuccess(t, resp)
 
-	assert.Output(t, resp.Stdout, `
-<contains>
+	assert.Output(t, resp.Stdout, `` +
+`<contains>
 ls output:
 AGENTS.md
 cmd

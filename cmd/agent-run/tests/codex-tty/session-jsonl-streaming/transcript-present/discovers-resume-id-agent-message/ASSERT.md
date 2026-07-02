@@ -37,8 +37,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 		t.Fatal(err)
 	}
 	assertSuccess(t, resp)
-	assert.Output(t, resp.Stdout, `
-<contains>
+	assert.Output(t, resp.Stdout, `` +
+`<contains>
 JSONL_DISCOVERED_AGENT_MESSAGE
 </contains>`)
 	_, lines := findCodexTTYEventsJSONL(t, req.Home)

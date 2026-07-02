@@ -31,8 +31,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 		t.Fatal(err)
 	}
 	assertSuccess(t, resp)
-	assert.Output(t, resp.Stderr, `
-<contains>
+	assert.Output(t, resp.Stderr, `` +
+`<contains>
 <regex>codex-tty:\s*session-\d+</regex>
 </contains>`)
 	if strings.Contains(resp.Stdout, "codex-tty:") {

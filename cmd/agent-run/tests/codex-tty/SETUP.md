@@ -775,6 +775,80 @@ func runCodexJSONLStreamProbe(t *testing.T, req *Request) (*Response, error) {
 	return resp, waitErr
 }
 
+func runConcurrentCodexTTYRuns(t *testing.T, req *Request) (*Response, error) {
+	t.Helper()
+	appendCodexTTYEnv(req)
+	appendCodexHomeEnv(req)
+	count := req.ConcurrentRuns
+	if count <= 0 {
+		count = 3
+	}
+	timeout := req.ExecTimeout
+	if timeout <= 0 {
+		timeout = 20 * time.Second
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	type runResult struct {
+		index  int
+		stdout string
+		stderr string
+		err    error
+	}
+	results := make(chan runResult, count)
+	start := make(chan struct{})
+	for i := 0; i < count; i++ {
+		i := i
+		go func() {
+			<-start
+			cmd := exec.CommandContext(ctx, req.AgentRun, req.Args...)
+			cmd.Dir = req.TempDir
+			cmd.Env = append(os.Environ(), req.Env...)
+			var stdout, stderr bytes.Buffer
+			cmd.Stdout = &stdout
+			cmd.Stderr = &stderr
+			err := cmd.Run()
+			results <- runResult{
+				index:  i,
+				stdout: stdout.String(),
+				stderr: stderr.String(),
+				err:    err,
+			}
+		}()
+	}
+	close(start)
+
+	resp := &Response{
+		ConcurrentSessionIDs: make([]string, count),
+		ConcurrentStderrs:    make([]string, count),
+		ConcurrentStdouts:    make([]string, count),
+	}
+	var firstErr error
+	for i := 0; i < count; i++ {
+		result := <-results
+		resp.ConcurrentStdouts[result.index] = result.stdout
+		resp.ConcurrentStderrs[result.index] = result.stderr
+		if firstErr == nil && result.err != nil {
+			firstErr = result.err
+		}
+		if id, ok := parseCodexTTYSessionID(result.stderr); ok {
+			resp.ConcurrentSessionIDs[result.index] = id
+		}
+	}
+	resp.Err = firstErr
+	if firstErr != nil {
+		var joined strings.Builder
+		for i := range resp.ConcurrentStderrs {
+			fmt.Fprintf(&joined, "[%d] stdout:\n%s\n[%d] stderr:\n%s\n", i, resp.ConcurrentStdouts[i], i, resp.ConcurrentStderrs[i])
+		}
+		resp.Stdout = joined.String()
+		return resp, nil
+	}
+	return resp, nil
+}
+
 func assertSuccess(t *testing.T, resp *Response) {
 	t.Helper()
 	if resp.ExitCode != 0 {

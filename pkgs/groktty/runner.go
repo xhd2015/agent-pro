@@ -83,12 +83,25 @@ func Run(ctx context.Context, opts RunOptions) (captured string, grokSessionID s
 		<-serverDone
 	}
 
-	sess, err := mgr.CreateCommand(cfg.runnerID, opts.Workspace, argv)
+	sessionID := ""
+	var releaseSessionID func()
+	if cfg.registryDir != "" {
+		var reserveErr error
+		sessionID, releaseSessionID, reserveErr = ReserveRegistrySessionID(opts.Home, cfg.registryDir)
+		if reserveErr != nil {
+			shutdown()
+			return "", "", reserveErr
+		}
+	}
+	sess, err := mgr.CreateCommandWithID(sessionID, cfg.runnerID, opts.Workspace, argv)
 	if err != nil {
+		if releaseSessionID != nil {
+			releaseSessionID()
+		}
 		shutdown()
 		return "", "", err
 	}
-	sessionID := sess.ID
+	sessionID = sess.ID
 	runStart := time.Now()
 
 	if err := WriteRegistryFor(opts.Home, cfg.registryDir, RegistryEntry{
@@ -96,9 +109,15 @@ func Run(ctx context.Context, opts RunOptions) (captured string, grokSessionID s
 		ListenAddr: listenAddr,
 		PID:        os.Getpid(),
 	}); err != nil {
+		if releaseSessionID != nil {
+			releaseSessionID()
+		}
 		mgr.Remove(sessionID)
 		shutdown()
 		return "", "", err
+	}
+	if releaseSessionID != nil {
+		releaseSessionID()
 	}
 	defer RemoveRegistryFor(opts.Home, cfg.registryDir, sessionID)
 
