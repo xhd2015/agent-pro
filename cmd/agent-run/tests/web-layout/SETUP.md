@@ -767,4 +767,727 @@ await page.addInitScript(() => {
 });
 `, escaped)
 }
+
+// seedLayoutScrollSession seeds an idle session with alternating user/assistant messages
+// so message-list overflows on mobile viewport (≥15 messages by default).
+func seedLayoutScrollSession(t *testing.T, home, runner, sessionID string, messageCount int) error {
+	t.Helper()
+	if messageCount < 15 {
+		messageCount = 15
+	}
+	sessDir := filepath.Join(home, "sessions", runner, sessionID)
+	if err := os.MkdirAll(sessDir, 0755); err != nil {
+		return err
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	meta := map[string]any{
+		"runner":     runner,
+		"session_id": sessionID,
+		"status":     "idle",
+		"workspace":  "/tmp/layout-scroll-workspace",
+		"created_at": now,
+		"updated_at": now,
+	}
+	metaBytes, err := json.Marshal(meta)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(sessDir, "meta.json"), metaBytes, 0644); err != nil {
+		return err
+	}
+	var b strings.Builder
+	baseTS := time.Now().UTC().Add(-time.Duration(messageCount) * time.Minute).UnixMilli()
+	for i := 0; i < messageCount; i++ {
+		role := "user"
+		if i%2 == 1 {
+			role = "assistant"
+		}
+		text := fmt.Sprintf("Layout scroll seed message %d — enough text to push the transcript well past one mobile viewport height.", i+1)
+		ts := baseTS + int64(i)*60000
+		escaped := strings.ReplaceAll(text, `\`, `\\`)
+		escaped = strings.ReplaceAll(escaped, `"`, `\"`)
+		b.WriteString(fmt.Sprintf("{\"type\":\"message\",\"role\":\"%s\",\"text\":\"%s\",\"timestamp\":%d}\n", role, escaped, ts))
+	}
+	return os.WriteFile(filepath.Join(sessDir, "events.jsonl"), []byte(b.String()), 0644)
+}
+
+func buildFakeCodexIntoPath(t *testing.T, req *Request) error {
+	t.Helper()
+	fakeCodex := filepath.Join(req.TempDir, "bin", "fake-codex")
+	if err := os.MkdirAll(filepath.Dir(fakeCodex), 0755); err != nil {
+		return err
+	}
+	build := exec.Command("go", "build", "-o", fakeCodex, "./cmd/fake-codex")
+	build.Dir = req.RepoRoot
+	if out, err := build.CombinedOutput(); err != nil {
+		return fmt.Errorf("build fake-codex: %w\n%s", err, string(out))
+	}
+	req.Env = append(req.Env, "PATH="+filepath.Dir(fakeCodex)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return nil
+}
+
+func openLiveFakeCodexSession(baseURL, prompt string) string {
+	escaped := strings.ReplaceAll(prompt, `\`, `\\`)
+	escaped = strings.ReplaceAll(escaped, `'`, `\'`)
+	base := strings.TrimRight(baseURL, "/")
+	return fmt.Sprintf(`
+const res = await fetch('%s/api/agent-run/sessions', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ runner: 'fake-codex', prompt: '%s' }),
+});
+if (!res.ok && res.status !== 202) throw new Error('create session failed: ' + res.status);
+const data = await res.json();
+const sid = data.session.session_id;
+const runner = data.session.runner;
+await page.goto('%s/sessions/' + runner + '/' + sid, { waitUntil: 'domcontentloaded' });
+const chat = page.locator('[data-testid="chat-active"]');
+await chat.waitFor({ state: 'visible', timeout: 15000 });
+const messages = page.locator('[data-testid="message-list"]');
+await messages.waitFor({ state: 'visible', timeout: 15000 });
+`, base, escaped, base)
+}
+
+func waitForChatActive() string {
+	return `
+const chat = page.locator('[data-testid="chat-active"]');
+await chat.waitFor({ state: 'visible', timeout: 15000 });
+const messages = page.locator('[data-testid="message-list"]');
+await messages.waitFor({ state: 'visible', timeout: 15000 });
+`
+}
+
+func openSeededSessionPage(baseURL, sessionPath string) string {
+	base := strings.TrimRight(baseURL, "/")
+	return fmt.Sprintf(`
+await page.goto('%s%s', { waitUntil: 'domcontentloaded' });
+%s`, base, sessionPath, waitForChatActive())
+}
+
+func recordFrozenScrollTop() string {
+	return `
+let __layoutFrozenScrollTop = await page.locator('[data-testid="message-list"]').evaluate((el) => el.scrollTop);
+`
+}
+
+// assertNoDocumentVerticalScroll verifies html/body do not scroll (±2px tolerance).
+func assertNoDocumentVerticalScroll() string {
+	return `
+{
+  const scrollHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+  const clientHeight = await page.evaluate(() => document.documentElement.clientHeight);
+  if (Math.abs(scrollHeight - clientHeight) > 2) {
+    throw new Error('document scrolls vertically: scrollHeight=' + scrollHeight + ' clientHeight=' + clientHeight);
+  }
+  const bodyScrollHeight = await page.evaluate(() => document.body.scrollHeight);
+  const bodyClientHeight = await page.evaluate(() => document.body.clientHeight);
+  if (Math.abs(bodyScrollHeight - bodyClientHeight) > 2) {
+    throw new Error('body scrolls vertically: scrollHeight=' + bodyScrollHeight + ' clientHeight=' + bodyClientHeight);
+  }
+}
+`
+}
+
+// assertMessageListOverflows verifies only the transcript region has vertical overflow.
+func assertMessageListOverflows() string {
+	return `
+{
+  const list = page.locator('[data-testid="message-list"]');
+  const metrics = await list.evaluate((el) => ({
+    scrollHeight: el.scrollHeight,
+    clientHeight: el.clientHeight,
+  }));
+  if (metrics.scrollHeight <= metrics.clientHeight) {
+    throw new Error('message-list must overflow: scrollHeight=' + metrics.scrollHeight + ' clientHeight=' + metrics.clientHeight);
+  }
+}
+`
+}
+
+// waitForMessageListOverflow polls until message-list scrollHeight exceeds clientHeight (+10px slack).
+func waitForMessageListOverflow() string {
+	return `
+{
+  const list = page.locator('[data-testid="message-list"]');
+  let overflow = false;
+  for (let i = 0; i < 120; i++) {
+    const metrics = await list.evaluate((el) => ({
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+    }));
+    if (metrics.scrollHeight > metrics.clientHeight + 10) {
+      overflow = true;
+      break;
+    }
+    await page.waitForTimeout(250);
+  }
+  if (!overflow) {
+    throw new Error('message-list never overflowed within 30s timeout');
+  }
+}
+`
+}
+
+// scrollMessageListUpFromBottom scrolls the transcript up by at least minPx from the bottom.
+func scrollMessageListUpFromBottom(minPx int) string {
+	return fmt.Sprintf(`
+{
+  const list = page.locator('[data-testid="message-list"]');
+  await list.evaluate((el, minPx) => {
+    const maxTop = Math.max(0, el.scrollHeight - el.clientHeight);
+    el.scrollTop = Math.max(0, maxTop - minPx);
+  }, %d);
+  await page.waitForTimeout(100);
+}
+`, minPx)
+}
+
+// assertChromeFixedWhileMessageListScrolls records chrome positions, scrolls list, asserts ±2px stability.
+func assertChromeFixedWhileMessageListScrolls() string {
+	return `
+{
+  const topBar = page.locator('.top-bar');
+  const sessionHeader = page.locator('.session-header');
+  const composer = page.locator('[data-testid="composer"]');
+  await topBar.waitFor({ state: 'visible', timeout: 15000 });
+  await sessionHeader.waitFor({ state: 'visible', timeout: 15000 });
+  await composer.waitFor({ state: 'visible', timeout: 15000 });
+  const beforeTop = await topBar.boundingBox();
+  const beforeHeader = await sessionHeader.boundingBox();
+  const beforeComposer = await composer.boundingBox();
+  if (!beforeTop || !beforeHeader || !beforeComposer) {
+    throw new Error('missing chrome bounding boxes before scroll');
+  }
+  const list = page.locator('[data-testid="message-list"]');
+  await list.evaluate((el) => {
+    el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight - 300);
+  });
+  await page.waitForTimeout(150);
+  const afterTop = await topBar.boundingBox();
+  const afterHeader = await sessionHeader.boundingBox();
+  const afterComposer = await composer.boundingBox();
+  if (!afterTop || !afterHeader || !afterComposer) {
+    throw new Error('missing chrome bounding boxes after scroll');
+  }
+  const tol = 2;
+  if (Math.abs(afterTop.y - beforeTop.y) > tol) {
+    throw new Error('top-bar moved after message-list scroll: beforeY=' + beforeTop.y + ' afterY=' + afterTop.y);
+  }
+  if (Math.abs(afterHeader.y - beforeHeader.y) > tol) {
+    throw new Error('session-header moved after message-list scroll: beforeY=' + beforeHeader.y + ' afterY=' + afterHeader.y);
+  }
+  if (Math.abs(afterComposer.y - beforeComposer.y) > tol) {
+    throw new Error('composer moved after message-list scroll: beforeY=' + beforeComposer.y + ' afterY=' + afterComposer.y);
+  }
+}
+`
+}
+
+const layoutBottomThresholdPx = 80
+
+func assertMessageListAtBottom() string {
+	return fmt.Sprintf(`
+{
+  const list = page.locator('[data-testid="message-list"]');
+  const distance = await list.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight);
+  if (distance > %d) {
+    throw new Error('message-list not at bottom: distanceFromBottom=' + distance + ' threshold=%d');
+  }
+}
+`, layoutBottomThresholdPx, layoutBottomThresholdPx)
+}
+
+func assertMessageListDetached() string {
+	return fmt.Sprintf(`
+{
+  const list = page.locator('[data-testid="message-list"]');
+  const distance = await list.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight);
+  if (distance <= %d) {
+    throw new Error('message-list still at bottom after scroll-up: distanceFromBottom=' + distance);
+  }
+}
+`, layoutBottomThresholdPx)
+}
+
+// assertFollowAtBottomDuringStreaming polls assistant growth and requires scrollTop stay at bottom.
+func assertFollowAtBottomDuringStreaming() string {
+	return fmt.Sprintf(`
+{
+  const list = page.locator('[data-testid="message-list"]');
+  const assistant = page.locator('[data-testid="message-item-assistant"]').last();
+  let prevLen = 0;
+  let bottomChecks = 0;
+  for (let i = 0; i < 80; i++) {
+    const count = await assistant.count();
+    if (count > 0) {
+      const text = (await assistant.innerText()).trim();
+      if (text.length > prevLen && prevLen > 0) {
+        const distance = await list.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight);
+        if (distance > %d) {
+          throw new Error('auto-follow failed during stream: distanceFromBottom=' + distance + ' textLen=' + text.length);
+        }
+        bottomChecks++;
+      }
+      if (text.length > 0) prevLen = text.length;
+    }
+    await page.waitForTimeout(250);
+  }
+  if (bottomChecks < 1) {
+    throw new Error('assistant text grew but no at-bottom checks ran during streaming window');
+  }
+}
+`, layoutBottomThresholdPx)
+}
+
+// assertScrollTopFrozenDuringStreaming asserts ±2px scrollTop stability while assistant text grows.
+// Uses script-scoped __layoutFrozenScrollTop when set (e.g. before composer send).
+func assertScrollTopFrozenDuringStreaming() string {
+	return `
+{
+  const list = page.locator('[data-testid="message-list"]');
+  const assistant = page.locator('[data-testid="message-item-assistant"]').last();
+  const runningCard = page.locator('[data-testid="agent-running-card"]');
+  const inlineLoading = page.locator('[data-testid="message-item-assistant-loading"]');
+  const statusPill = page.locator('.status-pill');
+  const layoutIsSessionRunning = async () => {
+    if (await runningCard.isVisible().catch(() => false)) return true;
+    if (await inlineLoading.isVisible().catch(() => false)) return true;
+    if (await statusPill.isVisible().catch(() => false)) {
+      const text = (await statusPill.innerText()).trim().toLowerCase();
+      if (text === 'running') return true;
+    }
+    return false;
+  };
+
+  const frozenScrollTop = typeof __layoutFrozenScrollTop !== 'undefined'
+    ? __layoutFrozenScrollTop
+    : await list.evaluate((el) => el.scrollTop);
+
+  let sawRunning = false;
+  for (let i = 0; i < 40; i++) {
+    if (await layoutIsSessionRunning()) {
+      sawRunning = true;
+      break;
+    }
+    await page.waitForTimeout(250);
+  }
+  if (!sawRunning) {
+    throw new Error('session run never started after follow-up');
+  }
+
+  const assertFrozen = async () => {
+    const scrollTop = await list.evaluate((el) => el.scrollTop);
+    if (Math.abs(scrollTop - frozenScrollTop) > 2) {
+      throw new Error('scrollTop moved while detached: frozen=' + frozenScrollTop + ' now=' + scrollTop);
+    }
+  };
+
+  let baselineCount = await assistant.count();
+  let initialLastText = '';
+  let prevLen = 0;
+  if (baselineCount > 0) {
+    initialLastText = (await assistant.innerText()).trim();
+    prevLen = initialLastText.length;
+  }
+  let freezeChecks = 0;
+  let sawTextGrowth = false;
+
+  for (let i = 0; i < 120; i++) {
+    const stillRunning = await layoutIsSessionRunning();
+    let grewThisTick = false;
+    const assistantCount = await assistant.count();
+    if (assistantCount > baselineCount) {
+      sawTextGrowth = true;
+      baselineCount = assistantCount;
+      prevLen = (await assistant.innerText()).trim().length;
+      grewThisTick = true;
+    } else if (assistantCount > 0) {
+      const current = (await assistant.innerText()).trim();
+      if (current !== initialLastText) sawTextGrowth = true;
+      if (current.length > prevLen) grewThisTick = true;
+      prevLen = current.length;
+    }
+    if (await inlineLoading.isVisible().catch(() => false)) {
+      sawTextGrowth = true;
+      grewThisTick = true;
+    }
+
+    if (stillRunning || grewThisTick) {
+      await assertFrozen();
+      freezeChecks++;
+    }
+
+    if (!stillRunning && sawTextGrowth && freezeChecks >= 1) break;
+    await page.waitForTimeout(250);
+  }
+
+  if (freezeChecks < 1) {
+    throw new Error('no frozen-scrollTop checks ran during streaming window');
+  }
+  if (!sawTextGrowth) {
+    throw new Error('assistant text did not grow during streaming window');
+  }
+}
+`
+}
+
+// assertJumpToLatestChipFlow waits for chip while detached + streaming, taps it, asserts follow resumes.
+func assertJumpToLatestChipFlow() string {
+	return fmt.Sprintf(`
+{
+  const chip = page.locator('[data-testid="jump-to-latest"]');
+  let chipVisible = false;
+  for (let i = 0; i < 80; i++) {
+    if (await chip.isVisible().catch(() => false)) {
+      chipVisible = true;
+      break;
+    }
+    await page.waitForTimeout(250);
+  }
+  if (!chipVisible) {
+    throw new Error('jump-to-latest chip never became visible while detached with streaming content');
+  }
+  await chip.click();
+  await page.waitForTimeout(200);
+  const list = page.locator('[data-testid="message-list"]');
+  const distance = await list.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight);
+  if (distance > %d) {
+    throw new Error('jump-to-latest did not scroll to bottom: distanceFromBottom=' + distance);
+  }
+  const stillVisible = await chip.isVisible().catch(() => false);
+  if (stillVisible) {
+    throw new Error('jump-to-latest chip still visible after tap');
+  }
+}
+`, layoutBottomThresholdPx)
+}
+
+// recordMessageListScrollTop stores scrollTop in a playwright script-scoped let binding.
+func recordMessageListScrollTop(varName string) string {
+	return fmt.Sprintf(`
+let __layout%s = await page.locator('[data-testid="message-list"]').evaluate((el) => el.scrollTop);
+`, varName)
+}
+
+// assertMessageListScrollTopEqualsVar asserts scrollTop unchanged vs recorded let binding (±2px).
+func assertMessageListScrollTopEqualsVar(varName string) string {
+	return fmt.Sprintf(`
+{
+  const scrollTop = await page.locator('[data-testid="message-list"]').evaluate((el) => el.scrollTop);
+  if (typeof __layout%s === 'undefined') throw new Error('missing recorded scrollTop let __layout%s');
+  if (Math.abs(scrollTop - __layout%s) > 2) {
+    throw new Error('message-list scrollTop changed: recorded=' + __layout%s + ' now=' + scrollTop);
+  }
+}
+`, varName, varName, varName, varName)
+}
+
+const layoutScrollContainerSessionList = "session-list"
+
+func homeSessionID(index int) string {
+	return fmt.Sprintf("home-sess-%03d", index)
+}
+
+// seedManyHomeSessions creates count session dirs (home-sess-001 …) with distinct session_id
+// and staggered updated_at for stable list ordering (oldest first, newest last).
+func seedManyHomeSessions(t *testing.T, home, runner string, count int) error {
+	t.Helper()
+	if count < 20 {
+		count = 20
+	}
+	base := time.Now().UTC().Add(-time.Duration(count+1) * time.Minute)
+	for i := 1; i <= count; i++ {
+		if err := writeHomeSessionDir(home, runner, i, base.Add(time.Duration(i)*time.Minute)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeHomeSessionDir(home, runner string, index int, updatedAt time.Time) error {
+	sessionID := homeSessionID(index)
+	sessDir := filepath.Join(home, "sessions", runner, sessionID)
+	if err := os.MkdirAll(sessDir, 0755); err != nil {
+		return err
+	}
+	createdAt := updatedAt.Add(-2 * time.Minute).Format(time.RFC3339)
+	updatedAtStr := updatedAt.Format(time.RFC3339)
+	meta := map[string]any{
+		"runner":     runner,
+		"session_id": sessionID,
+		"status":     "idle",
+		"workspace":  "/tmp/home-scroll-workspace",
+		"created_at": createdAt,
+		"updated_at": updatedAtStr,
+	}
+	metaBytes, err := json.Marshal(meta)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(sessDir, "meta.json"), metaBytes, 0644); err != nil {
+		return err
+	}
+	userTS := updatedAt.UnixMilli()
+	eventsNDJSON := fmt.Sprintf("{\"type\":\"message\",\"role\":\"user\",\"text\":\"Home scroll seed session %d\",\"timestamp\":%d}\n", index, userTS)
+	return os.WriteFile(filepath.Join(sessDir, "events.jsonl"), []byte(eventsNDJSON), 0644)
+}
+
+// appendHomeSessionDir writes one additional home session dir after page load (poll refresh tests).
+func appendHomeSessionDir(t *testing.T, home, runner string, index int) error {
+	t.Helper()
+	updatedAt := time.Now().UTC()
+	return writeHomeSessionDir(home, runner, index, updatedAt)
+}
+
+// scheduleAppendHomeSessionDir starts a goroutine that appends a session dir after a delay.
+// Errors surface via t.Cleanup after the playwright script finishes.
+func scheduleAppendHomeSessionDir(t *testing.T, req *Request, runner string, index int, after time.Duration) {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() {
+		time.Sleep(after)
+		done <- appendHomeSessionDir(t, req.Home, runner, index)
+	}()
+	t.Cleanup(func() {
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Errorf("appendHomeSessionDir(%d): %v", index, err)
+			}
+		case <-time.After(30 * time.Second):
+			t.Errorf("appendHomeSessionDir(%d) timed out", index)
+		}
+	})
+}
+
+func openHomePage(baseURL string) string {
+	base := strings.TrimRight(baseURL, "/")
+	return fmt.Sprintf(`
+await page.goto('%s/', { waitUntil: 'domcontentloaded' });
+const homeActive = page.locator('[data-testid="home-active"]');
+await homeActive.waitFor({ state: 'visible', timeout: 15000 });
+const list = page.locator('[data-testid="session-list"]');
+await list.waitFor({ state: 'visible', timeout: 15000 });
+`, base)
+}
+
+func waitForHomePollRefresh() string {
+	return `
+await page.waitForTimeout(4000);
+`
+}
+
+func scrollContainerLocator(testid string) string {
+	return fmt.Sprintf(`[data-testid="%s"]`, testid)
+}
+
+func assertScrollContainerOverflows(testid string) string {
+	loc := scrollContainerLocator(testid)
+	return fmt.Sprintf(`
+{
+  const list = page.locator('%s');
+  const metrics = await list.evaluate((el) => ({
+    scrollHeight: el.scrollHeight,
+    clientHeight: el.clientHeight,
+  }));
+  if (metrics.scrollHeight <= metrics.clientHeight) {
+    throw new Error('%s must overflow: scrollHeight=' + metrics.scrollHeight + ' clientHeight=' + metrics.clientHeight);
+  }
+}
+`, loc, testid)
+}
+
+func waitForScrollContainerOverflow(testid string) string {
+	loc := scrollContainerLocator(testid)
+	return fmt.Sprintf(`
+{
+  const list = page.locator('%s');
+  let overflow = false;
+  for (let i = 0; i < 120; i++) {
+    const metrics = await list.evaluate((el) => ({
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+    }));
+    if (metrics.scrollHeight > metrics.clientHeight + 10) {
+      overflow = true;
+      break;
+    }
+    await page.waitForTimeout(250);
+  }
+  if (!overflow) {
+    throw new Error('%s never overflowed within 30s timeout');
+  }
+}
+`, loc, testid)
+}
+
+func scrollContainerToBottom(testid string) string {
+	loc := scrollContainerLocator(testid)
+	return fmt.Sprintf(`
+{
+  const list = page.locator('%s');
+  await list.evaluate((el) => {
+    el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+  });
+  await page.waitForTimeout(100);
+}
+`, loc)
+}
+
+func scrollContainerUpFromBottom(testid string, minPx int) string {
+	loc := scrollContainerLocator(testid)
+	return fmt.Sprintf(`
+{
+  const list = page.locator('%s');
+  await list.evaluate((el, minPx) => {
+    const maxTop = Math.max(0, el.scrollHeight - el.clientHeight);
+    el.scrollTop = Math.max(0, maxTop - minPx);
+  }, %d);
+  await page.waitForTimeout(100);
+}
+`, loc, minPx)
+}
+
+func assertScrollContainerAtBottom(testid string) string {
+	loc := scrollContainerLocator(testid)
+	return fmt.Sprintf(`
+{
+  const list = page.locator('%s');
+  const distance = await list.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight);
+  if (distance > %d) {
+    throw new Error('%s not at bottom: distanceFromBottom=' + distance + ' threshold=%d');
+  }
+}
+`, loc, layoutBottomThresholdPx, testid, layoutBottomThresholdPx)
+}
+
+func assertScrollContainerDetached(testid string) string {
+	loc := scrollContainerLocator(testid)
+	return fmt.Sprintf(`
+{
+  const list = page.locator('%s');
+  const distance = await list.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight);
+  if (distance <= %d) {
+    throw new Error('%s still at bottom after scroll-up: distanceFromBottom=' + distance);
+  }
+}
+`, loc, layoutBottomThresholdPx, testid)
+}
+
+func recordScrollContainerScrollTop(varName, testid string) string {
+	loc := scrollContainerLocator(testid)
+	return fmt.Sprintf(`
+let __layout%s = await page.locator('%s').evaluate((el) => el.scrollTop);
+`, varName, loc)
+}
+
+func assertScrollContainerScrollTopEqualsVar(varName, testid string) string {
+	loc := scrollContainerLocator(testid)
+	return fmt.Sprintf(`
+{
+  const scrollTop = await page.locator('%s').evaluate((el) => el.scrollTop);
+  if (typeof __layout%s === 'undefined') throw new Error('missing recorded scrollTop let __layout%s');
+  if (Math.abs(scrollTop - __layout%s) > 2) {
+    throw new Error('%s scrollTop changed: recorded=' + __layout%s + ' now=' + scrollTop);
+  }
+}
+`, loc, varName, varName, varName, testid, varName)
+}
+
+func assertSessionListOverflows() string {
+	return assertScrollContainerOverflows(layoutScrollContainerSessionList)
+}
+
+func waitForSessionListOverflow() string {
+	return waitForScrollContainerOverflow(layoutScrollContainerSessionList)
+}
+
+func scrollSessionListToBottom() string {
+	return scrollContainerToBottom(layoutScrollContainerSessionList)
+}
+
+func scrollSessionListUpFromBottom(minPx int) string {
+	return scrollContainerUpFromBottom(layoutScrollContainerSessionList, minPx)
+}
+
+func assertSessionListAtBottom() string {
+	return assertScrollContainerAtBottom(layoutScrollContainerSessionList)
+}
+
+func assertSessionListDetached() string {
+	return assertScrollContainerDetached(layoutScrollContainerSessionList)
+}
+
+func recordSessionListScrollTop(varName string) string {
+	return recordScrollContainerScrollTop(varName, layoutScrollContainerSessionList)
+}
+
+func assertSessionListScrollTopEqualsVar(varName string) string {
+	return assertScrollContainerScrollTopEqualsVar(varName, layoutScrollContainerSessionList)
+}
+
+// assertChromeFixedWhileSessionListScrolls records home chrome positions, scrolls session-list, asserts ±2px stability.
+func assertChromeFixedWhileSessionListScrolls() string {
+	return `
+{
+  const topBar = page.locator('.top-bar.top-bar-home');
+  const composer = page.locator('[data-testid="composer"]');
+  await topBar.waitFor({ state: 'visible', timeout: 15000 });
+  await composer.waitFor({ state: 'visible', timeout: 15000 });
+  const beforeTop = await topBar.boundingBox();
+  const beforeComposer = await composer.boundingBox();
+  if (!beforeTop || !beforeComposer) {
+    throw new Error('missing home chrome bounding boxes before scroll');
+  }
+  const list = page.locator('[data-testid="session-list"]');
+  await list.evaluate((el) => {
+    el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight - 300);
+  });
+  await page.waitForTimeout(150);
+  const afterTop = await topBar.boundingBox();
+  const afterComposer = await composer.boundingBox();
+  if (!afterTop || !afterComposer) {
+    throw new Error('missing home chrome bounding boxes after scroll');
+  }
+  const tol = 2;
+  if (Math.abs(afterTop.y - beforeTop.y) > tol) {
+    throw new Error('top-bar-home moved after session-list scroll: beforeY=' + beforeTop.y + ' afterY=' + afterTop.y);
+  }
+  if (Math.abs(afterComposer.y - beforeComposer.y) > tol) {
+    throw new Error('composer moved after session-list scroll: beforeY=' + beforeComposer.y + ' afterY=' + afterComposer.y);
+  }
+}
+` + assertComposerPinnedBottom()
+}
+
+// assertHomeJumpToLatestChipFlow waits for chip while detached + poll refresh, taps, asserts follow resumes.
+func assertHomeJumpToLatestChipFlow() string {
+	return fmt.Sprintf(`
+{
+  const chip = page.locator('[data-testid="jump-to-latest"]');
+  let chipVisible = false;
+  for (let i = 0; i < 80; i++) {
+    if (await chip.isVisible().catch(() => false)) {
+      chipVisible = true;
+      break;
+    }
+    await page.waitForTimeout(250);
+  }
+  if (!chipVisible) {
+    throw new Error('jump-to-latest chip never became visible while detached with new sessions below');
+  }
+  await chip.click();
+  await page.waitForTimeout(200);
+  const list = page.locator('[data-testid="session-list"]');
+  const distance = await list.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight);
+  if (distance > %d) {
+    throw new Error('jump-to-latest did not scroll session-list to bottom: distanceFromBottom=' + distance);
+  }
+  const stillVisible = await chip.isVisible().catch(() => false);
+  if (stillVisible) {
+    throw new Error('jump-to-latest chip still visible after tap');
+  }
+}
+`, layoutBottomThresholdPx)
+}
 ```

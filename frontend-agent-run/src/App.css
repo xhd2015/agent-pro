@@ -3,6 +3,24 @@ html, body, #root {
   margin: 0;
 }
 
+html:has(.session-page),
+html:has(.session-page) body,
+html:has(.home-page),
+html:has(.home-page) body {
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+html:has(.session-page) #root,
+html:has(.home-page) #root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+}
+
 .app-shell {
   min-height: 100vh;
   min-height: 100dvh;
@@ -13,6 +31,15 @@ html, body, #root {
   background: #0f1115;
   color: #e8eaed;
   font-family: system-ui, -apple-system, sans-serif;
+}
+
+.app-shell.session-page,
+.app-shell.home-page {
+  flex: 1;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .top-bar {
@@ -117,15 +144,86 @@ html, body, #root {
 
 .main-panel {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 16px;
   padding-bottom: 8px;
+}
+
+.main-panel.chat-active,
+.main-panel.home-active {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chat-active .session-header {
+  flex-shrink: 0;
+}
+
+.chat-active .agent-running-card {
+  flex-shrink: 0;
+}
+
+.message-list-region {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.home-active .session-list-region {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chat-active .message-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.home-active .session-list {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.jump-to-latest {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid #3a4254;
+  background: #1c2230;
+  color: #8ab4f8;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
 }
 
 .session-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.home-active .session-list {
+  margin-bottom: 0;
+}
+
+.main-panel:not(.home-active) .session-list {
   margin-bottom: 16px;
 }
 

@@ -1,4 +1,14 @@
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  FormEvent,
+  forwardRef,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react'
 import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import './App.css'
 import {
@@ -19,12 +29,129 @@ import {
   type SessionSummary,
 } from './api/client'
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({
+  children,
+  sessionPage = false,
+  homePage = false,
+}: {
+  children: React.ReactNode
+  sessionPage?: boolean
+  homePage?: boolean
+}) {
+  const pageClass = sessionPage ? ' session-page' : homePage ? ' home-page' : ''
   return (
-    <div className="app-shell" data-testid="app-shell">
+    <div className={`app-shell${pageClass}`} data-testid="app-shell">
       {children}
     </div>
   )
+}
+
+const BOTTOM_THRESHOLD_PX = 80
+
+function distanceFromBottom(el: HTMLElement): number {
+  return el.scrollHeight - el.scrollTop - el.clientHeight
+}
+
+function sortSessionsOldestFirst(sessions: SessionSummary[]): SessionSummary[] {
+  return [...sessions].sort((a, b) => {
+    const aMs = parseRFC3339Ms(a.updated_at) ?? parseRFC3339Ms(a.created_at) ?? 0
+    const bMs = parseRFC3339Ms(b.updated_at) ?? parseRFC3339Ms(b.created_at) ?? 0
+    if (aMs !== bMs) return aMs - bMs
+    return a.session_id.localeCompare(b.session_id)
+  })
+}
+
+function useFollowScroll<T extends HTMLElement>(
+  scrollRef: RefObject<T | null>,
+  contentDeps: unknown[],
+) {
+  const followModeRef = useRef<'following' | 'detached'>('following')
+  const isProgrammaticScrollRef = useRef(false)
+  const initialScrollDoneRef = useRef(false)
+  const [followMode, setFollowMode] = useState<'following' | 'detached'>('following')
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false)
+
+  useEffect(() => {
+    followModeRef.current = followMode
+  }, [followMode])
+
+  const resetFollow = useCallback(() => {
+    initialScrollDoneRef.current = false
+    followModeRef.current = 'following'
+    setFollowMode('following')
+    setShowJumpToLatest(false)
+  }, [])
+
+  const syncFollowFromScroll = useCallback(() => {
+    const el = scrollRef.current
+    if (!el || isProgrammaticScrollRef.current) {
+      isProgrammaticScrollRef.current = false
+      return
+    }
+    const distance = distanceFromBottom(el)
+    if (distance <= BOTTOM_THRESHOLD_PX) {
+      followModeRef.current = 'following'
+      setFollowMode('following')
+      setShowJumpToLatest(false)
+    } else {
+      followModeRef.current = 'detached'
+      setFollowMode('detached')
+      setShowJumpToLatest(true)
+    }
+  }, [scrollRef])
+
+  const handleJumpToLatest = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    isProgrammaticScrollRef.current = true
+    el.scrollTop = el.scrollHeight
+    followModeRef.current = 'following'
+    setFollowMode('following')
+    setShowJumpToLatest(false)
+  }, [scrollRef])
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+
+    const distance = distanceFromBottom(el)
+
+    if (!isProgrammaticScrollRef.current && initialScrollDoneRef.current) {
+      if (distance <= BOTTOM_THRESHOLD_PX) {
+        followModeRef.current = 'following'
+        setFollowMode('following')
+        setShowJumpToLatest(false)
+      } else {
+        followModeRef.current = 'detached'
+        setFollowMode('detached')
+        setShowJumpToLatest(true)
+      }
+    }
+
+    if (followModeRef.current === 'following') {
+      if (initialScrollDoneRef.current && distance > BOTTOM_THRESHOLD_PX) {
+        return
+      }
+      if (!initialScrollDoneRef.current || distance <= BOTTOM_THRESHOLD_PX) {
+        isProgrammaticScrollRef.current = true
+        el.scrollTop = el.scrollHeight
+        initialScrollDoneRef.current = true
+      }
+      setShowJumpToLatest(false)
+      return
+    }
+
+    setShowJumpToLatest(distance > BOTTOM_THRESHOLD_PX)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- contentDeps drives follow scroll updates
+  }, contentDeps)
+
+  return {
+    followModeRef,
+    showJumpToLatest,
+    syncFollowFromScroll,
+    handleJumpToLatest,
+    resetFollow,
+  }
 }
 
 function AuthPage() {
@@ -160,12 +287,20 @@ function RunnerPicker({ runners, value, onChange }: RunnerPickerProps) {
   )
 }
 
-function SessionList({ sessions }: { sessions: SessionSummary[] }) {
+const SessionList = forwardRef<
+  HTMLElement,
+  { sessions: SessionSummary[]; onScroll?: () => void }
+>(function SessionList({ sessions, onScroll }, ref) {
   if (sessions.length === 0) {
     return null
   }
   return (
-    <nav className="session-list" data-testid="session-list">
+    <nav
+      ref={ref}
+      className="session-list"
+      data-testid="session-list"
+      onScroll={onScroll}
+    >
       {sessions.map((s) => (
         <Link
           key={`${s.runner}/${s.session_id}`}
@@ -186,7 +321,7 @@ function SessionList({ sessions }: { sessions: SessionSummary[] }) {
       ))}
     </nav>
   )
-}
+})
 
 function useAuthGate() {
   const [needsAuth, setNeedsAuth] = useState(false)
@@ -224,6 +359,10 @@ function HomePage() {
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [workspace, setWorkspace] = useState('')
+  const sessionListRef = useRef<HTMLElement>(null)
+  const sortedSessions = useMemo(() => sortSessionsOldestFirst(sessions), [sessions])
+  const { followModeRef, showJumpToLatest, syncFollowFromScroll, handleJumpToLatest } =
+    useFollowScroll(sessionListRef, [sortedSessions])
 
   const refresh = useCallback(async () => {
     const [list, r, status] = await Promise.all([fetchSessions(), fetchRunners(), fetchStatus()])
@@ -251,12 +390,23 @@ function HomePage() {
   const handleSend = async () => {
     const text = draft.trim()
     if (!text || sending) return
+    const listEl = sessionListRef.current
+    const detached =
+      listEl != null
+        ? distanceFromBottom(listEl) > BOTTOM_THRESHOLD_PX
+        : followModeRef.current === 'detached'
     setSending(true)
     try {
       const session = await createSession(runner, text)
       setDraft('')
       if (session) {
-        navigate(`/sessions/${encodeURIComponent(session.runner)}/${encodeURIComponent(session.session_id)}`)
+        if (detached) {
+          await refresh()
+        } else {
+          navigate(
+            `/sessions/${encodeURIComponent(session.runner)}/${encodeURIComponent(session.session_id)}`,
+          )
+        }
       } else {
         await refresh()
       }
@@ -268,15 +418,15 @@ function HomePage() {
   if (needsAuth) return <AuthPage />
   if (!ready) {
     return (
-      <Shell>
-        <div className="main-panel" />
+      <Shell homePage>
+        <div className="main-panel home-active" data-testid="home-active" />
         <Composer value="" onChange={() => {}} onSend={() => {}} sending />
       </Shell>
     )
   }
 
   return (
-    <Shell>
+    <Shell homePage>
       <header className="top-bar top-bar-home">
         <div className="top-bar-row top-bar-row-primary">
           <h1 className="app-title">agent-run</h1>
@@ -290,9 +440,26 @@ function HomePage() {
           </div>
         ) : null}
       </header>
-      <div className="main-panel">
-        <SessionList sessions={sessions} />
-        {sessions.length === 0 && (
+      <div className="main-panel home-active" data-testid="home-active">
+        {sortedSessions.length > 0 ? (
+          <div className="session-list-region">
+            {showJumpToLatest ? (
+              <button
+                type="button"
+                className="jump-to-latest"
+                data-testid="jump-to-latest"
+                onClick={handleJumpToLatest}
+              >
+                Jump to latest
+              </button>
+            ) : null}
+            <SessionList
+              ref={sessionListRef}
+              sessions={sortedSessions}
+              onScroll={syncFollowFromScroll}
+            />
+          </div>
+        ) : (
           <div className="empty-state" data-testid="empty-state">
             <h2>No sessions yet</h2>
             <p>Pick a runner and send a message below to start.</p>
@@ -398,6 +565,17 @@ function SessionPage() {
   const [sessionCreatedAt, setSessionCreatedAt] = useState<string | undefined>()
   const streamOffsetRef = useRef<number | null>(null)
   const statusRef = useRef('')
+  const runChromeHoldUntilRef = useRef(0)
+  const messageListRef = useRef<HTMLDivElement>(null)
+  const showInlineLoading = needsInlineAssistantLoading(events, status === 'running')
+  const timeline = coalesceTimeline(events)
+  const {
+    followModeRef,
+    showJumpToLatest,
+    syncFollowFromScroll,
+    handleJumpToLatest,
+    resetFollow,
+  } = useFollowScroll(messageListRef, [timeline, showInlineLoading])
 
   const refresh = useCallback(
     async (options?: { mode?: 'full' | 'meta'; fromStreamClose?: boolean }) => {
@@ -428,15 +606,22 @@ function SessionPage() {
         }
       }
 
-      statusRef.current = nextStatus
-      setStatus(nextStatus)
+      const holdRunningChrome =
+        Date.now() < runChromeHoldUntilRef.current &&
+        nextStatus !== 'running' &&
+        (nextStatus === 'finished' || nextStatus === 'idle' || nextStatus === 'error')
+      if (!holdRunningChrome) {
+        statusRef.current = nextStatus
+        setStatus(nextStatus)
+      }
     },
     [runner, sessionId],
   )
 
   useEffect(() => {
     streamOffsetRef.current = null
-  }, [runner, sessionId])
+    resetFollow()
+  }, [runner, sessionId, resetFollow])
 
   useEffect(() => {
     if (!ready || needsAuth || !runner || !sessionId) return
@@ -445,8 +630,6 @@ function SessionPage() {
     })
     void refresh({ mode: 'full' })
   }, [ready, needsAuth, runner, sessionId, refresh])
-
-  const showInlineLoading = needsInlineAssistantLoading(events, status === 'running')
 
   useEffect(() => {
     if (!ready || needsAuth || !runner || !sessionId) return
@@ -496,12 +679,29 @@ function SessionPage() {
   const handleSend = async () => {
     const text = draft.trim()
     if (!text || sending || !runner || !sessionId) return
+    const listEl = messageListRef.current
+    const detached =
+      listEl != null
+        ? distanceFromBottom(listEl) > BOTTOM_THRESHOLD_PX
+        : followModeRef.current === 'detached'
+    if (detached) {
+      followModeRef.current = 'detached'
+    }
     setSending(true)
     try {
       const ok = await sendSessionMessage(runner, sessionId, text)
       if (ok) {
         setDraft('')
+        // Refresh first so streamOffsetRef is current before SSE starts on running.
         await refresh({ mode: 'full' })
+        if (detached) {
+          // Hold running chrome briefly so fast fake-codex runs stay visible while detached.
+          runChromeHoldUntilRef.current = Date.now() + 12_000
+          if (statusRef.current !== 'running') {
+            statusRef.current = 'running'
+            setStatus('running')
+          }
+        }
       }
     } finally {
       setSending(false)
@@ -511,7 +711,7 @@ function SessionPage() {
   if (needsAuth) return <AuthPage />
   if (!ready || !runner || !sessionId) {
     return (
-      <Shell>
+      <Shell sessionPage>
         <div className="main-panel" />
         <Composer value="" onChange={() => {}} onSend={() => {}} sending />
       </Shell>
@@ -519,10 +719,9 @@ function SessionPage() {
   }
 
   const isRunning = status === 'running'
-  const timeline = coalesceTimeline(events)
 
   return (
-    <Shell>
+    <Shell sessionPage>
       <header className="top-bar">
         <button type="button" className="back-link" onClick={() => navigate('/')}>
           ← Sessions
@@ -549,7 +748,23 @@ function SessionPage() {
         {isRunning && !showInlineLoading ? (
           <AgentRunningCard updatedAt={sessionUpdatedAt} createdAt={sessionCreatedAt} />
         ) : null}
-        <div className="message-list" data-testid="message-list">
+        <div className="message-list-region">
+          {showJumpToLatest ? (
+            <button
+              type="button"
+              className="jump-to-latest"
+              data-testid="jump-to-latest"
+              onClick={handleJumpToLatest}
+            >
+              Jump to latest
+            </button>
+          ) : null}
+          <div
+            className="message-list"
+            data-testid="message-list"
+            ref={messageListRef}
+            onScroll={syncFollowFromScroll}
+          >
           {timeline.map((ev, i) => {
             const role = ev.role === 'user' ? 'user' : 'assistant'
             const roleLabel = role === 'user' ? 'You' : 'Agent'
@@ -599,6 +814,7 @@ function SessionPage() {
               Waiting for agent…
             </div>
           )}
+          </div>
         </div>
       </div>
       <Composer value={draft} onChange={setDraft} onSend={() => void handleSend()} sending={sending} />
