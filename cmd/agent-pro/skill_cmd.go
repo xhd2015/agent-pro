@@ -7,6 +7,7 @@ import (
 	brainstorm_run "github.com/xhd2015/agent-pro/agents/brainstorm/run"
 	explore_run "github.com/xhd2015/agent-pro/agents/explore/run"
 	followup_run "github.com/xhd2015/agent-pro/agents/followup/run"
+	gitresolveconflicts_run "github.com/xhd2015/agent-pro/agents/git-resolve-conflicts/run"
 	intentroute_run "github.com/xhd2015/agent-pro/agents/intent-route/run"
 	reproduce_run "github.com/xhd2015/agent-pro/agents/reproduce/run"
 	"github.com/xhd2015/less-gen/flags"
@@ -34,6 +35,11 @@ var knownSkills = map[string]skillInfo{
 		Name:        "followup",
 		Description: extractDescription(followup_run.SkillFile),
 		Content:     followup_run.SkillFile,
+	},
+	"git-resolve-conflicts": {
+		Name:        "git-resolve-conflicts",
+		Description: extractDescription(gitresolveconflicts_run.SkillFile),
+		Content:     gitresolveconflicts_run.SkillFile,
 	},
 	"intent-route": {
 		Name:        "intent-route",
@@ -67,7 +73,7 @@ func extractDescription(skillMD string) string {
 		if strings.HasPrefix(line, "description:") {
 			desc := strings.TrimPrefix(line, "description:")
 			desc = strings.TrimSpace(desc)
-			// Handle YAML folded block scalar (>-) 
+			// Handle YAML folded block scalar (>-)
 			// The description continues on subsequent indented lines
 			if desc == ">-" || desc == ">" {
 				// Collect continuation lines (indented)
@@ -90,8 +96,10 @@ func extractDescription(skillMD string) string {
 }
 
 func knownSkillNames() []string {
-	return []string{"brainstorm", "explore", "followup", "intent-route", "reproduce"}
+	return []string{"brainstorm", "explore", "followup", "git-resolve-conflicts", "intent-route", "reproduce"}
 }
+
+const knownSkillNamesText = "brainstorm, explore, followup, git-resolve-conflicts, intent-route, reproduce"
 
 const skillHelp = `
 Usage: agent-pro skill <command> [ARGS]
@@ -101,7 +109,7 @@ Commands:
   <name> show         print the SKILL.md content of a skill
   <name> install      install a skill to a skill directory
 
-Skill names: brainstorm, explore, followup, intent-route, reproduce
+Skill names: brainstorm, explore, followup, git-resolve-conflicts, intent-route, reproduce
 
 Run agent-pro skill <name> <command> --help for command-specific options.
 `
@@ -110,10 +118,11 @@ const skillsHelp = `
 Usage: agent-pro skills [<command>] [ARGS]
 
 Commands (without arguments, lists all available skill names):
+  update              update already-installed skills
   <name> show         print the SKILL.md content of a skill
   <name> install      install a skill to a skill directory
 
-Skill names: brainstorm, explore, followup, intent-route, reproduce
+Skill names: brainstorm, explore, followup, git-resolve-conflicts, intent-route, reproduce
 
 Run agent-pro skills <name> <command> --help for command-specific options.
 `
@@ -145,7 +154,7 @@ func handleSkill(args []string) error {
 	name := args[0]
 	sk, ok := knownSkills[name]
 	if !ok {
-		return fmt.Errorf("unknown skill: %s (available: brainstorm, explore, followup, intent-route, reproduce)", name)
+		return fmt.Errorf("unknown skill: %s (available: %s)", name, knownSkillNamesText)
 	}
 
 	if len(args) == 1 {
@@ -173,6 +182,9 @@ func handleSkills(args []string) error {
 		fmt.Print(strings.TrimPrefix(skillsHelp, "\n"))
 		return nil
 	}
+	if args[0] == "update" {
+		return handleSkillsUpdate(args[1:])
+	}
 
 	// If first arg is a skill name, delegate to handleSkill
 	name := args[0]
@@ -180,7 +192,7 @@ func handleSkills(args []string) error {
 		return handleSkill(args)
 	}
 
-	return fmt.Errorf("unknown skills command: %s (expected brainstorm, explore, followup, intent-route, or reproduce)", args[0])
+	return fmt.Errorf("unknown skills command: %s (expected update or one of: %s)", args[0], knownSkillNamesText)
 }
 
 func listSkills() error {
@@ -235,4 +247,20 @@ func handleSkillInstall(sk skillInfo, args []string) error {
 		SkillContent: sk.Content,
 		Usage:        fmt.Sprintf("agent-pro skill %s install", sk.Name),
 	}, args)
+}
+
+func handleSkillsUpdate(args []string) error {
+	skills := make([]install.UpdateSkill, 0, len(knownSkills))
+	for _, name := range knownSkillNames() {
+		sk := knownSkills[name]
+		skills = append(skills, install.UpdateSkill{
+			InstallOptions: install.InstallOptions{
+				SkillDirName: sk.Name,
+				SkillContent: sk.Content,
+				Usage:        "agent-pro skills update",
+			},
+			Name: name,
+		})
+	}
+	return install.HandleUpdateMany(skills, args)
 }

@@ -55,7 +55,7 @@ require (
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/xhd2015/less-flags v1.0.0
-	github.com/xhd2015/skills v0.0.10
+	github.com/xhd2015/skills v0.0.12
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/sys v0.44.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
