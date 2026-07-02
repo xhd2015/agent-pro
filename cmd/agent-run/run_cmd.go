@@ -17,7 +17,7 @@ Options:
   --json              stream NDJSON AgentEvent lines to stdout
   --model MODEL       model name
   --session ID        session id
-  --agent-runner RUNNER
+  --agent-runner RUNNER   codex, codex-tty, grok-tty, opencode, fake-codex, ...
   -h, --help          show help
 `
 

@@ -1,0 +1,823 @@
+# Scenario
+
+**Feature**: `codex-tty` runner — adhoc ptywrap server, registry, scrollback capture, attach
+
+```
+agent-run run --agent-runner codex-tty "prompt"
+  -> adhoc ptywrap on 127.0.0.1:0
+  -> registry codex-tty-registry/<id>.json
+  -> stderr codex-tty: session-N
+  -> capture sidecar (readonly scrollback)
+  -> inject prompt after CODEX_TTY_BANNER
+  -> events under sessions/codex-tty/
+
+agent-run attach <id> -> registry lookup -> ptyclient WS attach
+```
+
+## Preconditions
+
+- Repository contains `cmd/agent-run` (build may fail until codex-tty is implemented).
+- Each test uses isolated `AGENT_RUN_HOME=filepath.Join(t.TempDir(), ".agent-run")`.
+- Default-suite tests set `AGENT_RUN_CODEX_TTY_COMMAND` to a fake interactive TUI script
+  (not a non-interactive Codex JSON mode).
+- No `agent-term serve` — each run owns its own ephemeral ptywrap HTTP server.
+- Fake TUI scripts print `CODEX_TTY_BANNER` before the prompt marker so banner-wait
+  logic is deterministic.
+
+## Steps
+
+1. Root `Setup` builds `agent-run`, sets `AGENT_RUN_HOME`, configures fake TUI env
+   unless `req.SkipFakeTUI` is set by a real Codex scenario.
+2. Grouping `Setup` narrows subcommand (`run`, `attach`, `help`) or real-codex profile.
+3. Leaf `Setup` sets prompt, fake TUI variant, or starts a background codex-tty run.
+4. `Run` executes CLI or performs registry/attach probe against a live session.
+5. Leaf `Assert` checks stderr session id, registry JSON, captured output, or attach.
+
+```go
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/creack/pty"
+	ptyclient "github.com/xhd2015/dot-pkgs/go-pkgs/shell/ptywrap/client"
+)
+
+const codexTTYBannerMarker = "CODEX_TTY_BANNER"
+
+func fakeTUIRespondHi() string {
+	return `sh -c 'printf "CODEX_TTY_BANNER\nCodex › "; read line; echo "Response: $line"'`
+}
+
+func fakeTUILongRun() string {
+	return `sh -c 'printf "CODEX_TTY_BANNER\n"; sleep 30'`
+}
+
+func fakeTUICodexResumeThenSleep(seconds int) string {
+	return fmt.Sprintf(`sh -c 'printf "CODEX_TTY_BANNER\nTo continue this session, run codex resume %%s\n" "$FAKE_CODEX_SESSION_ID"; sleep %d'`, seconds)
+}
+
+func fakeTUICodexResumeWithFallback(fallback string) string {
+	return `sh -c 'printf "CODEX_TTY_BANNER\nTo continue this session, run codex resume %s\nCodex › " "$FAKE_CODEX_SESSION_ID"; read line; printf "%s\n" "$FAKE_CODEX_FALLBACK_TEXT"'`
+}
+
+func fakeTUIDelayedBanner() string {
+	return `sh -c 'sleep 0.3; printf "CODEX_TTY_BANNER\nCodex › "; read line; echo "Response: $line"'`
+}
+
+func fakeTUIRequiresCR() string {
+	return `sh -c 'printf "CODEX_TTY_BANNER\nCodex › "; read -r line; echo "SUBMITTED:$line"'`
+}
+
+func fakeTUIRawCodexScrollback() string {
+	return `sh -c 'printf "CODEX_TTY_BANNER\n"; read -r line; printf ">4;0m>7u\n╭────────────────────────╮\n│ >_ OpenAI Codex        │\n│ model: loading /model to change │\n│ directory: /tmp/work   │\n╰────────────────────────╯\nStarting MCP servers...\nBooting MCP...\nWorking...\nWorking...\n› %s\nls output:\nAGENTS.md\ncmd\npkgs\n" "$line"'`
+}
+
+func codexTTYRegistryDir(home string) string {
+	return filepath.Join(home, "codex-tty-registry")
+}
+
+func codexTTYRegistryPath(home, sessionID string) string {
+	return filepath.Join(codexTTYRegistryDir(home), sessionID+".json")
+}
+
+func grokTTYRegistryPath(home, sessionID string) string {
+	return filepath.Join(home, "grok-tty-registry", sessionID+".json")
+}
+
+func reserveUnusedLocalAddr(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve unused localhost address: %v", err)
+	}
+	addr := ln.Addr().String()
+	if err := ln.Close(); err != nil {
+		t.Fatalf("close reserved listener: %v", err)
+	}
+	return addr
+}
+
+func writeStaleGrokTTYRegistry(t *testing.T, home, sessionID string) string {
+	t.Helper()
+	path := grokTTYRegistryPath(home, sessionID)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatalf("mkdir stale grok registry dir: %v", err)
+	}
+	addr := reserveUnusedLocalAddr(t)
+	entry := CodexTTYRegistryEntry{
+		SessionID:  sessionID,
+		ListenAddr: addr,
+		PID:        -1,
+		CreatedAt:  time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
+	}
+	data, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatalf("marshal stale grok registry: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		t.Fatalf("write stale grok registry: %v", err)
+	}
+	return addr
+}
+
+func execCmd(t *testing.T, command string, args []string, dir string, env []string, timeout time.Duration) (*Response, error) {
+	t.Helper()
+	if timeout <= 0 {
+		timeout = 45 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, command, args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), env...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	resp := &Response{
+		Stdout: stdout.String(),
+		Stderr: stderr.String(),
+		Err:    err,
+	}
+	if err == nil {
+		return resp, nil
+	}
+	if ctx.Err() != nil {
+		return resp, ctx.Err()
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		resp.ExitCode = exitErr.ExitCode()
+		return resp, nil
+	}
+	return resp, err
+}
+
+func runAgentRun(t *testing.T, req *Request, args ...string) (*Response, error) {
+	t.Helper()
+	if len(args) == 0 {
+		args = req.Args
+	}
+	appendCodexTTYEnv(req)
+	appendCodexHomeEnv(req)
+	return execCmd(t, req.AgentRun, args, req.TempDir, req.Env, req.ExecTimeout)
+}
+
+func appendCodexHomeEnv(req *Request) {
+	if strings.TrimSpace(req.CodexHome) == "" {
+		return
+	}
+	req.Env = withoutEnvKey(req.Env, "CODEX_HOME")
+	req.Env = append(req.Env, "CODEX_HOME="+req.CodexHome)
+	req.Env = withoutEnvKey(req.Env, "HOME")
+	req.Env = append(req.Env, "HOME="+filepath.Dir(req.CodexHome))
+}
+
+func appendCodexTTYEnv(req *Request) {
+	if req.SkipFakeTUI {
+		return
+	}
+	cmd := strings.TrimSpace(req.CodexTTYCommand)
+	if cmd == "" {
+		cmd = fakeTUIRespondHi()
+	}
+	req.Env = withoutEnvKey(req.Env, "AGENT_RUN_CODEX_TTY_COMMAND")
+	req.Env = append(req.Env, "AGENT_RUN_CODEX_TTY_COMMAND="+cmd)
+}
+
+func setCodexTTYCommand(req *Request, cmd string) {
+	req.CodexTTYCommand = cmd
+	appendCodexTTYEnv(req)
+}
+
+func withoutEnvKey(env []string, key string) []string {
+	prefix := key + "="
+	out := make([]string, 0, len(env))
+	for _, e := range env {
+		if strings.HasPrefix(e, prefix) {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+func parseCodexTTYSessionID(stderr string) (string, bool) {
+	re := regexp.MustCompile(`codex-tty:\s*(session-\d+)`)
+	m := re.FindStringSubmatch(stderr)
+	if len(m) < 2 {
+		return "", false
+	}
+	return m[1], true
+}
+
+func waitForCodexTTYSessionLine(t *testing.T, buf *bytes.Buffer, timeout time.Duration) string {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if id, ok := parseCodexTTYSessionID(buf.String()); ok {
+			return id
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("timeout waiting for codex-tty session id in stderr:\n%s", buf.String())
+	return ""
+}
+
+func waitForRegistryEntry(t *testing.T, home, sessionID string, timeout time.Duration) *CodexTTYRegistryEntry {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	path := codexTTYRegistryPath(home, sessionID)
+	for time.Now().Before(deadline) {
+		if data, err := os.ReadFile(path); err == nil {
+			var entry CodexTTYRegistryEntry
+			if json.Unmarshal(data, &entry) == nil && entry.ListenAddr != "" {
+				return &entry
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("timeout waiting for registry file %s", path)
+	return nil
+}
+
+func portOpen(addr string) bool {
+	conn, err := net.DialTimeout("tcp", addr, 500*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
+}
+
+func waitForTCPAddr(t *testing.T, addr string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if portOpen(addr) {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("timeout waiting for TCP %s", addr)
+}
+
+func probeAttachWS(t *testing.T, listenAddr, sessionID string) (bool, string) {
+	t.Helper()
+	base := "http://" + listenAddr
+	c := ptyclient.NewClient(base)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, err := ptyclient.Attach(c, ptyclient.ConnectOptions{
+			SessionID:      sessionID,
+			AttachSnapshot: true,
+			Wait:           false,
+		})
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			return false, err.Error()
+		}
+		return true, ""
+	case <-ctx.Done():
+		return true, ""
+	}
+}
+
+func probeAttachCLI(t *testing.T, req *Request, sessionID string) (*Response, error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, req.AgentRun, "attach", sessionID)
+	cmd.Dir = req.TempDir
+	cmd.Env = append(os.Environ(), req.Env...)
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		return nil, fmt.Errorf("start attach under pty: %w", err)
+	}
+	defer func() { _ = ptmx.Close() }()
+
+	var output bytes.Buffer
+	readDone := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(&output, ptmx)
+		close(readDone)
+	}()
+
+	waitDone := make(chan error, 1)
+	go func() {
+		waitDone <- cmd.Wait()
+	}()
+
+	var waitErr error
+	select {
+	case waitErr = <-waitDone:
+	case <-ctx.Done():
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+		waitErr = ctx.Err()
+	}
+	_ = ptmx.Close()
+	select {
+	case <-readDone:
+	case <-time.After(500 * time.Millisecond):
+	}
+	resp := &Response{
+		Stdout: output.String(),
+		Stderr: output.String(),
+		Err:    waitErr,
+	}
+	if waitErr == nil {
+		resp.AttachProbeOK = true
+		return resp, nil
+	}
+	if ctx.Err() != nil {
+		if strings.Contains(output.String(), "codex-tty") || output.Len() > 0 || ctx.Err() == context.DeadlineExceeded {
+			resp.AttachProbeOK = true
+			return resp, nil
+		}
+		return resp, ctx.Err()
+	}
+	var exitErr *exec.ExitError
+	if errors.As(waitErr, &exitErr) {
+		resp.ExitCode = exitErr.ExitCode()
+		return resp, nil
+	}
+	return resp, waitErr
+}
+
+func startCodexTTYBackground(t *testing.T, req *Request) {
+	t.Helper()
+	appendCodexTTYEnv(req)
+	args := []string{"run", "--agent-runner", "codex-tty"}
+	if req.CodexTTYPrompt != "" {
+		args = append(args, req.CodexTTYPrompt)
+	} else {
+		args = append(args, "hold")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd := exec.CommandContext(ctx, req.AgentRun, args...)
+	cmd.Dir = req.TempDir
+	cmd.Env = append(os.Environ(), req.Env...)
+	req.BackgroundStderr = &bytes.Buffer{}
+	req.BackgroundStdout = &bytes.Buffer{}
+	cmd.Stderr = req.BackgroundStderr
+	cmd.Stdout = req.BackgroundStdout
+	if err := cmd.Start(); err != nil {
+		cancel()
+		t.Fatalf("start background codex-tty run: %v", err)
+	}
+	req.BackgroundCmd = cmd
+	t.Cleanup(func() {
+		cancel()
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+		_ = cmd.Wait()
+	})
+	req.CodexTTYSessionID = waitForCodexTTYSessionLine(t, req.BackgroundStderr, 15*time.Second)
+}
+
+func runRegistryWhileRunning(t *testing.T, req *Request) (*Response, error) {
+	t.Helper()
+	if req.CodexTTYSessionID == "" {
+		t.Fatal("registry-while-running requires CodexTTYSessionID from background Setup")
+	}
+	entry := waitForRegistryEntry(t, req.Home, req.CodexTTYSessionID, 10*time.Second)
+	waitForTCPAddr(t, entry.ListenAddr, 5*time.Second)
+	return &Response{RegistryEntry: entry}, nil
+}
+
+func runAttachProbe(t *testing.T, req *Request) (*Response, error) {
+	t.Helper()
+	if req.CodexTTYSessionID == "" {
+		t.Fatal("attach-probe requires CodexTTYSessionID from background Setup")
+	}
+	entry := waitForRegistryEntry(t, req.Home, req.CodexTTYSessionID, 10*time.Second)
+	ok, probeErr := probeAttachWS(t, entry.ListenAddr, entry.SessionID)
+	return &Response{
+		RegistryEntry:  entry,
+		AttachProbeOK:  ok,
+		AttachProbeErr: probeErr,
+	}, nil
+}
+
+func runAttachCLIOnlyProbe(t *testing.T, req *Request) (*Response, error) {
+	t.Helper()
+	if req.CodexTTYSessionID == "" {
+		t.Fatal("attach-cli-only-probe requires CodexTTYSessionID from background Setup")
+	}
+	resp, err := probeAttachCLI(t, req, req.CodexTTYSessionID)
+	if resp == nil {
+		resp = &Response{}
+	}
+	resp.BackgroundStdout = req.BackgroundStdout.String()
+	resp.BackgroundStderr = req.BackgroundStderr.String()
+	if entry, readErr := waitForRegistryEntryNoFatal(req.Home, req.CodexTTYSessionID, 2*time.Second); readErr == nil {
+		resp.RegistryEntry = entry
+	}
+	return resp, err
+}
+
+func waitForRegistryEntryNoFatal(home, sessionID string, timeout time.Duration) (*CodexTTYRegistryEntry, error) {
+	deadline := time.Now().Add(timeout)
+	path := codexTTYRegistryPath(home, sessionID)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		data, err := os.ReadFile(path)
+		if err == nil {
+			var entry CodexTTYRegistryEntry
+			if err := json.Unmarshal(data, &entry); err == nil && entry.ListenAddr != "" {
+				return &entry, nil
+			} else if err != nil {
+				lastErr = err
+			}
+		} else {
+			lastErr = err
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("registry entry %s not found", path)
+	}
+	return nil, lastErr
+}
+
+func collectAttachScrollback(t *testing.T, listenAddr, sessionID string, collectFor time.Duration) (string, error) {
+	t.Helper()
+	base := "http://" + listenAddr
+	c := ptyclient.NewClient(base)
+	var buf bytes.Buffer
+	ctx, cancel := context.WithTimeout(context.Background(), collectFor+5*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, err := ptyclient.AttachWithIO(c, ptyclient.ConnectOptions{
+			SessionID:      sessionID,
+			AttachSnapshot: true,
+			Wait:           true,
+			SkipTTYCheck:   true,
+		}, strings.NewReader(""), &buf, io.Discard)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		return buf.String(), err
+	case <-time.After(collectFor):
+		return buf.String(), nil
+	case <-ctx.Done():
+		return buf.String(), ctx.Err()
+	}
+}
+
+func runAttachScrollbackProbe(t *testing.T, req *Request) (*Response, error) {
+	t.Helper()
+	if req.CodexTTYSessionID == "" {
+		t.Fatal("attach-scrollback-probe requires CodexTTYSessionID from background Setup")
+	}
+	entry := waitForRegistryEntry(t, req.Home, req.CodexTTYSessionID, 10*time.Second)
+	scrollback, err := collectAttachScrollback(t, entry.ListenAddr, entry.SessionID, 2*time.Second)
+	resp := &Response{
+		RegistryEntry:    entry,
+		AttachScrollback: scrollback,
+		AttachProbeOK:    entry.ListenAddr != "",
+	}
+	if err != nil && !strings.Contains(scrollback, codexTTYBannerMarker) {
+		resp.AttachProbeErr = err.Error()
+		resp.AttachProbeOK = false
+	}
+	return resp, nil
+}
+
+func runAttachInteractiveProbe(t *testing.T, req *Request) (*Response, error) {
+	t.Helper()
+	if req.CodexTTYSessionID == "" {
+		t.Fatal("attach-interactive-probe requires CodexTTYSessionID from background Setup")
+	}
+	resp, err := probeAttachCLI(t, req, req.CodexTTYSessionID)
+	if resp != nil && resp.AttachProbeOK {
+		entry := waitForRegistryEntry(t, req.Home, req.CodexTTYSessionID, 10*time.Second)
+		resp.RegistryEntry = entry
+		resp.BackgroundStdout = req.BackgroundStdout.String()
+		resp.BackgroundStderr = req.BackgroundStderr.String()
+		return resp, err
+	}
+	entry := waitForRegistryEntry(t, req.Home, req.CodexTTYSessionID, 10*time.Second)
+	ok, probeErr := probeAttachWS(t, entry.ListenAddr, entry.SessionID)
+	if resp == nil {
+		resp = &Response{}
+	}
+	resp.AttachProbeOK = ok
+	resp.AttachProbeErr = probeErr
+	resp.RegistryEntry = entry
+	resp.BackgroundStdout = req.BackgroundStdout.String()
+	resp.BackgroundStderr = req.BackgroundStderr.String()
+	return resp, err
+}
+
+func findCodexTTYEventsJSONL(t *testing.T, home string) (string, []string) {
+	t.Helper()
+	root := filepath.Join(home, "sessions", "codex-tty")
+	var found string
+	var lines []string
+	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		if info.Name() == "events.jsonl" {
+			found = path
+			data, readErr := os.ReadFile(path)
+			if readErr != nil {
+				t.Fatalf("read %s: %v", path, readErr)
+			}
+			for _, line := range strings.Split(string(data), "\n") {
+				if strings.TrimSpace(line) != "" {
+					lines = append(lines, line)
+				}
+			}
+		}
+		return nil
+	})
+	return found, lines
+}
+
+func eventsContainSubstring(t *testing.T, lines []string, want string) bool {
+	t.Helper()
+	for _, line := range lines {
+		var ev map[string]any
+		if err := json.Unmarshal([]byte(line), &ev); err != nil {
+			continue
+		}
+		blob, _ := json.Marshal(ev)
+		if strings.Contains(strings.ToLower(string(blob)), strings.ToLower(want)) {
+			return true
+		}
+	}
+	return false
+}
+
+func codexRolloutPath(codexHome, sessionID string) string {
+	return filepath.Join(codexHome, "sessions", "2026", "07", "02", "rollout-2026-07-02T12-01-53-"+sessionID+".jsonl")
+}
+
+func ensureCodexTranscriptPath(t *testing.T, req *Request) string {
+	t.Helper()
+	if req.CodexHome == "" {
+		req.CodexHome = filepath.Join(req.TempDir, ".codex")
+	}
+	if req.CodexTranscriptSessionID == "" {
+		req.CodexTranscriptSessionID = "019f20fd-8569-7910-ab0b-9d898d66e3e6"
+	}
+	if req.CodexTranscriptPath == "" {
+		req.CodexTranscriptPath = codexRolloutPath(req.CodexHome, req.CodexTranscriptSessionID)
+	}
+	if err := os.MkdirAll(filepath.Dir(req.CodexTranscriptPath), 0755); err != nil {
+		t.Fatalf("mkdir codex transcript dir: %v", err)
+	}
+	return req.CodexTranscriptPath
+}
+
+func appendCodexTranscriptJSONL(path string, lines ...string) error {
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		if _, err := fmt.Fprintln(f, line); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func codexSessionMetaLine(sessionID, cwd string) string {
+	line, _ := json.Marshal(map[string]any{
+		"timestamp": "2026-07-02T12:01:53Z",
+		"type":      "session_meta",
+		"payload":   map[string]any{"session_id": sessionID, "cwd": cwd},
+	})
+	return string(line)
+}
+
+func codexAgentMessageLine(text string) string {
+	line, _ := json.Marshal(map[string]any{
+		"timestamp": "2026-07-02T12:01:54Z",
+		"type":      "event_msg",
+		"payload":   map[string]any{"type": "agent_message", "message": text},
+	})
+	return string(line)
+}
+
+func codexTaskCompleteLine(text string) string {
+	line, _ := json.Marshal(map[string]any{
+		"timestamp": "2026-07-02T12:01:55Z",
+		"type":      "event_msg",
+		"payload":   map[string]any{"type": "task_complete", "last_agent_message": text},
+	})
+	return string(line)
+}
+
+func codexAssistantResponseItemLine(texts ...string) string {
+	content := make([]map[string]any, 0, len(texts))
+	for _, text := range texts {
+		content = append(content, map[string]any{"type": "output_text", "text": text})
+	}
+	line, _ := json.Marshal(map[string]any{
+		"timestamp": "2026-07-02T12:01:54Z",
+		"type":      "response_item",
+		"payload": map[string]any{
+			"type":    "message",
+			"role":    "assistant",
+			"content": content,
+		},
+	})
+	return string(line)
+}
+
+func codexFunctionCallOutputLine(output string) string {
+	line, _ := json.Marshal(map[string]any{
+		"timestamp": "2026-07-02T12:01:54Z",
+		"type":      "response_item",
+		"payload":   map[string]any{"type": "function_call_output", "output": output},
+	})
+	return string(line)
+}
+
+func seedCodexTranscript(t *testing.T, req *Request, lines ...string) {
+	t.Helper()
+	path := ensureCodexTranscriptPath(t, req)
+	seed := []string{codexSessionMetaLine(req.CodexTranscriptSessionID, req.TempDir)}
+	seed = append(seed, lines...)
+	if err := appendCodexTranscriptJSONL(path, seed...); err != nil {
+		t.Fatalf("seed codex transcript: %v", err)
+	}
+}
+
+func scheduleCodexTranscriptAppends(t *testing.T, req *Request) {
+	t.Helper()
+	if len(req.CodexTranscriptSchedules) == 0 {
+		return
+	}
+	path := ensureCodexTranscriptPath(t, req)
+	for _, schedule := range req.CodexTranscriptSchedules {
+		s := schedule
+		go func() {
+			time.Sleep(s.Delay)
+			if err := appendCodexTranscriptJSONL(path, s.Lines...); err != nil {
+				t.Errorf("append codex transcript: %v", err)
+			}
+		}()
+	}
+}
+
+func runCodexJSONLStreamProbe(t *testing.T, req *Request) (*Response, error) {
+	t.Helper()
+	appendCodexTTYEnv(req)
+	appendCodexHomeEnv(req)
+	scheduleCodexTranscriptAppends(t, req)
+
+	timeout := req.ExecTimeout
+	if timeout <= 0 {
+		timeout = 15 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, req.AgentRun, req.Args...)
+	cmd.Dir = req.TempDir
+	cmd.Env = append(os.Environ(), req.Env...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	waitDone := make(chan error, 1)
+	go func() { waitDone <- cmd.Wait() }()
+
+	want := req.StreamProbeSubstring
+	probeTimeout := req.StreamProbeTimeout
+	if probeTimeout <= 0 {
+		probeTimeout = 8 * time.Second
+	}
+	resp := &Response{}
+	deadline := time.After(probeTimeout)
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	var waitErr error
+	waited := false
+	for !waited {
+		select {
+		case waitErr = <-waitDone:
+			waited = true
+		case <-ticker.C:
+			if want != "" && strings.Contains(stdout.String(), want) {
+				resp.StreamProbeSeen = true
+				resp.StreamProbeBeforeExit = true
+			}
+		case <-deadline:
+			if want != "" && strings.Contains(stdout.String(), want) {
+				resp.StreamProbeSeen = true
+			}
+		case <-ctx.Done():
+			if cmd.Process != nil {
+				_ = cmd.Process.Kill()
+			}
+			waitErr = ctx.Err()
+			waited = true
+		}
+		if resp.StreamProbeBeforeExit && want != "" {
+			break
+		}
+	}
+	if !waited {
+		waitErr = <-waitDone
+	}
+
+	resp.Stdout = stdout.String()
+	resp.Stderr = stderr.String()
+	resp.StreamProbeStdout = stdout.String()
+	resp.Err = waitErr
+	if waitErr == nil {
+		return resp, nil
+	}
+	if ctx.Err() != nil {
+		return resp, ctx.Err()
+	}
+	var exitErr *exec.ExitError
+	if errors.As(waitErr, &exitErr) {
+		resp.ExitCode = exitErr.ExitCode()
+		return resp, nil
+	}
+	return resp, waitErr
+}
+
+func assertSuccess(t *testing.T, resp *Response) {
+	t.Helper()
+	if resp.ExitCode != 0 {
+		t.Fatalf("exit code = %d, stderr:\n%s", resp.ExitCode, resp.Stderr)
+	}
+}
+
+func assertExitCode(t *testing.T, resp *Response, want int) {
+	t.Helper()
+	if resp.ExitCode != want {
+		t.Fatalf("expected exit code %d, got %d, stderr:\n%s", want, resp.ExitCode, resp.Stderr)
+	}
+}
+
+func Setup(t *testing.T, req *Request) error {
+	req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../.."))
+	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
+		return fmt.Errorf("repo root not found: %w", err)
+	}
+	req.TempDir = t.TempDir()
+	req.Home = filepath.Join(req.TempDir, ".agent-run")
+	req.AgentRun = filepath.Join(req.TempDir, "bin", "agent-run")
+	if err := os.MkdirAll(filepath.Dir(req.AgentRun), 0755); err != nil {
+		return fmt.Errorf("mkdir bin: %w", err)
+	}
+	build := exec.Command("go", "build", "-o", req.AgentRun, "./cmd/agent-run")
+	build.Dir = req.RepoRoot
+	if out, err := build.CombinedOutput(); err != nil {
+		return fmt.Errorf("build agent-run: %w\n%s", err, string(out))
+	}
+	req.Env = append(req.Env, "AGENT_RUN_HOME="+req.Home)
+	appendCodexTTYEnv(req)
+	return nil
+}
+
+func httpGetHealth(listenAddr string) (int, error) {
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get("http://" + listenAddr + "/api/terminal/sessions")
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return resp.StatusCode, nil
+}
+```

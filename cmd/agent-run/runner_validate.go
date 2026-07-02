@@ -19,7 +19,9 @@ func validateRunner(runner string) error {
 		registry.AgentRunnerFakeCodex,
 		registry.AgentRunnerCrush,
 		registry.AgentRunnerPi,
-		registry.AgentRunnerGrok:
+		registry.AgentRunnerGrok,
+		registry.AgentRunnerGrokTTY,
+		registry.AgentRunnerCodexTTY:
 		return nil
 	default:
 		return fmt.Errorf("unknown agent runner: %s", runner)

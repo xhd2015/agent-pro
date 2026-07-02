@@ -6,7 +6,7 @@ require (
 	github.com/coder/acp-go-sdk v0.13.0
 	github.com/coder/websocket v1.8.14
 	github.com/tidwall/jsonc v0.3.3
-	github.com/xhd2015/dot-pkgs/go-pkgs v0.0.38
+	github.com/xhd2015/dot-pkgs/go-pkgs v0.0.39
 	github.com/xhd2015/less-gen v0.0.19
 	github.com/xhd2015/xgo v1.1.14
 	gopkg.in/yaml.v3 v3.0.1
@@ -20,12 +20,12 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
+	github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02
 	github.com/openai/openai-go/v3 v3.29.0
 	golang.org/x/term v0.43.0
 )
 
 require (
-	github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect

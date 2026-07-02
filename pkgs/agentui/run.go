@@ -13,25 +13,26 @@ import (
 	codexagent "github.com/xhd2015/agent-pro/agent/cli/codex"
 	crushagent "github.com/xhd2015/agent-pro/agent/cli/crush"
 	grokagent "github.com/xhd2015/agent-pro/agent/cli/grok"
-	agentprovider "github.com/xhd2015/agent-pro/agent/cli/provider"
 	piagent "github.com/xhd2015/agent-pro/agent/cli/pi"
+	agentprovider "github.com/xhd2015/agent-pro/agent/cli/provider"
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
 	"github.com/xhd2015/agent-pro/agent/event/codex_types"
 	eventprint "github.com/xhd2015/agent-pro/agent/event/print"
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	agentexec "github.com/xhd2015/agent-pro/agent/exec"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
+	"github.com/xhd2015/agent-pro/pkgs/groktty"
 )
 
 // RunOptions configures a headless agent-run invocation.
 type RunOptions struct {
-	Prompt    string
-	Runner    string
-	Model     string
-	SessionID string
-	JSON      bool
-	Workspace string
-	Store     agentstorage.Store
+	Prompt       string
+	Runner       string
+	Model        string
+	SessionID    string
+	JSON         bool
+	Workspace    string
+	Store        agentstorage.Store
 	Stdout       io.Writer
 	Stderr       io.Writer
 	StreamPhases bool // web: phased assistant start/update/end; CLI: single message events
@@ -129,7 +130,7 @@ func Run(ctx context.Context, opts RunOptions) error {
 		return err
 	}
 
-	newRunnerSessionID, runErr := streamRunner(ctx, runner, workspace, env, runnerPrompt, opts.Model, runnerSessionID, opts.StreamPhases, emit, stderr)
+	newRunnerSessionID, runErr := streamRunner(ctx, runner, opts.Store.Home(), workspace, env, runnerPrompt, opts.Model, runnerSessionID, opts.StreamPhases, emit, stderr)
 	if strings.TrimSpace(newRunnerSessionID) != "" {
 		_ = opts.Store.UpdateSessionRunnerSessionID(runner, sessionID, newRunnerSessionID)
 	}
@@ -144,8 +145,12 @@ func Run(ctx context.Context, opts RunOptions) error {
 	return runErr
 }
 
-func streamRunner(ctx context.Context, runner, workspace string, env *agentexec.Env, prompt, model, runnerSessionID string, streamPhases bool, emit func(types.AgentEvent) error, stderr io.Writer) (string, error) {
+func streamRunner(ctx context.Context, runner, home, workspace string, env *agentexec.Env, prompt, model, runnerSessionID string, streamPhases bool, emit func(types.AgentEvent) error, stderr io.Writer) (string, error) {
 	switch registry.AgentRunnerID(runner) {
+	case registry.AgentRunnerGrokTTY:
+		return streamGrokTTY(ctx, home, workspace, prompt, model, runnerSessionID, emit, stderr)
+	case registry.AgentRunnerCodexTTY:
+		return streamCodexTTY(ctx, home, workspace, prompt, model, runnerSessionID, emit, stderr)
 	case registry.AgentRunnerFakeCodex, registry.AgentRunnerCodex:
 		err := streamCodexLike(ctx, runner, workspace, env, prompt, model, streamPhases, emit, stderr)
 		return "", err
@@ -245,6 +250,44 @@ func runnerSessionIDFromAgent(agent registry.Agent) string {
 		return strings.TrimSpace(a.LastSessionID)
 	}
 	return ""
+}
+
+func streamGrokTTY(ctx context.Context, home, workspace, prompt, model, runnerSessionID string, emit func(types.AgentEvent) error, stderr io.Writer) (string, error) {
+	_, grokSessionID, err := groktty.Run(ctx, groktty.RunOptions{
+		Home:            home,
+		Workspace:       workspace,
+		Prompt:          prompt,
+		Model:           model,
+		ResumeSessionID: runnerSessionID,
+		Stderr:          stderr,
+		Emit:            emit,
+	})
+	if strings.TrimSpace(grokSessionID) != "" {
+		return grokSessionID, err
+	}
+	return runnerSessionID, err
+}
+
+func streamCodexTTY(ctx context.Context, home, workspace, prompt, model, runnerSessionID string, emit func(types.AgentEvent) error, stderr io.Writer) (string, error) {
+	_, codexSessionID, err := groktty.Run(ctx, groktty.RunOptions{
+		Home:            home,
+		Workspace:       workspace,
+		Prompt:          prompt,
+		Model:           model,
+		ResumeSessionID: runnerSessionID,
+		RunnerID:        string(registry.AgentRunnerCodexTTY),
+		StderrPrefix:    string(registry.AgentRunnerCodexTTY),
+		RegistryDir:     "codex-tty-registry",
+		BannerProvider:  "codex",
+		BannerMarkers:   []string{"CODEX_TTY_BANNER"},
+		DisableTail:     true,
+		Stderr:          stderr,
+		Emit:            emit,
+	})
+	if strings.TrimSpace(codexSessionID) != "" {
+		return codexSessionID, err
+	}
+	return runnerSessionID, err
 }
 
 func streamCodexLike(ctx context.Context, runner, workspace string, env *agentexec.Env, prompt, model string, streamPhases bool, emit func(types.AgentEvent) error, stderr io.Writer) error {

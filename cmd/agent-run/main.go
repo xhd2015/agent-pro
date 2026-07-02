@@ -13,11 +13,12 @@ Usage: agent-run [--agent-runner RUNNER] [--help]
 Commands:
   web        start localhost web UI and API
   run        headless one-shot agent invocation
+  attach     attach to a live grok-tty or codex-tty session by id
   sessions   list stored sessions or print one session's events
   status     show agent-run status
 
 Options:
-  --agent-runner RUNNER   default agent runner (codex, opencode, fake-codex, ...)
+  --agent-runner RUNNER   default agent runner (codex, codex-tty, grok-tty, opencode, fake-codex, ...)
   -h, --help              show help
 
 Run agent-run <command> --help for command-specific options.
@@ -62,6 +63,8 @@ func run(args []string) error {
 		return runWeb(sub, agentRunner)
 	case "run":
 		return runHeadless(sub, agentRunner)
+	case "attach":
+		return runAttach(sub)
 	case "sessions":
 		return runSessions(sub)
 	case "status":

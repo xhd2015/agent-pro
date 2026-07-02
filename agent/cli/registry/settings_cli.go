@@ -17,23 +17,25 @@ const (
 	AgentRunnerCrush     AgentRunnerID = "crush"
 	AgentRunnerPi        AgentRunnerID = "pi"
 	AgentRunnerGrok      AgentRunnerID = "grok"
+	AgentRunnerGrokTTY   AgentRunnerID = "grok-tty"
+	AgentRunnerCodexTTY  AgentRunnerID = "codex-tty"
 	AgentRunnerClaude    AgentRunnerID = "claude"
 )
 
 const (
-	CursorCLIPathSettingKey         = "cursor_cli_path"
-	CodexCLIPathSettingKey          = "codex_cli_path"
-	OpencodeCLIPathSettingKey       = "opencode_cli_path"
-	FakeCodexCLIPathSettingKey      = "fake_codex_cli_path"
-	CrushCLIPathSettingKey          = "crush_cli_path"
-	PiCLIPathSettingKey             = "pi_cli_path"
-	GrokCLIPathSettingKey           = "grok_cli_path"
-	ClaudeCLIPathSettingKey         = "claude_cli_path"
-	CodexAPIKeySettingKey           = "codex_api_key"
-	AgentRunnerIDSettingKey         = "agent_runner_id"
+	CursorCLIPathSettingKey          = "cursor_cli_path"
+	CodexCLIPathSettingKey           = "codex_cli_path"
+	OpencodeCLIPathSettingKey        = "opencode_cli_path"
+	FakeCodexCLIPathSettingKey       = "fake_codex_cli_path"
+	CrushCLIPathSettingKey           = "crush_cli_path"
+	PiCLIPathSettingKey              = "pi_cli_path"
+	GrokCLIPathSettingKey            = "grok_cli_path"
+	ClaudeCLIPathSettingKey          = "claude_cli_path"
+	CodexAPIKeySettingKey            = "codex_api_key"
+	AgentRunnerIDSettingKey          = "agent_runner_id"
 	KBDefaultAgentRunnerIDSettingKey = "kb_default_agent_runner_id"
-	ModelSettingKey                 = "model"
-	ModelsByAgentRunnerSettingKey   = "models_by_agent_runner"
+	ModelSettingKey                  = "model"
+	ModelsByAgentRunnerSettingKey    = "models_by_agent_runner"
 )
 
 type Settings struct {
@@ -55,14 +57,14 @@ type Settings struct {
 }
 
 const (
-	EnvCursorCLIPath   = "AGENT_RUNNER_CURSOR_PATH"
-	EnvCodexCLIPath    = "AGENT_RUNNER_CODEX_PATH"
-	EnvOpencodeCLIPath = "AGENT_RUNNER_OPENCODE_PATH"
+	EnvCursorCLIPath    = "AGENT_RUNNER_CURSOR_PATH"
+	EnvCodexCLIPath     = "AGENT_RUNNER_CODEX_PATH"
+	EnvOpencodeCLIPath  = "AGENT_RUNNER_OPENCODE_PATH"
 	EnvFakeCodexCLIPath = "AGENT_RUNNER_FAKE_CODEX_PATH"
-	EnvCrushCLIPath    = "AGENT_RUNNER_CRUSH_PATH"
-	EnvPiCLIPath       = "AGENT_RUNNER_PI_PATH"
-	EnvGrokCLIPath     = "AGENT_RUNNER_GROK_PATH"
-	EnvClaudeCLIPath   = "AGENT_RUNNER_CLAUDE_PATH"
+	EnvCrushCLIPath     = "AGENT_RUNNER_CRUSH_PATH"
+	EnvPiCLIPath        = "AGENT_RUNNER_PI_PATH"
+	EnvGrokCLIPath      = "AGENT_RUNNER_GROK_PATH"
+	EnvClaudeCLIPath    = "AGENT_RUNNER_CLAUDE_PATH"
 )
 
 func LoadEnvCLIPath(envKey string) string {

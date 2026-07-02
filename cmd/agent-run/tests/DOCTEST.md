@@ -6,13 +6,15 @@ headless `run`, localhost `web` API, and session storage under `AGENT_RUN_HOME`.
 # DSN (Domain Specific Notion)
 
 `agent-run` is the CLI entry. Runner backends come from `agent/cli/registry`
-(`codex`, `opencode`, `pi`, `crush`, `grok`, `cursor`, `fake-codex`, …).
-Tests use `fake-codex` for deterministic NDJSON output.
+(`codex`, `opencode`, `pi`, `crush`, `grok`, `grok-tty`, `codex-tty`, `cursor`,
+`fake-codex`, …). Tests use `fake-codex` for deterministic NDJSON output;
+`grok-tty` and `codex-tty` tests live in nested trees with fake TUI hooks.
 
 ```
 agent-run [--agent-runner RUNNER] [--help]
 agent-run web [--port PORT] [--dev] [--token TOKEN] [--no-open] [--agent-runner RUNNER]
 agent-run run "prompt" [--json] [--model M] [--session ID] [--agent-runner RUNNER]
+agent-run attach <session-id>
 agent-run sessions [--json]
 agent-run sessions <runner>/<session_id> --print
 agent-run status
@@ -111,8 +113,20 @@ cmd/agent-run/tests/
 │       ├── missing-print-flag/      session ref without --print → exit 1
 │       ├── malformed-session-ref/   positional without slash → exit 1
 │       └── follow-running-appends/  status=running; tail until finished
-└── status/
-    └── exits-zero/                  status exits 0
+├── status/
+│   └── exits-zero/                  status exits 0
+├── grok-tty/                        nested root: grok-tty runner + attach (see grok-tty/DOCTEST.md)
+    ├── cli-edge/accepts-grok-tty-runner/
+    ├── run/                         stderr id, registry, banner wait, capture
+    ├── attach/                      registry lookup + WS attach
+    ├── help/lists-attach/
+    └── real-grok/                   label: grok — real grok CLI on PATH
+└── codex-tty/                       nested root: codex-tty runner + attach (see codex-tty/DOCTEST.md)
+    ├── cli-edge/accepts-codex-tty-runner/
+    ├── run/                         stderr id, registry, banner wait, scrollback capture
+    ├── attach/                      registry lookup + WS attach
+    ├── help/                        attach + codex-tty runner docs
+    └── real-codex/                  label: codex — real Codex CLI on PATH
 ```
 
 ## Test Index
@@ -156,6 +170,32 @@ cmd/agent-run/tests/
 | 35 | `web/stream/sse-delivers-new-events` | SSE after=0 delivers user + assistant events |
 | 36 | `web/stream/sse-after-offset-skips-prior` | SSE at EOF offset on finished session → no replay |
 
+## Nested: grok-tty (PTY interactive runner)
+
+`grok-tty` tests are a **nested DOCTEST root** (inheritance firewall). Each run spawns
+an adhoc ptywrap server on a random port; session ids print to stderr as
+`grok-tty: session-N`. Default suite uses `AGENT_RUN_GROK_TTY_COMMAND` fake TUI;
+`real-grok/` leaves require `--label grok` and real `grok` on PATH.
+
+```sh
+doctest vet ./cmd/agent-run/tests/grok-tty
+doctest test ./cmd/agent-run/tests/grok-tty
+doctest test --label grok ./cmd/agent-run/tests/grok-tty/real-grok
+```
+
+## Nested: codex-tty (PTY interactive runner)
+
+`codex-tty` tests are a **nested DOCTEST root** (inheritance firewall). Each run
+spawns an adhoc ptywrap server on a random port; session ids print to stderr as
+`codex-tty: session-N`. Default suite uses `AGENT_RUN_CODEX_TTY_COMMAND` fake TUI;
+`real-codex/` leaves require `--label codex` and real `codex` on PATH.
+
+```sh
+doctest vet ./cmd/agent-run/tests/codex-tty
+doctest test ./cmd/agent-run/tests/codex-tty
+doctest test --label codex ./cmd/agent-run/tests/codex-tty/real-codex
+```
+
 ## Nested: web layout (Playwright)
 
 Mobile layout tests live in a separate root (inheritance firewall):
@@ -178,6 +218,10 @@ doctest test -v ./cmd/agent-run/tests/web/timeline/continuation/follow-up-agent-
 doctest test -v ./cmd/agent-run/tests/web/stream
 doctest test -v ./cmd/agent-run/tests/web/process-output/web-stdout-silent-on-agent-run
 doctest test -v ./cmd/agent-run/tests/web-layout/mobile-message-roles-and-timestamps --label chromium
+doctest test -v ./cmd/agent-run/tests/grok-tty/run/captures-tui-output
+doctest test --label grok ./cmd/agent-run/tests/grok-tty/real-grok
+doctest test -v ./cmd/agent-run/tests/codex-tty/run/captures-tui-output
+doctest test --label codex ./cmd/agent-run/tests/codex-tty/real-codex
 ```
 
 ```go
