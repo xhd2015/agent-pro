@@ -158,6 +158,9 @@ func registerAPI(mux *http.ServeMux, store agentstorage.Store, token string, req
 		return func(w http.ResponseWriter, r *http.Request) {
 			got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 			got = strings.TrimSpace(got)
+			if got == "" {
+				got = strings.TrimSpace(r.URL.Query().Get("token"))
+			}
 			if got != token {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return

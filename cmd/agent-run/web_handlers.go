@@ -48,10 +48,12 @@ func knownRunners() []string {
 	return []string{
 		string(registry.AgentRunnerOpencode),
 		string(registry.AgentRunnerCodex),
+		string(registry.AgentRunnerCodexTTY),
 		string(registry.AgentRunnerCursor),
 		string(registry.AgentRunnerPi),
 		string(registry.AgentRunnerCrush),
 		string(registry.AgentRunnerGrok),
+		string(registry.AgentRunnerGrokTTY),
 		string(registry.AgentRunnerFakeCodex),
 	}
 }
@@ -121,15 +123,19 @@ func startAgentRun(store agentstorage.Store, runner, sessionID, prompt string) {
 	webRunWG.Add(1)
 	go func() {
 		defer webRunWG.Done()
+		if sendPromptToLiveTerminal(store, runner, sessionID, prompt) {
+			return
+		}
 		_ = agentui.Run(context.Background(), agentui.RunOptions{
-			Prompt:       prompt,
-			Runner:       runner,
-			SessionID:    sessionID,
-			Workspace:    workspace,
-			Store:        store,
-			Stdout:       io.Discard,
-			Stderr:       io.Discard,
-			StreamPhases: true,
+			Prompt:            prompt,
+			Runner:            runner,
+			SessionID:         sessionID,
+			Workspace:         workspace,
+			Store:             store,
+			Stdout:            io.Discard,
+			Stderr:            io.Discard,
+			StreamPhases:      true,
+			KeepTerminalAlive: isTTYRunner(runner),
 		})
 	}()
 }
@@ -245,6 +251,24 @@ func handleSessionResource(store agentstorage.Store) http.HandlerFunc {
 		}
 		runner, sessionID := parts[0], parts[1]
 
+		if len(parts) == 3 && parts[2] == "terminal" {
+			if r.Method != http.MethodGet {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			handleTerminalStatus(store, runner, sessionID)(w, r)
+			return
+		}
+
+		if len(parts) == 4 && parts[2] == "terminal" && parts[3] == "ws" {
+			if r.Method != http.MethodGet {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			handleTerminalWebSocket(store, runner, sessionID)(w, r)
+			return
+		}
+
 		if len(parts) == 4 && parts[2] == "events" && parts[3] == "stream" {
 			if r.Method != http.MethodGet {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -305,9 +329,9 @@ func handleSessionResource(store agentstorage.Store) http.HandlerFunc {
 			events = []types.AgentEvent{}
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"session":        meta.Meta,
-			"events":         events,
-			"events_offset":  eventsOffset,
+			"session":       meta.Meta,
+			"events":        events,
+			"events_offset": eventsOffset,
 		})
 	}
 }

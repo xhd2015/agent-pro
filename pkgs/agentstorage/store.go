@@ -14,6 +14,7 @@ type Store interface {
 	CreateSession(runner, sessionID string, meta SessionMeta) error
 	UpdateSessionStatus(runner, sessionID, status string) error
 	UpdateSessionRunnerSessionID(runner, sessionID, runnerSessionID string) error
+	UpdateSessionTerminalSessionID(runner, sessionID, terminalSessionID string) error
 	AppendEvent(runner, sessionID string, ev types.AgentEvent) error
 	ReadEvents(runner, sessionID string, afterOffset int64) ([]types.AgentEvent, int64, error)
 	AppendMessage(runner, sessionID, text string) (Message, error)

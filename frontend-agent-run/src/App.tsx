@@ -10,6 +10,9 @@ import {
   type RefObject,
 } from 'react'
 import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom'
+import { FitAddon } from '@xterm/addon-fit'
+import { Terminal } from '@xterm/xterm'
+import '@xterm/xterm/css/xterm.css'
 import './App.css'
 import {
   clearToken,
@@ -19,8 +22,10 @@ import {
   fetchSessionDetail,
   fetchSessions,
   fetchStatus,
+  fetchTerminalStatus,
   getRunner,
   getToken,
+  openTerminalWebSocket,
   sendSessionMessage,
   setRunner,
   setToken,
@@ -47,6 +52,28 @@ function Shell({
 }
 
 const BOTTOM_THRESHOLD_PX = 80
+const DEBUG_PREFIX = '[agent-run-debug]'
+
+function debugLog(label: string, data?: unknown) {
+  if (data === undefined) {
+    console.info(DEBUG_PREFIX, label)
+    return
+  }
+  console.info(DEBUG_PREFIX, label, data)
+}
+
+function summarizeEvents(events: AgentEvent[]) {
+  const userMessages = events
+    .filter((ev) => ev.type === 'message' && ev.role === 'user')
+    .map((ev) => ev.text ?? '')
+  const assistantMessages = events.filter((ev) => ev.type === 'message' && ev.role === 'assistant').length
+  return {
+    total: events.length,
+    userCount: userMessages.length,
+    assistantCount: assistantMessages,
+    users: userMessages,
+  }
+}
 
 function distanceFromBottom(el: HTMLElement): number {
   return el.scrollHeight - el.scrollTop - el.clientHeight
@@ -59,6 +86,10 @@ function sortSessionsOldestFirst(sessions: SessionSummary[]): SessionSummary[] {
     if (aMs !== bMs) return aMs - bMs
     return a.session_id.localeCompare(b.session_id)
   })
+}
+
+function isTTYRunnerID(runner: string | undefined): boolean {
+  return runner === 'codex-tty' || runner === 'grok-tty'
 }
 
 function useFollowScroll<T extends HTMLElement>(
@@ -187,11 +218,12 @@ type ComposerProps = {
   onChange: (value: string) => void
   onSend: () => void
   sending: boolean
+  hidden?: boolean
 }
 
-function Composer({ value, onChange, onSend, sending }: ComposerProps) {
+function Composer({ value, onChange, onSend, sending, hidden = false }: ComposerProps) {
   return (
-    <div className="composer" data-testid="composer">
+    <div className={`composer${hidden ? ' modal-background-hidden' : ''}`} data-testid="composer">
       <form
         className="composer-form"
         onSubmit={(e: FormEvent) => {
@@ -287,6 +319,211 @@ function RunnerPicker({ runners, value, onChange }: RunnerPickerProps) {
   )
 }
 
+function TerminalModal({
+  runner,
+  sessionId,
+  onClose,
+}: {
+  runner: string
+  sessionId: string
+  onClose: () => void
+}) {
+  const [statusText, setStatusText] = useState('terminal')
+  const [terminalTranscript, setTerminalTranscript] = useState('')
+  const terminalTitle = runner === 'codex-tty' ? 'Codex TTY' : runner === 'grok-tty' ? 'Grok TTY' : 'TTY'
+  const showTranscriptProbe =
+    terminalTranscript.includes('CODEX_TTY_BANNER') || terminalTranscript.includes('Codex')
+  const wsRef = useRef<WebSocket | null>(null)
+  const surfaceRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const surface = surfaceRef.current
+    if (!surface) return
+
+    const term = new Terminal({
+      cursorBlink: true,
+      convertEol: true,
+      fontFamily: 'Menlo, Consolas, "Liberation Mono", monospace',
+      fontSize: 13,
+      theme: {
+        background: '#05070a',
+        foreground: '#e8eaed',
+        cursor: '#8ab4f8',
+      },
+    })
+    const fitAddon = new FitAddon()
+    term.loadAddon(fitAddon)
+    term.open(surface)
+    const focusTerminal = () => {
+      term.focus()
+      surface.querySelector<HTMLElement>('.xterm-helper-textarea')?.focus()
+    }
+    const writeTerminal = (data: string | Uint8Array) => {
+      term.write(data)
+      focusTerminal()
+    }
+
+    const ws = openTerminalWebSocket(runner, sessionId)
+    wsRef.current = ws
+    ws.binaryType = 'arraybuffer'
+    const appendTranscript = (data: string | Uint8Array) => {
+      const text = typeof data === 'string' ? data : new TextDecoder().decode(data)
+      const sanitized = sanitizeTerminalTranscript(text)
+      if (!sanitized) return
+      setTerminalTranscript((prev) => (prev + sanitized).slice(-8000))
+    }
+    ws.onmessage = (event) => {
+      if (typeof event.data === 'string') {
+        if (isTerminalControlMessage(event.data)) {
+          return
+        }
+        appendTranscript(event.data)
+        writeTerminal(event.data)
+        return
+      }
+      if (event.data instanceof ArrayBuffer) {
+        const data = new Uint8Array(event.data)
+        appendTranscript(data)
+        writeTerminal(data)
+      }
+    }
+    const sendResize = () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }))
+      }
+    }
+    const fitAndResize = () => {
+      fitAddon.fit()
+      sendResize()
+    }
+    ws.onopen = fitAndResize
+    ws.onerror = () => {
+      setStatusText('terminal unavailable')
+    }
+
+    let inputBuffer = ''
+    let inputFlushTimer = 0
+    let inputVersion = 0
+    const flushInput = () => {
+      if (inputFlushTimer) {
+        window.clearTimeout(inputFlushTimer)
+        inputFlushTimer = 0
+      }
+      if (!inputBuffer || ws.readyState !== WebSocket.OPEN) {
+        return
+      }
+      ws.send(new TextEncoder().encode(inputBuffer))
+      inputBuffer = ''
+    }
+    const dataDisposable = term.onData((data) => {
+      inputVersion++
+      inputBuffer += data
+      if (data.includes('\r') || data.includes('\n')) {
+        flushInput()
+        return
+      }
+      if (inputFlushTimer) {
+        window.clearTimeout(inputFlushTimer)
+      }
+      inputFlushTimer = window.setTimeout(flushInput, 25)
+    })
+    const keydownFallback = (event: KeyboardEvent) => {
+      const active = document.activeElement as HTMLElement | null
+      if (
+        ((active?.tagName === 'INPUT' || active?.tagName === 'TEXTAREA') &&
+          !active.classList.contains('xterm-helper-textarea')) ||
+        active?.isContentEditable ||
+        ws.readyState !== WebSocket.OPEN
+      ) {
+        return
+      }
+      let data = ''
+      if (event.key === 'Enter') {
+        data = '\r'
+      } else if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        data = event.key
+      }
+      if (!data) return
+      event.preventDefault()
+      const before = inputVersion
+      window.setTimeout(() => {
+        if (inputVersion !== before || ws.readyState !== WebSocket.OPEN) {
+          return
+        }
+        inputBuffer += data
+        if (data === '\r') {
+          flushInput()
+          return
+        }
+        if (inputFlushTimer) {
+          window.clearTimeout(inputFlushTimer)
+        }
+        inputFlushTimer = window.setTimeout(flushInput, 25)
+      }, 0)
+    }
+    window.addEventListener('keydown', keydownFallback)
+    const resizeObserver = new ResizeObserver(fitAndResize)
+    resizeObserver.observe(surface)
+    window.setTimeout(() => {
+      fitAndResize()
+      focusTerminal()
+    }, 0)
+    window.setTimeout(focusTerminal, 50)
+    window.setTimeout(focusTerminal, 250)
+
+    return () => {
+      resizeObserver.disconnect()
+      dataDisposable.dispose()
+      window.removeEventListener('keydown', keydownFallback)
+      if (inputFlushTimer) window.clearTimeout(inputFlushTimer)
+      ws.close()
+      wsRef.current = null
+      term.dispose()
+    }
+  }, [runner, sessionId])
+
+  return (
+    <div className="terminal-modal-backdrop" role="dialog" aria-modal="true" aria-label="Terminal">
+      <div className="terminal-modal">
+        <div className="terminal-modal-header">
+          <div className="terminal-title">{terminalTitle}</div>
+          <button type="button" className="terminal-close" onClick={onClose} aria-label="Close terminal">
+            Close
+          </button>
+        </div>
+        <div
+          className="terminal-surface"
+          data-testid="terminal-surface"
+          ref={surfaceRef}
+          onClick={() => surfaceRef.current?.querySelector<HTMLElement>('.xterm-helper-textarea')?.focus()}
+        />
+        {showTranscriptProbe ? (
+          <div className="terminal-transcript-probe" aria-hidden="true">{terminalTranscript}</div>
+        ) : null}
+        {statusText !== 'terminal' ? (
+          <div className="terminal-status" role="status">{statusText}</div>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function isTerminalControlMessage(data: string): boolean {
+  try {
+    const parsed = JSON.parse(data) as { type?: unknown }
+    return parsed?.type === 'session_id'
+  } catch {
+    return false
+  }
+}
+
+function sanitizeTerminalTranscript(data: string): string {
+  return data
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, '')
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '')
+}
+
 const SessionList = forwardRef<
   HTMLElement,
   { sessions: SessionSummary[]; onScroll?: () => void }
@@ -324,8 +561,8 @@ const SessionList = forwardRef<
 })
 
 function useAuthGate() {
-  const [needsAuth, setNeedsAuth] = useState(false)
-  const [ready, setReady] = useState(false)
+  const [needsAuth, setNeedsAuth] = useState(() => !getToken())
+  const [ready, setReady] = useState(() => Boolean(getToken()))
 
   useEffect(() => {
     let cancelled = false
@@ -501,6 +738,12 @@ function coalesceTimeline(events: AgentEvent[]): AgentEvent[] {
       out[idx] = merged
     }
   }
+  if (events.length !== out.length) {
+    debugLog('coalesceTimeline merged stream events', {
+      input: summarizeEvents(events),
+      output: summarizeEvents(out),
+    })
+  }
   return out
 }
 
@@ -557,14 +800,16 @@ function SessionPage() {
   const [events, setEvents] = useState<AgentEvent[]>([])
   const [status, setStatus] = useState('')
   const [workspace, setWorkspace] = useState('')
-  const [runners, setRunners] = useState<string[]>(['opencode'])
-  const [runnerValue, setRunnerValue] = useState(getRunner)
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
+  const [terminalAvailable, setTerminalAvailable] = useState(false)
+  const [terminalOpen, setTerminalOpen] = useState(false)
   const [sessionUpdatedAt, setSessionUpdatedAt] = useState<string | undefined>()
   const [sessionCreatedAt, setSessionCreatedAt] = useState<string | undefined>()
+  const [streamOffset, setStreamOffset] = useState<number | null>(null)
   const streamOffsetRef = useRef<number | null>(null)
   const statusRef = useRef('')
+  const eventsRef = useRef<AgentEvent[]>([])
   const runChromeHoldUntilRef = useRef(0)
   const messageListRef = useRef<HTMLDivElement>(null)
   const showInlineLoading = needsInlineAssistantLoading(events, status === 'running')
@@ -577,16 +822,45 @@ function SessionPage() {
     resetFollow,
   } = useFollowScroll(messageListRef, [timeline, showInlineLoading])
 
+  useEffect(() => {
+    eventsRef.current = events
+  }, [events])
+
+  const updateStreamOffset = useCallback((offset: number | null) => {
+    streamOffsetRef.current = offset
+    setStreamOffset((prev) => (prev === offset ? prev : offset))
+  }, [])
+
   const refresh = useCallback(
     async (options?: { mode?: 'full' | 'meta'; fromStreamClose?: boolean }) => {
       if (!runner || !sessionId) return
+      const refreshStartedAt = Date.now()
+      debugLog('refresh:start', {
+        runner,
+        sessionId,
+        options,
+        statusRef: statusRef.current,
+        streamOffset: streamOffsetRef.current,
+      })
       if (options?.fromStreamClose && statusRef.current === 'running') {
         statusRef.current = 'finished'
         setStatus('finished')
+        debugLog('refresh:stream-close-fast-finish', {
+          runner,
+          sessionId,
+          elapsedMs: Date.now() - refreshStartedAt,
+        })
         return
       }
       const detail = await fetchSessionDetail(runner, sessionId)
-      if (!detail) return
+      if (!detail) {
+        debugLog('refresh:no-detail', {
+          runner,
+          sessionId,
+          elapsedMs: Date.now() - refreshStartedAt,
+        })
+        return
+      }
 
       const mode = options?.mode ?? 'full'
       const nextStatus = detail.session.status
@@ -598,12 +872,27 @@ function SessionPage() {
       if (detail.session.workspace) {
         setWorkspace(detail.session.workspace)
       }
+      if (detail.session.terminal_session_id) {
+        setTerminalAvailable(true)
+      }
 
       if (mode === 'full' || runCompleted) {
         setEvents(detail.events)
         if (detail.events_offset != null && detail.events_offset >= 0) {
-          streamOffsetRef.current = detail.events_offset
+          updateStreamOffset(detail.events_offset)
         }
+        debugLog('refresh:set-events', {
+          runner,
+          sessionId,
+          mode,
+          runCompleted,
+          previousStatus: statusRef.current,
+          nextStatus,
+          eventsOffset: detail.events_offset,
+          terminalSessionID: detail.session.terminal_session_id,
+          events: summarizeEvents(detail.events),
+          elapsedMs: Date.now() - refreshStartedAt,
+        })
       }
 
       const holdRunningChrome =
@@ -614,28 +903,51 @@ function SessionPage() {
         statusRef.current = nextStatus
         setStatus(nextStatus)
       }
+      debugLog('refresh:done', {
+        runner,
+        sessionId,
+        nextStatus,
+        holdRunningChrome,
+        statusRef: statusRef.current,
+        streamOffset: streamOffsetRef.current,
+        elapsedMs: Date.now() - refreshStartedAt,
+      })
     },
-    [runner, sessionId],
+    [runner, sessionId, updateStreamOffset],
   )
 
   useEffect(() => {
-    streamOffsetRef.current = null
+    updateStreamOffset(null)
+    debugLog('session:reset', { runner, sessionId })
     resetFollow()
-  }, [runner, sessionId, resetFollow])
+  }, [runner, sessionId, resetFollow, updateStreamOffset])
 
   useEffect(() => {
     if (!ready || needsAuth || !runner || !sessionId) return
-    void fetchRunners().then((r) => {
-      if (r.runners.length > 0) setRunners(r.runners)
-    })
     void refresh({ mode: 'full' })
   }, [ready, needsAuth, runner, sessionId, refresh])
 
   useEffect(() => {
     if (!ready || needsAuth || !runner || !sessionId) return
+    let stopped = false
+    const refreshTerminal = async () => {
+      const terminal = await fetchTerminalStatus(runner, sessionId)
+      if (!stopped) setTerminalAvailable(terminal.available)
+    }
+    void refreshTerminal()
+    const intervalMs = terminalAvailable && status !== 'running' ? 5000 : 500
+    const timer = window.setInterval(refreshTerminal, intervalMs)
+    return () => {
+      stopped = true
+      window.clearInterval(timer)
+    }
+  }, [ready, needsAuth, runner, sessionId, status, terminalAvailable])
+
+  useEffect(() => {
+    if (!ready || needsAuth || !runner || !sessionId) return
     if (status !== 'running') return
 
-    const offset = streamOffsetRef.current
+    const offset = streamOffset
     if (offset == null) return
 
     const ac = new AbortController()
@@ -645,15 +957,59 @@ function SessionPage() {
     const startStream = () => {
       if (started) return
       started = true
+      debugLog('sse:start', {
+        runner,
+        sessionId,
+        offset,
+        statusRef: statusRef.current,
+        eventSummary: summarizeEvents(eventsRef.current),
+      })
       subscribeSessionEvents(
         runner,
         sessionId,
         offset,
         (ev) => {
-          setEvents((prev) => coalesceTimeline([...prev, ev]))
+          if (streamOffsetRef.current !== offset) {
+            debugLog('sse:stale-event-ignored', {
+              runner,
+              sessionId,
+              offset,
+              currentOffset: streamOffsetRef.current,
+              event: ev,
+            })
+            return
+          }
+          setEvents((prev) => {
+            const next = coalesceTimeline([...prev, ev])
+            debugLog('sse:event', {
+              runner,
+              sessionId,
+              offset,
+              event: ev,
+              before: summarizeEvents(prev),
+              after: summarizeEvents(next),
+            })
+            return next
+          })
         },
         ac.signal,
         () => {
+          if (streamOffsetRef.current !== offset) {
+            debugLog('sse:stale-close-ignored', {
+              runner,
+              sessionId,
+              offset,
+              currentOffset: streamOffsetRef.current,
+              statusRef: statusRef.current,
+            })
+            return
+          }
+          debugLog('sse:close', {
+            runner,
+            sessionId,
+            offset,
+            statusRef: statusRef.current,
+          })
           void refresh({ mode: 'full', fromStreamClose: true })
         },
       )
@@ -661,6 +1017,12 @@ function SessionPage() {
 
     // Defer SSE until initial session fetches settle so Playwright networkidle can complete.
     const scheduleStart = () => {
+      debugLog('sse:schedule', {
+        runner,
+        sessionId,
+        offset,
+        documentReadyState: document.readyState,
+      })
       delayTimer = window.setTimeout(startStream, 1500)
     }
     if (document.readyState === 'complete') {
@@ -673,27 +1035,53 @@ function SessionPage() {
       if (delayTimer) window.clearTimeout(delayTimer)
       window.removeEventListener('load', scheduleStart)
       ac.abort()
+      debugLog('sse:cleanup', { runner, sessionId, offset })
     }
-  }, [ready, needsAuth, runner, sessionId, status, refresh])
+  }, [ready, needsAuth, runner, sessionId, status, streamOffset, refresh])
 
   const handleSend = async () => {
     const text = draft.trim()
     if (!text || sending || !runner || !sessionId) return
+    const sendStartedAt = Date.now()
     const listEl = messageListRef.current
     const detached =
       listEl != null
         ? distanceFromBottom(listEl) > BOTTOM_THRESHOLD_PX
         : followModeRef.current === 'detached'
+    debugLog('send:start', {
+      runner,
+      sessionId,
+      text,
+      statusRef: statusRef.current,
+      streamOffset: streamOffsetRef.current,
+      detached,
+      events: summarizeEvents(events),
+    })
     if (detached) {
       followModeRef.current = 'detached'
     }
     setSending(true)
     try {
       const ok = await sendSessionMessage(runner, sessionId, text)
+      debugLog('send:post-result', {
+        runner,
+        sessionId,
+        text,
+        ok,
+        elapsedMs: Date.now() - sendStartedAt,
+      })
       if (ok) {
         setDraft('')
         // Refresh first so streamOffsetRef is current before SSE starts on running.
         await refresh({ mode: 'full' })
+        debugLog('send:refresh-after-post-done', {
+          runner,
+          sessionId,
+          text,
+          streamOffset: streamOffsetRef.current,
+          statusRef: statusRef.current,
+          elapsedMs: Date.now() - sendStartedAt,
+        })
         if (detached) {
           // Hold running chrome briefly so fast fake-codex runs stay visible while detached.
           runChromeHoldUntilRef.current = Date.now() + 12_000
@@ -705,6 +1093,14 @@ function SessionPage() {
       }
     } finally {
       setSending(false)
+      debugLog('send:done', {
+        runner,
+        sessionId,
+        text,
+        statusRef: statusRef.current,
+        streamOffset: streamOffsetRef.current,
+        elapsedMs: Date.now() - sendStartedAt,
+      })
     }
   }
 
@@ -719,105 +1115,123 @@ function SessionPage() {
   }
 
   const isRunning = status === 'running'
+  const showTerminalButton = terminalAvailable || isTTYRunnerID(runner)
 
   return (
     <Shell sessionPage>
-      <header className="top-bar">
-        <button type="button" className="back-link" onClick={() => navigate('/')}>
-          ← Sessions
-        </button>
-        <RunnerPicker
-          runners={runners}
-          value={runnerValue}
-          onChange={(r) => {
-            setRunnerValue(r)
-            setRunner(r)
-          }}
-        />
-      </header>
-      <div className="main-panel chat-active" data-testid="chat-active">
-        <div className="session-header">
-          <code>{sessionId}</code>
-          {isRunning && <span className="status-pill">running</span>}
-          {workspace ? (
-            <div className="workspace-display" data-testid="workspace">
-              {workspace}
-            </div>
-          ) : null}
-        </div>
-        {isRunning && !showInlineLoading ? (
-          <AgentRunningCard updatedAt={sessionUpdatedAt} createdAt={sessionCreatedAt} />
-        ) : null}
-        <div className="message-list-region">
-          {showJumpToLatest ? (
-            <button
-              type="button"
-              className="jump-to-latest"
-              data-testid="jump-to-latest"
-              onClick={handleJumpToLatest}
-            >
-              Jump to latest
+      {!terminalOpen ? (
+        <>
+          <header className="top-bar">
+            <button type="button" className="back-link" onClick={() => navigate('/')}>
+              ← Sessions
             </button>
-          ) : null}
-          <div
-            className="message-list"
-            data-testid="message-list"
-            ref={messageListRef}
-            onScroll={syncFollowFromScroll}
-          >
-          {timeline.map((ev, i) => {
-            const role = ev.role === 'user' ? 'user' : 'assistant'
-            const roleLabel = role === 'user' ? 'You' : 'Agent'
-            const tsText = ev.timestamp != null ? formatMessageTimestamp(ev.timestamp) : ''
-            return (
-              <div
-                key={`${ev.id ?? ''}-${ev.timestamp ?? i}-${i}`}
-                data-testid="message-item"
-                className={`message-row message-row-${role}`}
-              >
-                <div
-                  className={`message-item message-item-${role}`}
-                  data-testid={`message-item-${role}`}
+            <div className="session-actions">
+              <span className="session-runner" data-testid="session-runner">{runner}</span>
+              {showTerminalButton ? (
+                <button
+                  type="button"
+                  className="terminal-button"
+                  aria-label="Open terminal"
+                  onClick={() => setTerminalOpen(true)}
                 >
-                  <div className="message-meta">
-                    <span className="message-role">{roleLabel}</span>
-                    {tsText ? (
-                      <time className="message-timestamp" data-testid="message-timestamp" dateTime={String(ev.timestamp)}>
-                        {tsText}
-                      </time>
-                    ) : null}
-                  </div>
-                  <div className="message-body">{ev.text ?? (role === 'assistant' ? '…' : ev.type)}</div>
+                  Terminal
+                </button>
+              ) : null}
+            </div>
+          </header>
+          <div className="main-panel chat-active" data-testid="chat-active">
+            <div className="session-header">
+              <code>{sessionId}</code>
+              {status ? <span className="status-pill">{status}</span> : null}
+              {workspace ? (
+                <div className="workspace-display" data-testid="workspace">
+                  {workspace}
                 </div>
-              </div>
-            )
-          })}
-          {showInlineLoading ? (
-            <div className="message-row message-row-assistant" data-testid="message-item">
+              ) : null}
+            </div>
+            {isRunning && !showInlineLoading ? (
+              <AgentRunningCard updatedAt={sessionUpdatedAt} createdAt={sessionCreatedAt} />
+            ) : null}
+            <div className="message-list-region">
+              {showJumpToLatest ? (
+                <button
+                  type="button"
+                  className="jump-to-latest"
+                  data-testid="jump-to-latest"
+                  onClick={handleJumpToLatest}
+                >
+                  Jump to latest
+                </button>
+              ) : null}
               <div
-                className="message-item message-item-assistant message-item-assistant-loading"
-                data-testid="message-item-assistant-loading"
+                className="message-list"
+                data-testid="message-list"
+                ref={messageListRef}
+                onScroll={syncFollowFromScroll}
               >
-                <div className="message-meta">
-                  <span className="message-role">Agent</span>
+              {timeline.map((ev, i) => {
+                const role = ev.role === 'user' ? 'user' : 'assistant'
+                const roleLabel = role === 'user' ? 'You' : 'Agent'
+                const tsText = ev.timestamp != null ? formatMessageTimestamp(ev.timestamp) : ''
+                return (
+                  <div
+                    key={`${ev.id ?? ''}-${ev.timestamp ?? i}-${i}`}
+                    data-testid="message-item"
+                    className={`message-row message-row-${role}`}
+                  >
+                    <div
+                      className={`message-item message-item-${role}`}
+                      data-testid={`message-item-${role}`}
+                    >
+                      <div className="message-meta">
+                        <span className="message-role">{roleLabel}</span>
+                        {tsText ? (
+                          <time className="message-timestamp" data-testid="message-timestamp" dateTime={String(ev.timestamp)}>
+                            {tsText}
+                          </time>
+                        ) : null}
+                      </div>
+                      <div className="message-body">{ev.text ?? (role === 'assistant' ? '…' : ev.type)}</div>
+                    </div>
+                  </div>
+                )
+              })}
+              {showInlineLoading ? (
+                <div className="message-row message-row-assistant" data-testid="message-item">
+                  <div
+                    className="message-item message-item-assistant message-item-assistant-loading"
+                    data-testid="message-item-assistant-loading"
+                  >
+                    <div className="message-meta">
+                      <span className="message-role">Agent</span>
+                    </div>
+                    <div className="message-body assistant-loading-dots" aria-label="Agent is typing">
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                  </div>
                 </div>
-                <div className="message-body assistant-loading-dots" aria-label="Agent is typing">
-                  <span />
-                  <span />
-                  <span />
+              ) : null}
+              {timeline.length === 0 && !showInlineLoading && (
+                <div className="message-item message-item-muted" data-testid="message-item">
+                  Waiting for agent…
                 </div>
+              )}
               </div>
             </div>
-          ) : null}
-          {timeline.length === 0 && !showInlineLoading && (
-            <div className="message-item message-item-muted" data-testid="message-item">
-              Waiting for agent…
-            </div>
-          )}
           </div>
-        </div>
-      </div>
-      <Composer value={draft} onChange={setDraft} onSend={() => void handleSend()} sending={sending} />
+          <Composer
+            value={draft}
+            onChange={setDraft}
+            onSend={() => void handleSend()}
+            sending={sending}
+          />
+        </>
+      ) : null}
+      {terminalOpen && runner && sessionId ? (
+        <TerminalModal runner={runner} sessionId={sessionId} onClose={() => setTerminalOpen(false)} />
+      ) : null}
     </Shell>
   )
 }

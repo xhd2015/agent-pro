@@ -19,21 +19,23 @@ import (
 
 // RunOptions configures a grok-tty headless invocation.
 type RunOptions struct {
-	Home            string
-	Workspace       string
-	Prompt          string
-	Model           string
-	ResumeSessionID string
-	SettingsPath    string
-	AgentPath       string
-	RunnerID        string
-	StderrPrefix    string
-	RegistryDir     string
-	BannerProvider  string
-	BannerMarkers   []string
-	DisableTail     bool
-	Stderr          io.Writer
-	Emit            func(types.AgentEvent) error
+	Home                string
+	Workspace           string
+	Prompt              string
+	Model               string
+	ResumeSessionID     string
+	SettingsPath        string
+	AgentPath           string
+	RunnerID            string
+	StderrPrefix        string
+	RegistryDir         string
+	BannerProvider      string
+	BannerMarkers       []string
+	DisableTail         bool
+	KeepTerminalAlive   bool
+	Stderr              io.Writer
+	Emit                func(types.AgentEvent) error
+	OnTerminalSessionID func(string)
 }
 
 // Run starts an adhoc ptywrap server, runs interactive grok in a PTY, injects the
@@ -119,7 +121,12 @@ func Run(ctx context.Context, opts RunOptions) (captured string, grokSessionID s
 	if releaseSessionID != nil {
 		releaseSessionID()
 	}
-	defer RemoveRegistryFor(opts.Home, cfg.registryDir, sessionID)
+	if opts.OnTerminalSessionID != nil {
+		opts.OnTerminalSessionID(sessionID)
+	}
+	if !opts.KeepTerminalAlive {
+		defer RemoveRegistryFor(opts.Home, cfg.registryDir, sessionID)
+	}
 
 	fmt.Fprintf(opts.Stderr, "%s: %s\n", cfg.stderrPrefix, sessionID)
 
@@ -151,9 +158,11 @@ func Run(ctx context.Context, opts RunOptions) (captured string, grokSessionID s
 	var autoExitCancel context.CancelFunc
 	if cfg.bannerProvider == "codex" || cfg.bannerProvider == "codex-tty" || cfg.runnerID == "codex-tty" {
 		go retryCodexSubmit(ctx, mgr, sessionID, promptText)
-		autoExitCtx, cancel := context.WithCancel(ctx)
-		autoExitCancel = cancel
-		go autoExitCodexAfterTurn(autoExitCtx, mgr, sessionID, promptText)
+		if !opts.KeepTerminalAlive {
+			autoExitCtx, cancel := context.WithCancel(ctx)
+			autoExitCancel = cancel
+			go autoExitCodexAfterTurn(autoExitCtx, mgr, sessionID, promptText)
+		}
 	}
 
 	var tailState struct {
@@ -257,13 +266,20 @@ func Run(ctx context.Context, opts RunOptions) (captured string, grokSessionID s
 		}()
 	}
 
-	waitErr := mgr.Wait(sessionID)
-	if autoExitCancel != nil {
-		autoExitCancel()
+	var waitErr error
+	if opts.KeepTerminalAlive {
+		waitErr = waitForPersistentTurn(ctx, mgr, sessionID, promptText, cfg)
+	} else {
+		waitErr = mgr.Wait(sessionID)
+		if autoExitCancel != nil {
+			autoExitCancel()
+		}
 	}
 	scrollback := mgr.Scrollback(sessionID)
-	mgr.Remove(sessionID)
-	shutdown()
+	if !opts.KeepTerminalAlive {
+		mgr.Remove(sessionID)
+		shutdown()
+	}
 
 	if tailCancel != nil {
 		tailCancel()

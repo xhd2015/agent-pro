@@ -142,6 +142,40 @@ html:has(.home-page) #root {
   font-size: 14px;
 }
 
+.session-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.session-runner {
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: #e8eaed;
+}
+
+.terminal-button,
+.terminal-close {
+  min-height: 36px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #3a4254;
+  background: #202635;
+  color: #e8eaed;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.terminal-button:hover,
+.terminal-close:hover {
+  border-color: #8ab4f8;
+}
+
 .main-panel {
   flex: 1;
   min-height: 0;
@@ -395,6 +429,82 @@ html:has(.home-page) #root {
 
 .message-item-assistant-loading {
   min-width: 72px;
+}
+
+.terminal-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: 18px;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.68);
+}
+
+.modal-background-hidden {
+  display: none !important;
+}
+
+.terminal-modal {
+  width: min(920px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #3a4254;
+  border-radius: 8px;
+  background: #11141b;
+  overflow: hidden;
+}
+
+.terminal-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #2a2f3a;
+  background: #151922;
+}
+
+.terminal-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.terminal-surface {
+  flex: 1;
+  min-height: 280px;
+  padding: 8px;
+  overflow: hidden;
+  outline: none;
+  background: #05070a;
+}
+
+.terminal-surface .xterm {
+  height: 100%;
+}
+
+.terminal-surface .xterm-viewport {
+  background: #05070a !important;
+}
+
+.terminal-transcript-probe {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: pre-wrap;
+}
+
+.terminal-status {
+  padding: 8px 12px;
+  border-top: 1px solid #2a2f3a;
+  color: #f28b82;
+  font-size: 13px;
+  background: #151922;
 }
 
 .assistant-loading-dots {

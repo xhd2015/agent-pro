@@ -173,6 +173,49 @@ func autoExitCodexAfterTurn(ctx context.Context, mgr *ptywrap.Manager, sessionID
 	}
 }
 
+func waitForPersistentTurn(ctx context.Context, mgr *ptywrap.Manager, sessionID, prompt string, cfg runConfig) error {
+	timeout := 90 * time.Second
+	if isCodexProvider(cfg.bannerProvider) || cfg.runnerID == "codex-tty" {
+		timeout = 3 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	promptCompact := compactBannerText(strings.ToLower(prompt))
+	var completeSince time.Time
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+		scrollback := mgr.Scrollback(sessionID)
+		if persistentTurnComplete(scrollback, prompt, promptCompact, cfg) {
+			if completeSince.IsZero() {
+				completeSince = time.Now()
+				continue
+			}
+			if time.Since(completeSince) >= 750*time.Millisecond {
+				return nil
+			}
+			continue
+		}
+		completeSince = time.Time{}
+	}
+}
+
+func persistentTurnComplete(scrollback []byte, prompt, promptCompact string, cfg runConfig) bool {
+	if isCodexProvider(cfg.bannerProvider) || cfg.runnerID == "codex-tty" {
+		if strings.TrimSpace(extractAssistantTextConfigForProvider(scrollback, prompt, cfg.bannerMarkers, cfg.bannerProvider)) != "" {
+			return true
+		}
+		return codexTurnCompleteForExit(scrollback, promptCompact)
+	}
+	return strings.TrimSpace(extractAssistantTextConfigForProvider(scrollback, prompt, cfg.bannerMarkers, cfg.bannerProvider)) != ""
+}
+
 func retryCodexSubmit(ctx context.Context, mgr *ptywrap.Manager, sessionID, prompt string) {
 	promptCompact := compactBannerText(strings.ToLower(prompt))
 	if promptCompact == "" {
@@ -180,11 +223,26 @@ func retryCodexSubmit(ctx context.Context, mgr *ptywrap.Manager, sessionID, prom
 	}
 	ticker := time.NewTicker(750 * time.Millisecond)
 	defer ticker.Stop()
-	for attempts := 0; attempts < 3; attempts++ {
+	deadline := time.Now().Add(2 * time.Minute)
+	var lastQueueAttempt time.Time
+	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+		}
+		scrollback := mgr.Scrollback(sessionID)
+		if codexTurnCompleteForExit(scrollback, promptCompact) {
+			return
+		}
+		if !codexPromptStillInInput(scrollback, promptCompact) {
+			if codexPromptVisibleInInput(scrollback, promptCompact) && time.Since(lastQueueAttempt) >= 2*time.Second {
+				lastQueueAttempt = time.Now()
+				if err := mgr.WriteInput(sessionID, []byte("\t")); err != nil {
+					return
+				}
+			}
+			continue
 		}
 		if err := mgr.WriteInput(sessionID, []byte("\r")); err != nil {
 			return
@@ -210,6 +268,16 @@ func codexPromptStillInInput(scrollback []byte, promptCompact string) bool {
 		}
 	}
 	return true
+}
+
+func codexPromptVisibleInInput(scrollback []byte, promptCompact string) bool {
+	if promptCompact == "" {
+		return false
+	}
+	rawCompact := compactBannerText(strings.ToLower(stripANSI(scrollback)))
+	screenCompact := compactBannerText(strings.ToLower(stripANSI(renderTerminalText(scrollback))))
+	return strings.Contains(rawCompact, "›"+promptCompact) ||
+		strings.Contains(screenCompact, "›"+promptCompact)
 }
 
 func codexTurnCompleteForExit(scrollback []byte, promptCompact string) bool {
@@ -395,6 +463,10 @@ func cleanCodexScrollbackFallback(scrollback []byte, prompt string, markers []st
 		if line == "" {
 			continue
 		}
+		if bulletText := extractCodexBulletText(line, prompt, markers); bulletText != "" {
+			kept = append(kept, bulletText)
+			continue
+		}
 		if skipCodexFallbackLine(line, prompt, markers) {
 			continue
 		}
@@ -402,6 +474,32 @@ func cleanCodexScrollbackFallback(scrollback []byte, prompt string, markers []st
 	}
 	if len(kept) == 0 {
 		return ""
+	}
+	return strings.TrimSpace(strings.Join(kept, "\n"))
+}
+
+func extractCodexBulletText(line, prompt string, markers []string) string {
+	if !strings.Contains(line, "•") {
+		return ""
+	}
+	var kept []string
+	for _, segment := range strings.Split(line, "•")[1:] {
+		if idx := strings.Index(segment, "›"); idx >= 0 {
+			segment = segment[:idx]
+		}
+		segment = cleanTerminalTextLine(segment)
+		if segment == "" || skipCodexFallbackLine(segment, prompt, markers) {
+			continue
+		}
+		lower := strings.ToLower(segment)
+		if strings.HasPrefix(lower, "working") ||
+			strings.HasPrefix(lower, "running ") ||
+			strings.HasPrefix(lower, "starting ") ||
+			strings.HasPrefix(lower, "queued ") ||
+			strings.Contains(lower, "esc to interrupt") {
+			continue
+		}
+		kept = append(kept, segment)
 	}
 	return strings.TrimSpace(strings.Join(kept, "\n"))
 }
@@ -440,11 +538,20 @@ func skipCodexFallbackLine(line, prompt string, markers []string) bool {
 		return true
 	}
 	if strings.Contains(lower, "openai codex") ||
+		strings.Contains(lower, "[features].codex_hooks") ||
+		strings.Contains(lower, "[features].hooks") ||
+		strings.Contains(lower, "developers.openai.com/codex") ||
+		strings.HasPrefix(lower, "enable it with") ||
+		strings.HasPrefix(lower, "for details") ||
+		strings.HasPrefix(lower, "tip:") ||
+		strings.HasPrefix(lower, "permissions:") ||
 		strings.Contains(compact, "model:loading") ||
 		strings.HasPrefix(lower, "model:") ||
 		strings.HasPrefix(lower, "directory:") ||
 		strings.Contains(lower, "starting mcp servers") ||
 		strings.Contains(lower, "booting mcp") ||
+		strings.Contains(lower, "running stop hook") ||
+		strings.Contains(lower, "running userpromptsubmit hook") ||
 		strings.HasPrefix(lower, "working") {
 		return true
 	}

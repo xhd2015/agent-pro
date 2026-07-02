@@ -26,16 +26,17 @@ import (
 
 // RunOptions configures a headless agent-run invocation.
 type RunOptions struct {
-	Prompt       string
-	Runner       string
-	Model        string
-	SessionID    string
-	JSON         bool
-	Workspace    string
-	Store        agentstorage.Store
-	Stdout       io.Writer
-	Stderr       io.Writer
-	StreamPhases bool // web: phased assistant start/update/end; CLI: single message events
+	Prompt            string
+	Runner            string
+	Model             string
+	SessionID         string
+	JSON              bool
+	Workspace         string
+	Store             agentstorage.Store
+	Stdout            io.Writer
+	Stderr            io.Writer
+	StreamPhases      bool // web: phased assistant start/update/end; CLI: single message events
+	KeepTerminalAlive bool
 }
 
 // Run executes the agent runner, streams output, and persists AgentEvents.
@@ -130,9 +131,19 @@ func Run(ctx context.Context, opts RunOptions) error {
 		return err
 	}
 
-	newRunnerSessionID, runErr := streamRunner(ctx, runner, opts.Store.Home(), workspace, env, runnerPrompt, opts.Model, runnerSessionID, opts.StreamPhases, emit, stderr)
+	persistTerminalSessionID := func(id string) {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			return
+		}
+		_ = opts.Store.UpdateSessionTerminalSessionID(runner, sessionID, id)
+	}
+	newRunnerSessionID, newTerminalSessionID, runErr := streamRunner(ctx, runner, opts.Store.Home(), workspace, env, runnerPrompt, opts.Model, runnerSessionID, opts.StreamPhases, opts.KeepTerminalAlive, persistTerminalSessionID, emit, stderr)
 	if strings.TrimSpace(newRunnerSessionID) != "" {
 		_ = opts.Store.UpdateSessionRunnerSessionID(runner, sessionID, newRunnerSessionID)
+	}
+	if strings.TrimSpace(newTerminalSessionID) != "" {
+		_ = opts.Store.UpdateSessionTerminalSessionID(runner, sessionID, newTerminalSessionID)
 	}
 	if err := emit(types.AgentEvent{Type: types.ActionDone}); err != nil {
 		return err
@@ -145,20 +156,21 @@ func Run(ctx context.Context, opts RunOptions) error {
 	return runErr
 }
 
-func streamRunner(ctx context.Context, runner, home, workspace string, env *agentexec.Env, prompt, model, runnerSessionID string, streamPhases bool, emit func(types.AgentEvent) error, stderr io.Writer) (string, error) {
+func streamRunner(ctx context.Context, runner, home, workspace string, env *agentexec.Env, prompt, model, runnerSessionID string, streamPhases, keepTerminalAlive bool, onTerminalSessionID func(string), emit func(types.AgentEvent) error, stderr io.Writer) (string, string, error) {
 	switch registry.AgentRunnerID(runner) {
 	case registry.AgentRunnerGrokTTY:
-		return streamGrokTTY(ctx, home, workspace, prompt, model, runnerSessionID, emit, stderr)
+		return streamGrokTTY(ctx, home, workspace, prompt, model, runnerSessionID, keepTerminalAlive, onTerminalSessionID, emit, stderr)
 	case registry.AgentRunnerCodexTTY:
-		return streamCodexTTY(ctx, home, workspace, prompt, model, runnerSessionID, emit, stderr)
+		return streamCodexTTY(ctx, home, workspace, prompt, model, runnerSessionID, keepTerminalAlive, onTerminalSessionID, emit, stderr)
 	case registry.AgentRunnerFakeCodex, registry.AgentRunnerCodex:
 		err := streamCodexLike(ctx, runner, workspace, env, prompt, model, streamPhases, emit, stderr)
-		return "", err
+		return "", "", err
 	default:
 		if _, err := agentprovider.Build(registry.AgentRunnerID(runner), "", workspace, env); err != nil {
-			return "", err
+			return "", "", err
 		}
-		return streamViaRegistry(ctx, runner, workspace, env, prompt, model, runnerSessionID, streamPhases, emit)
+		runnerSessionID, err := streamViaRegistry(ctx, runner, workspace, env, prompt, model, runnerSessionID, streamPhases, emit)
+		return runnerSessionID, "", err
 	}
 }
 
@@ -252,42 +264,58 @@ func runnerSessionIDFromAgent(agent registry.Agent) string {
 	return ""
 }
 
-func streamGrokTTY(ctx context.Context, home, workspace, prompt, model, runnerSessionID string, emit func(types.AgentEvent) error, stderr io.Writer) (string, error) {
+func streamGrokTTY(ctx context.Context, home, workspace, prompt, model, runnerSessionID string, keepTerminalAlive bool, onTerminalSessionID func(string), emit func(types.AgentEvent) error, stderr io.Writer) (string, string, error) {
+	terminalSessionID := ""
 	_, grokSessionID, err := groktty.Run(ctx, groktty.RunOptions{
-		Home:            home,
-		Workspace:       workspace,
-		Prompt:          prompt,
-		Model:           model,
-		ResumeSessionID: runnerSessionID,
-		Stderr:          stderr,
-		Emit:            emit,
+		Home:              home,
+		Workspace:         workspace,
+		Prompt:            prompt,
+		Model:             model,
+		ResumeSessionID:   runnerSessionID,
+		Stderr:            stderr,
+		Emit:              emit,
+		KeepTerminalAlive: keepTerminalAlive,
+		OnTerminalSessionID: func(id string) {
+			terminalSessionID = strings.TrimSpace(id)
+			if onTerminalSessionID != nil {
+				onTerminalSessionID(terminalSessionID)
+			}
+		},
 	})
 	if strings.TrimSpace(grokSessionID) != "" {
-		return grokSessionID, err
+		return grokSessionID, terminalSessionID, err
 	}
-	return runnerSessionID, err
+	return runnerSessionID, terminalSessionID, err
 }
 
-func streamCodexTTY(ctx context.Context, home, workspace, prompt, model, runnerSessionID string, emit func(types.AgentEvent) error, stderr io.Writer) (string, error) {
+func streamCodexTTY(ctx context.Context, home, workspace, prompt, model, runnerSessionID string, keepTerminalAlive bool, onTerminalSessionID func(string), emit func(types.AgentEvent) error, stderr io.Writer) (string, string, error) {
+	terminalSessionID := ""
 	_, codexSessionID, err := groktty.Run(ctx, groktty.RunOptions{
-		Home:            home,
-		Workspace:       workspace,
-		Prompt:          prompt,
-		Model:           model,
-		ResumeSessionID: runnerSessionID,
-		RunnerID:        string(registry.AgentRunnerCodexTTY),
-		StderrPrefix:    string(registry.AgentRunnerCodexTTY),
-		RegistryDir:     "codex-tty-registry",
-		BannerProvider:  "codex",
-		BannerMarkers:   []string{"CODEX_TTY_BANNER"},
-		DisableTail:     true,
-		Stderr:          stderr,
-		Emit:            emit,
+		Home:              home,
+		Workspace:         workspace,
+		Prompt:            prompt,
+		Model:             model,
+		ResumeSessionID:   runnerSessionID,
+		RunnerID:          string(registry.AgentRunnerCodexTTY),
+		StderrPrefix:      string(registry.AgentRunnerCodexTTY),
+		RegistryDir:       "codex-tty-registry",
+		BannerProvider:    "codex",
+		BannerMarkers:     []string{"CODEX_TTY_BANNER"},
+		DisableTail:       true,
+		Stderr:            stderr,
+		Emit:              emit,
+		KeepTerminalAlive: keepTerminalAlive,
+		OnTerminalSessionID: func(id string) {
+			terminalSessionID = strings.TrimSpace(id)
+			if onTerminalSessionID != nil {
+				onTerminalSessionID(terminalSessionID)
+			}
+		},
 	})
 	if strings.TrimSpace(codexSessionID) != "" {
-		return codexSessionID, err
+		return codexSessionID, terminalSessionID, err
 	}
-	return runnerSessionID, err
+	return runnerSessionID, terminalSessionID, err
 }
 
 func streamCodexLike(ctx context.Context, runner, workspace string, env *agentexec.Env, prompt, model string, streamPhases bool, emit func(types.AgentEvent) error, stderr io.Writer) error {

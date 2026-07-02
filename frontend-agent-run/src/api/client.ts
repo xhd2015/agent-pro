@@ -56,6 +56,7 @@ export type SessionSummary = {
   runner: string
   session_id: string
   status: string
+  terminal_session_id?: string
   workspace?: string
   model?: string
   created_at?: string
@@ -102,6 +103,13 @@ export type SessionDetail = {
   events_offset?: number
 }
 
+export type TerminalStatus = {
+  available: boolean
+  runner: string
+  session_id: string
+  terminal_session_id?: string
+}
+
 export async function fetchSessionDetail(runner: string, sessionId: string): Promise<SessionDetail | null> {
   const res = await apiFetch(
     `/api/agent-run/sessions/${encodeURIComponent(runner)}/${encodeURIComponent(sessionId)}`,
@@ -137,6 +145,30 @@ export async function sendSessionMessage(
     },
   )
   return res.ok
+}
+
+export async function fetchTerminalStatus(
+  runner: string,
+  sessionId: string,
+): Promise<TerminalStatus> {
+  const res = await apiFetch(
+    `/api/agent-run/sessions/${encodeURIComponent(runner)}/${encodeURIComponent(sessionId)}/terminal`,
+  )
+  if (!res.ok) {
+    return { available: false, runner, session_id: sessionId }
+  }
+  return (await res.json()) as TerminalStatus
+}
+
+export function openTerminalWebSocket(runner: string, sessionId: string): WebSocket {
+  const token = getToken()
+  const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const path = `/api/agent-run/sessions/${encodeURIComponent(runner)}/${encodeURIComponent(sessionId)}/terminal/ws`
+  const url = new URL(path, `${scheme}//${window.location.host}`)
+  if (token) {
+    url.searchParams.set('token', token)
+  }
+  return new WebSocket(url)
 }
 
 /** Tails session events via SSE (supports Bearer auth). Calls onEvent per AgentEvent JSON line. */

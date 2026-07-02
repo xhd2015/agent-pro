@@ -1,0 +1,19 @@
+## Expected
+
+- Resize message is forwarded to the upstream terminal websocket.
+
+```go
+import (
+	"strings"
+	"testing"
+)
+
+func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(resp.WSOutput, "resize-ok") && !strings.Contains(resp.WSResize, `"cols":100`) {
+		t.Fatalf("resize was not forwarded; output=%q resize=%q error=%q", resp.WSOutput, resp.WSResize, resp.WSError)
+	}
+}
+```

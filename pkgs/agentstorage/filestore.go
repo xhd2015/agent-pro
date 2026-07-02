@@ -128,6 +128,24 @@ func (s *fileStore) UpdateSessionRunnerSessionID(runner, sessionID, runnerSessio
 	return os.WriteFile(filepath.Join(s.sessionDir(runner, sessionID), "meta.json"), data, 0644)
 }
 
+func (s *fileStore) UpdateSessionTerminalSessionID(runner, sessionID, terminalSessionID string) error {
+	sess, err := s.GetSession(runner, sessionID)
+	if err != nil {
+		return err
+	}
+	terminalSessionID = strings.TrimSpace(terminalSessionID)
+	if terminalSessionID == "" {
+		return nil
+	}
+	sess.Meta.TerminalSessionID = terminalSessionID
+	sess.Meta.UpdatedAt = nowRFC3339()
+	data, err := json.Marshal(sess.Meta)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(s.sessionDir(runner, sessionID), "meta.json"), data, 0644)
+}
+
 func (s *fileStore) ListSessions(runner string) ([]SessionMeta, error) {
 	root := filepath.Join(s.home, "sessions", runner)
 	entries, err := os.ReadDir(root)
