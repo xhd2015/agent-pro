@@ -127,6 +127,12 @@ cmd/agent-run/tests/
     ├── attach/                      registry lookup + WS attach
     ├── help/                        attach + codex-tty runner docs
     └── real-codex/                  label: codex — real Codex CLI on PATH
+└── tty/                             nested root: tty status/attach/send subcommands (see tty/DOCTEST.md)
+    ├── help/lists-subcommands/      tty --help lists status, attach, send
+    ├── status/                      registry read + screen detection
+    ├── attach/                      tty attach + shortcut alias
+    ├── attach-shortcut/             agent-run attach delegates to tty attach
+    └── send/                        WS prompt inject + response capture
 ```
 
 ## Test Index
@@ -176,11 +182,13 @@ cmd/agent-run/tests/
 an adhoc ptywrap server on a random port; session ids print to stderr as
 `grok-tty: session-N`. Default suite uses `AGENT_RUN_GROK_TTY_COMMAND` fake TUI;
 `real-grok/` leaves require `--label grok` and real `grok` on PATH.
+Keep-tty leaves test `--keep-tty` flag persistence.
 
 ```sh
 doctest vet ./cmd/agent-run/tests/grok-tty
 doctest test ./cmd/agent-run/tests/grok-tty
 doctest test --label grok ./cmd/agent-run/tests/grok-tty/real-grok
+doctest test -v ./cmd/agent-run/tests/grok-tty/run/keep-tty-registry-persists
 ```
 
 ## Nested: codex-tty (PTY interactive runner)
@@ -194,6 +202,20 @@ spawns an adhoc ptywrap server on a random port; session ids print to stderr as
 doctest vet ./cmd/agent-run/tests/codex-tty
 doctest test ./cmd/agent-run/tests/codex-tty
 doctest test --label codex ./cmd/agent-run/tests/codex-tty/real-codex
+```
+
+## Nested: tty (status / attach / send)
+
+`tty` tests are a **nested DOCTEST root** (inheritance firewall). Tests cover
+the `agent-run tty` subcommand group — status, attach, and send — as well as
+the `agent-run attach` shortcut alias. Mock registry JSON files and fake
+in-process ptywrap HTTP+WebSocket servers provide deterministic test harnesses.
+
+```sh
+doctest vet ./cmd/agent-run/tests/tty
+doctest test ./cmd/agent-run/tests/tty
+doctest test -v ./cmd/agent-run/tests/tty/status/registry-entry-valid/human-readable
+doctest test -v ./cmd/agent-run/tests/tty/send/sends-to-live-terminal
 ```
 
 ## Nested: web layout (Playwright)
@@ -222,6 +244,8 @@ doctest test -v ./cmd/agent-run/tests/grok-tty/run/captures-tui-output
 doctest test --label grok ./cmd/agent-run/tests/grok-tty/real-grok
 doctest test -v ./cmd/agent-run/tests/codex-tty/run/captures-tui-output
 doctest test --label codex ./cmd/agent-run/tests/codex-tty/real-codex
+doctest test -v ./cmd/agent-run/tests/tty/status/registry-entry-valid/human-readable
+doctest test -v ./cmd/agent-run/tests/tty/send/sends-to-live-terminal
 ```
 
 ```go

@@ -75,7 +75,9 @@ cmd/agent-run/tests/grok-tty/
 │   ├── stderr-grok-session-before-stdout-stream/  # stderr grok lines before stdout stream marker
 │   ├── discovery-polls-until-session-appears/  # delayed session dir (5s) still discovered + streams
 │   ├── stdout-streams-formatted-events/  # stdout 💬 user, ⚡ tool, assistant from updates.jsonl
-│   └── rejects-prior-session-same-prompt/  # old "run ls" session ignored; new session tailed
+│   ├── rejects-prior-session-same-prompt/  # old "run ls" session ignored; new session tailed
+│   ├── keep-tty-registry-persists/       # after --keep-tty run, registry file persists
+│   └── keep-tty-terminal-stays-alive/    # after --keep-tty run, ptywrap server still reachable
 ├── attach/
 │   ├── connects-via-registry/         # background run → attach WS probe OK
 │   └── missing-session-error/         # unknown id → exit 1, helpful stderr
@@ -129,6 +131,8 @@ Parameter ranking (most → least significant):
 | 24 | `run/stdout-streams-formatted-events` | Stdout contains formatted user (`💬`) and tool/assistant lines from synthetic `updates.jsonl` |
 | 25 | `real-grok/prints-grok-session-stderr` | `label: grok`; stderr has `grok session` + path; stdout non-empty (`label: grok`) |
 | 26 | `run/rejects-prior-session-same-prompt` | Prior session same prompt + old `created_at` ignored; new session marker streamed |
+| 27 | `run/keep-tty-registry-persists` | `run --keep-tty` → registry entry persists after run exit |
+| 28 | `run/keep-tty-terminal-stays-alive` | `run --keep-tty` → ptywrap listen_addr still reachable after run exit |
 
 ## How to Run
 
@@ -140,6 +144,7 @@ doctest test -v ./cmd/agent-run/tests/grok-tty/run/captures-tui-output
 doctest test ./cmd/agent-run/tests/grok-tty/run/streams-events-before-exit
 doctest test ./cmd/agent-run/tests/grok-tty/run/prints-grok-session-on-stderr
 doctest test ./cmd/agent-run/tests/grok-tty/run/discovery-polls-until-session-appears
+doctest test ./cmd/agent-run/tests/grok-tty/run/keep-tty-registry-persists
 
 # Design / debug — real grok (requires grok on PATH)
 doctest test --label grok ./cmd/agent-run/tests/grok-tty/real-grok

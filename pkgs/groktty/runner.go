@@ -31,9 +31,11 @@ type RunOptions struct {
 	RegistryDir         string
 	BannerProvider      string
 	BannerMarkers       []string
-	DisableTail         bool
-	KeepTerminalAlive   bool
-	Stderr              io.Writer
+	DisableTail           bool
+	KeepTerminalAlive     bool
+	KeepTerminalBlocking  bool // block after prompt inject to keep ptywrap server alive
+	BuildArgv             func(env *agentexec.Env, settingsPath, agentPath, model, resumeSession string) ([]string, error)
+	Stderr                io.Writer
 	Emit                func(types.AgentEvent) error
 	OnTerminalSessionID func(string)
 }
@@ -58,7 +60,12 @@ func Run(ctx context.Context, opts RunOptions) (captured string, grokSessionID s
 
 	env := newExecEnv()
 	cfg := opts.withDefaults()
-	argv, err := cfg.buildArgv(env, opts.SettingsPath, opts.AgentPath, opts.Model, opts.ResumeSessionID)
+	var argv []string
+	if opts.BuildArgv != nil {
+		argv, err = opts.BuildArgv(env, opts.SettingsPath, opts.AgentPath, opts.Model, opts.ResumeSessionID)
+	} else {
+		argv, err = cfg.buildArgv(env, opts.SettingsPath, opts.AgentPath, opts.Model, opts.ResumeSessionID)
+	}
 	if err != nil {
 		return "", "", err
 	}
@@ -124,7 +131,7 @@ func Run(ctx context.Context, opts RunOptions) (captured string, grokSessionID s
 	if opts.OnTerminalSessionID != nil {
 		opts.OnTerminalSessionID(sessionID)
 	}
-	if !opts.KeepTerminalAlive {
+	if !opts.KeepTerminalAlive && cfg.runnerID != "stub-tty" {
 		defer RemoveRegistryFor(opts.Home, cfg.registryDir, sessionID)
 	}
 
@@ -154,6 +161,9 @@ func Run(ctx context.Context, opts RunOptions) (captured string, grokSessionID s
 		mgr.Remove(sessionID)
 		shutdown()
 		return "", "", writeErr
+	}
+	if opts.KeepTerminalBlocking {
+		select {}
 	}
 	var autoExitCancel context.CancelFunc
 	if cfg.bannerProvider == "codex" || cfg.bannerProvider == "codex-tty" || cfg.runnerID == "codex-tty" {

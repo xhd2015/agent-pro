@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -14,59 +13,41 @@ import (
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
-	"github.com/xhd2015/agent-pro/pkgs/groktty"
+	"github.com/xhd2015/agent-pro/pkgs/ttyrunner"
 )
 
 type terminalResolution struct {
 	Runner            string
 	SessionID         string
 	TerminalSessionID string
-	Entry             *groktty.RegistryEntry
+	Entry             *ttyrunner.RegistryEntry
 }
 
 func isTTYRunner(runner string) bool {
-	switch registry.AgentRunnerID(strings.TrimSpace(runner)) {
-	case registry.AgentRunnerCodexTTY, registry.AgentRunnerGrokTTY:
-		return true
-	default:
-		return false
-	}
+	return ttyrunner.IsTTYRunner(runner)
 }
 
 func resolveTerminal(store agentstorage.Store, runner, sessionID string) (*terminalResolution, bool) {
 	if !isTTYRunner(runner) {
 		return nil, false
 	}
-	sess, err := store.GetSession(runner, sessionID)
+	ttySess, err := ttyrunner.ResolveByAgentSession(store, runner, sessionID)
 	if err != nil {
 		return nil, false
 	}
-	if sess.Meta.Runner != "" && sess.Meta.Runner != runner {
-		return nil, false
+	if !ttySess.TCPReachable {
+		return &terminalResolution{
+			Runner:            runner,
+			SessionID:         sessionID,
+			TerminalSessionID: ttySess.TerminalSessionID,
+		}, true
 	}
-	terminalSessionID := strings.TrimSpace(sess.Meta.TerminalSessionID)
-	if terminalSessionID == "" {
-		terminalSessionID = sessionID
-	}
-	registryDir := runner + "-registry"
-	resolved := &terminalResolution{Runner: runner, SessionID: sessionID, TerminalSessionID: terminalSessionID}
-	entry, err := groktty.ReadRegistryFor(store.Home(), registryDir, terminalSessionID, runner)
-	if err == nil && entry != nil && terminalEntryReachable(entry) {
-		resolved.Entry = entry
-	}
-	return resolved, true
-}
-
-func terminalEntryReachable(entry *groktty.RegistryEntry) bool {
-	if entry == nil || strings.TrimSpace(entry.ListenAddr) == "" {
-		return false
-	}
-	conn, err := net.DialTimeout("tcp", entry.ListenAddr, 300*time.Millisecond)
-	if err != nil {
-		return false
-	}
-	_ = conn.Close()
-	return true
+	return &terminalResolution{
+		Runner:            runner,
+		SessionID:         sessionID,
+		TerminalSessionID: ttySess.TerminalSessionID,
+		Entry:             &ttySess.Registry,
+	}, true
 }
 
 func handleTerminalStatus(store agentstorage.Store, runner, sessionID string) http.HandlerFunc {

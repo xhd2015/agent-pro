@@ -1,0 +1,603 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"regexp"
+	"strings"
+	"sync"
+	"time"
+
+	grokagent "github.com/xhd2015/agent-pro/agent/cli/grok"
+	"github.com/xhd2015/agent-pro/agent/cli/registry"
+	agentexec "github.com/xhd2015/agent-pro/agent/exec"
+	"github.com/xhd2015/agent-pro/pkgs/groktty"
+	"github.com/creack/pty"
+	"github.com/hinshun/vt10x"
+)
+
+const (
+	envShowUsageCommand = "GROK_SHOW_USAGE_COMMAND"
+	envShowUsageTimeout = "GROK_SHOW_USAGE_TIMEOUT"
+	envShowUsageDebug   = "GROK_SHOW_USAGE_DEBUG"
+	envShowUsageRetries = "GROK_SHOW_USAGE_RETRIES"
+
+	defaultTimeoutSeconds = 60
+	defaultMaxAttempts    = 0 // 0 = retry until context deadline
+	idleDebounce          = 200 * time.Millisecond
+	pollInterval          = 50 * time.Millisecond
+	promptSettleDelay     = 100 * time.Millisecond
+	promptStableDelay     = 300 * time.Millisecond
+	retryBackoff          = 500 * time.Millisecond
+	ptyRows               = 40
+	ptyCols               = 120
+)
+
+// UsageInfo holds parsed grok /usage show output.
+type UsageInfo struct {
+	WeeklyLimit string
+	NextReset   string
+}
+
+var (
+	weeklyLimitRe = regexp.MustCompile(`(?i)weekly\s*limit:\s*(\d+%)`)
+	nextResetRe   = regexp.MustCompile(`(?i)next\s*reset:\s*([A-Za-z]+\s*\d{1,2},\s*\d{1,2}:\d{2}\s*(?:PT|UTC|[A-Z]{2,4}))`)
+	resetDateRe   = regexp.MustCompile(`^([A-Za-z]+)\s*(\d{1,2}),\s*(\d{1,2}:\d{2})\s*(PT)$`)
+)
+
+// Options configures FetchUsage.
+type Options struct {
+	Debug      bool
+	MaxAttempts int
+}
+
+// FetchUsage launches grok in a PTY, submits /usage show, and parses the response.
+func FetchUsage(ctx context.Context) (*UsageInfo, error) {
+	return FetchUsageWithOptions(ctx, Options{
+		Debug:       debugEnabled(),
+		MaxAttempts: maxAttemptsFromEnv(),
+	})
+}
+
+// FetchUsageWithOptions launches grok with optional verbose logging and retries.
+func FetchUsageWithOptions(ctx context.Context, opts Options) (*UsageInfo, error) {
+	v := newVerboseLog(opts.Debug)
+	attempts := opts.MaxAttempts
+	if attempts <= 0 {
+		attempts = defaultMaxAttempts
+	}
+
+	env := newExecEnv()
+	argv, err := buildArgv(env)
+	if err != nil {
+		return nil, err
+	}
+	v.command(argv)
+
+	var lastErr error
+	for attempt := 1; attempts <= 0 || attempt <= attempts; attempt++ {
+		if attempt > 1 {
+			v.attempt(attempt)
+		}
+		select {
+		case <-ctx.Done():
+			if lastErr != nil {
+				return nil, lastErr
+			}
+			return nil, timeoutErr(ctx)
+		default:
+		}
+
+		info, err := fetchUsageOnce(ctx, argv, v)
+		if err == nil {
+			v.stateChange("done", fmt.Sprintf("weekly=%s reset=%s", info.WeeklyLimit, info.NextReset))
+			return info, nil
+		}
+		lastErr = err
+		v.stateChange("attempt-failed", err.Error())
+		if isNonRetryable(err) {
+			return nil, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, lastErr
+		default:
+		}
+		v.stateChange("retry", "restarting grok session")
+		time.Sleep(retryBackoff)
+	}
+	return nil, lastErr
+}
+
+func fetchUsageOnce(ctx context.Context, argv []string, v *verboseLog) (*UsageInfo, error) {
+	scrollback, err := capturePTY(ctx, argv, v)
+	if err != nil {
+		return nil, err
+	}
+	return parseUsage(scrollback)
+}
+
+func maxAttemptsFromEnv() int {
+	v := strings.TrimSpace(os.Getenv(envShowUsageRetries))
+	if v == "" {
+		return defaultMaxAttempts // 0 = retry until context deadline
+	}
+	n, err := strconvAtoi(v)
+	if err != nil || n <= 0 {
+		return defaultMaxAttempts
+	}
+	return n
+}
+
+func strconvAtoi(s string) (int, error) {
+	var n int
+	_, err := fmt.Sscanf(s, "%d", &n)
+	return n, err
+}
+
+func newExecEnv() *agentexec.Env {
+	return agentexec.NewEnv(&agentexec.PathsConfig{
+		RootDirName: ".agent-pro",
+		DataDirName: "data",
+		BinDirName:  "bin",
+	}, "AGENT_PRO_CONFIG_HOME")
+}
+
+func debugEnabled() bool {
+	v := strings.TrimSpace(os.Getenv(envShowUsageDebug))
+	return v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes")
+}
+
+func buildArgv(env *agentexec.Env) ([]string, error) {
+	if hook := strings.TrimSpace(os.Getenv(envShowUsageCommand)); hook != "" {
+		return groktty.ParseShellWords(hook)
+	}
+
+	path, err := registry.ResolveConfiguredCLIPath(
+		"",
+		registry.GrokCLIPathSettingKey,
+		registry.EnvGrokCLIPath,
+		"",
+		func() (string, error) { return grokagent.FindAgentPath(env) },
+	)
+	if err != nil {
+		return nil, fmt.Errorf("grok not found: %w", err)
+	}
+	return []string{path, "--trust", "--always-approve", "--permission-mode=bypassPermissions"}, nil
+}
+
+func argvHasTrust(argv []string) bool {
+	for _, arg := range argv {
+		if arg == "--trust" {
+			return true
+		}
+	}
+	return false
+}
+
+func capturePTY(ctx context.Context, argv []string, v *verboseLog) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		return nil, fmt.Errorf("start grok: %w", err)
+	}
+	_ = pty.Setsize(ptmx, &pty.Winsize{Rows: ptyRows, Cols: ptyCols})
+
+	var scrollback bytes.Buffer
+	var mu sync.Mutex
+	readDone := make(chan struct{})
+	go func() {
+		defer close(readDone)
+		_, _ = io.Copy(&lockedWriter{mu: &mu, w: &scrollback}, ptmx)
+	}()
+
+	defer shutdownPTY(ptmx, cmd, readDone)
+
+	getScrollback := func() []byte {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]byte(nil), scrollback.Bytes()...)
+	}
+
+	if argvHasTrust(argv) {
+		v.stateChange("workspace-trusted", "via --trust flag")
+	}
+	v.stateChange("waiting-prompt", "launching grok TUI")
+	if err := waitForPrompt(ctx, ptmx, getScrollback, v); err != nil {
+		v.printf("prompt wait failed; scrollback:\n%s", formatScrollbackDebug(getScrollback()))
+		return nil, err
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil, timeoutErr(ctx)
+	case <-time.After(promptSettleDelay):
+	}
+
+	screen := currentScreen(getScrollback())
+	if usageFieldsPresentOnScreen(screen) {
+		v.stateChange("usage-on-screen", "skipping /usage show")
+		return getScrollback(), nil
+	}
+
+	if _, err := ptmx.Write([]byte("/usage show\r")); err != nil {
+		return nil, fmt.Errorf("write /usage show: %w", err)
+	}
+	v.stateChange("submitted", "/usage show")
+
+	if err := waitForUsageResponse(ctx, getScrollback, v, screen); err != nil {
+		v.printf("usage wait failed; scrollback:\n%s", formatScrollbackDebug(getScrollback()))
+		return nil, err
+	}
+	return getScrollback(), nil
+}
+
+func shutdownPTY(ptmx *os.File, cmd *exec.Cmd, readDone <-chan struct{}) {
+	if cmd != nil && cmd.Process != nil {
+		_ = cmd.Process.Kill()
+	}
+	_ = ptmx.Close()
+	select {
+	case <-readDone:
+	case <-time.After(time.Second):
+	}
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+	waitDone := make(chan struct{})
+	go func() {
+		_, _ = cmd.Process.Wait()
+		close(waitDone)
+	}()
+	select {
+	case <-waitDone:
+	case <-time.After(2 * time.Second):
+	}
+}
+
+func formatScrollbackDebug(scrollback []byte) string {
+	plain := groktty.StripANSI(scrollback)
+	rendered := renderScrollback(scrollback)
+	if rendered != "" {
+		return "--- rendered ---\n" + rendered + "\n--- plain ---\n" + plain
+	}
+	return plain
+}
+
+func waitForPrompt(ctx context.Context, ptmx io.Writer, getScrollback func() []byte, v *verboseLog) error {
+	var readySince time.Time
+	lastStarting := false
+	lastReady := false
+	lastTrust := false
+
+	for {
+		select {
+		case <-ctx.Done():
+			return timeoutErr(ctx)
+		default:
+		}
+
+		sb := getScrollback()
+		trustVisible := trustPromptVisible(sb)
+		if trustVisible != lastTrust {
+			if trustVisible {
+				v.stateChange("asking-trust-for-workspace", "")
+				v.stateChange("accepting-trust", "pressing Enter")
+				if _, err := ptmx.Write([]byte("\r")); err != nil {
+					if postTrustReady(sb) {
+						trustVisible = false
+					} else {
+						return fmt.Errorf("accept workspace trust: %w", err)
+					}
+				}
+				readySince = time.Time{}
+				lastReady = false
+			} else if lastTrust {
+				v.stateChange("workspace-trusted", "")
+				v.stateChange("waiting-prompt", "after workspace trust")
+			}
+			lastTrust = trustVisible
+		}
+		if trustVisible {
+			time.Sleep(pollInterval)
+			continue
+		}
+
+		screen := currentScreen(sb)
+		starting := sessionStartingOnScreen(screen)
+		ready := grokReadyOnScreen(screen)
+
+		if starting != lastStarting {
+			if starting {
+				v.stateChange("session-starting", "grok booting")
+			} else if lastStarting {
+				v.stateChange("session-ready", "startup complete")
+			}
+			lastStarting = starting
+		}
+
+		if ready != lastReady {
+			if ready {
+				v.stateChange("prompt-ready", "grok input prompt visible")
+			} else if lastReady {
+				v.stateChange("prompt-lost", "waiting for prompt")
+			}
+			lastReady = ready
+		}
+
+		if ready {
+			if readySince.IsZero() {
+				readySince = time.Now()
+			} else if time.Since(readySince) >= promptStableDelay {
+				v.stateChange("prompt-stable", fmt.Sprintf("prompt stable for %s", promptStableDelay))
+				return nil
+			}
+		} else {
+			readySince = time.Time{}
+		}
+
+		time.Sleep(pollInterval)
+	}
+}
+
+func currentScreen(scrollback []byte) string {
+	return renderScrollback(scrollback)
+}
+
+func trustPromptVisible(scrollback []byte) bool {
+	screen := currentScreen(scrollback)
+	plain := groktty.StripANSI(scrollback)
+	if !trustPromptInText(screen) && !trustPromptInText(plain) {
+		return false
+	}
+	return !postTrustReady(scrollback)
+}
+
+func postTrustReady(scrollback []byte) bool {
+	return promptPastTrustScreen(currentScreen(scrollback)) ||
+		promptPastTrustScreen(groktty.StripANSI(scrollback))
+}
+
+func promptPastTrustScreen(text string) bool {
+	if strings.TrimSpace(text) == "" {
+		return false
+	}
+	if usageFieldsPresentOnScreen(text) {
+		return true
+	}
+	if strings.Contains(text, "Grok ›") || strings.Contains(text, "Grok \u203a") {
+		return true
+	}
+	lower := strings.ToLower(text)
+	return strings.Contains(lower, "composer") && promptDetectedInText(text)
+}
+
+func trustPromptInText(text string) bool {
+	compact := compactScreenText(text)
+	if strings.Contains(compact, "doyoutrustthecontentsofthisdirectory") {
+		return strings.Contains(compact, "yes,proceed") ||
+			strings.Contains(compact, "yes,continue") ||
+			strings.Contains(compact, "pressentertocontinue") ||
+			strings.Contains(compact, "grokbuildmayrunormodify")
+	}
+	return strings.Contains(compact, "workspacetrust") && strings.Contains(compact, "yes,proceed")
+}
+
+func compactScreenText(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range strings.ToLower(s) {
+		switch r {
+		case ' ', '\n', '\r', '\t', '\b', '\f':
+			continue
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func sessionStartingOnScreen(screen string) bool {
+	lower := strings.ToLower(screen)
+	return strings.Contains(lower, "starting session") || strings.Contains(lower, "startingsession")
+}
+
+func grokReadyOnScreen(screen string) bool {
+	if strings.TrimSpace(screen) == "" {
+		return false
+	}
+	if trustPromptInText(screen) && !promptPastTrustScreen(screen) {
+		return false
+	}
+	if usageFieldsPresentOnScreen(screen) {
+		return true
+	}
+	if sessionStartingOnScreen(screen) {
+		return false
+	}
+	if !promptDetectedInText(screen) {
+		return false
+	}
+	lower := strings.ToLower(screen)
+	// Real grok: main UI footer is visible when the session accepts input.
+	if strings.Contains(lower, "composer") || strings.Contains(lower, "always-approve") {
+		return true
+	}
+	// Fake TUI used by doctests.
+	return strings.Contains(screen, "Grok ›") || strings.Contains(screen, "Grok \u203a")
+}
+
+func waitForUsageResponse(ctx context.Context, getScrollback func() []byte, v *verboseLog, baselineScreen string) error {
+	var parseableSince time.Time
+	var screenIdleSince time.Time
+	lastParseable := false
+	lastScreen := ""
+
+	for {
+		select {
+		case <-ctx.Done():
+			return timeoutErr(ctx)
+		default:
+		}
+
+		screen := currentScreen(getScrollback())
+		if screen != lastScreen {
+			lastScreen = screen
+			screenIdleSince = time.Now()
+		}
+
+		parseable := usageFieldsPresentOnScreen(screen)
+
+		if parseable != lastParseable {
+			if parseable {
+				v.stateChange("usage-detected", "weekly limit and next reset on screen")
+			}
+			lastParseable = parseable
+		}
+
+		if parseable {
+			if parseableSince.IsZero() {
+				parseableSince = time.Now()
+			} else if time.Since(parseableSince) >= idleDebounce {
+				v.stateChange("usage-ready", "usage fields stable on screen")
+				return nil
+			}
+		} else {
+			parseableSince = time.Time{}
+			if !screenIdleSince.IsZero() && time.Since(screenIdleSince) >= idleDebounce &&
+				malformedUsageResponse(screen) {
+				_, err := parseUsage(getScrollback())
+				v.stateChange("parse-failed", err.Error())
+				return err
+			}
+		}
+
+		time.Sleep(pollInterval)
+	}
+}
+
+func isNonRetryable(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "failed to parse usage output")
+}
+
+func malformedUsageResponse(screen string) bool {
+	return strings.Contains(strings.ToLower(screen), "not usage")
+}
+
+func usageFieldsPresentOnScreen(screen string) bool {
+	if strings.TrimSpace(screen) == "" {
+		return false
+	}
+	_, err := parseUsageText(screen)
+	return err == nil
+}
+
+func scrollbackViews(scrollback []byte) []string {
+	plain := groktty.StripANSI(scrollback)
+	rendered := strings.TrimSpace(renderScrollback(scrollback))
+	if rendered != "" && rendered != plain {
+		return []string{plain, rendered}
+	}
+	return []string{plain}
+}
+
+func renderScrollback(scrollback []byte) string {
+	if len(scrollback) == 0 {
+		return ""
+	}
+	vt := vt10x.New(vt10x.WithSize(ptyCols, ptyRows))
+	if _, err := vt.Write(scrollback); err != nil {
+		return ""
+	}
+	vt.Lock()
+	defer vt.Unlock()
+
+	var out strings.Builder
+	for y := 0; y < ptyRows; y++ {
+		runes := make([]rune, ptyCols)
+		lastNonSpace := -1
+		for x := 0; x < ptyCols; x++ {
+			ch := vt.Cell(x, y).Char
+			if ch == 0 {
+				ch = ' '
+			}
+			runes[x] = ch
+			if ch != ' ' {
+				lastNonSpace = x
+			}
+		}
+		if lastNonSpace < 0 {
+			continue
+		}
+		out.WriteString(string(runes[:lastNonSpace+1]))
+		out.WriteByte('\n')
+	}
+	return out.String()
+}
+
+func promptDetectedInText(plain string) bool {
+	if strings.Contains(plain, "Grok ›") || strings.Contains(plain, "Grok \u203a") {
+		return true
+	}
+	lower := strings.ToLower(plain)
+	if strings.Contains(lower, "grok build") && (strings.Contains(plain, "❯") || strings.Contains(plain, "\u276f") || strings.Contains(plain, "›")) {
+		return true
+	}
+	return strings.Contains(plain, "❯") || strings.Contains(plain, "\u276f")
+}
+
+func parseUsage(scrollback []byte) (*UsageInfo, error) {
+	return parseUsageText(usageCorpus(scrollback))
+}
+
+func parseUsageText(corpus string) (*UsageInfo, error) {
+	weekly := weeklyLimitRe.FindStringSubmatch(corpus)
+	next := nextResetRe.FindStringSubmatch(corpus)
+	if len(weekly) < 2 || len(next) < 2 {
+		return nil, fmt.Errorf("failed to parse usage output")
+	}
+	return &UsageInfo{
+		WeeklyLimit: strings.TrimSpace(weekly[1]),
+		NextReset:   normalizeResetDate(strings.TrimSpace(next[1])),
+	}, nil
+}
+
+func usageCorpus(scrollback []byte) string {
+	plain := groktty.StripANSI(scrollback)
+	rendered := renderScrollback(scrollback)
+	if rendered != "" {
+		return plain + "\n" + rendered
+	}
+	return plain
+}
+
+func normalizeResetDate(raw string) string {
+	compact := strings.ReplaceAll(raw, " ", "")
+	if m := resetDateRe.FindStringSubmatch(compact); len(m) == 5 {
+		return fmt.Sprintf("%s %s, %s %s", m[1], m[2], m[3], m[4])
+	}
+	return strings.TrimSpace(raw)
+}
+
+func timeoutErr(ctx context.Context) error {
+	if ctx.Err() == context.DeadlineExceeded {
+		return fmt.Errorf("timeout waiting for usage output")
+	}
+	return fmt.Errorf("timeout waiting for usage output: %w", ctx.Err())
+}
+
+type lockedWriter struct {
+	mu *sync.Mutex
+	w  io.Writer
+}
+
+func (lw *lockedWriter) Write(p []byte) (int, error) {
+	lw.mu.Lock()
+	defer lw.mu.Unlock()
+	return lw.w.Write(p)
+}

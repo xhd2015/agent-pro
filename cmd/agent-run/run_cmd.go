@@ -17,6 +17,7 @@ Options:
   --json              stream NDJSON AgentEvent lines to stdout
   --model MODEL       model name
   --session ID        session id
+  --keep-tty          keep TTY session alive after run completes
   --agent-runner RUNNER   codex, codex-tty, grok-tty, opencode, fake-codex, ...
   -h, --help          show help
 `
@@ -26,9 +27,11 @@ func runHeadless(args []string, defaultRunner string) error {
 	var model string
 	var sessionID string
 	var agentRunner string
+	var keepTTY bool
 	remaining, err := flags.Bool("--json", &jsonFlag).
 		String("--model", &model).
 		String("--session", &sessionID).
+		Bool("--keep-tty", &keepTTY).
 		String("--agent-runner", &agentRunner).
 		Help("-h,--help", runHelp).
 		Parse(args)
@@ -51,13 +54,14 @@ func runHeadless(args []string, defaultRunner string) error {
 		return err
 	}
 	return agentui.Run(context.Background(), agentui.RunOptions{
-		Prompt:    prompt,
-		Runner:    runner,
-		Model:     model,
-		SessionID: sessionID,
-		JSON:      jsonFlag,
-		Store:     store,
-		Stdout:    os.Stdout,
-		Stderr:    os.Stderr,
+		Prompt:            prompt,
+		Runner:            runner,
+		Model:             model,
+		SessionID:         sessionID,
+		JSON:              jsonFlag,
+		KeepTerminalAlive: keepTTY,
+		Store:             store,
+		Stdout:            os.Stdout,
+		Stderr:            os.Stderr,
 	})
 }

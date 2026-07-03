@@ -35,7 +35,7 @@ func BuildGrokCommandArgv(env *exec.Env, settingsPath, agentPath, model, resumeS
 		return nil, err
 	}
 
-	args := []string{path}
+	args := []string{path, "--always-approve", "--permission-mode=bypassPermissions"}
 	if model != "" {
 		args = append(args, "--model", model)
 	}
@@ -61,7 +61,7 @@ func BuildCodexCommandArgv(env *exec.Env, settingsPath, agentPath, model, resume
 		return nil, err
 	}
 
-	args := []string{path}
+	args := []string{path, "--dangerously-bypass-approvals-and-sandbox"}
 	if model != "" {
 		args = append(args, "--model", model)
 	}
@@ -97,6 +97,11 @@ func resolveCodexPath(agent *codexagent.CodexAgent) (string, error) {
 		return "", fmt.Errorf("codex not found: %w", err)
 	}
 	return path, nil
+}
+
+// ParseShellWords splits a shell-style command line into argv words.
+func ParseShellWords(line string) ([]string, error) {
+	return parseShellWords(line)
 }
 
 func parseShellWords(line string) ([]string, error) {

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/xhd2015/agent-pro/pkgs/ttyrunner"
 )
 
 const help = `
@@ -32,6 +34,9 @@ func main() {
 }
 
 func run(args []string) error {
+	if len(args) > 0 && args[0] == "__stub-tty" {
+		return ttyrunner.RunStubTTYMain()
+	}
 	var agentRunner string
 	var cmdArgs []string
 	for i := 0; i < len(args); i++ {
@@ -65,6 +70,8 @@ func run(args []string) error {
 		return runHeadless(sub, agentRunner)
 	case "attach":
 		return runAttach(sub)
+	case "tty":
+		return runTty(sub)
 	case "sessions":
 		return runSessions(sub)
 	case "status":

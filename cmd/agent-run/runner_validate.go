@@ -5,11 +5,15 @@ import (
 	"strings"
 
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
+	"github.com/xhd2015/agent-pro/pkgs/ttyrunner"
 )
 
 func validateRunner(runner string) error {
 	runner = strings.TrimSpace(runner)
 	if runner == "" {
+		return nil
+	}
+	if ttyrunner.IsTTYRunner(runner) {
 		return nil
 	}
 	switch registry.AgentRunnerID(runner) {

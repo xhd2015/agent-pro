@@ -67,6 +67,11 @@ func bannerDetected(scrollback []byte) bool {
 
 func bannerDetectedConfig(scrollback []byte, provider string, markers []string) bool {
 	plain := stripANSI(scrollback)
+	if provider == "stub" {
+		if strings.Contains(plain, "\u203a") || strings.Contains(plain, "›") {
+			return true
+		}
+	}
 	for _, marker := range markers {
 		if marker != "" && strings.Contains(plain, marker) {
 			return true
@@ -336,6 +341,11 @@ func codexTransportTimedOut(scrollback []byte) bool {
 
 func isCodexProvider(provider string) bool {
 	return provider == "codex" || provider == "codex-tty"
+}
+
+// RenderTerminalText renders PTY scrollback into a plain terminal screen snapshot.
+func RenderTerminalText(scrollback []byte) []byte {
+	return renderTerminalText(scrollback)
 }
 
 func renderTerminalText(scrollback []byte) []byte {
