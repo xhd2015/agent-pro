@@ -8,6 +8,20 @@ import (
 	"testing"
 )
 
+func TestDebugWithUserSkillIsRegistered(t *testing.T) {
+	names := knownSkillNames()
+	if !containsString(names, "debug-with-user") {
+		t.Fatalf("knownSkillNames missing debug-with-user: %v", names)
+	}
+	sk, ok := knownSkills["debug-with-user"]
+	if !ok {
+		t.Fatal("knownSkills missing debug-with-user")
+	}
+	if !strings.Contains(sk.Content, "name: debug-with-user") {
+		t.Fatalf("skill content missing frontmatter name:\n%s", sk.Content)
+	}
+}
+
 func TestGitResolveConflictsSkillIsRegistered(t *testing.T) {
 	names := knownSkillNames()
 	if !containsString(names, "git-resolve-conflicts") {
