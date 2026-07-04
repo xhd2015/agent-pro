@@ -8,24 +8,23 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/xhd2015/doctest/assert"
+	"github.com/xhd2015/agent-pro/script/tty-watch/ttywatchtest"
 )
 
 func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	combined := resp.Combined
-	if combined == "" {
-		combined = resp.Stdout
+	raw := resp.Stdout
+	if raw == "" {
+		raw = resp.Combined
 	}
-	if !strings.Contains(combined, "RUN_OK") {
-		t.Fatalf("PTY output missing RUN_OK, got %q", combined)
+	lines := ttywatchtest.VisibleContentLines(raw)
+	for _, line := range lines {
+		if line == "RUN_OK" {
+			return
+		}
 	}
-	assert.Output(t, combined, `---
-version: 2
----
-...1 lines omitted...
-RUN_OK`)
+	t.Fatalf("PTY output missing RUN_OK line, lines=%v raw=%q", lines, raw)
 }
 ```

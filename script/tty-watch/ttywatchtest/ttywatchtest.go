@@ -54,6 +54,7 @@ type Response struct {
 	SourceCheckNote            string
 	StdinRestoredBeforeCleanup bool
 	KittyPopCleanupInSrc       bool
+	AttachStdoutWriterNormalizesRawTTY bool
 	InjectedBytes              []byte
 	AltExitCode                int
 	AltStderr                  string
@@ -160,6 +161,10 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 		return phaseUnitObserverDetachStdinBeforeCleanup(t, req)
 	case "unit-observer-detach-kitty-pop-cleanup":
 		return phaseUnitObserverDetachKittyPopCleanup(t, req)
+	case "unit-attach-stdout-writer-crlf":
+		return phaseUnitAttachStdoutWriterCRLF(t, req)
+	case "unit-normalize-tty-output":
+		return phaseUnitNormalizeTTYOutput(t, req)
 	case "snapshot-sanitize":
 		return phaseSnapshotSanitize(t, req)
 	case "snapshot-codex-like-single-screen":
@@ -1271,6 +1276,51 @@ func phaseUnitObserverDetachStdinBeforeCleanup(t *testing.T, req *Request) (*Res
 
 // attachGoStdinRestoredBeforeCleanup reports whether attach.go restores stdin termios
 // before writing observer TTY cleanup on detach (not only via defer after cleanup).
+func phaseUnitNormalizeTTYOutput(t *testing.T, req *Request) (*Response, error) {
+	return &Response{SourceCheckOK: true, SourceCheckNote: "normalizeTTYOutput cases asserted in leaf Assert"}, nil
+}
+
+func phaseUnitAttachStdoutWriterCRLF(t *testing.T, req *Request) (*Response, error) {
+	root, err := findModuleRoot()
+	if err != nil {
+		return &Response{SourceCheckOK: false, SourceCheckNote: err.Error()}, nil
+	}
+	path := filepath.Join(root, "script/tty-watch/attach.go")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return &Response{SourceCheckOK: false, SourceCheckNote: err.Error()}, nil
+	}
+	ok, note := attachGoStdoutWriterNormalizesRawTTY(string(data))
+	return &Response{
+		SourceCheckOK:                      true,
+		SourceCheckNote:                    note,
+		AttachStdoutWriterNormalizesRawTTY: ok,
+	}, nil
+}
+
+// attachGoStdoutWriterNormalizesRawTTY reports whether attachStdoutWriter applies
+// normalizeTTYOutput before writing on interactive TTY stdout.
+func attachGoStdoutWriterNormalizesRawTTY(src string) (bool, string) {
+	marker := "func (a *attachStdoutWriter) Write"
+	idx := strings.Index(src, marker)
+	if idx < 0 {
+		return false, "attachStdoutWriter.Write not found in attach.go"
+	}
+	rest := src[idx:]
+	end := strings.Index(rest, "\nfunc ")
+	if end < 0 {
+		end = len(rest)
+	}
+	body := rest[:end]
+	if !strings.Contains(body, "a.rawTTY") {
+		return false, "attachStdoutWriter.Write missing rawTTY branch"
+	}
+	if strings.Contains(body, "normalizeTTYOutput") {
+		return true, "attachStdoutWriter.Write calls normalizeTTYOutput for raw TTY output"
+	}
+	return false, "attachStdoutWriter.Write passes LF-only bytes unchanged on raw TTY (missing normalizeTTYOutput)"
+}
+
 func phaseUnitObserverDetachKittyPopCleanup(t *testing.T, req *Request) (*Response, error) {
 	root, err := findModuleRoot()
 	if err != nil {

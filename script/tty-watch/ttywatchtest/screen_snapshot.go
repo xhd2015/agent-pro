@@ -66,15 +66,18 @@ func HasLeadingBlankLine(s string) bool {
 
 // HasIndentedExitMarker reports output where [Terminal exited] is not left-aligned.
 func HasIndentedExitMarker(s string) bool {
-	if strings.Contains(s, "\n   [Terminal exited]") {
+	normalized := csiStripRe.ReplaceAllString(s, "")
+	normalized = strings.ReplaceAll(normalized, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	if strings.Contains(normalized, "\n   [Terminal exited]") {
 		return true
 	}
-	if strings.Contains(s, "\r   [Terminal exited]") {
-		return true
-	}
-	for _, line := range strings.Split(s, "\n") {
+	for _, line := range strings.Split(normalized, "\n") {
 		trimmed := strings.TrimSpace(line)
-		if trimmed == "[Terminal exited]" && line != trimmed {
+		if trimmed != "[Terminal exited]" {
+			continue
+		}
+		if strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") {
 			return true
 		}
 	}
@@ -83,7 +86,27 @@ func HasIndentedExitMarker(s string) bool {
 
 // EndsWithNewline reports whether s ends with a newline (host prompt must start fresh).
 func EndsWithNewline(s string) bool {
-	return len(s) > 0 && s[len(s)-1] == '\n'
+	if len(s) == 0 {
+		return false
+	}
+	if s[len(s)-1] == '\n' {
+		return true
+	}
+	return len(s) >= 2 && s[len(s)-2] == '\r' && s[len(s)-1] == '\n'
+}
+
+// HasBareLFNewlines reports whether s contains LF not preceded by CR. On interactive
+// TTYs, bare LF advances to the next line without resetting the cursor column.
+func HasBareLFNewlines(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] != '\n' {
+			continue
+		}
+		if i == 0 || s[i-1] != '\r' {
+			return true
+		}
+	}
+	return false
 }
 
 func renderScreenSnapshotFrame(scrollback []byte, cols, rows int) ([]byte, bool) {

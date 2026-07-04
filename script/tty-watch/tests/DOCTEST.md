@@ -58,6 +58,9 @@ End-to-end tests for the standalone `tty-watch` CLI: `run` subcommand embeds pty
  |    +-- echo-clean-two-lines/      (LEAF)  echo yes: no leading blank line; yes + [Terminal exited] (RED)
  |    +-- bash-c-clean-two-lines/    (LEAF)  bash -c echo yes: no leading blank line smear (RED)
  |    +-- exit-marker-column-zero/  (LEAF)  no leading blank line; [Terminal exited] column 0 (RED)
+ |    +-- bash-c-raw-tty-crlf/      (LEAF)  bash -c echo yes: CRLF on raw TTY (regression lock)
+ |    +-- echo-raw-tty-crlf/        (LEAF)  echo yes: CRLF on raw TTY (regression lock)
+ |    +-- cr-overwrite-raw-tty-crlf/ (LEAF)  \\r overwrite + CRLF on raw TTY (regression lock)
  |    |
  |    +-- custom-session-id/
  |         |
@@ -72,6 +75,8 @@ End-to-end tests for the standalone `tty-watch` CLI: `run` subcommand embeds pty
  |    +-- screen-snapshot-exit-marker/ (LEAF)  snapshot text no leading \\n; exit marker column 0 (RED)
  |    +-- observer-detach-stdin-before-cleanup/ (LEAF) detach restores stdin before stdout cleanup (RED)
  |    +-- observer-detach-kitty-pop-cleanup/ (LEAF) detach pops grok kitty keyboard stack with \\x1b[<u (RED)
+ |    +-- attach-stdout-writer-crlf/ (LEAF) attachStdoutWriter normalizes LF-only output on raw TTY (regression lock)
+ |    +-- normalize-tty-output/      (LEAF) normalizeTTYOutput LF→CRLF + CR preserve (regression lock)
  |
  +-- list/
  |    |
@@ -140,12 +145,17 @@ Parameter ranking (most → least significant):
 | 21 | `run/echo-clean-two-lines` | `run echo yes` has no leading blank line; only `yes` + `[Terminal exited]` (RED) |
 | 22 | `run/bash-c-clean-two-lines` | `run bash -c 'echo yes'` has no leading blank line before `yes` (RED) |
 | 23 | `run/exit-marker-column-zero` | No leading blank line; `[Terminal exited]` at column 0; trailing newline (RED) |
+| 24 | `run/bash-c-raw-tty-crlf` | `run bash -c 'echo yes'` emits CRLF on raw TTY so host prompt stays column 0 (regression lock) |
+| 56 | `run/echo-raw-tty-crlf` | `run echo yes` emits CRLF on raw TTY so host prompt stays column 0 (regression lock) |
+| 57 | `run/cr-overwrite-raw-tty-crlf` | `printf MARKER_A\\rMARKER_B\\n` preserves CR overwrite and CRLF on raw TTY (regression lock) |
 | 47 | `run/custom-session-id/registers-custom-id` | `--session-id` detached run writes `test-with-grok.json`; list shows id + sleep (RED) |
 | 48 | `run/custom-session-id/duplicate-live-errors` | Second `run --session-id` same live id exits 1; already in use (RED) |
 | 49 | `run/custom-session-id/reuses-stale-id` | Stale custom registry pruned; id reused; live in list (RED) |
 | 50 | `run/custom-session-id/invalid-id-rejected` | `run --session-id .bad` exits 1; invalid session id (RED) |
 | 51 | `run/custom-session-id/list-mixed-with-auto` | Custom id and auto `session-N` both appear in list (RED) |
-| 24 | `unit/screen-snapshot-exit-marker` | Snapshot text must not start with `\n`; exit marker at column 0 (RED) |
+| 25 | `unit/screen-snapshot-exit-marker` | Snapshot text must not start with `\n`; exit marker at column 0 (RED) |
+| 26 | `unit/attach-stdout-writer-crlf` | `attachStdoutWriter` must call `normalizeTTYOutput` on raw TTY stdout (regression lock) |
+| 58 | `unit/normalize-tty-output` | `normalizeTTYOutput` expands bare LF to CRLF; preserves standalone CR (regression lock) |
 | 37 | `unit/observer-detach-stdin-before-cleanup` | Detach restores stdin before stdout TTY cleanup (RED) |
 | 39 | `unit/observer-detach-kitty-pop-cleanup` | Detach pops grok kitty keyboard stack with `\x1b[<u` (RED) |
 | 10 | `list/shows-command-uptime` | `list` shows session id, command argv, uptime (RED) |

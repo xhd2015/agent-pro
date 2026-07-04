@@ -173,9 +173,9 @@ func shouldPrependSnapshotNewline(text []byte) bool {
 	return !bytes.Contains(text, []byte("[Terminal exited]"))
 }
 
-// attachStdoutWriter passes PTY bytes through unchanged on interactive terminals
-// so the terminal driver applies carriage-return cursor positioning. When stdout
-// is not a TTY, it emulates \r overwrite for plain-text capture instead of
+// attachStdoutWriter writes PTY bytes to interactive terminals with normalizeTTYOutput
+// so bare LF advances to column 0 (CRLF); standalone \r in-place redraws are preserved.
+// When stdout is not a TTY, it emulates \r overwrite for plain-text capture instead of
 // stripping \r (which smears redrawn shell errors). The alternate-screen exit
 // prefix is followed by a newline so scrollback text appears on the next line.
 type attachStdoutWriter struct {
@@ -198,7 +198,9 @@ func (a *attachStdoutWriter) Write(p []byte) (int, error) {
 	}
 	if a.rawTTY {
 		debugLogBytes("attachStdoutWriter rawTTY in", p)
-		if _, err := a.w.Write(p); err != nil {
+		out := normalizeTTYOutput(p)
+		debugLogBytes("attachStdoutWriter rawTTY out", out)
+		if _, err := a.w.Write(out); err != nil {
 			return 0, err
 		}
 		return len(p), nil
