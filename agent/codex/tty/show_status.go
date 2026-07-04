@@ -108,16 +108,20 @@ func FetchStatusWithOptions(ctx context.Context, opts Options) (*UsageInfo, erro
 	})
 
 	v.stateChange("starting-session", strings.Join(codexArgv, " "))
+	startPhase := time.Now()
 	if err := session.StartInProcess(ctx); err != nil {
 		logCodexError("start_session", err, map[string]any{"session_id": sessionID})
 		return nil, fmt.Errorf("start ttywatch session: %w", err)
 	}
+	v.phaseDone("start-session", startPhase)
 	v.stateChange("session-registered", sessionID)
 
+	waitPromptPhase := time.Now()
 	if err := waitForPrompt(ctx, session, v); err != nil {
 		logCodexError("wait_prompt", err, snapshotExcerptFields(session))
 		return nil, err
 	}
+	v.phaseDone("wait-prompt", waitPromptPhase)
 
 	if err := session.Send("/status\n\r"); err != nil {
 		logCodexError("send_status", err, nil)
@@ -133,11 +137,13 @@ func FetchStatusWithOptions(ctx context.Context, opts Options) (*UsageInfo, erro
 		},
 	})
 
+	waitStatusPhase := time.Now()
 	snapshot, err := waitForStatusSnapshot(ctx, session, v)
 	if err != nil {
 		logCodexError("wait_status", err, snapshotExcerptFields(session))
 		return nil, err
 	}
+	v.phaseDone("wait-status", waitStatusPhase)
 
 	info, err := ParseStatusSnapshot(snapshot)
 	if err != nil {
@@ -275,6 +281,8 @@ func waitForPrompt(ctx context.Context, session *ttywatch.EphemeralSession, v *v
 	waitStart := time.Now()
 	deadline := waitStart.Add(timeout)
 	var lastPollLog time.Time
+	pollCount := 0
+	var snapshotTotal time.Duration
 	for {
 		select {
 		case <-ctx.Done():
@@ -286,17 +294,24 @@ func waitForPrompt(ctx context.Context, session *ttywatch.EphemeralSession, v *v
 			return fmt.Errorf("timeout waiting for status output")
 		}
 
+		pollCount++
+		snapStart := time.Now()
 		snapshot, err := session.Snapshot()
+		snapDur := time.Since(snapStart)
+		snapshotTotal += snapDur
 		if err != nil {
+			v.snapshot("wait-prompt", snapDur, "error: "+err.Error())
 			return err
 		}
 		if statusFieldsPresent(snapshot) {
-			v.stateChange("prompt-ready", "status fields already visible")
+			v.snapshot("wait-prompt", snapDur, fmt.Sprintf("poll=%d status-already-visible", pollCount))
+			v.stateChange("prompt-ready", fmt.Sprintf("status fields already visible (polls=%d snapshot_total=%s)", pollCount, snapshotTotal.Round(time.Millisecond)))
 			return nil
 		}
 		st := provider.CheckWritable([]byte(snapshot))
 		if st.Ready && st.State == "idle" {
-			v.stateChange("prompt-ready", st.State)
+			v.snapshot("wait-prompt", snapDur, fmt.Sprintf("poll=%d idle", pollCount))
+			v.stateChange("prompt-ready", fmt.Sprintf("%s (polls=%d snapshot_total=%s)", st.State, pollCount, snapshotTotal.Round(time.Millisecond)))
 			debuglog.Log(debuglog.Entry{
 				Event: "prompt_ready",
 				Labels: map[string]string{
@@ -315,6 +330,7 @@ func waitForPrompt(ctx context.Context, session *ttywatch.EphemeralSession, v *v
 
 		if lastPollLog.IsZero() || time.Since(lastPollLog) >= 2*time.Second {
 			lastPollLog = time.Now()
+			v.snapshot("wait-prompt", snapDur, fmt.Sprintf("poll=%d state=%s ready=%v", pollCount, st.State, st.Ready))
 			debuglog.Log(debuglog.Entry{
 				Event: "wait_prompt",
 				Labels: map[string]string{
@@ -363,6 +379,7 @@ func statusFieldsPresent(text string) bool {
 }
 
 func waitForStatusSnapshot(ctx context.Context, session *ttywatch.EphemeralSession, v *verboseLog) (string, error) {
+	v.stateChange("status-settle", fmt.Sprintf("sleep %s after /status", statusSettleDelay))
 	select {
 	case <-ctx.Done():
 		return "", timeoutErr(ctx)
@@ -378,6 +395,8 @@ func waitForStatusSnapshot(ctx context.Context, session *ttywatch.EphemeralSessi
 	deadline := time.Now().Add(timeout)
 	var lastPollLog time.Time
 	lastParseable := false
+	pollCount := 0
+	var snapshotTotal time.Duration
 
 	for {
 		select {
@@ -389,21 +408,27 @@ func waitForStatusSnapshot(ctx context.Context, session *ttywatch.EphemeralSessi
 			return "", fmt.Errorf("timeout waiting for status output")
 		}
 
+		pollCount++
+		snapStart := time.Now()
 		snapshot, err := session.Snapshot()
+		snapDur := time.Since(snapStart)
+		snapshotTotal += snapDur
 		if err != nil {
+			v.snapshot("wait-status", snapDur, "error: "+err.Error())
 			return "", err
 		}
 
 		parseable := statusFieldsPresent(snapshot)
 		if parseable != lastParseable {
 			if parseable {
+				v.snapshot("wait-status", snapDur, fmt.Sprintf("poll=%d parseable", pollCount))
 				v.stateChange("status-detected", "monthly limit and credits on screen")
 			}
 			lastParseable = parseable
 		}
 
 		if parseable {
-			v.stateChange("status-ready", "status fields on screen")
+			v.stateChange("status-ready", fmt.Sprintf("polls=%d snapshot_total=%s", pollCount, snapshotTotal.Round(time.Millisecond)))
 			debuglog.Log(debuglog.Entry{
 				Event: "status_ready",
 				Labels: map[string]string{
@@ -426,6 +451,7 @@ func waitForStatusSnapshot(ctx context.Context, session *ttywatch.EphemeralSessi
 
 		if lastPollLog.IsZero() || time.Since(lastPollLog) >= 2*time.Second {
 			lastPollLog = time.Now()
+			v.snapshot("wait-status", snapDur, fmt.Sprintf("poll=%d parseable=%v", pollCount, parseable))
 			debuglog.Log(debuglog.Entry{
 				Event: "wait_status",
 				Labels: map[string]string{

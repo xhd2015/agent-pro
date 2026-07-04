@@ -96,72 +96,134 @@ func parseAttachRoleDimensions(data []byte, cols, rows int) (int, int) {
 }
 
 func readScreenSnapshotFrame(listenAddr, sessionID string) (string, int, int, error) {
-	conn, err := dialSnapshotWebSocket(listenAddr, sessionID, "screen")
-	if err != nil {
-		return "", 0, 0, err
-	}
-	defer conn.Close()
-
 	cols, rows := 80, 24
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-		msgType, data, err := conn.ReadMessage()
+		frame, c, r, done, err := readScreenSnapshotFrameOnce(listenAddr, sessionID, deadline, cols, rows)
+		cols, rows = c, r
 		if err != nil {
-			if ne, ok := err.(interface{ Timeout() bool }); ok && ne.Timeout() {
-				continue
-			}
 			return "", cols, rows, err
 		}
-		switch msgType {
-		case websocket.TextMessage:
-			if handled, _, parseErr := parseServerMessage(data); parseErr != nil {
-				return "", cols, rows, parseErr
-			} else if handled {
-				cols, rows = parseAttachRoleDimensions(data, cols, rows)
-			}
-		case websocket.BinaryMessage:
-			return string(data), cols, rows, nil
+		if done {
+			return frame, cols, rows, nil
 		}
 	}
 	return "", cols, rows, fmt.Errorf("timeout waiting for snapshot frame")
 }
 
-func readSnapshotScrollback(listenAddr, sessionID string) (string, int, int, error) {
-	conn, err := dialSnapshotWebSocket(listenAddr, sessionID, "snapshot")
+func readScreenSnapshotFrameOnce(listenAddr, sessionID string, deadline time.Time, cols, rows int) (frame string, outCols, outRows int, done bool, err error) {
+	conn, err := dialSnapshotWebSocket(listenAddr, sessionID, "screen")
 	if err != nil {
-		return "", 0, 0, err
+		return "", cols, rows, false, err
 	}
 	defer conn.Close()
 
-	cols, rows := 80, 24
-	var out strings.Builder
-	for {
-		_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	for time.Now().Before(deadline) {
+		remain := time.Until(deadline)
+		readWait := 2 * time.Second
+		if remain < readWait {
+			readWait = remain
+		}
+		if readWait <= 0 {
+			return "", cols, rows, false, nil
+		}
+
+		_ = conn.SetReadDeadline(time.Now().Add(readWait))
 		msgType, data, err := conn.ReadMessage()
 		if err != nil {
 			if ne, ok := err.(interface{ Timeout() bool }); ok && ne.Timeout() {
-				if out.Len() > 0 {
-					return out.String(), cols, rows, nil
-				}
-				continue
+				// Gorilla marks the connection corrupt after any read error; redial instead of retrying.
+				return "", cols, rows, false, nil
 			}
-			if out.Len() > 0 {
-				return out.String(), cols, rows, nil
-			}
-			return "", cols, rows, normalizeTerminalReadError(err)
+			return "", cols, rows, false, normalizeTerminalReadError(err)
 		}
 		switch msgType {
 		case websocket.TextMessage:
 			if handled, _, parseErr := parseServerMessage(data); parseErr != nil {
-				return "", cols, rows, parseErr
+				return "", cols, rows, false, parseErr
 			} else if handled {
 				cols, rows = parseAttachRoleDimensions(data, cols, rows)
 			}
 		case websocket.BinaryMessage:
-			out.Write(data)
+			return string(data), cols, rows, true, nil
 		}
 	}
+	return "", cols, rows, false, nil
+}
+
+func readSnapshotScrollback(listenAddr, sessionID string) (string, int, int, error) {
+	cols, rows := 80, 24
+	deadline := time.Now().Add(10 * time.Second)
+	var out strings.Builder
+	for time.Now().Before(deadline) {
+		chunk, c, r, done, err := readSnapshotScrollbackOnce(listenAddr, sessionID, deadline, cols, rows)
+		cols, rows = c, r
+		if err != nil {
+			if out.Len() > 0 {
+				return out.String(), cols, rows, nil
+			}
+			return "", cols, rows, err
+		}
+		if chunk != "" {
+			out.WriteString(chunk)
+		}
+		if done {
+			return out.String(), cols, rows, nil
+		}
+	}
+	if out.Len() > 0 {
+		return out.String(), cols, rows, nil
+	}
+	return "", cols, rows, fmt.Errorf("timeout waiting for snapshot scrollback")
+}
+
+func readSnapshotScrollbackOnce(listenAddr, sessionID string, deadline time.Time, cols, rows int) (chunk string, outCols, outRows int, done bool, err error) {
+	conn, err := dialSnapshotWebSocket(listenAddr, sessionID, "snapshot")
+	if err != nil {
+		return "", cols, rows, false, err
+	}
+	defer conn.Close()
+
+	var buf strings.Builder
+	for time.Now().Before(deadline) {
+		remain := time.Until(deadline)
+		readWait := 2 * time.Second
+		if remain < readWait {
+			readWait = remain
+		}
+		if readWait <= 0 {
+			if buf.Len() > 0 {
+				return buf.String(), cols, rows, true, nil
+			}
+			return "", cols, rows, false, nil
+		}
+
+		_ = conn.SetReadDeadline(time.Now().Add(readWait))
+		msgType, data, err := conn.ReadMessage()
+		if err != nil {
+			if buf.Len() > 0 {
+				return buf.String(), cols, rows, true, nil
+			}
+			if ne, ok := err.(interface{ Timeout() bool }); ok && ne.Timeout() {
+				return "", cols, rows, false, nil
+			}
+			return "", cols, rows, false, normalizeTerminalReadError(err)
+		}
+		switch msgType {
+		case websocket.TextMessage:
+			if handled, _, parseErr := parseServerMessage(data); parseErr != nil {
+				return "", cols, rows, false, parseErr
+			} else if handled {
+				cols, rows = parseAttachRoleDimensions(data, cols, rows)
+			}
+		case websocket.BinaryMessage:
+			buf.Write(data)
+		}
+	}
+	if buf.Len() > 0 {
+		return buf.String(), cols, rows, true, nil
+	}
+	return "", cols, rows, false, nil
 }
 
 func dialSnapshotWebSocket(listenAddr, sessionID, attachMode string) (*websocket.Conn, error) {

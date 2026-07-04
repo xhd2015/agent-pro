@@ -14,8 +14,8 @@ import (
 
 func main() {
 	var verbose bool
-	flag.BoolVar(&verbose, "debug", false, "log codex command and state transitions to stderr")
-	flag.BoolVar(&verbose, "v", false, "log codex command and state transitions to stderr")
+	flag.BoolVar(&verbose, "debug", false, "log phase timing and snapshot polls to stderr")
+	flag.BoolVar(&verbose, "v", false, "log phase timing and snapshot polls to stderr")
 	flag.Parse()
 
 	timeout := 60
