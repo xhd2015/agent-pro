@@ -59,6 +59,8 @@ End-to-end tests for the standalone `tty-watch` CLI: `run` subcommand embeds pty
  +-- unit/
  |    |
  |    +-- screen-snapshot-exit-marker/ (LEAF)  snapshot text no leading \\n; exit marker column 0 (RED)
+ |    +-- observer-detach-stdin-before-cleanup/ (LEAF) detach restores stdin before stdout cleanup (RED)
+ |    +-- observer-detach-kitty-pop-cleanup/ (LEAF) detach pops grok kitty keyboard stack with \\x1b[<u (RED)
  |
  +-- list/
  |    |
@@ -73,6 +75,10 @@ End-to-end tests for the standalone `tty-watch` CLI: `run` subcommand embeds pty
  |    +-- ctrl-c-detaches/            (LEAF)  Ctrl-C detaches watch; session survives (RED)
  |    +-- ctrl-c-detaches-sigint/     (LEAF)  SIGINT detaches watch when stdin not raw (RED)
  |    +-- ctrl-c-detaches-nonraw-stdin/ (LEAF) TTY stdout + pipe stdin: SIGINT detaches (RED)
+ |    +-- ctrl-c-detaches-grok-modes-kitty-ctrl-c/ (LEAF) grok mode preamble + kitty Ctrl-C detaches (RED)
+ |    +-- ctrl-c-detaches-real-grok-kitty-ctrl-c/ (LEAF) real grok alt-screen + kitty Ctrl-C detaches (RED)
+ |    +-- ctrl-c-detaches-grok-modes-tty-cleanup/ (LEAF) grok modes + iTerm kitty Ctrl-C restores observer TTY (RED)
+ |    +-- ctrl-c-detaches-grok-modes-post-detach-kitty-garbage/ (LEAF) post-detach kitty input must not garble shell (RED)
  |    +-- grok-like-prompt-clean/      (LEAF)  grok-like TUI: no CSI/C0 in watch output (RED)
  |    +-- grok-tui-tty-raw-mirror/     (LEAF)  watch TTY mirrors alt-screen via raw ESC (RED)
  |    +-- grok-tui-single-screen-state/(LEAF)  watch pipe: one screen, no stacked redraws (RED)
@@ -119,6 +125,8 @@ Parameter ranking (most → least significant):
 | 22 | `run/bash-c-clean-two-lines` | `run bash -c 'echo yes'` has no leading blank line before `yes` (RED) |
 | 23 | `run/exit-marker-column-zero` | No leading blank line; `[Terminal exited]` at column 0; trailing newline (RED) |
 | 24 | `unit/screen-snapshot-exit-marker` | Snapshot text must not start with `\n`; exit marker at column 0 (RED) |
+| 37 | `unit/observer-detach-stdin-before-cleanup` | Detach restores stdin before stdout TTY cleanup (RED) |
+| 39 | `unit/observer-detach-kitty-pop-cleanup` | Detach pops grok kitty keyboard stack with `\x1b[<u` (RED) |
 | 10 | `list/shows-command-uptime` | `list` shows session id, command argv, uptime (RED) |
 | 11 | `list/empty-when-none` | Empty registry prints no sessions (RED) |
 | 12 | `watch/streams-output` | `watch` streams raw `WATCH_MARKER` output (RED) |
@@ -127,6 +135,10 @@ Parameter ranking (most → least significant):
 | 30 | `watch/ctrl-c-detaches` | `watch` Ctrl-C detaches observer; session survives (RED) |
 | 31 | `watch/ctrl-c-detaches-sigint` | `watch` SIGINT detaches when Ctrl-C is not delivered as `\x03` (RED) |
 | 32 | `watch/ctrl-c-detaches-nonraw-stdin` | `watch` TTY stdout + non-TTY stdin: SIGINT detaches (RED) |
+| 33 | `watch/ctrl-c-detaches-grok-modes-kitty-ctrl-c` | `watch` after grok terminal modes: kitty Ctrl-C detaches (RED) |
+| 34 | `watch/ctrl-c-detaches-real-grok-kitty-ctrl-c` | `watch` on real grok: kitty Ctrl-C detaches (RED, label real-grok) |
+| 35 | `watch/ctrl-c-detaches-grok-modes-tty-cleanup` | `watch` after grok modes: iTerm kitty Ctrl-C restores observer TTY (RED) |
+| 38 | `watch/ctrl-c-detaches-grok-modes-post-detach-kitty-garbage` | Post-detach kitty key bytes must not garble host shell (RED) |
 | 25 | `watch/grok-like-prompt-clean` | `watch` on grok-like TUI shows prompt without CSI/C0 leaks (RED) |
 | 26 | `watch/grok-tui-tty-raw-mirror` | `watch` on TTY passes raw ESC to mirror grok alt-screen UI (RED) |
 | 27 | `watch/grok-tui-single-screen-state` | `watch` pipe capture shows one screen, no duplicate redraw smear (RED) |

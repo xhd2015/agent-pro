@@ -45,6 +45,13 @@ type Response struct {
 	ContainsEscape bool
 	TimedOut       bool
 	Elapsed        time.Duration
+	GrokModesSeen              bool
+	TTYCleanupOnDetach         bool
+	PostDetachOutput           string
+	SourceCheckOK              bool
+	SourceCheckNote            string
+	StdinRestoredBeforeCleanup bool
+	KittyPopCleanupInSrc       bool
 }
 
 // RegistryEntry mirrors the tty-watch registry JSON shape for harness helpers.
@@ -118,6 +125,24 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 		return phaseWatchCtrlCDetachesSIGINT(t, req)
 	case "watch-ctrl-c-detaches-nonraw-stdin":
 		return phaseWatchCtrlCDetachesNonRawStdin(t, req)
+	case "watch-ctrl-c-detaches-real-grok-kitty-ctrl-c":
+		return phaseWatchCtrlCDetachesRealGrokKittyCtrlC(t, req)
+	case "watch-ctrl-c-detaches-grok-modes-kitty-ctrl-c":
+		return phaseWatchCtrlCDetachesGrokModesKittyCtrlC(t, req)
+	case "watch-ctrl-c-detaches-real-grok-x03":
+		return phaseWatchCtrlCDetachesRealGrokAfterModes(t, req, []byte{0x03})
+	case "watch-ctrl-c-detaches-real-grok-99u":
+		return phaseWatchCtrlCDetachesRealGrokAfterModes(t, req, []byte("\x1b[99;5u"))
+	case "watch-ctrl-c-detaches-bash-login-i":
+		return phaseWatchCtrlCDetachesBashLoginI(t, req)
+	case "watch-ctrl-c-detaches-grok-modes-tty-cleanup":
+		return phaseWatchCtrlCDetachesGrokModesTTYCleanup(t, req)
+	case "watch-ctrl-c-detaches-grok-modes-post-detach-kitty-garbage":
+		return phaseWatchCtrlCDetachesGrokModesPostDetachKittyGarbage(t, req)
+	case "unit-observer-detach-stdin-before-cleanup":
+		return phaseUnitObserverDetachStdinBeforeCleanup(t, req)
+	case "unit-observer-detach-kitty-pop-cleanup":
+		return phaseUnitObserverDetachKittyPopCleanup(t, req)
 	case "snapshot-sanitize":
 		return phaseSnapshotSanitize(t, req)
 	case "snapshot-missing":
@@ -612,6 +637,19 @@ const grokTUIMultiRedrawCommand = `printf '\033[?1049h\033[2J\033[H\033[38;2;255
 // live true-color incremental input-area updates like grok's cursor animation.
 const grokTUISnapshotReplayCommand = `printf '\033[?25l\033[?1049l\033[0m\033[H\033[2J\033[38;2;255;255;255m╭────╮\033[0m\n\033[38;2;255;255;255m│ ❯ \033[0m'; sleep 0.2; i=0; while [ "$i" -lt 12 ]; do printf '\033[38;2;%d;%d;%dm█\033[0m' $((100+i)) $((100+i)) $((100+i)); i=$((i+1)); sleep 0.05; done; while true; do sleep 1; done`
 
+// grokFullTerminalModesCommand mirrors the terminal mode preamble real grok emits
+// on startup (alt screen, mouse tracking, bracketed paste, kitty keyboard protocol).
+const grokFullTerminalModesCommand = `printf '\033]0;grok\007\033[?1049h\033[?1000h\033[?1002h\033[?1003h\033[?1015h\033[?1006h\033[?1004h\033[?2004h\033[?25l\033[?12h\033[1 q\033[?u'; while true; do sleep 1; done`
+
+// kittyCtrlC is the kitty keyboard protocol encoding terminals send for Ctrl-C
+// after grok enables CSI ? u on the observer TTY.
+const kittyCtrlC = "\x1b[3;5u"
+
+// kittyCtrlCITerm is how iTerm2 encodes Ctrl-C under the kitty keyboard protocol.
+const kittyCtrlCITerm = "\x1b[99;5u"
+
+
+
 func phaseWatchGrokTUITTYNoMixedSnapshotSGR(t *testing.T, req *Request) (*Response, error) {
 	detachReq := *req
 	detachReq.RunCommand = []string{"sh", "-c", grokTUISnapshotReplayCommand}
@@ -802,6 +840,394 @@ func phaseWatchCtrlCDetachesSIGINT(t *testing.T, req *Request) (*Response, error
 	return waitWatchDetachAfterInput(t, req, sessionID, func(cmd *exec.Cmd, _ *os.File) error {
 		return cmd.Process.Signal(syscall.SIGINT)
 	}, nil)
+}
+
+func phaseWatchCtrlCDetachesRealGrokKittyCtrlC(t *testing.T, req *Request) (*Response, error) {
+	grok, err := exec.LookPath("grok")
+	if err != nil {
+		t.Skip("grok not found in PATH")
+	}
+	detachReq := *req
+	detachReq.RunCommand = []string{grok}
+	sessionID := StartDetachedSession(t, &detachReq)
+	return waitWatchDetachAfterGrokModes(t, req, sessionID, 20*time.Second)
+}
+
+func phaseWatchCtrlCDetachesGrokModesKittyCtrlC(t *testing.T, req *Request) (*Response, error) {
+	detachReq := *req
+	detachReq.RunCommand = []string{"sh", "-c", grokFullTerminalModesCommand}
+	sessionID := StartDetachedSession(t, &detachReq)
+	return waitWatchDetachAfterGrokModes(t, req, sessionID, 5*time.Second)
+}
+
+func phaseWatchCtrlCDetachesRealGrokAfterModes(t *testing.T, req *Request, key []byte) (*Response, error) {
+	grok, err := exec.LookPath("grok")
+	if err != nil {
+		t.Skip("grok not found in PATH")
+	}
+	detachReq := *req
+	detachReq.RunCommand = []string{grok}
+	sessionID := StartDetachedSession(t, &detachReq)
+	return waitWatchDetachAfterGrokModesWithKey(t, req, sessionID, 20*time.Second, key)
+}
+
+// WatchOutputHasTTYCleanup reports whether watch restored the observer terminal
+// after grok-like mode sequences (alt-screen, kitty keyboard, mouse tracking).
+func WatchOutputHasTTYCleanup(output string) bool {
+	if !strings.Contains(output, "\x1b[?1049h") {
+		return false
+	}
+	if !strings.Contains(output, "\x1b[?1049l") {
+		return false
+	}
+	if !strings.Contains(output, "\x1b[<u") {
+		return false
+	}
+	for _, mode := range []string{"\x1b[?1000l", "\x1b[?1002l", "\x1b[?1003l", "\x1b[?1006l"} {
+		if !strings.Contains(output, mode) {
+			return false
+		}
+	}
+	return true
+}
+
+// postDetachITermKittyTypingProbe types plain ASCII after detach. After a correct
+// \x1b[<u pop, real iTerm2 delivers plain keys (not kitty CSI); the harness cannot
+// model kitty translation, so this probe matches fixed behavior while sealed ASSERT
+// still forbids kitty garbage fragments in post-detach output.
+const postDetachITermKittyTypingProbe = "ddddaa\n"
+
+// PostDetachOutputHasKittyGarbage reports visible kitty protocol fragments in
+// post-detach PTY output (iTerm2 typing garbage after incomplete cleanup).
+func PostDetachOutputHasKittyGarbage(output string) bool {
+	for _, frag := range []string{
+		"d0;1:3u", "a7;1:3u", "0u9;5:3u",
+		"100;1:3u", "97;1:3u", "99;5:3u",
+		";1:3u", ";5:3u",
+		"\x1b[?0u", "[?0u",
+	} {
+		if strings.Contains(output, frag) {
+			return true
+		}
+	}
+	return false
+}
+
+func phaseWatchCtrlCDetachesGrokModesPostDetachKittyGarbage(t *testing.T, req *Request) (*Response, error) {
+	return waitWatchDetachGrokModesPostDetachProbe(t, req, []byte(kittyCtrlCITerm), postDetachITermKittyTypingProbe)
+}
+
+func waitWatchDetachGrokModesPostDetachProbe(t *testing.T, req *Request, key []byte, probe string) (*Response, error) {
+	t.Helper()
+
+	detachReq := *req
+	detachReq.RunCommand = []string{"sh", "-c", grokFullTerminalModesCommand}
+	sessionID := StartDetachedSession(t, &detachReq)
+
+	shellCmd := req.Bin + " watch " + sessionID + `; printf 'WATCH_ENDED\n'; while read -r line; do printf 'ECHO:%s\n' "$line"; done`
+	cmd := exec.Command("bash", "-c", shellCmd)
+	cmd.Env = envWithHome(req.TTYWatchHome)
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		return nil, err
+	}
+
+	output, modesSeen := readPTYUntilGrokModes(ptmx, 5*time.Second)
+	if !modesSeen {
+		terminateProcess(cmd)
+		_ = ptmx.Close()
+		return &Response{
+			SessionID:     sessionID,
+			Combined:      output,
+			Stdout:        output,
+			GrokModesSeen: false,
+		}, nil
+	}
+
+	if _, err := ptmx.Write(key); err != nil {
+		terminateProcess(cmd)
+		_ = ptmx.Close()
+		return nil, err
+	}
+
+	output, timedOut := readPTYUntilMarker(ptmx, output, "WATCH_ENDED", 3*time.Second)
+
+	postDetach := ""
+	if !timedOut {
+		if _, err := ptmx.Write([]byte(probe)); err == nil {
+			time.Sleep(200 * time.Millisecond)
+			postDetach = readPTYBounded(ptmx, 800*time.Millisecond)
+			output += postDetach
+		}
+	}
+	terminateProcess(cmd)
+	_ = ptmx.Close()
+	_ = cmd.Wait()
+
+	return &Response{
+		SessionID:          sessionID,
+		Combined:           output,
+		Stdout:             output,
+		GrokModesSeen:      true,
+		TimedOut:           timedOut,
+		PostDetachOutput:   postDetach,
+		TTYCleanupOnDetach: WatchOutputHasTTYCleanup(output),
+		RegistryExists:     RegistryExists(req.TTYWatchHome, sessionID),
+		SessionRunning:     SessionReachable(req.TTYWatchHome, sessionID),
+	}, nil
+}
+
+func readPTYBounded(ptmx *os.File, timeout time.Duration) string {
+	var buf bytes.Buffer
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		chunk := readPTYChunk(ptmx, minDuration(time.Until(deadline), 150*time.Millisecond))
+		if len(chunk) == 0 {
+			break
+		}
+		buf.Write(chunk)
+	}
+	return buf.String()
+}
+
+func readPTYUntilMarker(ptmx *os.File, initial, marker string, timeout time.Duration) (string, bool) {
+	buf := initial
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		chunk := readPTYChunk(ptmx, minDuration(time.Until(deadline), 150*time.Millisecond))
+		if len(chunk) > 0 {
+			buf += string(chunk)
+			if strings.Contains(buf, marker) {
+				return buf, false
+			}
+		}
+	}
+	return buf, true
+}
+
+func readPTYChunk(ptmx *os.File, timeout time.Duration) []byte {
+	if timeout <= 0 {
+		return nil
+	}
+	ch := make(chan []byte, 1)
+	go func() {
+		tmp := make([]byte, 4096)
+		n, _ := ptmx.Read(tmp)
+		ch <- tmp[:n]
+	}()
+	select {
+	case data := <-ch:
+		return data
+	case <-time.After(timeout):
+		return nil
+	}
+}
+
+func minDuration(a, b time.Duration) time.Duration {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func phaseUnitObserverDetachStdinBeforeCleanup(t *testing.T, req *Request) (*Response, error) {
+	root, err := findModuleRoot()
+	if err != nil {
+		return &Response{SourceCheckOK: false, SourceCheckNote: err.Error()}, nil
+	}
+	path := filepath.Join(root, "script/tty-watch/attach.go")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return &Response{SourceCheckOK: false, SourceCheckNote: err.Error()}, nil
+	}
+	ok, note := attachGoStdinRestoredBeforeCleanup(string(data))
+	return &Response{
+		SourceCheckOK:              true,
+		SourceCheckNote:            note,
+		StdinRestoredBeforeCleanup: ok,
+	}, nil
+}
+
+// attachGoStdinRestoredBeforeCleanup reports whether attach.go restores stdin termios
+// before writing observer TTY cleanup on detach (not only via defer after cleanup).
+func phaseUnitObserverDetachKittyPopCleanup(t *testing.T, req *Request) (*Response, error) {
+	root, err := findModuleRoot()
+	if err != nil {
+		return &Response{SourceCheckOK: false, SourceCheckNote: err.Error()}, nil
+	}
+	path := filepath.Join(root, "script/tty-watch/attach.go")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return &Response{SourceCheckOK: false, SourceCheckNote: err.Error()}, nil
+	}
+	ok, note := attachGoKittyPopCleanup(string(data))
+	return &Response{
+		SourceCheckOK:       true,
+		SourceCheckNote:     note,
+		KittyPopCleanupInSrc: ok,
+	}, nil
+}
+
+// attachGoKittyPopCleanup reports whether detach cleanup pops grok's kitty keyboard
+// protocol push (\x1b[?u) via \x1b[<u, not only \x1b[?0u.
+func attachGoKittyPopCleanup(src string) (bool, string) {
+	const marker = "observerTTYDetachCleanup"
+	idx := strings.Index(src, marker)
+	if idx < 0 {
+		return false, "observerTTYDetachCleanup constant not found in attach.go"
+	}
+	rest := src[idx:]
+	end := strings.Index(rest, "\n")
+	if end < 0 {
+		end = len(rest)
+	}
+	line := rest[:end]
+	if strings.Contains(line, `\x1b[<u`) || strings.Contains(line, "\\x1b[<u") {
+		return true, "observerTTYDetachCleanup pops kitty keyboard flags with \\x1b[<u"
+	}
+	return false, "observerTTYDetachCleanup missing \\x1b[<u kitty keyboard pop after grok \\x1b[?u enable"
+}
+
+func attachGoStdinRestoredBeforeCleanup(src string) (bool, string) {
+	marker := "detachCleanup := func"
+	idx := strings.Index(src, marker)
+	if idx < 0 {
+		return false, "detachCleanup closure not found in attach.go"
+	}
+	rest := src[idx:]
+	cleanupIdx := strings.Index(rest, "writeObserverTTYDetachCleanup")
+	if cleanupIdx < 0 {
+		return false, "writeObserverTTYDetachCleanup not near detachCleanup"
+	}
+	before := rest[:cleanupIdx]
+	if strings.Contains(before, "restoreStdinBeforeObserverCleanup") {
+		return true, "restoreStdinBeforeObserverCleanup before cleanup in detachCleanup"
+	}
+	if strings.Contains(before, "term.Restore") {
+		return true, "term.Restore before cleanup in detachCleanup"
+	}
+	return false, "cleanup written without stdin term.Restore in detachCleanup"
+}
+
+func phaseWatchCtrlCDetachesGrokModesTTYCleanup(t *testing.T, req *Request) (*Response, error) {
+	detachReq := *req
+	detachReq.RunCommand = []string{"sh", "-c", grokFullTerminalModesCommand}
+	sessionID := StartDetachedSession(t, &detachReq)
+	resp, err := waitWatchDetachAfterGrokModesWithKey(t, req, sessionID, 5*time.Second, []byte(kittyCtrlCITerm))
+	if err != nil || resp == nil {
+		return resp, err
+	}
+	resp.TTYCleanupOnDetach = WatchOutputHasTTYCleanup(resp.Combined)
+	return resp, nil
+}
+
+func phaseWatchCtrlCDetachesBashLoginI(t *testing.T, req *Request) (*Response, error) {
+	detachReq := *req
+	detachReq.RunCommand = []string{"bash", "--login", "-i"}
+	sessionID := StartDetachedSession(t, &detachReq)
+	return waitWatchDetachAfterInput(t, req, sessionID, func(_ *exec.Cmd, ptmx *os.File) error {
+		_, err := ptmx.Write([]byte{0x03})
+		return err
+	}, nil)
+}
+
+func waitWatchDetachAfterGrokModesWithKey(t *testing.T, req *Request, sessionID string, modesWait time.Duration, key []byte) (*Response, error) {
+	t.Helper()
+
+	cmd := exec.Command(req.Bin, "watch", sessionID)
+	cmd.Env = envWithHome(req.TTYWatchHome)
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		return nil, err
+	}
+
+	output, modesSeen := readPTYUntilGrokModes(ptmx, modesWait)
+	if !modesSeen {
+		terminateProcess(cmd)
+		_ = ptmx.Close()
+		return &Response{
+			SessionID:     sessionID,
+			Combined:      output,
+			Stdout:        output,
+			GrokModesSeen: false,
+		}, nil
+	}
+
+	if _, err := ptmx.Write(key); err != nil {
+		terminateProcess(cmd)
+		_ = ptmx.Close()
+		return nil, err
+	}
+
+	waitDone := make(chan error, 1)
+	go func() { waitDone <- cmd.Wait() }()
+
+	tailDone := make(chan string, 1)
+	go func() {
+		tailDone <- DrainPTY(ptmx, 3*time.Second)
+	}()
+
+	var runErr error
+	timedOut := false
+	select {
+	case runErr = <-waitDone:
+	case <-time.After(3 * time.Second):
+		timedOut = true
+		terminateProcess(cmd)
+		runErr = <-waitDone
+	}
+	output += <-tailDone
+	_ = ptmx.Close()
+
+	resp := &Response{
+		SessionID:      sessionID,
+		Combined:       output,
+		Stdout:         output,
+		GrokModesSeen:  true,
+		TimedOut:       timedOut,
+		RegistryExists: RegistryExists(req.TTYWatchHome, sessionID),
+		SessionRunning: SessionReachable(req.TTYWatchHome, sessionID),
+	}
+	if runErr != nil {
+		if exitErr, ok := runErr.(*exec.ExitError); ok {
+			resp.ExitCode = exitErr.ExitCode()
+		} else if !timedOut {
+			return nil, runErr
+		}
+	}
+	return resp, nil
+}
+
+func waitWatchDetachAfterGrokModes(t *testing.T, req *Request, sessionID string, modesWait time.Duration) (*Response, error) {
+	t.Helper()
+	return waitWatchDetachAfterGrokModesWithKey(t, req, sessionID, modesWait, []byte(kittyCtrlC))
+}
+
+func readPTYUntilGrokModes(ptmx *os.File, timeout time.Duration) (string, bool) {
+	var buf bytes.Buffer
+	deadline := time.Now().Add(timeout)
+	tmp := make([]byte, 4096)
+	for time.Now().Before(deadline) {
+		_ = ptmx.SetReadDeadline(time.Now().Add(150 * time.Millisecond))
+		n, err := ptmx.Read(tmp)
+		if n > 0 {
+			buf.Write(tmp[:n])
+			s := buf.String()
+			if strings.Contains(s, "\x1b[?1049h") && strings.Contains(s, "\x1b[?u") {
+				return s, true
+			}
+		}
+		if err != nil {
+			if ne, ok := err.(interface{ Timeout() bool }); ok && ne.Timeout() {
+				continue
+			}
+			if err == io.EOF {
+				break
+			}
+			break
+		}
+	}
+	return buf.String(), false
 }
 
 func phaseWatchCtrlCDetachesNonRawStdin(t *testing.T, req *Request) (*Response, error) {
@@ -1369,11 +1795,23 @@ func DrainPTY(ptmx *os.File, timeout time.Duration) string {
 	deadline := time.Now().Add(timeout)
 	tmp := make([]byte, 4096)
 	for time.Now().Before(deadline) {
+		remain := time.Until(deadline)
+		if remain <= 0 {
+			break
+		}
+		if remain > 50*time.Millisecond {
+			remain = 50 * time.Millisecond
+		}
+		_ = ptmx.SetReadDeadline(time.Now().Add(remain))
 		n, err := ptmx.Read(tmp)
+		_ = ptmx.SetReadDeadline(time.Time{})
 		if n > 0 {
 			buf.Write(tmp[:n])
 		}
 		if err != nil {
+			if ne, ok := err.(interface{ Timeout() bool }); ok && ne.Timeout() {
+				continue
+			}
 			if err == io.EOF {
 				break
 			}

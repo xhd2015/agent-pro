@@ -8,8 +8,10 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -151,6 +153,14 @@ func parseServerMessage(data []byte) (handled bool, sessionID string, err error)
 }
 
 var altScreenExitPrefix = []byte("\x1b[?1049l\x1b[0m")
+
+// Detach cleanup restores the observer terminal after grok-like raw TTY modes
+// (alternate screen, kitty keyboard protocol, mouse tracking).
+const observerTTYDetachCleanup = "\x1b[?1049l\x1b[<u\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[0m"
+
+func writeObserverTTYDetachCleanup(w io.Writer) {
+	_, _ = io.WriteString(w, observerTTYDetachCleanup)
+}
 
 func isTerminalExitMarker(data []byte) bool {
 	return strings.Contains(string(data), "[Terminal exited]")
@@ -473,19 +483,103 @@ func forwardInputWithDetach(writer *wsWriter, stdin io.Reader) (detached bool, e
 	}
 }
 
+const kittyDetachMaxPending = 32
+
+// kittyCtrlCCodepoint is ETX (0x03), the unicode key code many terminals report for
+// Ctrl-C under the kitty keyboard protocol.
+const kittyCtrlCCodepoint = 3
+
+// kittyCtrlCLetterCodepoint is lowercase 'c'; iTerm2 and others send Ctrl-C as key 99
+// with the ctrl modifier instead of key 3 (ETX).
+const kittyCtrlCLetterCodepoint = 99
+
+// kittyCtrlModifierBit is the ctrl modifier bit in kitty keyboard protocol modifier fields.
+const kittyCtrlModifierBit = 4
+
 func drainObserverInput(stdin io.Reader) (detached bool, err error) {
 	buf := make([]byte, 4096)
+	var pending []byte
 	for {
 		n, readErr := stdin.Read(buf)
 		if n > 0 {
-			if indexByte(buf[:n], watchDetachByte) >= 0 {
+			debugLogBytes("drainObserverInput read", buf[:n])
+			pending = append(pending, buf[:n]...)
+			if observerInputDetach(pending) {
+				debugLogf("drainObserverInput detach pending_len=%d", len(pending))
 				return true, nil
 			}
+			pending = trimObserverInputPending(pending)
 		}
 		if readErr != nil {
 			return false, readErr
 		}
 	}
+}
+
+func observerInputDetach(b []byte) bool {
+	if indexByte(b, watchDetachByte) >= 0 {
+		return true
+	}
+	return containsKittyCtrlC(b)
+}
+
+func trimObserverInputPending(pending []byte) []byte {
+	if len(pending) > kittyDetachMaxPending {
+		pending = pending[len(pending)-kittyDetachMaxPending:]
+	}
+	if idx := bytes.LastIndexByte(pending, 0x1b); idx >= 0 {
+		if idx > 0 && len(pending)-idx < kittyDetachMaxPending {
+			pending = pending[idx:]
+		}
+	}
+	return pending
+}
+
+// containsKittyCtrlC reports whether b contains a complete kitty keyboard protocol
+// Ctrl-C sequence (CSI unicode-key-code ; modifiers u with key 3 or 99 and ctrl held).
+func containsKittyCtrlC(b []byte) bool {
+	for i := 0; i < len(b); i++ {
+		if b[i] != 0x1b || i+1 >= len(b) || b[i+1] != '[' {
+			continue
+		}
+		j := i + 2
+		for j < len(b) && b[j] >= 0x30 && b[j] <= 0x3f {
+			j++
+		}
+		if j >= len(b) || b[j] != 'u' {
+			continue
+		}
+		if kittyCSIParamsAreCtrlC(string(b[i+2 : j])) {
+			return true
+		}
+	}
+	return false
+}
+
+func kittyCSIParamsAreCtrlC(params string) bool {
+	semi := strings.LastIndexByte(params, ';')
+	if semi < 0 {
+		return false
+	}
+	keyPart := params[:semi]
+	modPart := params[semi+1:]
+	if colon := strings.IndexByte(modPart, ':'); colon >= 0 {
+		modPart = modPart[:colon]
+	}
+	keyPart = strings.SplitN(keyPart, ":", 2)[0]
+	keyCode, err := strconv.Atoi(keyPart)
+	if err != nil || !kittyCSIKeyIsCtrlC(keyCode) {
+		return false
+	}
+	mods, err := strconv.Atoi(modPart)
+	if err != nil {
+		return false
+	}
+	return mods&kittyCtrlModifierBit != 0
+}
+
+func kittyCSIKeyIsCtrlC(keyCode int) bool {
+	return keyCode == kittyCtrlCCodepoint || keyCode == kittyCtrlCLetterCodepoint
 }
 
 func indexByte(b []byte, target byte) int {
@@ -604,14 +698,35 @@ func streamObserver(listenAddr, sessionID string, stdout io.Writer) error {
 		if state, err := term.MakeRaw(int(stdinFile.Fd())); err == nil {
 			oldStdinState = state
 			stdinRaw = true
-			defer term.Restore(int(stdinFile.Fd()), oldStdinState)
 		}
 	}
+	restoreStdinBeforeObserverCleanup := func() {
+		if oldStdinState == nil {
+			return
+		}
+		_ = term.Restore(int(stdinFile.Fd()), oldStdinState)
+		oldStdinState = nil
+	}
+	defer restoreStdinBeforeObserverCleanup()
 
 	sigintCh := make(chan os.Signal, 1)
 	signal.Notify(sigintCh, syscall.SIGINT)
 	defer signal.Stop(sigintCh)
 	debugLogf("streamObserver session=%s stdinRaw=%v", sessionID, stdinRaw)
+
+	var (
+		detached    atomic.Bool
+		cleanupOnce sync.Once
+	)
+	detachCleanup := func() {
+		if !rawTTY {
+			return
+		}
+		cleanupOnce.Do(func() {
+			restoreStdinBeforeObserverCleanup()
+			writeObserverTTYDetachCleanup(stdoutFile)
+		})
+	}
 
 	readerErrCh := make(chan error, 1)
 	go func() {
@@ -619,11 +734,11 @@ func streamObserver(listenAddr, sessionID string, stdout io.Writer) error {
 	}()
 
 	stdinErrCh := make(chan error, 1)
-	var detached bool
 	go func() {
 		d, err := drainObserverInput(stdinFile)
-		detached = d
 		if d {
+			detached.Store(true)
+			detachCleanup()
 			err = nil
 		}
 		stdinErrCh <- err
@@ -632,15 +747,21 @@ func streamObserver(listenAddr, sessionID string, stdout io.Writer) error {
 	for {
 		select {
 		case err := <-readerErrCh:
+			if detached.Load() {
+				return nil
+			}
 			return normalizeTerminalReadError(err)
 		case err := <-stdinErrCh:
-			if detached {
+			if detached.Load() {
 				return nil
 			}
 			if err != nil && err != io.EOF {
 				return err
 			}
 		case <-sigintCh:
+			debugLogf("streamObserver detach via SIGINT session=%s", sessionID)
+			detached.Store(true)
+			detachCleanup()
 			return nil
 		}
 	}
