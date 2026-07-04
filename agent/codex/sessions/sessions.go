@@ -21,10 +21,12 @@ const (
 )
 
 type Session struct {
-	ID        string    `json:"id"`
-	StartedAt time.Time `json:"started_at"`
-	CWD       string    `json:"cwd"`
-	Path      string    `json:"path"`
+	ID               string    `json:"id"`
+	StartedAt        time.Time `json:"started_at"`
+	CWD              string    `json:"cwd"`
+	Title            string    `json:"title,omitempty"`
+	Path             string    `json:"path"`
+	NumDisplayEvents int       `json:"num_display_events,omitempty"`
 }
 
 type SessionBrief struct {
@@ -32,6 +34,16 @@ type SessionBrief struct {
 	Status         string         `json:"status"`
 	LineCount      int            `json:"line_count"`
 	RecentMessages []DisplayEvent `json:"recent_messages"`
+}
+
+type SessionInfo struct {
+	Session
+	Status            string         `json:"status"`
+	LineCount         int            `json:"line_count"`
+	NumDisplayEvents  int            `json:"num_display_events"`
+	RecentMessages    []DisplayEvent `json:"recent_messages"`
+	TotalInputTokens  int            `json:"total_input_tokens"`
+	TotalOutputTokens int            `json:"total_output_tokens"`
 }
 
 type DisplayEvent struct {
@@ -67,6 +79,12 @@ func List(codexHome string, limit int) ([]Session, error) {
 	if len(sessions) > limit {
 		sessions = sessions[:limit]
 	}
+
+	for i := range sessions {
+		if err := enrichSessionForList(&sessions[i]); err != nil {
+			return nil, err
+		}
+	}
 	return sessions, nil
 }
 
@@ -86,6 +104,44 @@ func Find(codexHome string, sessionID string) (string, error) {
 		}
 	}
 	return "", sessionNotFoundError(sessionID)
+}
+
+func Info(codexHome string, sessionID string, lastN int) (*SessionInfo, error) {
+	if lastN <= 0 {
+		lastN = 3
+	}
+
+	path, err := Find(codexHome, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	lines, err := readLines(path)
+	if err != nil {
+		return nil, err
+	}
+
+	session, err := sessionFromFile(path, lines)
+	if err != nil {
+		return nil, err
+	}
+
+	events := collectDisplayEvents(lines)
+	recent := events
+	if len(recent) > lastN {
+		recent = recent[len(recent)-lastN:]
+	}
+	inputTokens, outputTokens := sumTokenCounts(lines)
+
+	return &SessionInfo{
+		Session:           session,
+		Status:            inferSessionStatus(lines),
+		LineCount:         len(lines),
+		NumDisplayEvents:  len(events),
+		RecentMessages:    recent,
+		TotalInputTokens:  inputTokens,
+		TotalOutputTokens: outputTokens,
+	}, nil
 }
 
 func Brief(codexHome string, sessionID string, lastN int) (*SessionBrief, error) {
@@ -140,22 +196,69 @@ func PrintLog(path string, w io.Writer, tail int) error {
 	return nil
 }
 
-func FormatListTable(sessions []Session, home string) string {
+func FormatListTable(sessions []Session, home string, now time.Time) string {
 	if len(sessions) == 0 {
 		return "No sessions found"
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "%-38s  %-20s  %s\n", "SESSION ID", "STARTED", "CWD")
+	fmt.Fprintf(&b, "%-38s  %-12s  %-42s  %5s  %s\n", "SESSION ID", "LAST ACTIVE", "TITLE", "MSGS", "CWD")
 	for _, session := range sessions {
 		fmt.Fprintf(
 			&b,
-			"%-38s  %-20s  %s\n",
+			"%-38s  %-12s  %-42s  %5d  %s\n",
 			session.ID,
-			session.StartedAt.UTC().Format("2006-01-02 15:04:05"),
-			truncateCWD(session.CWD, home),
+			formatRelativeTime(session.StartedAt, now),
+			truncateTitle(session.Title),
+			session.NumDisplayEvents,
+			shortenPath(session.CWD, home),
 		)
 	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+func FormatInfoText(info *SessionInfo, home string, now time.Time) string {
+	if info == nil {
+		return ""
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Session: %s\n", info.ID)
+
+	title := strings.TrimSpace(info.Title)
+	if title == "" {
+		title = "(untitled)"
+	}
+	fmt.Fprintf(&b, "Title: %s\n", title)
+
+	fmt.Fprintf(
+		&b,
+		"Last active: %s (%s)\n",
+		formatRelativeTime(info.StartedAt, now),
+		formatAbsoluteTime(info.StartedAt),
+	)
+	if info.CWD != "" {
+		fmt.Fprintf(&b, "CWD: %s\n", info.CWD)
+	}
+	if info.Status != "" {
+		fmt.Fprintf(&b, "Status: %s\n", info.Status)
+	}
+	fmt.Fprintf(&b, "Lines: %d\n", info.LineCount)
+	if info.Path != "" {
+		fmt.Fprintf(&b, "File: %s\n", shortenPath(info.Path, home))
+	}
+	if len(info.RecentMessages) > 0 {
+		fmt.Fprintln(&b, "\nRecent messages:")
+		for _, msg := range info.RecentMessages {
+			fmt.Fprintln(&b, strings.TrimSpace(msg.Formatted))
+		}
+	}
+	if info.TotalInputTokens != 0 || info.TotalOutputTokens != 0 {
+		fmt.Fprintf(&b, "\nTokens:\n")
+		fmt.Fprintf(&b, "  Input:  %d\n", info.TotalInputTokens)
+		fmt.Fprintf(&b, "  Output: %d\n", info.TotalOutputTokens)
+	}
+
 	return strings.TrimRight(b.String(), "\n")
 }
 
@@ -259,7 +362,7 @@ func discoverSessions(codexHome string) ([]Session, error) {
 			return nil
 		}
 
-		session, err := sessionFromFile(path, nil)
+		session, err := sessionMetaFromFile(path)
 		if err != nil {
 			return nil
 		}
@@ -273,6 +376,73 @@ func discoverSessions(codexHome string) ([]Session, error) {
 		return nil, err
 	}
 	return sessions, nil
+}
+
+func sessionMetaFromFile(path string) (Session, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return Session{}, err
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		return Session{}, err
+	}
+	defer file.Close()
+
+	session := Session{
+		Path:      path,
+		StartedAt: info.ModTime(),
+	}
+
+	scanner := bufio.NewScanner(file)
+	if scanner.Scan() {
+		if meta, ok := parseSessionMeta(scanner.Text()); ok {
+			session.ID = meta.ID
+			session.CWD = meta.CWD
+			if ts, err := parseTimestamp(meta.Timestamp); err == nil {
+				session.StartedAt = ts
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return Session{}, err
+	}
+
+	if session.ID == "" {
+		session.ID = uuidFromFilename(filepath.Base(path))
+	}
+	if session.ID == "" {
+		return Session{}, fmt.Errorf("unable to determine session id for %s", path)
+	}
+	return session, nil
+}
+
+func enrichSessionForList(session *Session) error {
+	file, err := os.Open(session.Path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	titleFound := session.Title != ""
+	count := 0
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !titleFound {
+			if title := titleFromRolloutLine(line); title != "" {
+				session.Title = title
+				titleFound = true
+			}
+		}
+		count += countDisplayableFromRolloutLine(line)
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	session.NumDisplayEvents = count
+	return nil
 }
 
 func sessionFromFile(path string, lines []string) (Session, error) {
@@ -310,6 +480,9 @@ func sessionFromFile(path string, lines []string) (Session, error) {
 	if session.ID == "" {
 		return Session{}, fmt.Errorf("unable to determine session id for %s", path)
 	}
+
+	session.Title = extractTitle(lines)
+	session.NumDisplayEvents = len(collectDisplayEvents(lines))
 	return session, nil
 }
 
@@ -360,22 +533,36 @@ func parseTimestamp(value string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("unsupported timestamp: %s", value)
 }
 
-func truncateCWD(cwd, home string) string {
-	cwd = strings.TrimSpace(cwd)
-	if cwd == "" {
+func formatRelativeTime(lastActive, now time.Time) string {
+	diff := now.Sub(lastActive)
+	if diff < time.Minute {
+		return "just now"
+	}
+	if diff < time.Hour {
+		return fmt.Sprintf("%dm ago", int(diff.Minutes()))
+	}
+	if diff < 24*time.Hour {
+		return fmt.Sprintf("%dh ago", int(diff.Hours()))
+	}
+	if diff < 7*24*time.Hour {
+		return fmt.Sprintf("%dd ago", int(diff.Hours()/24))
+	}
+	return fmt.Sprintf("%dw ago", int(diff.Hours()/(24*7)))
+}
+
+func formatAbsoluteTime(ts time.Time) string {
+	if ts.IsZero() {
 		return ""
 	}
-	if home != "" {
-		if rel, err := filepath.Rel(home, cwd); err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
-			cwd = rel
-		}
+	return ts.UTC().Format("2006-01-02 15:04:05 UTC")
+}
+
+func truncateTitle(title string) string {
+	title = strings.TrimSpace(title)
+	if len(title) <= 40 {
+		return title
 	}
-	sep := string(os.PathSeparator)
-	parts := strings.Split(cwd, sep)
-	if len(parts) <= 3 {
-		return cwd
-	}
-	return ".../" + parts[len(parts)-1]
+	return title[:40] + "..."
 }
 
 func shortenPath(path, home string) string {

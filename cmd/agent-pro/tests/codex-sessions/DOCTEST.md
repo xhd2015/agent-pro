@@ -1,8 +1,9 @@
 # Codex Sessions Tests
 
 Doc-style tests for `agent/codex/sessions`, which lists Codex CLI rollout
-sessions, shows brief summaries, and prints human-readable logs from JSONL
-transcripts under a synthetic `CodexHome`.
+sessions in a unified grok-shaped table, shows session info (evolved from brief),
+and prints human-readable logs from JSONL transcripts under a synthetic
+`CodexHome`.
 
 # DSN (Domain Specific Notion)
 
@@ -11,10 +12,20 @@ Codex CLI writes session transcripts as JSONL rollout files under
 continues with `event_msg` and `response_item` events.
 
 The sessions package walks those files to discover sessions, parses metadata,
-and sorts by start time. For brief view it counts lines, infers status from
-task lifecycle events, and collects the last few displayable messages. For
-full log view it normalizes rollout events into the compact trace print
-pipeline (`print.FormatTraceLine`) so output matches other agent trace tools.
+and sorts by last activity. List table output matches the unified shape:
+`SESSION ID | LAST ACTIVE | TITLE | MSGS | CWD`, where `MSGS` is the count of
+displayable events in the rollout and `LAST ACTIVE` uses relative times with a
+fixed `now` clock.
+
+For session info (`agent-pro codex session info <id>`), `Info` aggregates
+metadata, status, line count, recent displayable messages, rollout file path,
+and token totals from `token_count` events; `FormatInfoText` renders
+grok-style key-value blocks. The legacy `Brief` API remains tested under
+`brief/` for package-level regression.
+
+For session log (`agent-pro codex session log <id> [--tail N]`), `PrintLog`
+normalizes rollout events into the compact trace print pipeline
+(`print.FormatTraceLine`) so output matches other agent trace tools.
 
 The test harness builds a temporary Codex home, writes minimal rollout
 fixtures, and calls the package API directly (no real `~/.codex`).
@@ -27,24 +38,31 @@ fixtures, and calls the package API directly (no real `~/.codex`).
 
 ```
 operation?
-├── list
+├── list/
 │   ├── default-limit-20/     25 fixtures → List returns 20 newest
 │   ├── custom-limit/         limit=3 → 3 sessions
-│   ├── sorted-newest-first/  verify descending started_at order
-│   ├── table-format/         FormatListTable has SESSION ID, STARTED, CWD
+│   ├── sorted-newest-first/  verify descending last-active order
+│   ├── table-format/         FormatListTable grok shape: LAST ACTIVE, TITLE, MSGS, CWD
+│   ├── table-with-msgs/      MSGS column from displayable event count
 │   ├── json-format/          FormatListJSON emits sessions array
+│   ├── list-within-time-budget/  100 large rollouts, limit 20 → List <= 500ms
 │   └── empty/                no rollout files → "No sessions found"
-├── brief
-│   ├── last-three-messages/  5 displayable events → last 3 in brief
-│   ├── json-format/          FormatBriefJSON includes recent_messages
+├── info/
+│   ├── known-session/        FormatInfoText: status, messages, rollout path, token totals
+│   ├── last-three-messages/  Info shows last 3 displayable events
+│   ├── no-tokens/            no token_count events → no Tokens section
 │   └── unknown-session/      missing UUID → codex session not found
-└── log
-    ├── exec-and-message/     exec_command + agent_message → RUN + ASSISTANT
-    ├── apply-patch/          apply_patch custom_tool_call → EDIT
-    ├── encrypted-reasoning/  encrypted reasoning only → REASONING [Redacted]
-    ├── skips-noise/          session_meta, token_count → no output
-    ├── tail-last-n/          5 events, tail=2 → only last 2 in log output
-    └── unknown-session/      missing UUID → error
+├── brief/                    (package API — legacy Brief/FormatBrief*)
+│   ├── last-three-messages/
+│   ├── json-format/
+│   └── unknown-session/
+└── log/                      (session log — PrintLog + --tail)
+    ├── exec-and-message/
+    ├── apply-patch/
+    ├── encrypted-reasoning/
+    ├── skips-noise/
+    ├── tail-last-n/
+    └── unknown-session/
 ```
 
 ## Test Index
@@ -54,18 +72,24 @@ operation?
 | 1 | `list/default-limit-20` | 25 rollout files, default limit 20 → returns 20 newest sessions |
 | 2 | `list/custom-limit` | 5 sessions, limit=3 → exactly 3 returned |
 | 3 | `list/sorted-newest-first` | 3 sessions with known timestamps → newest first |
-| 4 | `list/table-format` | Table output contains SESSION ID, STARTED, CWD headers |
-| 5 | `list/json-format` | JSON list includes id, started_at, cwd, path per session |
-| 6 | `list/empty` | Empty sessions tree → "No sessions found" |
-| 7 | `brief/last-three-messages` | 5 displayable events → brief shows last 3 chronologically |
-| 8 | `brief/json-format` | Brief JSON includes recent_messages with kind, text, formatted |
-| 9 | `brief/unknown-session` | Unknown full UUID → error |
-| 10 | `log/exec-and-message` | function_call + agent_message → RUN and ASSISTANT in log |
-| 11 | `log/apply-patch` | custom_tool_call apply_patch → EDIT in log |
-| 12 | `log/encrypted-reasoning` | reasoning with encrypted_content only → REASONING [Redacted] |
-| 13 | `log/skips-noise` | Non-displayable events produce empty log output |
-| 14 | `log/tail-last-n` | 5 displayable events, tail=2 → output has last 2 only |
-| 15 | `log/unknown-session` | Unknown session ID → error from Find/PrintLog |
+| 4 | `list/table-format` | Table has SESSION ID, LAST ACTIVE, TITLE, MSGS, CWD with relative times |
+| 5 | `list/table-with-msgs` | Five displayable events → MSGS shows `5` |
+| 6 | `list/json-format` | JSON list includes id, started_at, cwd, path per session |
+| 7 | `list/list-within-time-budget` | 200 rollouts × 400 events, limit 20 → List within 500ms |
+| 8 | `list/empty` | Empty sessions tree → "No sessions found" |
+| 8 | `info/known-session` | Info returns status, line count, rollout path, token totals |
+| 9 | `info/last-three-messages` | Five displayable events → info shows last 3 |
+| 10 | `info/no-tokens` | Session without token_count → info succeeds, no Tokens section |
+| 11 | `info/unknown-session` | Unknown full UUID → error |
+| 12 | `brief/last-three-messages` | Brief API: 5 events → last 3 in brief |
+| 13 | `brief/json-format` | Brief JSON includes recent_messages |
+| 14 | `brief/unknown-session` | Brief API: unknown UUID → error |
+| 15 | `log/exec-and-message` | function_call + agent_message → RUN and ASSISTANT in log |
+| 16 | `log/apply-patch` | custom_tool_call apply_patch → EDIT in log |
+| 17 | `log/encrypted-reasoning` | reasoning with encrypted_content only → REASONING [Redacted] |
+| 18 | `log/skips-noise` | Non-displayable events produce empty log output |
+| 19 | `log/tail-last-n` | 5 displayable events, tail=2 → output has last 2 only |
+| 20 | `log/unknown-session` | Unknown session ID → error from Find/PrintLog |
 
 ## How to Run
 
@@ -82,25 +106,29 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	sessions "github.com/xhd2015/agent-pro/agent/codex/sessions"
 )
 
 type Request struct {
-	Operation string // "list", "brief", "log"
+	Operation string    // "list", "info", "brief", "log"
 	CodexHome string
 	SessionID string
-	Limit     int    // 0 → default 20 for list
-	LastN     int    // 0 → default 3 for brief
-	Tail      int    // 0 → full log; >0 → last N displayable events
-	Format    string // "table", "json", "" (log writes raw text to Output)
+	Limit     int       // 0 → default 20 for list
+	LastN     int       // 0 → default 3 for brief/info recent messages
+	Tail      int       // 0 → full log; >0 → last N displayable events
+	Format    string    // "table", "json", "" (log writes raw text to Output)
+	Now       time.Time // fixed clock for relative times in formatters
 }
 
 type Response struct {
 	Sessions []sessions.Session
+	Info     *sessions.SessionInfo
 	Brief    *sessions.SessionBrief
 	Output   string
 	JSON     []byte
+	Elapsed  time.Duration // list operation wall time
 	Err      error
 }
 
@@ -114,10 +142,16 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 	if lastN == 0 {
 		lastN = 3
 	}
+	now := req.Now
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
 
 	switch req.Operation {
 	case "list":
+		start := time.Now()
 		list, err := sessions.List(req.CodexHome, limit)
+		resp.Elapsed = time.Since(start)
 		if err != nil {
 			resp.Err = err
 			return resp, nil
@@ -132,8 +166,16 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 			}
 			resp.JSON = data
 		default:
-			resp.Output = sessions.FormatListTable(list, req.CodexHome)
+			resp.Output = sessions.FormatListTable(list, req.CodexHome, now)
 		}
+	case "info":
+		info, err := sessions.Info(req.CodexHome, req.SessionID, lastN)
+		if err != nil {
+			resp.Err = err
+			return resp, nil
+		}
+		resp.Info = info
+		resp.Output = sessions.FormatInfoText(info, req.CodexHome, now)
 	case "brief":
 		brief, err := sessions.Brief(req.CodexHome, req.SessionID, lastN)
 		if err != nil {

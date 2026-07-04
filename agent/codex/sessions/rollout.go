@@ -319,6 +319,136 @@ func displayTextFromTraceLine(traceLine string) string {
 	return strings.TrimSpace(traceTypes.TraceItemText(item))
 }
 
+func titleFromRolloutLine(line string) string {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return ""
+	}
+	var row rolloutLine
+	if err := json.Unmarshal([]byte(trimmed), &row); err != nil || row.Type != "event_msg" {
+		return ""
+	}
+	var p eventMsgPayload
+	if err := json.Unmarshal(row.Payload, &p); err != nil {
+		return ""
+	}
+	if p.Type != "user_message" {
+		return ""
+	}
+	return strings.TrimSpace(p.Message)
+}
+
+func extractTitle(lines []string) string {
+	for _, line := range lines {
+		if title := titleFromRolloutLine(line); title != "" {
+			return title
+		}
+	}
+	return ""
+}
+
+func countDisplayableFromRolloutLine(line string) int {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return 0
+	}
+
+	var row rolloutLine
+	if err := json.Unmarshal([]byte(trimmed), &row); err != nil {
+		return 0
+	}
+
+	switch row.Type {
+	case "event_msg":
+		return countDisplayableEventMsg(row.Payload)
+	case "response_item":
+		return countDisplayableResponseItem(row.Payload)
+	default:
+		return 0
+	}
+}
+
+func countDisplayableEventMsg(payload json.RawMessage) int {
+	var p eventMsgPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return 0
+	}
+	if p.Type != "agent_message" {
+		return 0
+	}
+	if p.Phase != "commentary" && p.Phase != "final" {
+		return 0
+	}
+	if strings.TrimSpace(p.Message) == "" {
+		return 0
+	}
+	return 1
+}
+
+func countDisplayableResponseItem(payload json.RawMessage) int {
+	var p responseItemPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return 0
+	}
+
+	switch p.Type {
+	case "function_call":
+		if p.Name != "exec_command" {
+			return 0
+		}
+		if extractExecCommand(p.Arguments) == "" {
+			return 0
+		}
+		return 1
+	case "function_call_output":
+		if strings.TrimSpace(p.Output) == "" {
+			return 0
+		}
+		return 1
+	case "custom_tool_call":
+		if p.Name != "apply_patch" {
+			return 0
+		}
+		if extractPatchPath(p.Input) == "" {
+			return 0
+		}
+		return 1
+	case "reasoning":
+		if reasoningText(p) == "" {
+			return 0
+		}
+		return 1
+	default:
+		return 0
+	}
+}
+
+func sumTokenCounts(lines []string) (inputTokens, outputTokens int) {
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		var row rolloutLine
+		if err := json.Unmarshal([]byte(trimmed), &row); err != nil || row.Type != "event_msg" {
+			continue
+		}
+		var p struct {
+			Type         string `json:"type"`
+			InputTokens  int    `json:"input_tokens"`
+			OutputTokens int    `json:"output_tokens"`
+		}
+		if err := json.Unmarshal(row.Payload, &p); err != nil {
+			continue
+		}
+		if p.Type == "token_count" {
+			inputTokens += p.InputTokens
+			outputTokens += p.OutputTokens
+		}
+	}
+	return inputTokens, outputTokens
+}
+
 func sessionNotFoundError(id string) error {
 	return fmt.Errorf("codex session not found: %s", id)
 }

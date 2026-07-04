@@ -19,8 +19,9 @@ sessions package -> print.FormatTraceLine pipeline -> formatted terminal output
 ## Steps
 
 1. Root Setup allocates `req.CodexHome` as `{temp}/.codex`.
-2. Leaf Setup writes rollout JSONL fixtures under `CodexHome/sessions/`.
-3. Run dispatches to List, Brief, or PrintLog based on `req.Operation`.
+2. Root Setup sets `req.Now` to a fixed UTC instant for deterministic relative times.
+3. Leaf Setup writes rollout JSONL fixtures under `CodexHome/sessions/`.
+4. Run dispatches to List, Info, Brief, or PrintLog based on `req.Operation`.
 
 ## Context
 
@@ -40,8 +41,15 @@ import (
 	_ "github.com/xhd2015/agent-pro/agent_trace/codex"
 )
 
+const fixedNow = "2026-07-03T15:00:00.000Z"
+
 func Setup(t *testing.T, req *Request) error {
 	req.CodexHome = filepath.Join(t.TempDir(), ".codex")
+	now, err := time.Parse(time.RFC3339, fixedNow)
+	if err != nil {
+		t.Fatalf("parse fixed now: %v", err)
+	}
+	req.Now = now.UTC()
 	return nil
 }
 
@@ -79,6 +87,20 @@ func agentMessageLine(message string) string {
 	return fmt.Sprintf(
 		`{"type":"event_msg","payload":{"type":"agent_message","message":%q,"phase":"commentary"}}`,
 		message,
+	)
+}
+
+func userMessageLine(message string) string {
+	return fmt.Sprintf(
+		`{"type":"event_msg","payload":{"type":"user_message","message":%q}}`,
+		message,
+	)
+}
+
+func tokenCountLine(inputTokens, outputTokens int) string {
+	return fmt.Sprintf(
+		`{"type":"event_msg","payload":{"type":"token_count","input_tokens":%d,"output_tokens":%d}}`,
+		inputTokens, outputTokens,
 	)
 }
 

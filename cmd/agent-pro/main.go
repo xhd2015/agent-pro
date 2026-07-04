@@ -6,17 +6,21 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	codexcfg "github.com/xhd2015/agent-pro/agent/codex/config"
 	codexsessions "github.com/xhd2015/agent-pro/agent/codex/sessions"
 	codexskills "github.com/xhd2015/agent-pro/agent/codex/skills"
+	groksessions "github.com/xhd2015/agent-pro/agent/grok/sessions"
 	"github.com/xhd2015/agent-pro/agent/opencode/commands"
 	opencodecfg "github.com/xhd2015/agent-pro/agent/opencode/config"
 	openskills "github.com/xhd2015/agent-pro/agent/opencode/skills"
+	opencodesessions "github.com/xhd2015/agent-pro/agent/opencode/sessions"
 	"github.com/xhd2015/agent-pro/agent/opencode/permissions"
 	"github.com/xhd2015/agent-pro/agent/opencode/plugins"
 	"github.com/xhd2015/agent-pro/frontend"
 	"github.com/xhd2015/agent-pro/pkgs/agentconfig"
+	"github.com/xhd2015/agent-pro/pkgs/groktty"
 	"github.com/xhd2015/agent-pro/run"
 	"github.com/xhd2015/agent-pro/server"
 	"github.com/xhd2015/less-gen/flags"
@@ -30,6 +34,7 @@ Commands:
   pi                manage pi configuration
   crush             manage crush configuration
   codex             manage codex configuration
+  grok              manage grok CLI sessions
   skills            list available skills (explore, reproduce)
   skill             show or install a skill
   traces            view agent trace sessions (web viewer)
@@ -47,6 +52,8 @@ Commands:
   permissions       manage opencode permissions
   plugins           manage opencode plugins
   skills            list installed skills
+  sessions          list OpenCode CLI sessions
+  session           show info for one OpenCode CLI session
 
 Run agent-pro opencode <command> --help for command-specific options.
 `
@@ -70,6 +77,8 @@ func handle(args []string) error {
 		return handleOpenCode(args[1:])
 	case "codex":
 		return handleCodex(args[1:])
+	case "grok":
+		return handleGrok(args[1:])
 	case "pi":
 		return handlePi(args[1:])
 	case "crush":
@@ -104,6 +113,10 @@ func handleOpenCode(args []string) error {
 		return handleOpenCodeConfig(args[1:])
 	case "skills":
 		return handleOpenCodeSkills(args[1:])
+	case "sessions":
+		return handleOpenCodeSessions(args[1:])
+	case "session":
+		return handleOpenCodeSession(args[1:])
 	default:
 		return fmt.Errorf("unknown opencode command: %s", args[0])
 	}
@@ -718,6 +731,127 @@ func formatLocation(filePath string, line int, home string) string {
 	return s
 }
 
+// --- grok ---
+
+const grokHelp = `
+Usage: agent-pro grok <command> [ARGS]
+
+Commands:
+  sessions          list recent Grok CLI sessions
+  session           show details for one Grok CLI session
+
+Run agent-pro grok <command> --help for command-specific options.
+`
+
+func handleGrok(args []string) error {
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(strings.TrimPrefix(grokHelp, "\n"))
+		return nil
+	}
+
+	switch args[0] {
+	case "sessions":
+		return handleGrokSessions(args[1:])
+	case "session":
+		return handleGrokSession(args[1:])
+	default:
+		return fmt.Errorf("unknown grok command: %s", args[0])
+	}
+}
+
+const grokSessionsHelp = `
+Usage: agent-pro grok sessions [--limit N]
+
+List recent Grok CLI sessions from ~/.grok (or $GROK_HOME).
+
+Options:
+  --limit <n>   max sessions to list (default 20, max 100)
+  -h,--help     show help
+`
+
+func handleGrokSessions(args []string) error {
+	var limitFlag *int
+	_, err := flags.Int("--limit", &limitFlag).
+		Help("-h,--help", grokSessionsHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+
+	limit := 20
+	if limitFlag != nil && *limitFlag > 0 {
+		limit = *limitFlag
+	}
+
+	grokHome := groktty.GrokHome()
+	sessions, err := groksessions.List(grokHome, limit)
+	if err != nil {
+		return fmt.Errorf("list grok sessions: %w", err)
+	}
+
+	fmt.Println(groksessions.FormatListTable(sessions, homeDir(), time.Now()))
+	return nil
+}
+
+const grokSessionHelp = `
+Usage: agent-pro grok session <command> [ARGS]
+
+Commands:
+  info <session-id>   show detailed info for one Grok CLI session
+  log  <session-id>   print session log (not implemented yet)
+
+Run agent-pro grok session <command> --help for command-specific options.
+`
+
+const grokSessionInfoHelp = `
+Usage: agent-pro grok session info <session-id>
+
+Show detailed info for one Grok CLI session from ~/.grok (or $GROK_HOME).
+
+Options:
+  -h,--help     show help
+`
+
+func handleGrokSession(args []string) error {
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(strings.TrimPrefix(grokSessionHelp, "\n"))
+		return nil
+	}
+
+	switch args[0] {
+	case "info":
+		return handleGrokSessionInfo(args[1:])
+	default:
+		return fmt.Errorf("unknown grok session command: %s", args[0])
+	}
+}
+
+func handleGrokSessionInfo(args []string) error {
+	remaining, err := flags.New().
+		Help("-h,--help", grokSessionInfoHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+	if len(remaining) != 1 {
+		return fmt.Errorf("expected exactly one session id, got %d arguments", len(remaining))
+	}
+
+	sessionID := strings.TrimSpace(remaining[0])
+	if sessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+
+	grokHome := groktty.GrokHome()
+	info, err := groksessions.Info(grokHome, sessionID)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(groksessions.FormatInfoText(info, homeDir(), time.Now()))
+	return nil
+}
+
 // --- codex ---
 
 const codexHelp = `
@@ -730,7 +864,8 @@ Commands:
   projects          list trusted project paths
   plugins           list installed plugins
   skills            list installed skills
-  sessions          list, brief, or log Codex CLI rollout sessions
+  sessions          list Codex CLI rollout sessions
+  session           show info or log for one Codex CLI session
   features          show enabled/disabled feature flags
   doc               show codex config.toml reference documentation
 
@@ -758,6 +893,8 @@ func handleCodex(args []string) error {
 		return handleCodexSkills(args[1:])
 	case "sessions":
 		return handleCodexSessions(args[1:])
+	case "session":
+		return handleCodexSession(args[1:])
 	case "features":
 		return handleCodexFeatures(args[1:])
 	case "doc":
@@ -1143,100 +1280,122 @@ func handleCodexDoc(args []string) error {
 // --- codex sessions ---
 
 const codexSessionsHelp = `
-Usage: agent-pro codex sessions [SESSION-ID] [OPTIONS]
+Usage: agent-pro codex sessions [--limit N] [--json]
 
-List, briefly show, or print full logs for Codex CLI rollout sessions.
-
-Modes:
-  agent-pro codex sessions [--limit N] [--json]
-      List recent sessions (default limit 20, max 100).
-
-  agent-pro codex sessions <session-id> [--json]
-      Show a brief summary with the last few displayable messages.
-
-  agent-pro codex sessions <session-id> --log
-      Print the full human-readable session log.
-
-  agent-pro codex sessions <session-id> --tail <n>
-      Print the last N displayable log events (--log is implied).
+List recent Codex CLI rollout sessions.
 
 Options:
-  --limit <n>   max sessions to list (default 20)
-  --json        output JSON instead of a table or brief text
-  --log         print full session log (requires session id)
-  --tail <n>    print last N displayable log events (implies --log)
+  --limit <n>   max sessions to list (default 20, max 100)
+  --json        output JSON instead of a table
+  -h,--help     show help
+`
+
+const codexSessionHelp = `
+Usage: agent-pro codex session <command> [ARGS]
+
+Commands:
+  info <session-id>   show detailed info for one Codex CLI session
+  log  <session-id>   print human-readable session log
+
+Run agent-pro codex session <command> --help for command-specific options.
+`
+
+const codexSessionInfoHelp = `
+Usage: agent-pro codex session info <session-id> [--json]
+
+Show detailed info for one Codex CLI rollout session.
+
+Options:
+  --json        output JSON instead of text
+  -h,--help     show help
+`
+
+const codexSessionLogHelp = `
+Usage: agent-pro codex session log <session-id> [--tail N]
+
+Print the human-readable session log from a rollout JSONL file.
+
+Options:
+  --tail <n>    print last N displayable log events (0 = full log)
   -h,--help     show help
 `
 
 func handleCodexSessions(args []string) error {
 	var limitFlag *int
 	var jsonFlag *bool
-	var logFlag *bool
-	var tailFlag *int
 	remaining, err := flags.Int("--limit", &limitFlag).
 		Bool("--json", &jsonFlag).
-		Bool("--log", &logFlag).
-		Int("--tail", &tailFlag).
 		Help("-h,--help", codexSessionsHelp).
 		Parse(args)
 	if err != nil {
 		return err
 	}
+	if len(remaining) > 0 {
+		return fmt.Errorf("unexpected arguments: %v", remaining)
+	}
 
 	home := homeDir()
 	codexHome := codexsessions.CodexHomeFromEnv(home)
-	useJSON := jsonFlag != nil && *jsonFlag
-	tail := 0
-	if tailFlag != nil && *tailFlag > 0 {
-		tail = *tailFlag
+	limit := 20
+	if limitFlag != nil && *limitFlag > 0 {
+		limit = *limitFlag
 	}
-	useLog := (logFlag != nil && *logFlag) || tail > 0
-
-	if len(remaining) == 0 {
-		limit := 20
-		if limitFlag != nil && *limitFlag > 0 {
-			limit = *limitFlag
-		}
-		sessions, err := codexsessions.List(codexHome, limit)
+	sessions, err := codexsessions.List(codexHome, limit)
+	if err != nil {
+		return fmt.Errorf("list codex sessions: %w", err)
+	}
+	if jsonFlag != nil && *jsonFlag {
+		data, err := codexsessions.FormatListJSON(sessions)
 		if err != nil {
-			return fmt.Errorf("list codex sessions: %w", err)
+			return fmt.Errorf("format codex sessions json: %w", err)
 		}
-		if useJSON {
-			data, err := codexsessions.FormatListJSON(sessions)
-			if err != nil {
-				return fmt.Errorf("format codex sessions json: %w", err)
-			}
-			fmt.Println(string(data))
-			return nil
-		}
-		fmt.Println(codexsessions.FormatListTable(sessions, home))
+		fmt.Println(string(data))
+		return nil
+	}
+	fmt.Println(codexsessions.FormatListTable(sessions, home, time.Now()))
+	return nil
+}
+
+func handleCodexSession(args []string) error {
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(strings.TrimPrefix(codexSessionHelp, "\n"))
 		return nil
 	}
 
-	if len(remaining) != 1 {
-		return fmt.Errorf("expected at most one session id, got %d arguments", len(remaining))
+	switch args[0] {
+	case "info":
+		return handleCodexSessionInfo(args[1:])
+	case "log":
+		return handleCodexSessionLog(args[1:])
+	default:
+		return fmt.Errorf("unknown codex session command: %s", args[0])
 	}
+}
+
+func handleCodexSessionInfo(args []string) error {
+	var jsonFlag *bool
+	remaining, err := flags.Bool("--json", &jsonFlag).
+		Help("-h,--help", codexSessionInfoHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+	if len(remaining) != 1 {
+		return fmt.Errorf("expected exactly one session id, got %d arguments", len(remaining))
+	}
+
 	sessionID := strings.TrimSpace(remaining[0])
 	if sessionID == "" {
 		return fmt.Errorf("session id is required")
 	}
 
-	if useLog {
-		if useJSON {
-			return fmt.Errorf("--tail and --log cannot be used with --json")
-		}
-		path, err := codexsessions.Find(codexHome, sessionID)
+	home := homeDir()
+	codexHome := codexsessions.CodexHomeFromEnv(home)
+	if jsonFlag != nil && *jsonFlag {
+		brief, err := codexsessions.Brief(codexHome, sessionID, 3)
 		if err != nil {
 			return err
 		}
-		return codexsessions.PrintLog(path, os.Stdout, tail)
-	}
-
-	brief, err := codexsessions.Brief(codexHome, sessionID, 3)
-	if err != nil {
-		return err
-	}
-	if useJSON {
 		data, err := codexsessions.FormatBriefJSON(brief)
 		if err != nil {
 			return fmt.Errorf("format codex session brief json: %w", err)
@@ -1244,8 +1403,44 @@ func handleCodexSessions(args []string) error {
 		fmt.Println(string(data))
 		return nil
 	}
-	fmt.Println(codexsessions.FormatBriefText(brief, home))
+
+	info, err := codexsessions.Info(codexHome, sessionID, 3)
+	if err != nil {
+		return err
+	}
+	fmt.Println(codexsessions.FormatInfoText(info, home, time.Now()))
 	return nil
+}
+
+func handleCodexSessionLog(args []string) error {
+	var tailFlag *int
+	remaining, err := flags.Int("--tail", &tailFlag).
+		Help("-h,--help", codexSessionLogHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+	if len(remaining) != 1 {
+		return fmt.Errorf("expected exactly one session id, got %d arguments", len(remaining))
+	}
+
+	sessionID := strings.TrimSpace(remaining[0])
+	if sessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+
+	tail := 0
+	if tailFlag != nil && *tailFlag > 0 {
+		tail = *tailFlag
+	}
+
+	home := homeDir()
+	codexHome := codexsessions.CodexHomeFromEnv(home)
+	path, err := codexsessions.Find(codexHome, sessionID)
+	if err != nil {
+		return err
+	}
+	return codexsessions.PrintLog(path, os.Stdout, tail)
 }
 
 // --- codex skills ---
@@ -1528,6 +1723,100 @@ func printSkillGroup(label string, skills []openskills.SkillInfo, home string) {
 		}
 	}
 	fmt.Println()
+}
+
+const opencodeSessionsHelp = `
+Usage: agent-pro opencode sessions [--limit N]
+
+List recent OpenCode CLI sessions from ~/.local/share/opencode (or $XDG_DATA_HOME/opencode).
+
+Options:
+  --limit <n>   max sessions to list (default 20, max 100)
+  -h,--help     show help
+`
+
+const opencodeSessionHelp = `
+Usage: agent-pro opencode session <command> [ARGS]
+
+Commands:
+  info <session-id>   show detailed info for one OpenCode CLI session
+
+Run agent-pro opencode session <command> --help for command-specific options.
+`
+
+const opencodeSessionInfoHelp = `
+Usage: agent-pro opencode session info <session-id>
+
+Show detailed info for one OpenCode CLI session.
+
+Options:
+  -h,--help     show help
+`
+
+func handleOpenCodeSessions(args []string) error {
+	var limitFlag *int
+	remaining, err := flags.Int("--limit", &limitFlag).
+		Help("-h,--help", opencodeSessionsHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+	if len(remaining) > 0 {
+		return fmt.Errorf("unexpected arguments: %v", remaining)
+	}
+
+	home := homeDir()
+	dataDir := opencodesessions.OpenCodeDataHome(home)
+	limit := 20
+	if limitFlag != nil && *limitFlag > 0 {
+		limit = *limitFlag
+	}
+	sessions, err := opencodesessions.List(dataDir, limit)
+	if err != nil {
+		return fmt.Errorf("list opencode sessions: %w", err)
+	}
+	fmt.Println(opencodesessions.FormatListTable(sessions, home, time.Now()))
+	return nil
+}
+
+func handleOpenCodeSession(args []string) error {
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(strings.TrimPrefix(opencodeSessionHelp, "\n"))
+		return nil
+	}
+
+	switch args[0] {
+	case "info":
+		return handleOpenCodeSessionInfo(args[1:])
+	default:
+		return fmt.Errorf("unknown opencode session command: %s", args[0])
+	}
+}
+
+func handleOpenCodeSessionInfo(args []string) error {
+	remaining, err := flags.New().
+		Help("-h,--help", opencodeSessionInfoHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+	if len(remaining) != 1 {
+		return fmt.Errorf("expected exactly one session id, got %d arguments", len(remaining))
+	}
+
+	sessionID := strings.TrimSpace(remaining[0])
+	if sessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+
+	home := homeDir()
+	dataDir := opencodesessions.OpenCodeDataHome(home)
+	info, err := opencodesessions.Info(dataDir, sessionID)
+	if err != nil {
+		return err
+	}
+	fmt.Println(opencodesessions.FormatInfoText(info, home, time.Now()))
+	return nil
 }
 
 // --- opencode config ---

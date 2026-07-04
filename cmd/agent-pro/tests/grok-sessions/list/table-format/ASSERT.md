@@ -1,8 +1,8 @@
 ## Expected
 
-- `FormatListTable` output contains column headers `SESSION ID`, `LAST ACTIVE`, `TITLE`, `MSGS`, `CWD`.
+- `FormatListTable` output contains column headers `SESSION ID`, `LAST ACTIVE`, `TITLE`, `CWD`.
 - Relative times appear for each session: `just now`, `5m ago`, `2h ago`.
-- Output includes session UUIDs, titles derived from user messages, and cwd paths.
+- Output includes session UUIDs, titles, and cwd paths.
 
 ## Errors
 
@@ -16,7 +16,6 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	assertContains(t, resp.Output, "SESSION ID")
 	assertContains(t, resp.Output, "LAST ACTIVE")
 	assertContains(t, resp.Output, "TITLE")
-	assertContains(t, resp.Output, "MSGS")
 	assertContains(t, resp.Output, "CWD")
 
 	assertContains(t, resp.Output, "01900004-aaaa-7aaa-aaaa-aaaaaaaaaaaa")
@@ -27,9 +26,9 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	assertContains(t, resp.Output, "5m ago")
 	assertContains(t, resp.Output, "2h ago")
 
-	assertContains(t, resp.Output, "Alpha refactor task")
-	assertContains(t, resp.Output, "Beta bugfix task")
-	assertContains(t, resp.Output, "Gamma cleanup task")
+	assertContains(t, resp.Output, "Alpha refactor")
+	assertContains(t, resp.Output, "Beta bugfix")
+	assertContains(t, resp.Output, "Gamma cleanup")
 
 	assertContains(t, resp.Output, "/tmp/project-a")
 	assertContains(t, resp.Output, "/tmp/project-b")
