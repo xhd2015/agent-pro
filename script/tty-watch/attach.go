@@ -197,10 +197,8 @@ func (a *attachStdoutWriter) Write(p []byte) (int, error) {
 		return len(p), nil
 	}
 	if a.rawTTY {
-		out := normalizeTTYOutput(p)
 		debugLogBytes("attachStdoutWriter rawTTY in", p)
-		debugLogBytes("attachStdoutWriter rawTTY out", out)
-		if _, err := a.w.Write(out); err != nil {
+		if _, err := a.w.Write(p); err != nil {
 			return 0, err
 		}
 		return len(p), nil

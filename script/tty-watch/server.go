@@ -37,6 +37,7 @@ func runServeSession(args []string) error {
 	listenAddr := ln.Addr().String()
 
 	mux := http.NewServeMux()
+	registerPrepareInjectAPI(mux, mgr)
 	ptywrap.RegisterAPIWithManager(mux, mgr)
 	srv := &http.Server{Handler: mux}
 	serverDone := make(chan error, 1)

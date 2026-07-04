@@ -30,6 +30,7 @@ type Request struct {
 	RunCommand                 []string
 	Detach, SendCtrlC, Background bool
 	WatchProbe, SnapshotID, KillID string
+	SendID, SendMessage string
 }
 
 // Response is the doctest harness response for tty-watch CLI tests.
@@ -52,6 +53,9 @@ type Response struct {
 	SourceCheckNote            string
 	StdinRestoredBeforeCleanup bool
 	KittyPopCleanupInSrc       bool
+	InjectedBytes              []byte
+	AltExitCode                int
+	AltStderr                  string
 }
 
 // RegistryEntry mirrors the tty-watch registry JSON shape for harness helpers.
@@ -155,6 +159,14 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 		return phaseKillStale(t, req)
 	case "error-cmd":
 		return phaseErrorCmd(t, req)
+	case "send-injects-verbatim", "send-no-suffix", "send-preserves-whitespace":
+		return phaseSendCapture(t, req)
+	case "send-missing-args":
+		return phaseSendMissingArgs(t, req)
+	case "send-missing":
+		return phaseSendMissing(t, req)
+	case "send-stale":
+		return phaseSendStale(t, req)
 	default:
 		return nil, fmt.Errorf("unknown phase %q", req.Phase)
 	}
@@ -1472,6 +1484,109 @@ func phaseErrorCmd(t *testing.T, req *Request) (*Response, error) {
 		Stderr:   stderr,
 		Combined: combineOutput(stdout, stderr),
 		ExitCode: code,
+	}, nil
+}
+
+func byteCaptureSessionCommand(home string) (capturePath string, argv []string) {
+	capturePath = filepath.Join(home, "inject-capture.bin")
+	argv = []string{
+		"sh", "-c",
+		fmt.Sprintf("cat > %s; sleep 300", shellQuote(capturePath)),
+	}
+	return capturePath, argv
+}
+
+func phaseSendCapture(t *testing.T, req *Request) (*Response, error) {
+	message := req.SendMessage
+	if message == "" {
+		return nil, fmt.Errorf("send capture phase requires SendMessage")
+	}
+	capturePath, argv := byteCaptureSessionCommand(req.TTYWatchHome)
+	detachReq := *req
+	detachReq.RunCommand = argv
+	sessionID := StartDetachedSession(t, &detachReq)
+	time.Sleep(400 * time.Millisecond)
+
+	stdout, stderr, code, err := runCLISeparate(req.Bin, req.TTYWatchHome, []string{"send", sessionID, message})
+	if err != nil {
+		return nil, err
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	captured, readErr := os.ReadFile(capturePath)
+	if readErr != nil && !os.IsNotExist(readErr) {
+		return nil, readErr
+	}
+	return &Response{
+		SessionID:     sessionID,
+		Stdout:        stdout,
+		Stderr:        stderr,
+		Combined:      combineOutput(stdout, stderr),
+		ExitCode:      code,
+		InjectedBytes: captured,
+	}, nil
+}
+
+func phaseSendMissingArgs(t *testing.T, req *Request) (*Response, error) {
+	stdout, stderr, code, err := runCLISeparate(req.Bin, req.TTYWatchHome, []string{"send"})
+	if err != nil {
+		return nil, err
+	}
+	_, altStderr, altCode, err := runCLISeparate(req.Bin, req.TTYWatchHome, []string{"send", "session-1"})
+	if err != nil {
+		return nil, err
+	}
+	return &Response{
+		Stdout:      stdout,
+		Stderr:      stderr,
+		Combined:    combineOutput(stdout, stderr),
+		ExitCode:    code,
+		AltExitCode: altCode,
+		AltStderr:   altStderr,
+	}, nil
+}
+
+func phaseSendMissing(t *testing.T, req *Request) (*Response, error) {
+	id := req.SendID
+	if id == "" {
+		id = "session-99999"
+	}
+	message := req.SendMessage
+	if message == "" {
+		message = "hi"
+	}
+	stdout, stderr, code, err := runCLISeparate(req.Bin, req.TTYWatchHome, []string{"send", id, message})
+	if err != nil {
+		return nil, err
+	}
+	return &Response{
+		Stdout:   stdout,
+		Stderr:   stderr,
+		Combined: combineOutput(stdout, stderr),
+		ExitCode: code,
+	}, nil
+}
+
+func phaseSendStale(t *testing.T, req *Request) (*Response, error) {
+	const staleID = "session-stale-1"
+	if err := WriteStaleRegistry(req.TTYWatchHome, staleID, "127.0.0.1:1"); err != nil {
+		return nil, err
+	}
+	message := req.SendMessage
+	if message == "" {
+		message = "hi"
+	}
+	stdout, stderr, code, err := runCLISeparate(req.Bin, req.TTYWatchHome, []string{"send", staleID, message})
+	if err != nil {
+		return nil, err
+	}
+	return &Response{
+		SessionID:      staleID,
+		Stdout:         stdout,
+		Stderr:         stderr,
+		Combined:       combineOutput(stdout, stderr),
+		ExitCode:       code,
+		RegistryExists: RegistryExists(req.TTYWatchHome, staleID),
 	}, nil
 }
 

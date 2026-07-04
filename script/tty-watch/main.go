@@ -30,6 +30,8 @@ func run(args []string) error {
 		return runSnapshot(args[1:])
 	case "kill":
 		return runKill(args[1:])
+	case "send":
+		return runSend(args[1:])
 	case "-h", "--help", "help":
 		printHelp()
 		return nil
@@ -47,6 +49,7 @@ Usage:
   tty-watch watch <session-id>       Observe session (readonly)
   tty-watch snapshot <session-id>    Print sanitized scrollback
   tty-watch kill <session-id>        End session and remove registry
+  tty-watch send <session-id> <msg>  Inject follow-up text into live session
 
 Options:
   -h, --help                         Show help
