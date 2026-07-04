@@ -13,10 +13,11 @@ import (
 
 // ServeOptions configures an embedded PTY server session.
 type ServeOptions struct {
-	SessionID string
-	Command   []string
-	Home      string
-	Cwd       string
+	SessionID  string
+	Command    []string
+	Home       string
+	Cwd        string
+	ExtraPaths []string
 }
 
 // ServeSession runs the embedded ptywrap HTTP server until the command exits.
@@ -46,6 +47,9 @@ func ServeSession(ctx context.Context, opts ServeOptions) error {
 	}
 
 	mgr := ptywrap.NewManager()
+	if len(opts.ExtraPaths) > 0 {
+		mgr.Spawn.ExtraPaths = append([]string(nil), opts.ExtraPaths...)
+	}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return err

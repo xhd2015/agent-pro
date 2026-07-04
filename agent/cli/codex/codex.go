@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
+	"github.com/xhd2015/agent-pro/agent/debuglog"
 	"github.com/xhd2015/agent-pro/agent/exec"
 )
 
@@ -23,8 +24,44 @@ type CodexAgent struct {
 
 func FindAgentPath(env *exec.Env) (string, error) {
 	if path, err := env.LookPath("codex"); err == nil {
+		debuglog.Log(debuglog.Entry{
+			Event: "codex_path_resolved",
+			Labels: map[string]string{
+				"component": "codex_cli",
+				"phase":     "resolve",
+			},
+			Fields: map[string]any{
+				"path": path,
+				"via":  "path_lookup",
+			},
+		})
 		return path, nil
 	}
+	if path, ok := probeCodexInstallPath(); ok {
+		debuglog.Log(debuglog.Entry{
+			Event: "codex_path_resolved",
+			Labels: map[string]string{
+				"component": "codex_cli",
+				"phase":     "resolve",
+			},
+			Fields: map[string]any{
+				"path": path,
+				"via":  "probe",
+			},
+		})
+		return path, nil
+	}
+	debuglog.Log(debuglog.Entry{
+		Event: "codex_path_failed",
+		Labels: map[string]string{
+			"component": "codex_cli",
+			"phase":     "resolve",
+		},
+		Fields: map[string]any{
+			"error":    "codex not found in PATH",
+			"path_env": os.Getenv("PATH"),
+		},
+	})
 	return "", fmt.Errorf("codex not found in PATH")
 }
 

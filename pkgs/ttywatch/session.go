@@ -14,9 +14,10 @@ import (
 
 // EphemeralSession manages a short-lived tty-watch session without CLI subprocesses.
 type EphemeralSession struct {
-	Home      string
-	SessionID string
-	Command   []string
+	Home       string
+	SessionID  string
+	Command    []string
+	ExtraPaths []string
 
 	entry       *RegistryEntry
 	serveCancel context.CancelFunc
@@ -44,9 +45,10 @@ func (s *EphemeralSession) StartInProcess(ctx context.Context) error {
 	s.serveDone = make(chan error, 1)
 	go func() {
 		s.serveDone <- ServeSession(serveCtx, ServeOptions{
-			SessionID: s.SessionID,
-			Command:   s.Command,
-			Home:      s.Home,
+			SessionID:  s.SessionID,
+			Command:    s.Command,
+			Home:       s.Home,
+			ExtraPaths: s.ExtraPaths,
 		})
 	}()
 

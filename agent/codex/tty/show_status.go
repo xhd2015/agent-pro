@@ -74,6 +74,7 @@ func FetchStatusWithOptions(ctx context.Context, opts Options) (*UsageInfo, erro
 		logCodexError("build_argv", err, nil)
 		return nil, err
 	}
+	extraPaths := commandExtraPaths(codexArgv)
 	v.command(append([]string{"ttywatch", "run", "--session-id", sessionIDFromEnv()}, codexArgv...))
 
 	sessionID := sessionIDFromEnv()
@@ -91,6 +92,7 @@ func FetchStatusWithOptions(ctx context.Context, opts Options) (*UsageInfo, erro
 	defer release()
 
 	session := ttywatch.NewEphemeralSession(home, sessionID, codexArgv)
+	session.ExtraPaths = extraPaths
 	defer func() { _ = session.Kill() }()
 
 	debuglog.Log(debuglog.Entry{
@@ -101,9 +103,10 @@ func FetchStatusWithOptions(ctx context.Context, opts Options) (*UsageInfo, erro
 			"phase":     "session",
 		},
 		Fields: map[string]any{
-			"session_id": sessionID,
-			"tty_home":   home,
-			"argv":       codexArgv,
+			"session_id":  sessionID,
+			"tty_home":    home,
+			"argv":        codexArgv,
+			"extra_paths": extraPaths,
 		},
 	})
 
@@ -241,6 +244,23 @@ func ttyWatchHome() (string, error) {
 		return "", err
 	}
 	return filepath.Join(home, ".tty-watch"), nil
+}
+
+// commandExtraPaths returns PATH entries the PTY child needs beyond the daemon PATH.
+// npm-installed codex is a #!/usr/bin/env node shim; node must be on PATH at spawn time.
+func commandExtraPaths(argv []string) []string {
+	if len(argv) == 0 {
+		return nil
+	}
+	bin := strings.TrimSpace(argv[0])
+	if bin == "" {
+		return nil
+	}
+	dir := filepath.Dir(bin)
+	if dir == "" || dir == "." {
+		return nil
+	}
+	return []string{dir}
 }
 
 func buildCodexArgv(env *agentexec.Env) ([]string, error) {
