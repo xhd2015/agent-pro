@@ -60,3 +60,5 @@ require (
 	golang.org/x/sys v0.44.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 )
+
+replace github.com/xhd2015/dot-pkgs/go-pkgs => /Users/xhd2015/.wrk/worktrees/agent-pro-master-2026-07-03-tty-watch-1/external/dot-pkgs-master-2026-07-03/go-pkgs
