@@ -1,3 +1,11 @@
+# Scenario
+
+**Feature**: index=-1 sequential match
+
+```
+POST -> sequential counter -> Hello, world!
+```
+
 ## Steps
 1. Write config with a single exchange: index=-1, role="user", content="hello".
 2. Send a chat request matching role and content.

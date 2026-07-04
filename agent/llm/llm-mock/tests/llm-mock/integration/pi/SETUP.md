@@ -1,3 +1,11 @@
+# Scenario
+
+**Feature**: pi with mock backend
+
+```
+pi -> mock -> Paris
+```
+
 ## Steps
 1. Create a temp PI_CODING_AGENT_DIR and write `models.json` inside it with the openai provider config pointing at the mock server.
 2. Write a mock config with an exchange matching "capital of France" → "Paris" (role-match-any: empty role so pi's message format always matches).

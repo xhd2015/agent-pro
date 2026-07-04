@@ -1,3 +1,11 @@
+# Scenario
+
+**Branch**: agent binary integration with mock backend
+
+```
+mock server + opencode/pi -> Paris in output
+```
+
 ## Preconditions
 - These branches test real binary integration: the mock server runs as a backend and the
   actual agent binary (`opencode` or `pi`) is spawned to talk to it.

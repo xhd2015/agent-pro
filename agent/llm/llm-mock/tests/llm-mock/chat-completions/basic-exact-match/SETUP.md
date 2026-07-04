@@ -1,3 +1,11 @@
+# Scenario
+
+**Feature**: exact match index=0 -> Paris
+
+```
+POST -> exact role+content -> Paris
+```
+
 ## Steps
 1. Write config with a single exchange: index=0, role="user", content="one word of French capital".
 2. Send a chat request with a user message matching that content.

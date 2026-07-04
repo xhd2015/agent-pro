@@ -1,3 +1,11 @@
+# Scenario
+
+**Feature**: tool_calls response
+
+```
+POST -> tool_calls, null content
+```
+
 ## Steps
 1. Write config with an exchange that includes `tool_calls` in the response and `finish_reason: "tool_calls"`.
 2. Send a matching request.

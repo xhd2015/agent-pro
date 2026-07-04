@@ -17,7 +17,14 @@ import (
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/shared/constant"
+	types "github.com/xhd2015/agent-pro/agent/event/types"
+	"github.com/xhd2015/agent-pro/agent/llm/llm-mock/mockconfig"
+	"github.com/xhd2015/agent-pro/agent/llm/llm-mock/mockgen"
+	"github.com/xhd2015/agent-pro/agent/llm/llm-mock/mockpreset"
+	runpkg "github.com/xhd2015/agent-pro/agent/llm/llm-mock/run"
+	"github.com/xhd2015/agent-pro/pkgs/fake-agent/events"
 	"github.com/xhd2015/skills/install"
+	lessflags "github.com/xhd2015/less-flags"
 )
 
 //go:embed SKILL.md
@@ -25,44 +32,71 @@ var skillContent string
 
 const skillName = "llm-mock"
 
-// Config represents the JSON configuration file.
-type Config struct {
-	Port      int        `json:"port"`
-	Exchanges []Exchange `json:"exchanges"`
-}
+const mainHelp = `
+Usage: llm-mock <command> [options]
 
-// Exchange represents a request→response mapping.
-type Exchange struct {
-	Request  ExchangeRequest  `json:"request"`
-	Response ExchangeResponse `json:"response"`
-}
+Commands:
+  run       Run grok with a background mock LLM server (llm-mock run --help)
+  skill     Show or install the llm-mock skill (llm-mock skill show)
 
-// ExchangeRequest defines the matching criteria.
-type ExchangeRequest struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-	Index   int    `json:"index"`
-}
+Server mode (default, no subcommand):
+  llm-mock [--config FILE] [--mock-events-preset NAME] [--events-file FILE] [--agent-events-file FILE] [--log-http FILE]
 
-// ExchangeResponse defines the response to return.
-type ExchangeResponse struct {
-	Content      *string    `json:"content"`
-	ToolCalls    []ToolCall `json:"tool_calls"`
-	FinishReason string     `json:"finish_reason"`
-}
+  OpenAI-compatible mock HTTP server for /v1/chat/completions, /v1/models, etc.
 
-// ToolCall represents an OpenAI tool call in the config DSL.
-type ToolCall struct {
-	ID       string       `json:"id"`
-	Type     string       `json:"type"`
-	Function ToolFunction `json:"function"`
-}
+Options:
+  -config string
+        Path to JSON config file (or LLM_MOCK_CONFIG / LLM_MOCK_CONFIG_FILE)
+  -mock-events-preset string
+        Named AgentEvent sequence to seed genQueue after config exchanges, or "list" for catalog
+  -events-file string
+        Path to append RecordedRequest JSONL (admin/debug)
+  -agent-events-file string
+        Path to append served AgentEvent JSONL
+  -log-http string
+        Path to append full HTTP request/response exchange JSONL (must end with .jsonl)
 
-// ToolFunction represents a function call within a tool call.
-type ToolFunction struct {
-	Name      string `json:"name"`
-	Arguments string `json:"arguments"`
-}
+  -h, --help
+        Show this overview (server mode: also shows Go flag help)
+`
+
+const runHelp = `
+Usage: llm-mock run [--mock-events-preset NAME] [--log-events FILE] [--log-http FILE] grok [grok-args...]
+
+Start a background llm-mock HTTP server, configure an isolated GROK_HOME pointing
+at the mock, and run grok in the foreground. The mock stops when grok exits.
+
+Options:
+  --mock-events-preset NAME
+        Named AgentEvent sequence to seed mock genQueue after config exchanges,
+        or "list" to print the preset catalog and exit (no grok, no mock server).
+  --log-events FILE
+        Append standard AgentEvent JSONL for each served mock response.
+        FILE must end with .jsonl. Passed to the mock as --agent-events-file.
+  --log-http FILE
+        Append full HTTP request/response exchange JSONL for each mock HTTP call.
+        FILE must end with .jsonl. Passed to the mock as --log-http.
+
+Environment (orchestrator):
+  LLM_MOCK_CONFIG_FILE, LLM_MOCK_CONFIG   Mock exchange config JSON path
+  LLM_MOCK_EVENTS_FILE                    Optional input exchanges JSONL (appended)
+  LLM_MOCK_GROK_HOME                      Explicit grok home (default: temp dir)
+  LLM_MOCK_RUN_GROK_COMMAND               Replace grok executable (tests/plumbing)
+  LLM_MOCK_RUN_GROK_DEBUG=1               Verbose orchestrator stderr debug logs
+
+Config is optional; with no config env vars, uses inline default {"exchanges": []}.
+
+Examples:
+  llm-mock run --mock-events-preset=list
+  llm-mock run grok
+  llm-mock run --mock-events-preset=think-message grok
+  llm-mock run --log-events session.jsonl grok
+  llm-mock run --log-http http.jsonl grok
+  llm-mock run --log-events session.jsonl --log-http http.jsonl grok -p hello --always-approve
+
+  -h, --help
+        Show this help
+`
 
 // RecordedRequest stores a received HTTP request for the admin endpoint.
 type RecordedRequest struct {
@@ -74,6 +108,10 @@ type RecordedRequest struct {
 
 func main() {
 	args := os.Args[1:]
+	if len(args) == 0 || isHelpArg(args[0]) {
+		printMainHelp()
+		return
+	}
 	if len(args) > 0 && args[0] == "skill" {
 		if err := handleSkillCommand(args[1:]); err != nil {
 			fmt.Fprintf(os.Stderr, "llm-mock: %v\n", err)
@@ -81,78 +119,46 @@ func main() {
 		}
 		return
 	}
+	if len(args) > 0 && args[0] == "run" {
+		if err := handleRunCommand(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "llm-mock: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	configPath := flag.String("config", "", "Path to JSON config file")
+	mockEventsPreset := flag.String("mock-events-preset", "", "Named AgentEvent sequence for genQueue, or \"list\" for catalog")
 	eventsFile := flag.String("events-file", "", "Path to write request events as JSON lines")
+	agentEventsFile := flag.String("agent-events-file", "", "Path to write served AgentEvents as JSON lines")
+	logHTTPPath := flag.String("log-http", "", "Path to append HTTP exchange JSONL (must end with .jsonl)")
 	flag.Parse()
 
-	// Load config from --config flag or LLM_MOCK_CONFIG env var
-	if *configPath == "" {
-		*configPath = os.Getenv("LLM_MOCK_CONFIG")
-	}
-	if *configPath == "" {
-		log.Fatal("no config provided: use --config flag or LLM_MOCK_CONFIG env var")
+	if *mockEventsPreset == "list" {
+		mockpreset.PrintList(os.Stdout)
+		return
 	}
 
-	configData, err := os.ReadFile(*configPath)
+	if *logHTTPPath != "" && !strings.HasSuffix(*logHTTPPath, ".jsonl") {
+		log.Fatalf("--log-http path must end with .jsonl")
+	}
+
+	var presetEvents []types.AgentEvent
+	if *mockEventsPreset != "" {
+		var err error
+		presetEvents, err = mockpreset.Resolve(*mockEventsPreset)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	loaded, err := mockconfig.LoadMerged(*configPath)
 	if err != nil {
-		log.Fatalf("failed to read config file: %v", err)
+		log.Fatal(err)
 	}
-
-	var config Config
-	if err := json.Unmarshal(configData, &config); err != nil {
-		log.Fatalf("failed to parse config: %v", err)
-	}
-
-	// Set default port
-	if config.Port == 0 {
-		config.Port = 8080
-	}
-
-	// We need to detect whether "index" was explicitly set in JSON.
-	var rawCfg struct {
-		Port      int `json:"port"`
-		Exchanges []struct {
-			Request  json.RawMessage `json:"request"`
-			Response json.RawMessage `json:"response"`
-		} `json:"exchanges"`
-	}
-	if err := json.Unmarshal(configData, &rawCfg); err != nil {
-		log.Fatalf("failed to re-parse config: %v", err)
-	}
-
-	// Process each exchange to detect explicit index
-	var exchangesList []parsedExchange
-	for i, re := range rawCfg.Exchanges {
-		var reqMap map[string]any
-		if err := json.Unmarshal(re.Request, &reqMap); err != nil {
-			log.Fatalf("failed to parse exchange %d request: %v", i, err)
-		}
-		_, hasIndex := reqMap["index"]
-
-		ex := config.Exchanges[i]
-		if !hasIndex {
-			ex.Request.Index = -1
-		}
-		exchangesList = append(exchangesList, parsedExchange{Exchange: ex, HasIndex: hasIndex})
-	}
-
-	// Pre-compute effective indices: explicit indices stay as-is;
-	// index=-1 exchanges receive sequential implicit indices.
-	effectiveIndices := make([]int, len(exchangesList))
-	nextIdx := 0
-	for i := range exchangesList {
-		ex := exchangesList[i].Exchange
-		if ex.Request.Index >= 0 {
-			effectiveIndices[i] = ex.Request.Index
-			if ex.Request.Index >= nextIdx {
-				nextIdx = ex.Request.Index + 1
-			}
-		} else {
-			effectiveIndices[i] = nextIdx
-			nextIdx++
-		}
-	}
+	config := loaded.Config
+	exchangesList := loaded.Exchanges
+	effectiveIndices := loaded.EffectiveIndices
 
 	// Open events file for append if specified
 	var eventsWriter io.WriteCloser
@@ -165,21 +171,43 @@ func main() {
 		eventsWriter = f
 	}
 
+	var agentEventsWriter io.WriteCloser
+	if *agentEventsFile != "" {
+		f, err := os.OpenFile(*agentEventsFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Fatalf("failed to open agent events file: %v", err)
+		}
+		defer f.Close()
+		agentEventsWriter = f
+	}
+
+	var httpLog *httpLogger
+	if *logHTTPPath != "" {
+		var err error
+		httpLog, err = newHTTPLogger(*logHTTPPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer httpLog.Close()
+	}
+
 	// Create the handler
 	handler := &mockHandler{
-		config:           config,
-		exchanges:        exchangesList,
-		effectiveIndices: effectiveIndices,
-		counter:          0,
-		requests:         make([]RecordedRequest, 0),
-		eventsWriter:     eventsWriter,
+		config:            config,
+		exchanges:         exchangesList,
+		effectiveIndices:  effectiveIndices,
+		counter:           0,
+		genQueue:          append([]types.AgentEvent(nil), presetEvents...),
+		requests:          make([]RecordedRequest, 0),
+		eventsWriter:      eventsWriter,
+		agentEventsWriter: agentEventsWriter,
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/v1/chat/completions", handler.handleChatCompletions)
-	mux.HandleFunc("/v1/responses", handler.handleResponses)
-	mux.HandleFunc("/v1/models", handler.handleModels)
-	mux.HandleFunc("/admin/requests", handler.handleAdminRequests)
+	registerHandler(mux, "/v1/chat/completions", handler.handleChatCompletions, httpLog)
+	registerHandler(mux, "/v1/responses", handler.handleResponses, httpLog)
+	registerHandler(mux, "/v1/models", handler.handleModels, httpLog)
+	registerHandler(mux, "/admin/requests", handler.handleAdminRequests, httpLog)
 
 	// Port fallback: try port, port+1, ..., port+99
 	var listener net.Listener
@@ -188,18 +216,68 @@ func main() {
 		l, err := net.Listen("tcp", addr)
 		if err == nil {
 			listener = l
-			// Print the listening address to stdout (the test harness reads this)
-			fmt.Println(addr)
+			// Print the listening port to stdout (the test harness reads this).
+			if tcpAddr, ok := listener.Addr().(*net.TCPAddr); ok {
+				fmt.Printf(":%d\n", tcpAddr.Port)
+			} else {
+				fmt.Println(addr)
+			}
 			break
 		}
 	}
 	if listener == nil {
-		log.Fatalf("could not bind to any port in range %d-%d", config.Port, config.Port+99)
+		l, err := net.Listen("tcp", ":0")
+		if err != nil {
+			log.Fatalf("could not bind to any port in range %d-%d: %v", config.Port, config.Port+99, err)
+		}
+		listener = l
+		if tcpAddr, ok := listener.Addr().(*net.TCPAddr); ok {
+			fmt.Printf(":%d\n", tcpAddr.Port)
+		}
 	}
 
 	if err := http.Serve(listener, mux); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
+}
+
+func isHelpArg(arg string) bool {
+	return arg == "-h" || arg == "--help" || arg == "-help" || arg == "help"
+}
+
+func printMainHelp() {
+	fmt.Print(strings.TrimPrefix(mainHelp, "\n"))
+}
+
+func handleRunCommand(args []string) error {
+	var logEvents, logHTTP, mockEventsPreset *string
+	remain, err := lessflags.String("--mock-events-preset", &mockEventsPreset).
+		String("--log-events", &logEvents).
+		String("--log-http", &logHTTP).
+		Help("-h,--help", runHelp).
+		StopOnFirstArg().
+		Parse(args)
+	if err != nil {
+		return err
+	}
+	if mockEventsPreset != nil && *mockEventsPreset == "list" {
+		mockpreset.PrintList(os.Stdout)
+		return nil
+	}
+	if len(remain) < 1 || remain[0] != "grok" {
+		return fmt.Errorf("usage: llm-mock run [--mock-events-preset NAME] [--log-events FILE] [--log-http FILE] grok [grok-args...]\n(hint: llm-mock run --help)")
+	}
+	opts := runpkg.RunGrokOptions{}
+	if mockEventsPreset != nil {
+		opts.MockEventsPreset = *mockEventsPreset
+	}
+	if logEvents != nil {
+		opts.LogEventsPath = *logEvents
+	}
+	if logHTTP != nil {
+		opts.LogHTTPPath = *logHTTP
+	}
+	return runpkg.RunGrok(remain[1:], opts)
 }
 
 func handleSkillCommand(args []string) error {
@@ -225,18 +303,17 @@ func handleSkillCommand(args []string) error {
 }
 
 type mockHandler struct {
-	config           Config
-	exchanges        []parsedExchange
+	config           mockconfig.Config
+	exchanges        []mockconfig.ParsedExchange
 	effectiveIndices []int
 	counter          int
+	genQueue         []types.AgentEvent
+	genStream        *events.EventStream
+	genMu            sync.Mutex
 	mu               sync.Mutex
-	requests         []RecordedRequest
-	eventsWriter     io.Writer
-}
-
-type parsedExchange struct {
-	Exchange Exchange
-	HasIndex bool
+	requests          []RecordedRequest
+	eventsWriter      io.Writer
+	agentEventsWriter io.Writer
 }
 
 func (h *mockHandler) handleModels(w http.ResponseWriter, r *http.Request) {
@@ -334,11 +411,12 @@ func (h *mockHandler) handleResponses(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find matching exchange
-	exchange := h.findMatch(req.Messages)
+	exchange, agentEvents := h.findMatch(req.Messages)
 	if exchange == nil {
 		writeError(w, "no matching exchange", "no_match", http.StatusBadRequest)
 		return
 	}
+	h.writeAgentEvents(agentEvents)
 
 	stream, _ := rawBody["stream"].(bool)
 
@@ -397,7 +475,7 @@ func convertContentToString(content any) string {
 }
 
 // handleResponsesNonStream returns an OpenAI Responses API format response.
-func (h *mockHandler) handleResponsesNonStream(w http.ResponseWriter, model string, exchange *Exchange) {
+func (h *mockHandler) handleResponsesNonStream(w http.ResponseWriter, model string, exchange *mockconfig.Exchange) {
 	respID := genRespID()
 	msgID := genMsgID()
 	ts := time.Now().Unix()
@@ -440,7 +518,7 @@ func (h *mockHandler) handleResponsesNonStream(w http.ResponseWriter, model stri
 }
 
 // handleResponsesStream returns an OpenAI Responses API SSE stream.
-func (h *mockHandler) handleResponsesStream(w http.ResponseWriter, model string, exchange *Exchange) {
+func (h *mockHandler) handleResponsesStream(w http.ResponseWriter, model string, exchange *mockconfig.Exchange) {
 	respID := genRespID()
 	msgID := genMsgID()
 	ts := time.Now().Unix()
@@ -460,8 +538,8 @@ func (h *mockHandler) handleResponsesStream(w http.ResponseWriter, model string,
 		content = *exchange.Response.Content
 	}
 
-	// Event: response.created
-	writeRespSSE(w, flusher, map[string]any{
+	seq := 0
+	writeRespStreamEvent(w, flusher, &seq, map[string]any{
 		"type": "response.created",
 		"response": map[string]any{
 			"id":         respID,
@@ -473,8 +551,7 @@ func (h *mockHandler) handleResponsesStream(w http.ResponseWriter, model string,
 		},
 	})
 
-	// Event: response.output_item.added
-	writeRespSSE(w, flusher, map[string]any{
+	writeRespStreamEvent(w, flusher, &seq, map[string]any{
 		"type":         "response.output_item.added",
 		"output_index": 0,
 		"item": map[string]any{
@@ -486,26 +563,25 @@ func (h *mockHandler) handleResponsesStream(w http.ResponseWriter, model string,
 		},
 	})
 
-	// Event: response.content_part.added
-	writeRespSSE(w, flusher, map[string]any{
+	writeRespStreamEvent(w, flusher, &seq, map[string]any{
 		"type":          "response.content_part.added",
 		"item_id":       msgID,
 		"output_index":  0,
 		"content_index": 0,
 		"part": map[string]any{
-			"type": "output_text",
-			"text": "",
+			"type":        "output_text",
+			"text":        "",
+			"annotations": []any{},
 		},
 	})
 
-	// Events: response.output_text.delta (split into chunks)
 	for i := 0; i < len(content); i += 3 {
 		end := i + 3
 		if end > len(content) {
 			end = len(content)
 		}
 		delta := content[i:end]
-		writeRespSSE(w, flusher, map[string]any{
+		writeRespStreamEvent(w, flusher, &seq, map[string]any{
 			"type":          "response.output_text.delta",
 			"item_id":       msgID,
 			"output_index":  0,
@@ -514,20 +590,19 @@ func (h *mockHandler) handleResponsesStream(w http.ResponseWriter, model string,
 		})
 	}
 
-	// Event: response.content_part.done
-	writeRespSSE(w, flusher, map[string]any{
+	writeRespStreamEvent(w, flusher, &seq, map[string]any{
 		"type":          "response.content_part.done",
 		"item_id":       msgID,
 		"output_index":  0,
 		"content_index": 0,
 		"part": map[string]any{
-			"type": "output_text",
-			"text": content,
+			"type":        "output_text",
+			"text":        content,
+			"annotations": []any{},
 		},
 	})
 
-	// Event: response.output_item.done
-	writeRespSSE(w, flusher, map[string]any{
+	writeRespStreamEvent(w, flusher, &seq, map[string]any{
 		"type":         "response.output_item.done",
 		"output_index": 0,
 		"item": map[string]any{
@@ -537,15 +612,15 @@ func (h *mockHandler) handleResponsesStream(w http.ResponseWriter, model string,
 			"role":   "assistant",
 			"content": []map[string]any{
 				{
-					"type": "output_text",
-					"text": content,
+					"type":        "output_text",
+					"text":        content,
+					"annotations": []any{},
 				},
 			},
 		},
 	})
 
-	// Event: response.completed
-	writeRespSSE(w, flusher, map[string]any{
+	writeRespStreamEvent(w, flusher, &seq, map[string]any{
 		"type": "response.completed",
 		"response": map[string]any{
 			"id":         respID,
@@ -561,8 +636,9 @@ func (h *mockHandler) handleResponsesStream(w http.ResponseWriter, model string,
 					"role":   "assistant",
 					"content": []map[string]any{
 						{
-							"type": "output_text",
-							"text": content,
+							"type":        "output_text",
+							"text":        content,
+							"annotations": []any{},
 						},
 					},
 				},
@@ -571,6 +647,12 @@ func (h *mockHandler) handleResponsesStream(w http.ResponseWriter, model string,
 				"input_tokens":  0,
 				"output_tokens": 0,
 				"total_tokens":  0,
+				"input_tokens_details": map[string]any{
+					"cached_tokens": 0,
+				},
+				"output_tokens_details": map[string]any{
+					"reasoning_tokens": 0,
+				},
 			},
 		},
 	})
@@ -617,11 +699,12 @@ func (h *mockHandler) handleChatCompletions(w http.ResponseWriter, r *http.Reque
 	h.writeEvent(rec)
 
 	// Find matching exchange
-	exchange := h.findMatch(req.Messages)
+	exchange, agentEvents := h.findMatch(req.Messages)
 	if exchange == nil {
 		writeError(w, "no matching exchange", "no_match", http.StatusBadRequest)
 		return
 	}
+	h.writeAgentEvents(agentEvents)
 
 	stream, _ := rawBody["stream"].(bool)
 	model := string(req.Model)
@@ -644,15 +727,20 @@ func (h *mockHandler) writeEvent(rec RecordedRequest) {
 	fmt.Fprintln(h.eventsWriter, string(data))
 }
 
-func (h *mockHandler) findMatch(messages []openai.ChatCompletionMessageParamUnion) *Exchange {
-	// If counter has advanced past all configured exchanges, replay the last one.
-	// This handles clients that make multiple follow-up requests beyond the
-	// configured exchanges (e.g., opencode agent loops).
-	var replay *Exchange
-	if len(h.exchanges) > 0 && h.counter >= len(h.exchanges) {
-		replay = &h.exchanges[len(h.exchanges)-1].Exchange
+// writeAgentEvents appends served AgentEvent lines when --agent-events-file is set.
+func (h *mockHandler) writeAgentEvents(events []types.AgentEvent) {
+	if h.agentEventsWriter == nil || len(events) == 0 {
+		return
 	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, evt := range events {
+		data, _ := json.Marshal(evt)
+		fmt.Fprintln(h.agentEventsWriter, string(data))
+	}
+}
 
+func (h *mockHandler) findMatch(messages []openai.ChatCompletionMessageParamUnion) (*mockconfig.Exchange, []types.AgentEvent) {
 	for i := range h.exchanges {
 		ex := h.exchanges[i].Exchange
 
@@ -685,19 +773,82 @@ func (h *mockHandler) findMatch(messages []openai.ChatCompletionMessageParamUnio
 
 		// Match found
 		h.counter++
-		return &ex
+		return &ex, mockgen.ExchangeResponseToAgentEvents(ex.Response)
 	}
 
-	// No exact exchange matched. If we've exhausted all configured exchanges,
-	// replay the last one for a limited number of extra requests to support
-	// multi-turn clients, then stop to prevent infinite loops.
-	const maxReplays = 3
-	maxCounter := len(h.exchanges) + maxReplays
-	if replay != nil && h.counter < maxCounter {
-		h.counter++
-		return replay
+	// Prefix exchange expected but request did not match.
+	if h.counter < len(h.exchanges) {
+		return nil, nil
 	}
-	return nil
+
+	// Prefix exhausted: dequeue generated AgentEvent fallback.
+	return h.findGeneratedMatch(messages)
+}
+
+func (h *mockHandler) findGeneratedMatch(messages []openai.ChatCompletionMessageParamUnion) (*mockconfig.Exchange, []types.AgentEvent) {
+	prompt := extractPrompt(messages)
+
+	h.genMu.Lock()
+	if len(h.genQueue) > 0 {
+		evt := h.genQueue[0]
+		h.genQueue = h.genQueue[1:]
+		h.genMu.Unlock()
+		resp := mockgen.AgentEventToExchangeResponse(sanitizeGeneratedEvent(evt))
+		return &mockconfig.Exchange{Response: resp}, []types.AgentEvent{evt}
+	}
+
+	if h.genStream == nil {
+		seed := mockgen.SeedFromPrompt(prompt)
+		h.genStream = events.NewMockEventStream(seed, prompt)
+	}
+	stream := h.genStream
+	h.genMu.Unlock()
+
+	// Do not hold genMu (or handler mu) across probe execution; slow tool probes
+	// must not block other HTTP handlers or starve the first think response.
+	evt, ok := stream.Next()
+	if !ok {
+		// Shared stream yields think then message; once exhausted, start a fresh
+		// cycle seeded from the latest user prompt for the next turn.
+		h.genMu.Lock()
+		seed := mockgen.SeedFromPrompt(prompt)
+		h.genStream = events.NewMockEventStream(seed, prompt)
+		stream = h.genStream
+		h.genMu.Unlock()
+		evt, ok = stream.Next()
+		if !ok {
+			return nil, nil
+		}
+	}
+	resp := mockgen.AgentEventToExchangeResponse(sanitizeGeneratedEvent(evt))
+	return &mockconfig.Exchange{Response: resp}, []types.AgentEvent{evt}
+}
+
+// sanitizeGeneratedEvent normalizes generated events for HTTP JSON responses.
+// Think text uses embedded newlines; when tests capture bodies via shell echo,
+// JSON \n escapes are interpreted as line breaks and truncate parsed output.
+func sanitizeGeneratedEvent(evt types.AgentEvent) types.AgentEvent {
+	if evt.Type == types.ActionThink && strings.Contains(evt.Text, "\n") {
+		evt.Text = strings.ReplaceAll(evt.Text, "\n", " ")
+	}
+	return evt
+}
+
+func extractPrompt(messages []openai.ChatCompletionMessageParamUnion) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		info := extractMessageInfo(messages[i])
+		if info == nil || info.Role != "user" || info.Content == "" {
+			continue
+		}
+		return info.Content
+	}
+	for i := len(messages) - 1; i >= 0; i-- {
+		info := extractMessageInfo(messages[i])
+		if info != nil && info.Content != "" {
+			return info.Content
+		}
+	}
+	return ""
 }
 
 // messageInfo holds extracted role and content from a ChatCompletionMessageParamUnion.
@@ -743,7 +894,7 @@ func extractMessageInfo(msg openai.ChatCompletionMessageParamUnion) *messageInfo
 	return info
 }
 
-func (h *mockHandler) handleNonStream(w http.ResponseWriter, model string, exchange *Exchange) {
+func (h *mockHandler) handleNonStream(w http.ResponseWriter, model string, exchange *mockconfig.Exchange) {
 	id := genID()
 	ts := time.Now().Unix()
 
@@ -813,7 +964,7 @@ func (h *mockHandler) handleNonStream(w http.ResponseWriter, model string, excha
 	}
 }
 
-func (h *mockHandler) handleStream(w http.ResponseWriter, model string, exchange *Exchange) {
+func (h *mockHandler) handleStream(w http.ResponseWriter, model string, exchange *mockconfig.Exchange) {
 	id := genID()
 	ts := time.Now().Unix()
 
@@ -837,62 +988,18 @@ func (h *mockHandler) handleStream(w http.ResponseWriter, model string, exchange
 		finishReason = "stop"
 	}
 
-	// Event 1: role delta — using SDK ChatCompletionChunk type
-	chunk := openai.ChatCompletionChunk{
-		ID:      id,
-		Created: ts,
-		Model:   openai.ChatModel(model),
-		Object:  constant.ChatCompletionChunk("chat.completion.chunk"),
-		Choices: []openai.ChatCompletionChunkChoice{
-			{
-				Index: 0,
-				Delta: openai.ChatCompletionChunkChoiceDelta{
-					Role: "assistant",
-				},
-			},
-		},
-	}
-	writeSSE(w, flusher, chunk)
+	writeChatStreamChunk(w, flusher, id, ts, model, map[string]any{"role": "assistant"}, "")
 
-	// Content events: split into ~3-char chunks
 	for i := 0; i < len(content); i += 3 {
 		end := i + 3
 		if end > len(content) {
 			end = len(content)
 		}
 		chunkContent := content[i:end]
-		chunk := openai.ChatCompletionChunk{
-			ID:      id,
-			Created: ts,
-			Model:   openai.ChatModel(model),
-			Object:  constant.ChatCompletionChunk("chat.completion.chunk"),
-			Choices: []openai.ChatCompletionChunkChoice{
-				{
-					Index: 0,
-					Delta: openai.ChatCompletionChunkChoiceDelta{
-						Content: chunkContent,
-					},
-				},
-			},
-		}
-		writeSSE(w, flusher, chunk)
+		writeChatStreamChunk(w, flusher, id, ts, model, map[string]any{"content": chunkContent}, "")
 	}
 
-	// Final event: empty delta, finish_reason
-	finalChunk := openai.ChatCompletionChunk{
-		ID:      id,
-		Created: ts,
-		Model:   openai.ChatModel(model),
-		Object:  constant.ChatCompletionChunk("chat.completion.chunk"),
-		Choices: []openai.ChatCompletionChunkChoice{
-			{
-				Index:        0,
-				Delta:        openai.ChatCompletionChunkChoiceDelta{},
-				FinishReason: finishReason,
-			},
-		},
-	}
-	writeSSE(w, flusher, finalChunk)
+	writeChatStreamChunk(w, flusher, id, ts, model, map[string]any{}, finishReason)
 
 	// [DONE] marker
 	fmt.Fprintf(w, "data: [DONE]\n\n")
@@ -952,4 +1059,27 @@ func writeRespSSE(w io.Writer, flusher http.Flusher, obj map[string]any) {
 	}
 	fmt.Fprintf(w, "data: %s\n\n", string(data))
 	flusher.Flush()
+}
+
+func writeRespStreamEvent(w io.Writer, flusher http.Flusher, seq *int, obj map[string]any) {
+	obj["sequence_number"] = *seq
+	*seq++
+	writeRespSSE(w, flusher, obj)
+}
+
+func writeChatStreamChunk(w io.Writer, flusher http.Flusher, id string, created int64, model string, delta map[string]any, finishReason string) {
+	choice := map[string]any{
+		"index": 0,
+		"delta": delta,
+	}
+	if finishReason != "" {
+		choice["finish_reason"] = finishReason
+	}
+	writeRespSSE(w, flusher, map[string]any{
+		"id":      id,
+		"object":  "chat.completion.chunk",
+		"created": created,
+		"model":   model,
+		"choices": []map[string]any{choice},
+	})
 }

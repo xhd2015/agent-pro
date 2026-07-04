@@ -1,3 +1,13 @@
+# Scenario
+
+**Feature**: GET /admin/requests returns recorded HTTP requests
+
+```
+HTTP client -> POST /v1/chat/completions (x2)
+llm-mock <- admin recorder logs each request
+GET /admin/requests -> recorded request list
+```
+
 ## Steps
 1. Configure two exchanges for sequential matching.
 2. Send two chat completion requests.

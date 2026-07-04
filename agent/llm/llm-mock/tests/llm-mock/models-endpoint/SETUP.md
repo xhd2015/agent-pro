@@ -1,3 +1,11 @@
+# Scenario
+
+**Feature**: GET /v1/models
+
+```
+GET /v1/models -> model list JSON
+```
+
 ## Steps
 1. No exchanges needed — `/v1/models` ignores the exchange config.
 2. Send a GET request to `/v1/models`.

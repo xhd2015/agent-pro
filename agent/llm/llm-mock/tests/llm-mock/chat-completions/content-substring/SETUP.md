@@ -1,3 +1,11 @@
+# Scenario
+
+**Feature**: substring content match
+
+```
+POST user message -> substring exchange
+```
+
 ## Steps
 1. Write config with exchange where `request.content` is a substring of the expected message.
 2. Send a request where the last user message contains that substring.

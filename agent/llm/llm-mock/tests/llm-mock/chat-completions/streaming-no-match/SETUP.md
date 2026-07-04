@@ -1,3 +1,11 @@
+# Scenario
+
+**Feature**: streaming no match HTTP 400
+
+```
+POST stream=true unmatched -> HTTP 400
+```
+
 ## Steps
 1. Write config with an exchange that does NOT match the request.
 2. Send a streaming request (`"stream": true`).

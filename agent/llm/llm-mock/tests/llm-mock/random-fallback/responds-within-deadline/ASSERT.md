@@ -1,0 +1,43 @@
+## Expected
+
+- HTTP 200 within the 3-second client timeout (not HTTP 0 timeout / hang).
+- Valid OpenAI chat completion JSON with `choices[0].message`.
+- Response body does not contain `error.type` = `"no_match"`.
+
+```go
+import "testing"
+
+func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	assertSuccess(t, resp)
+
+	if len(resp.Responses) != 1 {
+		t.Fatalf("expected 1 response, got %d", len(resp.Responses))
+	}
+	r := resp.Responses[0]
+
+	if r.StatusCode != 200 {
+		t.Fatalf("expected status 200 within 3s (random fallback must not block on probe execution), got %d\nbody: %q", r.StatusCode, r.Body)
+	}
+
+	obj := parseJSON(t, r.Body)
+	if errObj, ok := obj["error"].(map[string]any); ok {
+		if errObj["type"] == "no_match" {
+			t.Fatalf("expected random fallback, got no_match error: %s", r.Body)
+		}
+	}
+
+	choices, ok := obj["choices"].([]any)
+	if !ok || len(choices) == 0 {
+		t.Fatalf("expected choices array, got %v", obj["choices"])
+	}
+	choice := choices[0].(map[string]any)
+	msg, ok := choice["message"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected message in choice, got %v", choice)
+	}
+	content, _ := msg["content"].(string)
+	if content == "" {
+		t.Fatalf("expected non-empty generated content, got %v", msg)
+	}
+}
+```

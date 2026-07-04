@@ -1,3 +1,11 @@
+# Scenario
+
+**Feature**: finish_reason length
+
+```
+POST -> finish_reason length
+```
+
 ## Steps
 1. Write config with an exchange that specifies `finish_reason: "length"`.
 2. Send a matching request.

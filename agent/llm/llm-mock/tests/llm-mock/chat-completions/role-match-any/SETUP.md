@@ -1,3 +1,11 @@
+# Scenario
+
+**Feature**: empty role matches any
+
+```
+POST system role -> empty-role exchange
+```
+
 ## Steps
 1. Write config with an exchange where `request.role` is empty (should match any role).
 2. Send a request where the last user message has role "system".

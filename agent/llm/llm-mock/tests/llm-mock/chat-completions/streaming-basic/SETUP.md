@@ -1,3 +1,11 @@
+# Scenario
+
+**Feature**: streaming SSE success
+
+```
+POST stream=true -> SSE chunks -> [DONE]
+```
+
 ## Steps
 1. Write config with a single exchange matching the request.
 2. Send a streaming request (`"stream": true`).

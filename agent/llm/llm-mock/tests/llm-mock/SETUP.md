@@ -1,3 +1,15 @@
+# Scenario
+
+**Feature**: OpenAI-compatible llm-mock HTTP server for deterministic LLM responses
+
+```
+# load config, start listener, match requests
+config loader -> llm-mock HTTP server -> exchange matcher -> JSON/SSE response
+
+# optional admin / events output
+HTTP client <- llm-mock (recorded requests, port announcement)
+```
+
 ## Preconditions
 - The repository contains the `agent/llm/llm-mock` package (to be built as the server binary).
 - Each test builds the server binary, writes a temp JSON config, starts the server,
@@ -17,6 +29,8 @@
 ## Context
 - `Request.ConfigJSON` — the JSON configuration content for the mock server.
 - `Request.BlockPort` — if >0, bind this port before starting the server (for fallback testing).
+- `Request.BlockListener` — if set, held open during Run (Setup acquired); Run skips BlockPort bind.
+- `Request.ExpectedFallbackPort` — if >0, port-fallback ASSERT checks `resp.Port` equals this value.
 - `Request.Requests` — ordered slice of JSON request bodies to POST to the chat completions endpoint.
 - `Request.Endpoint` — URL path (e.g., `/v1/chat/completions`, `/v1/models`).
 - `Request.Method` — HTTP method, defaults to POST.
@@ -53,6 +67,9 @@ func Setup(t *testing.T, req *Request) error {
     _ = assertNotContains
     _ = parseJSON
     _ = parseSSEEvents
+    _ = readAgentEventLines
+    _ = parseAgentEventMaps
+    _ = parseHTTPExchangeMaps
 
     req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../../.."))
     if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
@@ -132,6 +149,11 @@ func readPort(stdout io.Reader) (int, error) {
 
 // makeHTTPRequest sends an HTTP request and returns the parsed response.
 func makeHTTPRequest(baseURL, endpoint, method, bodyJSON string) (HTTPResponse, error) {
+    return makeHTTPRequestWithTimeout(baseURL, endpoint, method, bodyJSON, 10*time.Second)
+}
+
+// makeHTTPRequestWithTimeout sends an HTTP request with a custom client timeout.
+func makeHTTPRequestWithTimeout(baseURL, endpoint, method, bodyJSON string, timeout time.Duration) (HTTPResponse, error) {
     url := baseURL + endpoint
     var bodyReader io.Reader
     if bodyJSON != "" {
@@ -146,7 +168,7 @@ func makeHTTPRequest(baseURL, endpoint, method, bodyJSON string) (HTTPResponse, 
         httpReq.Header.Set("Content-Type", "application/json")
     }
 
-    client := &http.Client{Timeout: 10 * time.Second}
+    client := &http.Client{Timeout: timeout}
     httpResp, err := client.Do(httpReq)
     if err != nil {
         return HTTPResponse{StatusCode: 0, Body: "", Headers: nil}, nil
@@ -378,5 +400,66 @@ func parseSSEEvents(t *testing.T, body string) []map[string]any {
         events = append(events, obj)
     }
     return events
+}
+
+// readAgentEventLines splits trimmed AgentEvent JSONL into non-empty lines.
+func readAgentEventLines(text string) []string {
+    var lines []string
+    for _, line := range strings.Split(strings.TrimSpace(text), "\n") {
+        line = strings.TrimSpace(line)
+        if line != "" {
+            lines = append(lines, line)
+        }
+    }
+    return lines
+}
+
+// parseAgentEventMaps parses JSONL lines into AgentEvent-shaped objects.
+func parseAgentEventMaps(lines []string) ([]map[string]any, error) {
+    out := make([]map[string]any, 0, len(lines))
+    for i, line := range lines {
+        var ev map[string]any
+        if err := json.Unmarshal([]byte(line), &ev); err != nil {
+            return nil, fmt.Errorf("line %d: invalid JSONL: %w\n%s", i+1, err, line)
+        }
+        typ, _ := ev["type"].(string)
+        if typ == "" {
+            return nil, fmt.Errorf("line %d: missing type in %#v", i+1, ev)
+        }
+        out = append(out, ev)
+    }
+    return out, nil
+}
+
+// parseHTTPExchangeMaps parses --log-http JSONL lines into HTTP exchange records.
+func parseHTTPExchangeMaps(lines []string) ([]map[string]any, error) {
+    out := make([]map[string]any, 0, len(lines))
+    for i, line := range lines {
+        var rec map[string]any
+        if err := json.Unmarshal([]byte(line), &rec); err != nil {
+            return nil, fmt.Errorf("line %d: invalid JSONL: %w\n%s", i+1, err, line)
+        }
+        reqObj, ok := rec["request"].(map[string]any)
+        if !ok {
+            return nil, fmt.Errorf("line %d: missing request object in %#v", i+1, rec)
+        }
+        respObj, ok := rec["response"].(map[string]any)
+        if !ok {
+            return nil, fmt.Errorf("line %d: missing response object in %#v", i+1, rec)
+        }
+        method, _ := reqObj["method"].(string)
+        if method == "" {
+            return nil, fmt.Errorf("line %d: missing request.method in %#v", i+1, rec)
+        }
+        path, _ := reqObj["path"].(string)
+        if path == "" {
+            return nil, fmt.Errorf("line %d: missing request.path in %#v", i+1, rec)
+        }
+        if _, hasStatus := respObj["status"]; !hasStatus {
+            return nil, fmt.Errorf("line %d: missing response.status in %#v", i+1, rec)
+        }
+        out = append(out, rec)
+    }
+    return out, nil
 }
 ```

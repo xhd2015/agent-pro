@@ -1,3 +1,11 @@
+# Scenario
+
+**Feature**: two sequential exchanges
+
+```
+POST x2 -> Paris then follow-up
+```
+
 ## Steps
 1. Write config with two exchanges, both index=-1:
    - exchange[0]: content="one word of French capital", response="Paris"

@@ -1,3 +1,11 @@
+# Scenario
+
+**Branch**: POST /v1/chat/completions
+
+```
+HTTP client -> POST /v1/chat/completions -> exchange matcher
+```
+
 ## Preconditions
 - This branch tests the `POST /v1/chat/completions` endpoint.
 - The server is configured with exchange rules that define expected request→response mappings.

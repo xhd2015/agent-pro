@@ -44,41 +44,15 @@ func (g *Generator) chance(p float64) bool {
 }
 
 func GenerateEvents(seed int64, prompt string) []types.AgentEvent {
-	g := NewGenerator(seed)
-	return g.generateSession(prompt)
-}
-
-func (g *Generator) generateSession(prompt string) []types.AgentEvent {
+	stream := NewEventStream(seed, prompt)
 	var events []types.AgentEvent
-
-	topic := extractTopic(prompt)
-
-	thinkID := g.nextID()
-	thinkEvent := g.generateThink(thinkID, topic)
-	events = append(events, thinkEvent)
-
-	probeList := probe.Scan(prompt)
-	probeList = probe.Merge(probeList, probe.DefaultSuggestions())
-
-	for round := 0; round < genMaxRounds; round++ {
-		if g.chance(genResponseChance) {
+	for {
+		evt, ok := stream.Next()
+		if !ok {
 			break
 		}
-
-		suggestion := g.pickSuggestion(probeList)
-		toolEvent, result := g.execProbe(suggestion)
-		events = append(events, toolEvent)
-
-		if result != "" {
-			newProbes := probe.Scan(result)
-			probeList = probe.Merge(probeList, newProbes)
-		}
+		events = append(events, evt)
 	}
-
-	msgID := g.nextID()
-	msgEvent := g.generateMessage(msgID, topic)
-	events = append(events, msgEvent)
-
 	return events
 }
 
@@ -208,7 +182,7 @@ func (g *Generator) shufflePick(items []string, n int) []string {
 }
 
 func extractTopic(prompt string) string {
-	trimmed := strings.TrimSpace(prompt)
+	trimmed := strings.TrimSpace(unwrapUserQuery(prompt))
 	if trimmed == "" {
 		return "the task"
 	}
@@ -224,4 +198,16 @@ func extractTopic(prompt string) string {
 		topic = topic[:50] + "..."
 	}
 	return topic
+}
+
+// unwrapUserQuery strips grok's <user_query>...</user_query> wrapper so topic
+// extraction uses the inner user text instead of the XML tag.
+func unwrapUserQuery(prompt string) string {
+	trimmed := strings.TrimSpace(prompt)
+	const open = "<user_query>"
+	const close = "</user_query>"
+	if strings.HasPrefix(trimmed, open) && strings.HasSuffix(trimmed, close) {
+		return strings.TrimSpace(trimmed[len(open) : len(trimmed)-len(close)])
+	}
+	return prompt
 }

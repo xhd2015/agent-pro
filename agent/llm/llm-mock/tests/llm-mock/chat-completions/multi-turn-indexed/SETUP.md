@@ -1,3 +1,11 @@
+# Scenario
+
+**Feature**: indexed exchanges 0 and 1
+
+```
+POST -> index 0 then index 1
+```
+
 ## Steps
 1. Write config with two exchanges using explicit indices 0 and 1.
 2. Send first request → matches by counter 0 == exchange index 0.

@@ -1,3 +1,11 @@
+# Scenario
+
+**Feature**: LLM_MOCK_CONFIG env loading
+
+```
+server <- LLM_MOCK_CONFIG -> matched response
+```
+
 ## Steps
 1. Write config JSON to a temp file.
 2. Do NOT pass `--config`; instead set `LLM_MOCK_CONFIG` env var pointing to the config file.

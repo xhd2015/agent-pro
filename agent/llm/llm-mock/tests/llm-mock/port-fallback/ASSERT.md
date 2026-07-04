@@ -1,20 +1,24 @@
 ## Expected
 - Server starts successfully (exit code 0).
-- `resp.Port` is 8081 (the fallback port, since 8080 was blocked).
-- HTTP request to port 8081 returns 200 with the configured response.
+- `resp.Port` is the fallback port (blocked port + 1).
+- HTTP request to the fallback port returns 200 with the configured response.
 
 ```go
 import "testing"
 
 func Assert(t *testing.T, req *Request, resp *Response, err error) {
+    if err != nil {
+        t.Fatal(err)
+    }
     assertSuccess(t, resp)
 
-    // Port should have fallen back to 8081
-    if resp.Port != 8081 {
-        t.Fatalf("expected port 8081 (fallback), got %d", resp.Port)
+    if req.ExpectedFallbackPort <= 0 {
+        t.Fatal("ExpectedFallbackPort must be set by Setup")
+    }
+    if resp.Port != req.ExpectedFallbackPort {
+        t.Fatalf("expected port %d (fallback), got %d", req.ExpectedFallbackPort, resp.Port)
     }
 
-    // Request should have succeeded on fallback port
     if len(resp.Responses) != 1 {
         t.Fatalf("expected 1 response, got %d", len(resp.Responses))
     }

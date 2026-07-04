@@ -1,3 +1,11 @@
+# Scenario
+
+**Feature**: opencode with mock backend
+
+```
+opencode run -> mock -> Paris
+```
+
 ## Steps
 1. Create a temp working directory for opencode.
 2. Isolate opencode from the user's real home: `HOME` and `OPENCODE_CONFIG_DIR` point at empty temp dirs so global plugins/hooks under `~/.config/opencode` are not loaded.

@@ -1,3 +1,11 @@
+# Scenario
+
+**Feature**: empty content matches any
+
+```
+POST any content -> empty-content exchange
+```
+
 ## Steps
 1. Write config with an exchange where `request.content` is empty (should match any message).
 2. Send a request with arbitrary content.

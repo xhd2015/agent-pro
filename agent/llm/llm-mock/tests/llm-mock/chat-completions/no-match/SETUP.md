@@ -1,3 +1,11 @@
+# Scenario
+
+**Feature**: no match HTTP 400
+
+```
+POST unmatched -> HTTP 400
+```
+
 ## Steps
 1. Write config with one exchange that does NOT match the request content.
 2. Send a request with content that has no matching exchange.
