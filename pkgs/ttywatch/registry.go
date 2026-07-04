@@ -1,4 +1,4 @@
-package main
+package ttywatch
 
 import (
 	"encoding/json"
@@ -12,6 +12,32 @@ import (
 	"time"
 	"unicode"
 )
+
+const (
+	envTTYWatchHome = "TTY_WATCH_HOME"
+	defaultHomeDir  = ".tty-watch"
+	registrySubdir  = "registry"
+)
+
+// TTYWatchHome returns the tty-watch data directory.
+func TTYWatchHome() (string, error) {
+	if v := os.Getenv(envTTYWatchHome); v != "" {
+		return v, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, defaultHomeDir), nil
+}
+
+func registryDir(home string) string {
+	return filepath.Join(home, registrySubdir)
+}
+
+func registryPath(home, sessionID string) string {
+	return filepath.Join(registryDir(home), sessionID+".json")
+}
 
 // RegistryEntry maps a tty-watch session id to the embedded ptywrap listen address.
 type RegistryEntry struct {
@@ -225,6 +251,11 @@ func tcpReachable(addr string) bool {
 	return true
 }
 
+// WaitForRegistryEntry polls until a session registry entry is available.
+func WaitForRegistryEntry(home, sessionID string, timeout time.Duration) (*RegistryEntry, error) {
+	return waitForRegistryEntry(home, sessionID, timeout)
+}
+
 func waitForRegistryEntry(home, sessionID string, timeout time.Duration) (*RegistryEntry, error) {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -235,6 +266,16 @@ func waitForRegistryEntry(home, sessionID string, timeout time.Duration) (*Regis
 		time.Sleep(100 * time.Millisecond)
 	}
 	return nil, fmt.Errorf("timeout waiting for registry entry %s", sessionID)
+}
+
+// TCPReachable reports whether a TCP listen address accepts connections.
+func TCPReachable(addr string) bool {
+	return tcpReachable(addr)
+}
+
+// ProcessAlive reports whether pid responds to signal 0.
+func ProcessAlive(pid int) bool {
+	return processAlive(pid)
 }
 
 func processAlive(pid int) bool {

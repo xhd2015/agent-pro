@@ -33,6 +33,7 @@ doctest <- Response: exit codes, output, registry state, session reachability
 
 ```go
 import (
+	"fmt"
 	"os/exec"
 	"strings"
 	"testing"
@@ -75,5 +76,22 @@ func assertNonZeroExit(t *testing.T, resp *Response) {
 		t.Fatalf("expected non-zero exit, got 0\nstdout:%s\nstderr:%s\ncombined:%s",
 			resp.Stdout, resp.Stderr, resp.Combined)
 	}
+}
+
+// processArgsLine returns the ps(1) args field for the registry owner PID.
+func processArgsLine(t *testing.T, home, sessionID string) (string, error) {
+	t.Helper()
+	entry, err := ttywatchtest.ReadRegistryEntry(home, sessionID)
+	if err != nil {
+		return "", err
+	}
+	if entry.PID <= 0 {
+		t.Fatalf("registry %s has invalid pid %d", sessionID, entry.PID)
+	}
+	out, err := exec.Command("ps", "-p", fmt.Sprintf("%d", entry.PID), "-o", "args=").Output()
+	if err != nil {
+		return "", fmt.Errorf("ps serve child pid %d: %w", entry.PID, err)
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 ```

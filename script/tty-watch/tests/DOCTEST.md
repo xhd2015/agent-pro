@@ -52,6 +52,7 @@ End-to-end tests for the standalone `tty-watch` CLI: `run` subcommand embeds pty
  +-- run/
  |    |
  |    +-- registers-session/          (LEAF)  default run writes registry entry (RED)
+ |    +-- serve-subcommand-slug/      (LEAF)  reexec child argv uses __serve_{slug}__ not __serve__ (RED)
  |    +-- attaches-pty-output/        (LEAF)  writer attach shows child output (RED)
  |    +-- host-stays-silent/          (LEAF)  no session-id on host stdout/stderr (RED)
  |    +-- ctrl-c-reaches-child/      (LEAF)  \x03 interrupts PTY child (RED)
@@ -160,6 +161,7 @@ Parameter ranking (most → least significant):
 | # | Leaf | Description |
 |---|------|-------------|
 | 1 | `run/registers-session` | Default run creates `session-N.json` in registry (RED) |
+| 1b | `run/serve-subcommand-slug` | Reexec child ps line contains `__serve_sleep_300__`, not bare `__serve__` (RED) |
 | 2 | `run/attaches-pty-output` | Writer attach shows `RUN_OK` from child command (RED) |
 | 3 | `run/host-stays-silent` | Host prints no `session-` id during attach/detach (RED) |
 | 4 | `run/ctrl-c-reaches-child` | Ctrl-C (`\x03`) triggers child interrupt handler (RED) |

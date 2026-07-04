@@ -92,6 +92,9 @@ func checkCodexWritable(scrollback []byte) WritableStatus {
 	if strings.Contains(compact, "model:loading") {
 		return WritableStatus{Reason: "codex model loading", State: "loading"}
 	}
+	if strings.Contains(compact, "startingmcpservers") || strings.Contains(lower, "starting mcp") {
+		return WritableStatus{Reason: "codex MCP servers starting", State: "loading"}
+	}
 	if strings.Contains(compact, "doyoutrustthecontentsofthisdirectory") {
 		return WritableStatus{Reason: "codex trust prompt visible", State: "loading"}
 	}

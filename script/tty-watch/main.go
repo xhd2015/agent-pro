@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"github.com/xhd2015/agent-pro/pkgs/ttywatch"
 )
 
 func main() {
@@ -17,9 +19,10 @@ func run(args []string) error {
 		printHelp()
 		return nil
 	}
-	switch args[0] {
-	case serveSubcommand:
+	if ttywatch.IsServeSubcommand(args[0]) {
 		return runServeSession(args[1:])
+	}
+	switch args[0] {
 	case "run":
 		return runRun(args[1:])
 	case "list":

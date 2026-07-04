@@ -1,4 +1,4 @@
-package main
+package ttywatch
 
 import (
 	"bytes"
@@ -13,6 +13,11 @@ import (
 var snapshotCUPRe = regexp.MustCompile(`\x1b\[(\d+);(\d+)[Hf]`)
 
 var screenSnapshotMarker = []byte("\x1b[?25l")
+
+// IsScreenSnapshotFrame reports ptywrap screen snapshot binary frames.
+func IsScreenSnapshotFrame(data []byte) bool {
+	return isScreenSnapshotFrame(data)
+}
 
 func isScreenSnapshotFrame(data []byte) bool {
 	return bytes.HasPrefix(data, screenSnapshotMarker) && bytes.Contains(data, []byte("\x1b[2J"))
@@ -33,8 +38,12 @@ func needsVTRender(data []byte) bool {
 		bytes.HasPrefix(data, screenSnapshotMarker)
 }
 
-// renderSnapshotOutput converts a ptywrap screen snapshot frame and/or raw scrollback
+// RenderSnapshotOutput converts a ptywrap screen snapshot frame and/or raw scrollback
 // into printable snapshot text, matching the screen attach pipeline used by run.
+func RenderSnapshotOutput(frame, scrollback string, cols, rows int) string {
+	return renderSnapshotOutput(frame, scrollback, cols, rows)
+}
+
 func renderSnapshotOutput(frame, scrollback string, cols, rows int) string {
 	if cols <= 0 {
 		cols = 80
@@ -171,6 +180,11 @@ func snapshotMissingPlainPrefix(text string, data []byte) bool {
 	return !strings.Contains(text, needle)
 }
 
+// RenderSnapshotScrollback converts accumulated scrollback to printable snapshot text.
+func RenderSnapshotScrollback(raw string, cols, rows int) string {
+	return renderSnapshotScrollback(raw, cols, rows)
+}
+
 // renderSnapshotScrollback converts accumulated scrollback to printable snapshot text.
 // Alternate-screen redraws are replayed through vt10x so only the latest visible screen
 // is emitted; plain line-oriented output falls back to SanitizeForPrint.
@@ -227,7 +241,15 @@ func scrollbackToScreenText(scrollback []byte, cols, rows int) ([]byte, bool) {
 	return screenSnapshotToText(scrollback, cols, rows)
 }
 
-// renderObserverFrame converts observer-mode PTY bytes to visible text without CSI/C0 leaks.
+// RenderObserverFrame converts observer-mode PTY bytes to visible text without CSI/C0 leaks.
+func RenderObserverFrame(data []byte, cols, rows int) []byte {
+	return renderObserverFrame(data, cols, rows)
+}
+
+func shouldPrependSnapshotNewline(text []byte) bool {
+	return !bytes.Contains(text, []byte("[Terminal exited]"))
+}
+
 func renderObserverFrame(data []byte, cols, rows int) []byte {
 	if isObserverScreenFrame(data) {
 		if text, ok := screenSnapshotToText(data, cols, rows); ok {
@@ -244,6 +266,11 @@ func renderObserverFrame(data []byte, cols, rows int) []byte {
 	return []byte(cleaned)
 }
 
+// ScreenSnapshotToText renders a screen snapshot frame to plain text.
+func ScreenSnapshotToText(data []byte, cols, rows int) ([]byte, bool) {
+	return screenSnapshotToText(data, cols, rows)
+}
+
 func screenSnapshotToText(data []byte, cols, rows int) ([]byte, bool) {
 	if cols <= 0 {
 		cols = 80
@@ -256,6 +283,11 @@ func screenSnapshotToText(data []byte, cols, rows int) ([]byte, bool) {
 	if _, err := vt.Write(data); err != nil {
 		return nil, false
 	}
+	return renderVTStateToText(vt, cols, rows)
+}
+
+// RenderVTStateToText extracts printable lines from a vt10x terminal state.
+func RenderVTStateToText(vt vt10x.Terminal, cols, rows int) ([]byte, bool) {
 	return renderVTStateToText(vt, cols, rows)
 }
 
@@ -278,12 +310,9 @@ func renderVTStateToText(vt vt10x.Terminal, cols, rows int) ([]byte, bool) {
 		}
 	}
 	if len(lines) == 0 {
-		debugLogf("renderVTStateToText no non-empty lines cols=%d rows=%d", cols, rows)
 		return nil, false
 	}
 	text := []byte(strings.Join(lines, "\n") + "\n")
-	debugLogf("renderVTStateToText lines=%v", lines)
-	debugLogBytes("renderVTStateToText out", text)
 	return text, true
 }
 

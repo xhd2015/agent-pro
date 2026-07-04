@@ -2,7 +2,7 @@
 
 - After a fast first run exits and a second long-lived session starts, `tty-watch list`
   still shows the live second session (not empty).
-- Registry file for the second session still exists after the first `__serve__` grace cleanup.
+- Registry file for the second session still exists after the first `__serve_{slug}__` grace cleanup.
 - List output contains the second session id and command name `sleep`.
 - Tolerates table layout (header row and WATCH/ATTACHED columns when implemented).
 

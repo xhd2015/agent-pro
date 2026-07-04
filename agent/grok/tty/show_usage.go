@@ -14,6 +14,7 @@ import (
 
 	grokagent "github.com/xhd2015/agent-pro/agent/cli/grok"
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
+	"github.com/xhd2015/agent-pro/agent/debuglog"
 	agentexec "github.com/xhd2015/agent-pro/agent/exec"
 	"github.com/xhd2015/agent-pro/pkgs/groktty"
 	"github.com/creack/pty"
@@ -66,6 +67,14 @@ func FetchUsage(ctx context.Context) (*UsageInfo, error) {
 // FetchUsageWithOptions launches grok with optional verbose logging and retries.
 func FetchUsageWithOptions(ctx context.Context, opts Options) (*UsageInfo, error) {
 	v := newVerboseLog(opts.Debug)
+	debuglog.Log(debuglog.Entry{
+		Event: "fetch_start",
+		Labels: map[string]string{
+			"component": "grok_tty",
+			"provider":  "grok",
+			"phase":     "fetch",
+		},
+	})
 	attempts := opts.MaxAttempts
 	if attempts <= 0 {
 		attempts = defaultMaxAttempts
@@ -95,10 +104,35 @@ func FetchUsageWithOptions(ctx context.Context, opts Options) (*UsageInfo, error
 		info, err := fetchUsageOnce(ctx, argv, v)
 		if err == nil {
 			v.stateChange("done", fmt.Sprintf("weekly=%s reset=%s", info.WeeklyLimit, info.NextReset))
+			debuglog.Log(debuglog.Entry{
+				Event: "fetch_done",
+				Labels: map[string]string{
+					"component": "grok_tty",
+					"provider":  "grok",
+					"phase":     "fetch",
+				},
+				Fields: map[string]any{
+					"weekly_limit": info.WeeklyLimit,
+					"next_reset":   info.NextReset,
+					"attempt":      attempt,
+				},
+			})
 			return info, nil
 		}
 		lastErr = err
 		v.stateChange("attempt-failed", err.Error())
+		debuglog.Log(debuglog.Entry{
+			Event: "fetch_attempt_failed",
+			Labels: map[string]string{
+				"component": "grok_tty",
+				"provider":  "grok",
+				"phase":     "error",
+			},
+			Fields: map[string]any{
+				"error":   err.Error(),
+				"attempt": attempt,
+			},
+		})
 		if isNonRetryable(err) {
 			return nil, err
 		}

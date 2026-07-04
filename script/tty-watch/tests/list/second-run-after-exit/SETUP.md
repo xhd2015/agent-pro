@@ -4,7 +4,7 @@
 
 ```
 # user flow: tty-watch run codex -> exit -> tty-watch run codex -> list empty
-# root cause: first __serve__ zombie RemoveRegistry races with reused session-N id
+# root cause: first __serve_{slug}__ zombie RemoveRegistry races with reused session-N id
 first run true (fast exit) -> second run sleep 600 (live) -> wait grace -> list
 ```
 

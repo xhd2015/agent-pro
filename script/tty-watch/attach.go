@@ -295,10 +295,13 @@ func attachWriter(listenAddr, sessionID, attachMode string) (detached bool, err 
 
 	stdin := &detachReader{r: os.Stdin}
 	stdinFile := os.Stdin
+	stdinIsTTY := term.IsTerminal(int(stdinFile.Fd()))
 	var oldStdinState *term.State
-	if state, err := term.MakeRaw(int(stdinFile.Fd())); err == nil {
-		oldStdinState = state
-		defer term.Restore(int(stdinFile.Fd()), oldStdinState)
+	if stdinIsTTY {
+		if state, err := term.MakeRaw(int(stdinFile.Fd())); err == nil {
+			oldStdinState = state
+			defer term.Restore(int(stdinFile.Fd()), oldStdinState)
+		}
 	}
 
 	writer := &wsWriter{conn: conn}
@@ -332,24 +335,28 @@ func attachWriter(listenAddr, sessionID, attachMode string) (detached bool, err 
 		readerErrCh <- relayTerminalOutput(conn, out, true, cols, rows, false, false)
 	}()
 
-	stdinErrCh := make(chan error, 1)
-	go func() {
-		detached, err := forwardInputWithDetach(writer, stdin)
-		if detached {
-			stdin.detached = true
-			err = nil
-		}
-		stdinErrCh <- err
-	}()
-
 	var runErr error
-	select {
-	case err := <-readerErrCh:
-		runErr = normalizeTerminalReadError(err)
-	case err := <-stdinErrCh:
-		if err != nil && err != io.EOF {
-			runErr = err
+	if stdinIsTTY {
+		stdinErrCh := make(chan error, 1)
+		go func() {
+			detached, err := forwardInputWithDetach(writer, stdin)
+			if detached {
+				stdin.detached = true
+				err = nil
+			}
+			stdinErrCh <- err
+		}()
+
+		select {
+		case err := <-readerErrCh:
+			runErr = normalizeTerminalReadError(err)
+		case err := <-stdinErrCh:
+			if err != nil && err != io.EOF {
+				runErr = err
+			}
 		}
+	} else {
+		runErr = normalizeTerminalReadError(<-readerErrCh)
 	}
 
 	_ = writer.close(websocket.CloseNormalClosure)
@@ -644,108 +651,6 @@ func parseAttachRoleDimensions(data []byte, cols, rows int) (int, int) {
 		rows = msg.Rows
 	}
 	return cols, rows
-}
-
-func readSnapshot(listenAddr, sessionID string) (frame string, scrollback string, cols, rows int, err error) {
-	frame, cols, rows, err = readScreenSnapshotFrame(listenAddr, sessionID)
-	if err != nil {
-		return "", "", cols, rows, err
-	}
-	scrollback, _, _, scrollErr := readSnapshotScrollback(listenAddr, sessionID)
-	if scrollErr != nil {
-		scrollback = ""
-	}
-	return frame, scrollback, cols, rows, nil
-}
-
-func readScreenSnapshotFrame(listenAddr, sessionID string) (string, int, int, error) {
-	conn, err := dialSnapshotWebSocket(listenAddr, sessionID, "screen")
-	if err != nil {
-		return "", 0, 0, err
-	}
-	defer conn.Close()
-
-	cols, rows := 80, 24
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-		msgType, data, err := conn.ReadMessage()
-		if err != nil {
-			if ne, ok := err.(interface{ Timeout() bool }); ok && ne.Timeout() {
-				continue
-			}
-			return "", cols, rows, err
-		}
-		switch msgType {
-		case websocket.TextMessage:
-			if handled, _, parseErr := parseServerMessage(data); parseErr != nil {
-				return "", cols, rows, parseErr
-			} else if handled {
-				cols, rows = parseAttachRoleDimensions(data, cols, rows)
-			}
-		case websocket.BinaryMessage:
-			return string(data), cols, rows, nil
-		}
-	}
-	return "", cols, rows, fmt.Errorf("timeout waiting for snapshot frame")
-}
-
-func readSnapshotScrollback(listenAddr, sessionID string) (string, int, int, error) {
-	conn, err := dialSnapshotWebSocket(listenAddr, sessionID, "snapshot")
-	if err != nil {
-		return "", 0, 0, err
-	}
-	defer conn.Close()
-
-	cols, rows := 80, 24
-	var out strings.Builder
-	for {
-		_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-		msgType, data, err := conn.ReadMessage()
-		if err != nil {
-			if ne, ok := err.(interface{ Timeout() bool }); ok && ne.Timeout() {
-				if out.Len() > 0 {
-					return out.String(), cols, rows, nil
-				}
-				continue
-			}
-			if out.Len() > 0 {
-				return out.String(), cols, rows, nil
-			}
-			return "", cols, rows, normalizeTerminalReadError(err)
-		}
-		switch msgType {
-		case websocket.TextMessage:
-			if handled, _, parseErr := parseServerMessage(data); parseErr != nil {
-				return "", cols, rows, parseErr
-			} else if handled {
-				cols, rows = parseAttachRoleDimensions(data, cols, rows)
-			}
-		case websocket.BinaryMessage:
-			out.Write(data)
-		}
-	}
-}
-
-func dialSnapshotWebSocket(listenAddr, sessionID, attachMode string) (*websocket.Conn, error) {
-	wsURL, err := terminalWebSocketURL(listenAddr, sessionID, attachMode)
-	if err != nil {
-		return nil, err
-	}
-	conn, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	if err != nil {
-		if resp != nil {
-			defer resp.Body.Close()
-			body, _ := io.ReadAll(resp.Body)
-			snippet := strings.TrimSpace(string(body))
-			if snippet != "" {
-				return nil, fmt.Errorf("terminal connect failed: %s: %s", resp.Status, snippet)
-			}
-			return nil, fmt.Errorf("terminal connect failed: %s", resp.Status)
-		}
-		return nil, err
-	}
-	return conn, nil
 }
 
 func streamObserver(listenAddr, sessionID string, stdout io.Writer) error {

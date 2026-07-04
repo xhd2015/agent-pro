@@ -1,4 +1,4 @@
-package main
+package ttywatch
 
 import (
 	"fmt"
@@ -23,6 +23,11 @@ func registerPrepareInjectAPI(mux *http.ServeMux, mgr *ptywrap.Manager) {
 		}
 		w.WriteHeader(http.StatusOK)
 	})
+}
+
+// PrepareSessionInjectMode disables canonical mode before injecting input.
+func PrepareSessionInjectMode(listenAddr, sessionID string) error {
+	return prepareSessionInjectMode(listenAddr, sessionID)
 }
 
 func prepareSessionInjectMode(listenAddr, sessionID string) error {

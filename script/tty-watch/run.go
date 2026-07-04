@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"syscall"
 	"time"
+
+	"github.com/xhd2015/agent-pro/pkgs/ttywatch"
 )
 
 func parseRunArgs(args []string) (customSessionID string, commandArgs []string, err error) {
@@ -58,7 +60,8 @@ func runRun(args []string) error {
 	}
 	defer release()
 
-	argv := append([]string{serveSubcommand, sessionID}, commandArgs...)
+	serveToken := ttywatch.ServeSubcommand(commandArgs)
+	argv := append([]string{serveToken, sessionID}, commandArgs...)
 	cmd := exec.Command(os.Args[0], argv...)
 	cmd.Env = os.Environ()
 	cmd.Stdin = nil
