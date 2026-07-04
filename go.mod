@@ -6,7 +6,7 @@ require (
 	github.com/coder/acp-go-sdk v0.13.0
 	github.com/coder/websocket v1.8.14
 	github.com/tidwall/jsonc v0.3.3
-	github.com/xhd2015/dot-pkgs/go-pkgs v0.0.44
+	github.com/xhd2015/dot-pkgs/go-pkgs v0.0.45
 	github.com/xhd2015/less-gen v0.0.19
 	github.com/xhd2015/xgo v1.1.14
 	gopkg.in/yaml.v3 v3.0.1
@@ -57,6 +57,6 @@ require (
 	github.com/xhd2015/less-flags v1.0.0
 	github.com/xhd2015/skills v0.0.12
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	golang.org/x/sys v0.44.0 // indirect
+	golang.org/x/sys v0.44.0
 	golang.org/x/text v0.21.0 // indirect
 )

@@ -623,29 +623,127 @@ func normalizeTerminalReadError(err error) error {
 	return err
 }
 
-func readSnapshot(listenAddr, sessionID string) (string, error) {
-	conn, err := dialTerminal(listenAddr, sessionID, "snapshot")
+type attachRoleMessage struct {
+	Type       string `json:"type"`
+	AttachRole string `json:"attach_role"`
+	Cols       int    `json:"cols"`
+	Rows       int    `json:"rows"`
+}
+
+func parseAttachRoleDimensions(data []byte, cols, rows int) (int, int) {
+	var msg attachRoleMessage
+	if json.Unmarshal(data, &msg) != nil || msg.Type != "attach_role" {
+		return cols, rows
+	}
+	if msg.Cols > 0 {
+		cols = msg.Cols
+	}
+	if msg.Rows > 0 {
+		rows = msg.Rows
+	}
+	return cols, rows
+}
+
+func readSnapshot(listenAddr, sessionID string) (frame string, scrollback string, cols, rows int, err error) {
+	frame, cols, rows, err = readScreenSnapshotFrame(listenAddr, sessionID)
 	if err != nil {
-		return "", err
+		return "", "", cols, rows, err
+	}
+	scrollback, _, _, scrollErr := readSnapshotScrollback(listenAddr, sessionID)
+	if scrollErr != nil {
+		scrollback = ""
+	}
+	return frame, scrollback, cols, rows, nil
+}
+
+func readScreenSnapshotFrame(listenAddr, sessionID string) (string, int, int, error) {
+	conn, err := dialSnapshotWebSocket(listenAddr, sessionID, "screen")
+	if err != nil {
+		return "", 0, 0, err
 	}
 	defer conn.Close()
 
-	deadline := time.Now().Add(3 * time.Second)
-	var out strings.Builder
+	cols, rows := 80, 24
+	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		_ = conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+		_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 		msgType, data, err := conn.ReadMessage()
 		if err != nil {
 			if ne, ok := err.(interface{ Timeout() bool }); ok && ne.Timeout() {
 				continue
 			}
-			break
+			return "", cols, rows, err
 		}
-		if msgType == websocket.BinaryMessage || (msgType == websocket.TextMessage && !strings.Contains(string(data), `"type"`)) {
+		switch msgType {
+		case websocket.TextMessage:
+			if handled, _, parseErr := parseServerMessage(data); parseErr != nil {
+				return "", cols, rows, parseErr
+			} else if handled {
+				cols, rows = parseAttachRoleDimensions(data, cols, rows)
+			}
+		case websocket.BinaryMessage:
+			return string(data), cols, rows, nil
+		}
+	}
+	return "", cols, rows, fmt.Errorf("timeout waiting for snapshot frame")
+}
+
+func readSnapshotScrollback(listenAddr, sessionID string) (string, int, int, error) {
+	conn, err := dialSnapshotWebSocket(listenAddr, sessionID, "snapshot")
+	if err != nil {
+		return "", 0, 0, err
+	}
+	defer conn.Close()
+
+	cols, rows := 80, 24
+	var out strings.Builder
+	for {
+		_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+		msgType, data, err := conn.ReadMessage()
+		if err != nil {
+			if ne, ok := err.(interface{ Timeout() bool }); ok && ne.Timeout() {
+				if out.Len() > 0 {
+					return out.String(), cols, rows, nil
+				}
+				continue
+			}
+			if out.Len() > 0 {
+				return out.String(), cols, rows, nil
+			}
+			return "", cols, rows, normalizeTerminalReadError(err)
+		}
+		switch msgType {
+		case websocket.TextMessage:
+			if handled, _, parseErr := parseServerMessage(data); parseErr != nil {
+				return "", cols, rows, parseErr
+			} else if handled {
+				cols, rows = parseAttachRoleDimensions(data, cols, rows)
+			}
+		case websocket.BinaryMessage:
 			out.Write(data)
 		}
 	}
-	return out.String(), nil
+}
+
+func dialSnapshotWebSocket(listenAddr, sessionID, attachMode string) (*websocket.Conn, error) {
+	wsURL, err := terminalWebSocketURL(listenAddr, sessionID, attachMode)
+	if err != nil {
+		return nil, err
+	}
+	conn, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		if resp != nil {
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+			snippet := strings.TrimSpace(string(body))
+			if snippet != "" {
+				return nil, fmt.Errorf("terminal connect failed: %s: %s", resp.Status, snippet)
+			}
+			return nil, fmt.Errorf("terminal connect failed: %s", resp.Status)
+		}
+		return nil, err
+	}
+	return conn, nil
 }
 
 func streamObserver(listenAddr, sessionID string, stdout io.Writer) error {

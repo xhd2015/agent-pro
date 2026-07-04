@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/creack/pty"
+	"github.com/xhd2015/agent-pro/pkgs/ttyrunner"
 )
 
 const registrySubdir = "registry"
@@ -26,7 +27,7 @@ const registrySubdir = "registry"
 type Request struct {
 	Phase string
 
-	Bin, TTYWatchHome, SessionID string
+	Bin, TTYWatchHome, SessionID, CustomSessionID string
 	RunCommand                 []string
 	Detach, SendCtrlC, Background bool
 	WatchProbe, SnapshotID, KillID string
@@ -87,6 +88,16 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 		return phaseRunCtrlC(t, req)
 	case "run-detach":
 		return phaseRunDetach(t, req)
+	case "run-custom-registers":
+		return phaseRunCustomRegisters(t, req)
+	case "run-custom-duplicate-live":
+		return phaseRunCustomDuplicateLive(t, req)
+	case "run-custom-reuses-stale":
+		return phaseRunCustomReusesStale(t, req)
+	case "run-custom-invalid-id":
+		return phaseRunCustomInvalidID(t, req)
+	case "run-custom-list-mixed":
+		return phaseRunCustomListMixed(t, req)
 	case "run-exit-clean":
 		return phaseRunExitClean(t, req)
 	case "run-echo-exits":
@@ -109,6 +120,8 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 		return phaseListFields(t, req)
 	case "list-empty":
 		return phaseListEmpty(t, req)
+	case "list-second-run-after-exit":
+		return phaseListSecondRunAfterExit(t, req)
 	case "watch-stream":
 		return phaseWatchStream(t, req)
 	case "watch-readonly":
@@ -149,6 +162,14 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 		return phaseUnitObserverDetachKittyPopCleanup(t, req)
 	case "snapshot-sanitize":
 		return phaseSnapshotSanitize(t, req)
+	case "snapshot-codex-like-single-screen":
+		return phaseSnapshotCodexLikeSingleScreen(t, req)
+	case "snapshot-codex-cursor-drawn-mcp-boot":
+		return phaseSnapshotCodexCursorDrawnMCPBoot(t, req)
+	case "snapshot-codex-mcp-boot-smeared":
+		return phaseSnapshotCodexMCPBootSmeared(t, req)
+	case "snapshot-session-dimensions-wide":
+		return phaseSnapshotSessionDimensionsWide(t, req)
 	case "snapshot-missing":
 		return phaseSnapshotMissing(t, req)
 	case "kill-stop":
@@ -207,7 +228,7 @@ func RegistryDir(home string) string {
 	return filepath.Join(home, registrySubdir)
 }
 
-// ListRegistryIDs scans registry dir for session-*.json ids.
+// ListRegistryIDs scans registry dir for all *.json session ids.
 func ListRegistryIDs(home string) ([]string, error) {
 	dir := RegistryDir(home)
 	entries, err := os.ReadDir(dir)
@@ -223,10 +244,7 @@ func ListRegistryIDs(home string) ([]string, error) {
 		if !strings.HasSuffix(name, ".json") {
 			continue
 		}
-		id := strings.TrimSuffix(name, ".json")
-		if strings.HasPrefix(id, "session-") {
-			ids = append(ids, id)
-		}
+		ids = append(ids, strings.TrimSuffix(name, ".json"))
 	}
 	return ids, nil
 }
@@ -285,6 +303,14 @@ func withRunSubcommand(argv []string) []string {
 	return append([]string{"run"}, argv...)
 }
 
+func buildRunArgv(req *Request, commandArgv []string) []string {
+	argv := []string{"run"}
+	if req.CustomSessionID != "" {
+		argv = append(argv, "--session-id", req.CustomSessionID)
+	}
+	return append(argv, commandArgv...)
+}
+
 // StartDetachedSession starts tty-watch in a PTY, detaches with Ctrl-], returns session id.
 func StartDetachedSession(t *testing.T, req *Request) string {
 	t.Helper()
@@ -292,7 +318,16 @@ func StartDetachedSession(t *testing.T, req *Request) string {
 	if len(argv) == 0 {
 		argv = []string{"sleep", "300"}
 	}
-	cmd := exec.Command(req.Bin, withRunSubcommand(argv)...)
+	knownIDs := map[string]bool{}
+	if ids, err := ListRegistryIDs(req.TTYWatchHome); err != nil {
+		t.Fatalf("list registry before start: %v", err)
+	} else {
+		for _, id := range ids {
+			knownIDs[id] = true
+		}
+	}
+
+	cmd := exec.Command(req.Bin, buildRunArgv(req, argv)...)
 	cmd.Env = envWithHome(req.TTYWatchHome)
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
@@ -303,7 +338,7 @@ func StartDetachedSession(t *testing.T, req *Request) string {
 		_ = ptmx.Close()
 	})
 
-	sessionID, err := waitForRegistrySession(req.TTYWatchHome, 15*time.Second)
+	sessionID, err := waitForRegistrySession(req.TTYWatchHome, 15*time.Second, req.CustomSessionID, knownIDs)
 	if err != nil {
 		t.Fatalf("wait registry after start: %v", err)
 	}
@@ -420,6 +455,136 @@ func phaseRunDetach(t *testing.T, req *Request) (*Response, error) {
 		ListOutput:     listOut,
 		SessionRunning: SessionReachable(req.TTYWatchHome, sessionID),
 		ExitCode:       listCode,
+	}, nil
+}
+
+func phaseRunCustomRegisters(t *testing.T, req *Request) (*Response, error) {
+	if req.CustomSessionID == "" {
+		req.CustomSessionID = "test-with-grok"
+	}
+	argv := req.RunCommand
+	if len(argv) == 0 {
+		argv = []string{"sleep", "300"}
+	}
+	req.RunCommand = argv
+	sessionID := StartDetachedSession(t, req)
+	listOut, listCode, err := runCLI(req.Bin, req.TTYWatchHome, []string{"list"})
+	if err != nil {
+		return nil, err
+	}
+	return &Response{
+		SessionID:      sessionID,
+		RegistryExists: RegistryExists(req.TTYWatchHome, sessionID),
+		ListOutput:     listOut,
+		SessionRunning: SessionReachable(req.TTYWatchHome, sessionID),
+		ExitCode:       listCode,
+	}, nil
+}
+
+func phaseRunCustomDuplicateLive(t *testing.T, req *Request) (*Response, error) {
+	if req.CustomSessionID == "" {
+		req.CustomSessionID = "test-with-grok"
+	}
+	argv := req.RunCommand
+	if len(argv) == 0 {
+		argv = []string{"sleep", "300"}
+	}
+	req.RunCommand = argv
+	StartDetachedSession(t, req)
+
+	stdout, stderr, code, err := runCLISeparate(req.Bin, req.TTYWatchHome, buildRunArgv(req, argv))
+	if err != nil {
+		return nil, err
+	}
+	return &Response{
+		SessionID:  req.CustomSessionID,
+		Stdout:     stdout,
+		Stderr:     stderr,
+		Combined:   combineOutput(stdout, stderr),
+		ExitCode:   code,
+	}, nil
+}
+
+func phaseRunCustomReusesStale(t *testing.T, req *Request) (*Response, error) {
+	if req.CustomSessionID == "" {
+		req.CustomSessionID = "test-with-grok"
+	}
+	if err := WriteStaleRegistry(req.TTYWatchHome, req.CustomSessionID, "127.0.0.1:1"); err != nil {
+		return nil, err
+	}
+	argv := req.RunCommand
+	if len(argv) == 0 {
+		argv = []string{"sleep", "300"}
+	}
+	req.RunCommand = argv
+	sessionID := StartDetachedSession(t, req)
+	listOut, listCode, err := runCLI(req.Bin, req.TTYWatchHome, []string{"list"})
+	if err != nil {
+		return nil, err
+	}
+	return &Response{
+		SessionID:      sessionID,
+		RegistryExists: RegistryExists(req.TTYWatchHome, sessionID),
+		ListOutput:     listOut,
+		SessionRunning: SessionReachable(req.TTYWatchHome, sessionID),
+		ExitCode:       listCode,
+	}, nil
+}
+
+func phaseRunCustomInvalidID(t *testing.T, req *Request) (*Response, error) {
+	customID := req.CustomSessionID
+	if customID == "" {
+		customID = ".bad"
+	}
+	argv := req.RunCommand
+	if len(argv) == 0 {
+		argv = []string{"sleep", "1"}
+	}
+	stdout, stderr, code, err := runCLISeparate(req.Bin, req.TTYWatchHome, append([]string{"run", "--session-id", customID}, argv...))
+	if err != nil {
+		return nil, err
+	}
+	return &Response{
+		SessionID: customID,
+		Stdout:    stdout,
+		Stderr:    stderr,
+		Combined:  combineOutput(stdout, stderr),
+		ExitCode:  code,
+	}, nil
+}
+
+func phaseRunCustomListMixed(t *testing.T, req *Request) (*Response, error) {
+	customID := req.CustomSessionID
+	if customID == "" {
+		customID = "test-with-grok"
+	}
+	argv := req.RunCommand
+	if len(argv) == 0 {
+		argv = []string{"sleep", "300"}
+	}
+
+	customReq := *req
+	customReq.CustomSessionID = customID
+	customReq.RunCommand = argv
+	customSessionID := StartDetachedSession(t, &customReq)
+
+	autoReq := *req
+	autoReq.CustomSessionID = ""
+	autoReq.RunCommand = argv
+	autoSessionID := StartDetachedSession(t, &autoReq)
+
+	listOut, listCode, err := runCLI(req.Bin, req.TTYWatchHome, []string{"list"})
+	if err != nil {
+		return nil, err
+	}
+	ids, _ := ListRegistryIDs(req.TTYWatchHome)
+	return &Response{
+		SessionID:      customSessionID,
+		RegistryIDs:    ids,
+		ListOutput:     listOut,
+		ExitCode:       listCode,
+		RegistryExists: RegistryExists(req.TTYWatchHome, customSessionID) && RegistryExists(req.TTYWatchHome, autoSessionID),
+		SessionRunning: SessionReachable(req.TTYWatchHome, customSessionID) && SessionReachable(req.TTYWatchHome, autoSessionID),
 	}, nil
 }
 
@@ -598,6 +763,41 @@ func phaseListEmpty(t *testing.T, req *Request) (*Response, error) {
 	}, nil
 }
 
+// phaseListSecondRunAfterExit reproduces the second-run list-empty bug: a fast first
+// run exits and removes the registry file, but the zombie __serve__ process reuses the
+// same session id on the second run and its grace-period RemoveRegistry deletes the
+// live second session's registry entry.
+func phaseListSecondRunAfterExit(t *testing.T, req *Request) (*Response, error) {
+	_, code, err := runCLI(req.Bin, req.TTYWatchHome, []string{"run", "true"})
+	if err != nil {
+		return nil, err
+	}
+	if code != 0 {
+		return nil, fmt.Errorf("first run true exited %d", code)
+	}
+
+	detachReq := *req
+	detachReq.RunCommand = []string{"sleep", "600"}
+	sessionID := StartDetachedSession(t, &detachReq)
+
+	// Wait past the first __serve__ writerAttachGrace (2s) so its cleanup races with
+	// the second session's registry entry.
+	time.Sleep(3 * time.Second)
+
+	listOut, code, err := runCLI(req.Bin, req.TTYWatchHome, []string{"list"})
+	if err != nil {
+		return nil, err
+	}
+	ids, _ := ListRegistryIDs(req.TTYWatchHome)
+	return &Response{
+		SessionID:      sessionID,
+		ListOutput:     listOut,
+		ExitCode:       code,
+		RegistryIDs:    ids,
+		RegistryExists: len(ids) > 0,
+	}, nil
+}
+
 func phaseWatchStream(t *testing.T, req *Request) (*Response, error) {
 	detachReq := *req
 	detachReq.RunCommand = []string{"sh", "-c", `while true; do echo WATCH_MARKER; sleep 1; done`}
@@ -644,6 +844,15 @@ const grokTUIRawMirrorCommand = `printf '\033[?1049h\033[2J\033[H\033[38;2;255;2
 
 // grokTUIMultiRedrawCommand redraws the grok-like screen multiple times (live TUI updates).
 const grokTUIMultiRedrawCommand = `printf '\033[?1049h\033[2J\033[H\033[38;2;255;255;255m╭────╮\033[0m\n\033[38;2;255;255;255m│ Grok Build Beta │\033[0m\n\033[38;2;255;255;255m╰────╯\033[0m\n'; i=0; while [ "$i" -lt 6 ]; do printf '\033[2J\033[H\033[38;2;255;255;255m╭────╮\033[0m\n\033[38;2;255;255;255m│ Grok Build Beta │\033[0m\n\033[38;2;255;255;255m╰────╯\033[0m\n\033[38;2;113;113;113;48;2;238;238;238m⠀⠀⠀\033[0m'; i=$((i+1)); sleep 0.15; done; while true; do sleep 1; done`
+
+// codexLikeSnapshotCommand mimics codex-style alternate-screen redraws with status
+// line updates (MCP boot) that snapshot must collapse to the latest screen only.
+const codexLikeSnapshotCommand = `printf '\033[?1049h\033[2J\033[H\033[38;2;255;255;255m╭ OpenAI Codex ╮\033[0m\n\033[38;2;255;255;255m│ model: gpt-5.5 medium │\033[0m\n'; i=0; while [ "$i" -lt 8 ]; do printf '\033[2J\033[H\033[38;2;255;255;255m╭ OpenAI Codex ╮\033[0m\n\033[38;2;255;255;255m│ model: gpt-5.5 medium │\033[0m\n\033[33mΔ MCP starting ($i/5)\033[0m\n\033[38;2;255;255;255m› Improve documentation\033[0m\n'; i=$((i+1)); sleep 0.1; done; while true; do sleep 1; done`
+
+// codexCursorDrawnMCPBootCommand mimics real codex: plain warning before ?2026h (no 2J),
+// box UI via absolute cursor moves, tip line, incremental MCP status redraws, and kitty
+// protocol bytes that leak when snapshot render is wrong.
+const codexCursorDrawnMCPBootCommand = `printf '⚠ codex_hooks deprecated. See https://developers.openai.com/codex/config-basic#feature-flags for details.\n'; printf '\033[?2026h'; printf '\033[4;1H╭──────────────────────────────────────────────────────────╮'; printf '\033[5;1H│ >_ OpenAI Codex (v0.142.5)                               │'; printf '\033[6;1H│                                                          │'; printf '\033[7;1H│ model:     gpt-5.5 medium   /model to change             │'; printf '\033[8;1H│ directory: ~/worktrees/…support-send-followup            │'; printf '\033[9;1H╰──────────────────────────────────────────────────────────╯'; printf '\033[11;1H  Tip: New Use /fast to enable our fastest inference.'; i=0; while [ "$i" -lt 8 ]; do printf '\033[22;1H\033[K• Starting MCP servers (%s/5): codex_apps, computer-use, …' "$i"; printf '\033[<43;52;23M'; i=$((i+1)); sleep 0.05; done; printf '\033[22;1H\033[K⚠ MCP client for computer-use failed to start'; printf '\033[23;1H\033[K⚠ MCP startup incomplete (failed: computer-use)'; printf '\033[20;1H› Write tests for @filename'; printf '\033[24;1Hgpt-5.5 medium · ~/.wrk/worktrees/agent-pro-master-2026-07-04-support-send-followup'; while true; do sleep 1; done`
 
 // grokTUISnapshotReplayCommand mimics ptywrap scrollback replay (?25l prefix) plus
 // live true-color incremental input-area updates like grok's cursor animation.
@@ -1376,6 +1585,126 @@ func phaseWatchReadonly(t *testing.T, req *Request) (*Response, error) {
 	}, nil
 }
 
+func phaseSnapshotCodexLikeSingleScreen(t *testing.T, req *Request) (*Response, error) {
+	detachReq := *req
+	detachReq.CustomSessionID = "codex"
+	detachReq.RunCommand = []string{"sh", "-c", codexLikeSnapshotCommand}
+	sessionID := StartDetachedSession(t, &detachReq)
+	time.Sleep(1500 * time.Millisecond)
+
+	stdout, stderr, code, err := runCLISeparate(req.Bin, req.TTYWatchHome, []string{"snapshot", sessionID})
+	if err != nil {
+		return nil, err
+	}
+	text := stdout
+	if text == "" {
+		text = stderr
+	}
+	return &Response{
+		SessionID:      sessionID,
+		SnapshotText:   text,
+		ContainsEscape: ContainsANSIEscape(text),
+		Stdout:         stdout,
+		Stderr:         stderr,
+		ExitCode:       code,
+	}, nil
+}
+
+func phaseSnapshotCodexCursorDrawnMCPBoot(t *testing.T, req *Request) (*Response, error) {
+	detachReq := *req
+	detachReq.CustomSessionID = "codex"
+	detachReq.RunCommand = []string{"sh", "-c", codexCursorDrawnMCPBootCommand}
+	sessionID := StartDetachedSession(t, &detachReq)
+	time.Sleep(1200 * time.Millisecond)
+
+	stdout, stderr, code, err := runCLISeparate(req.Bin, req.TTYWatchHome, []string{"snapshot", sessionID})
+	if err != nil {
+		return nil, err
+	}
+	text := stdout
+	if text == "" {
+		text = stderr
+	}
+	return &Response{
+		SessionID:      sessionID,
+		SnapshotText:   text,
+		ContainsEscape: ContainsANSIEscape(text),
+		Stdout:         stdout,
+		Stderr:         stderr,
+		ExitCode:       code,
+	}, nil
+}
+
+func wideSnapshotLineMarker() string {
+	return "WIDE_LINE_MARKER_" + strings.Repeat("x", 75)
+}
+
+func phaseSnapshotSessionDimensionsWide(t *testing.T, req *Request) (*Response, error) {
+	marker := wideSnapshotLineMarker()
+	detachReq := *req
+	detachReq.RunCommand = []string{"sh", "-c", fmt.Sprintf(
+		`printf '\033[?2026h'; printf '\033[30;1H%s'; sleep 300`, marker)}
+	sessionID := StartDetachedSession(t, &detachReq)
+
+	entry, err := ReadRegistryEntry(req.TTYWatchHome, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	writer, err := ttyrunner.DialPTYAttach(entry.ListenAddr, sessionID, "")
+	if err != nil {
+		return nil, fmt.Errorf("dial writer ws: %w", err)
+	}
+	if err := writer.TryResize(100, 32); err != nil {
+		writer.Close()
+		return nil, fmt.Errorf("writer resize: %w", err)
+	}
+	writer.Close()
+	time.Sleep(300 * time.Millisecond)
+
+	stdout, stderr, code, err := runCLISeparate(req.Bin, req.TTYWatchHome, []string{"snapshot", sessionID})
+	if err != nil {
+		return nil, err
+	}
+	text := stdout
+	if text == "" {
+		text = stderr
+	}
+	return &Response{
+		SessionID:      sessionID,
+		SnapshotText:   text,
+		ContainsEscape: ContainsANSIEscape(text),
+		Stdout:         stdout,
+		Stderr:         stderr,
+		ExitCode:       code,
+	}, nil
+}
+
+func phaseSnapshotCodexMCPBootSmeared(t *testing.T, req *Request) (*Response, error) {
+	detachReq := *req
+	detachReq.CustomSessionID = "codex"
+	detachReq.RunCommand = []string{"sh", "-c", codexCursorDrawnMCPBootCommand}
+	sessionID := StartDetachedSession(t, &detachReq)
+	// Snapshot mid MCP boot before final error lines are drawn.
+	time.Sleep(500 * time.Millisecond)
+
+	stdout, stderr, code, err := runCLISeparate(req.Bin, req.TTYWatchHome, []string{"snapshot", sessionID})
+	if err != nil {
+		return nil, err
+	}
+	text := stdout
+	if text == "" {
+		text = stderr
+	}
+	return &Response{
+		SessionID:      sessionID,
+		SnapshotText:   text,
+		ContainsEscape: ContainsANSIEscape(text),
+		Stdout:         stdout,
+		Stderr:         stderr,
+		ExitCode:       code,
+	}, nil
+}
+
 func phaseSnapshotSanitize(t *testing.T, req *Request) (*Response, error) {
 	detachReq := *req
 	detachReq.RunCommand = []string{"sh", "-c", `printf '\033[31mRED\033[0m\nPLAIN_LINE\n'; sleep 300`}
@@ -1817,17 +2146,31 @@ func envWithHome(home string) []string {
 	return out
 }
 
-func waitForRegistrySession(home string, timeout time.Duration) (string, error) {
+func waitForRegistrySession(home string, timeout time.Duration, expectID string, knownIDs map[string]bool) (string, error) {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
+		if expectID != "" && RegistryExists(home, expectID) {
+			return expectID, nil
+		}
 		ids, err := ListRegistryIDs(home)
 		if err != nil {
 			return "", err
 		}
-		if len(ids) > 0 {
-			return ids[0], nil
+		for _, id := range ids {
+			if expectID != "" {
+				if id == expectID {
+					return id, nil
+				}
+				continue
+			}
+			if knownIDs == nil || !knownIDs[id] {
+				return id, nil
+			}
 		}
 		time.Sleep(100 * time.Millisecond)
+	}
+	if expectID != "" {
+		return "", fmt.Errorf("timeout waiting for registry session %s under %s", expectID, RegistryDir(home))
 	}
 	return "", fmt.Errorf("timeout waiting for registry session under %s", RegistryDir(home))
 }

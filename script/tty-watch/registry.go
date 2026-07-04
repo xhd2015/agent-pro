@@ -10,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode"
 )
 
 // RegistryEntry maps a tty-watch session id to the embedded ptywrap listen address.
@@ -22,25 +23,78 @@ type RegistryEntry struct {
 	Cwd        string   `json:"cwd,omitempty"`
 }
 
-// ReserveRegistrySessionID returns the next session-N id under flock.
-func ReserveRegistrySessionID(home string) (string, func(), error) {
+// validateSessionID checks custom session id syntax: [a-zA-Z0-9][a-zA-Z0-9._-]*.
+func validateSessionID(id string) error {
+	if id == "" || strings.HasPrefix(id, ".") {
+		return fmt.Errorf(`run: invalid session id %q`, id)
+	}
+	for i, r := range id {
+		if i == 0 {
+			if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+				return fmt.Errorf(`run: invalid session id %q`, id)
+			}
+			continue
+		}
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '.' || r == '_' || r == '-' {
+			continue
+		}
+		return fmt.Errorf(`run: invalid session id %q`, id)
+	}
+	return nil
+}
+
+// ReserveCustomSessionID validates id and ensures it is not held by a live session.
+// Stale registry entries are pruned so the id can be reused.
+func ReserveCustomSessionID(home, sessionID string) (func(), error) {
+	if err := validateSessionID(sessionID); err != nil {
+		return nil, err
+	}
+	release, err := acquireRegistryLock(home)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := os.Stat(registryPath(home, sessionID)); err == nil {
+		entry, readErr := ReadRegistry(home, sessionID)
+		if readErr == nil {
+			if tcpReachable(entry.ListenAddr) {
+				release()
+				return nil, fmt.Errorf(`run: session id %q already in use`, sessionID)
+			}
+			RemoveRegistryIfMatch(home, sessionID, entry.ListenAddr, entry.PID)
+		} else {
+			RemoveRegistry(home, sessionID)
+		}
+	}
+	return release, nil
+}
+
+func acquireRegistryLock(home string) (func(), error) {
 	dir := registryDir(home)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return "", nil, err
+		return nil, err
 	}
 	lockPath := filepath.Join(dir, ".lock")
 	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX); err != nil {
 		_ = lockFile.Close()
-		return "", nil, err
+		return nil, err
 	}
-	release := func() {
+	return func() {
 		_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
 		_ = lockFile.Close()
+	}, nil
+}
+
+// ReserveRegistrySessionID returns the next session-N id under flock.
+func ReserveRegistrySessionID(home string) (string, func(), error) {
+	release, err := acquireRegistryLock(home)
+	if err != nil {
+		return "", nil, err
 	}
+	dir := registryDir(home)
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -115,6 +169,20 @@ func RemoveRegistry(home, sessionID string) {
 	_ = os.Remove(registryPath(home, sessionID))
 }
 
+// RemoveRegistryIfMatch deletes the registry file only when the on-disk entry still
+// belongs to the caller (same listen address and pid). Stale __serve__ cleanup can
+// otherwise delete a newer session that reused the same session id.
+func RemoveRegistryIfMatch(home, sessionID, listenAddr string, pid int) {
+	entry, err := ReadRegistry(home, sessionID)
+	if err != nil {
+		return
+	}
+	if entry.ListenAddr != listenAddr || entry.PID != pid {
+		return
+	}
+	RemoveRegistry(home, sessionID)
+}
+
 // ListRegistryEntries returns all registry entries, optionally pruning unreachable ones.
 func ListRegistryEntries(home string, prune bool) ([]RegistryEntry, error) {
 	dir := registryDir(home)
@@ -132,15 +200,12 @@ func ListRegistryEntries(home string, prune bool) ([]RegistryEntry, error) {
 			continue
 		}
 		id := strings.TrimSuffix(name, ".json")
-		if !strings.HasPrefix(id, "session-") {
-			continue
-		}
 		entry, err := ReadRegistry(home, id)
 		if err != nil {
 			continue
 		}
 		if prune && !tcpReachable(entry.ListenAddr) {
-			RemoveRegistry(home, id)
+			RemoveRegistryIfMatch(home, id, entry.ListenAddr, entry.PID)
 			continue
 		}
 		out = append(out, *entry)

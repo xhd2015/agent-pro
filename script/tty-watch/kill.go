@@ -24,7 +24,7 @@ func runKill(args []string) error {
 	}
 
 	if !tcpReachable(entry.ListenAddr) {
-		RemoveRegistry(home, sessionID)
+		RemoveRegistryIfMatch(home, sessionID, entry.ListenAddr, entry.PID)
 		return nil
 	}
 
@@ -42,6 +42,6 @@ func runKill(args []string) error {
 		}
 	}
 
-	RemoveRegistry(home, sessionID)
+	RemoveRegistryIfMatch(home, sessionID, entry.ListenAddr, entry.PID)
 	return nil
 }

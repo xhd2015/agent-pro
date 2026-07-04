@@ -44,7 +44,8 @@ func printHelp() {
 	fmt.Print(`tty-watch — embedded PTY session manager
 
 Usage:
-  tty-watch run <command> [args...]  Start session and attach (writer)
+  tty-watch run [--session-id <id>] <command> [args...]
+                                     Start session and attach (writer)
   tty-watch list                     List sessions
   tty-watch watch <session-id>       Observe session (readonly)
   tty-watch snapshot <session-id>    Print sanitized scrollback

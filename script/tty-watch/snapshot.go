@@ -1,9 +1,6 @@
 package main
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
 func runSnapshot(args []string) error {
 	if len(args) != 1 {
@@ -20,16 +17,15 @@ func runSnapshot(args []string) error {
 		return err
 	}
 	if !tcpReachable(entry.ListenAddr) {
-		RemoveRegistry(home, sessionID)
+		RemoveRegistryIfMatch(home, sessionID, entry.ListenAddr, entry.PID)
 		return fmt.Errorf("tty-watch session %s not found", sessionID)
 	}
 
-	raw, err := readSnapshot(entry.ListenAddr, sessionID)
+	frame, scrollback, cols, rows, err := readSnapshot(entry.ListenAddr, sessionID)
 	if err != nil {
 		return err
 	}
-	text := SanitizeForPrint(raw)
-	text = strings.TrimRight(text, "\n")
+	text := renderSnapshotOutput(frame, scrollback, cols, rows)
 	if text != "" {
 		fmt.Println(text)
 	}

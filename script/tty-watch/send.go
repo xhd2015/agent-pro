@@ -23,7 +23,7 @@ func runSend(args []string) error {
 		return err
 	}
 	if !tcpReachable(entry.ListenAddr) {
-		RemoveRegistry(home, sessionID)
+		RemoveRegistryIfMatch(home, sessionID, entry.ListenAddr, entry.PID)
 		return fmt.Errorf("tty-watch session %s not found", sessionID)
 	}
 

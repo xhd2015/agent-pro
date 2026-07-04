@@ -11,8 +11,8 @@ End-to-end tests for the standalone `tty-watch` CLI: `run` subcommand embeds pty
   `run`, `list`, `watch`, `snapshot`, `kill`.
 - **Embedded ptywrap server** — HTTP/WS listener on `127.0.0.1:0` inside the
   owning `tty-watch` process for each session.
-- **Registry** — `$TTY_WATCH_HOME/registry/` JSON files (`session-N.json`) with
-  flock-based id reservation (groktty-style).
+- **Registry** — `$TTY_WATCH_HOME/registry/` JSON files (`session-N.json` or
+  `<custom-id>.json`) with flock-based id reservation (groktty-style).
 - **PTY child** — command argv executed inside the embedded terminal session.
 - **Test harness** — isolated `TTY_WATCH_HOME` per test, PTY helpers for attach,
   Ctrl-C (`\x03`), Ctrl-] detach (`\x1d`), registry probes.
@@ -21,11 +21,14 @@ End-to-end tests for the standalone `tty-watch` CLI: `run` subcommand embeds pty
 
 - Default run reserves `session-N`, starts ptywrap, writes registry, attaches as
   interactive writer; **host stays silent** (no session-id on stdout/stderr).
+- Optional `run --session-id <id>` (before `<command>`) reserves a user-chosen id;
+  pattern `[a-zA-Z0-9][a-zA-Z0-9._-]*`; live duplicate errors; stale entry pruned
+  and reused; invalid id rejected before start.
 - Ctrl-C forwards interrupt to PTY child; Ctrl-] detaches client only (session +
   registry survive).
 - Command exit while attached removes registry entry and exits host.
-- `list` scans registry, TCP-probes `listen_addr`, prints id + command + uptime;
-  prunes unreachable entries.
+- `list` scans **all** registry `*.json` files, TCP-probes `listen_addr`, prints
+  id + command + uptime; prunes unreachable entries.
 - `watch` attaches as observer: raw PTY bytes to stdout, no stdin forwarding.
 - `snapshot` attaches as snapshot mode; prints scrollback with ANSI/C0 sanitized.
 - `kill` DELETEs session via ptywrap API, SIGTERM owner PID, removes registry;
@@ -55,6 +58,14 @@ End-to-end tests for the standalone `tty-watch` CLI: `run` subcommand embeds pty
  |    +-- echo-clean-two-lines/      (LEAF)  echo yes: no leading blank line; yes + [Terminal exited] (RED)
  |    +-- bash-c-clean-two-lines/    (LEAF)  bash -c echo yes: no leading blank line smear (RED)
  |    +-- exit-marker-column-zero/  (LEAF)  no leading blank line; [Terminal exited] column 0 (RED)
+ |    |
+ |    +-- custom-session-id/
+ |         |
+ |         +-- registers-custom-id/     (LEAF)  --session-id writes custom registry + list (RED)
+ |         +-- duplicate-live-errors/   (LEAF)  live duplicate custom id errors (RED)
+ |         +-- reuses-stale-id/          (LEAF)  stale custom registry pruned and reused (RED)
+ |         +-- invalid-id-rejected/     (LEAF)  invalid id rejected before start (RED)
+ |         +-- list-mixed-with-auto/    (LEAF)  list shows custom id + session-N (RED)
  |
  +-- unit/
  |    |
@@ -66,6 +77,7 @@ End-to-end tests for the standalone `tty-watch` CLI: `run` subcommand embeds pty
  |    |
  |    +-- shows-command-uptime/       (LEAF)  list prints id, command, uptime (RED)
  |    +-- empty-when-none/            (LEAF)  empty registry yields empty list (RED)
+ |    +-- second-run-after-exit/      (LEAF)  second run after first exit: list not empty (RED)
  |
  +-- watch/
  |    |
@@ -87,6 +99,10 @@ End-to-end tests for the standalone `tty-watch` CLI: `run` subcommand embeds pty
  +-- snapshot/
  |    |
  |    +-- prints-sanitized/           (LEAF)  snapshot strips ANSI/C0 controls (RED)
+ |    +-- codex-like-single-screen/   (LEAF)  alt-screen TUI: latest screen only, no smear (RED)
+ |    +-- codex-cursor-drawn-mcp-boot/(LEAF)  ?2026h+CUP: full warning, no MCP smear/leaks (RED)
+ |    +-- codex-mcp-boot-smeared/     (LEAF)  mid MCP boot: no stacked status smear/leaks (RED)
+ |    +-- session-dimensions-wide/    (LEAF)  resized session: wide line not 80-col wrapped (RED)
  |    +-- unknown-session/            (LEAF)  missing session errors (RED)
  |
  +-- kill/
@@ -124,11 +140,17 @@ Parameter ranking (most → least significant):
 | 21 | `run/echo-clean-two-lines` | `run echo yes` has no leading blank line; only `yes` + `[Terminal exited]` (RED) |
 | 22 | `run/bash-c-clean-two-lines` | `run bash -c 'echo yes'` has no leading blank line before `yes` (RED) |
 | 23 | `run/exit-marker-column-zero` | No leading blank line; `[Terminal exited]` at column 0; trailing newline (RED) |
+| 47 | `run/custom-session-id/registers-custom-id` | `--session-id` detached run writes `test-with-grok.json`; list shows id + sleep (RED) |
+| 48 | `run/custom-session-id/duplicate-live-errors` | Second `run --session-id` same live id exits 1; already in use (RED) |
+| 49 | `run/custom-session-id/reuses-stale-id` | Stale custom registry pruned; id reused; live in list (RED) |
+| 50 | `run/custom-session-id/invalid-id-rejected` | `run --session-id .bad` exits 1; invalid session id (RED) |
+| 51 | `run/custom-session-id/list-mixed-with-auto` | Custom id and auto `session-N` both appear in list (RED) |
 | 24 | `unit/screen-snapshot-exit-marker` | Snapshot text must not start with `\n`; exit marker at column 0 (RED) |
 | 37 | `unit/observer-detach-stdin-before-cleanup` | Detach restores stdin before stdout TTY cleanup (RED) |
 | 39 | `unit/observer-detach-kitty-pop-cleanup` | Detach pops grok kitty keyboard stack with `\x1b[<u` (RED) |
 | 10 | `list/shows-command-uptime` | `list` shows session id, command argv, uptime (RED) |
 | 11 | `list/empty-when-none` | Empty registry prints no sessions (RED) |
+| 46 | `list/second-run-after-exit` | Second run after first exit: list shows live session, not empty (RED) |
 | 12 | `watch/streams-output` | `watch` streams raw `WATCH_MARKER` output (RED) |
 | 13 | `watch/readonly-no-input` | `watch` ignores stdin; no echo of probe input (RED) |
 | 29 | `watch/readonly-tty-no-local-echo` | `watch` TTY silently drops typed/mouse input (RED) |
@@ -144,6 +166,10 @@ Parameter ranking (most → least significant):
 | 27 | `watch/grok-tui-single-screen-state` | `watch` pipe capture shows one screen, no duplicate redraw smear (RED) |
 | 28 | `watch/grok-tui-tty-no-mixed-snapshot-sgr` | `watch` TTY: no plain snapshot before raw SGR (no input garbage) (RED) |
 | 14 | `snapshot/prints-sanitized` | `snapshot` prints plain text without escape sequences (RED) |
+| 52 | `snapshot/codex-like-single-screen` | `snapshot` on codex-like alt-screen TUI shows latest screen only (RED) |
+| 53 | `snapshot/codex-cursor-drawn-mcp-boot` | `snapshot` on ?2026h codex UI: full warning, no MCP smear/CSI leaks (RED) |
+| 54 | `snapshot/codex-mcp-boot-smeared` | `snapshot` mid MCP boot: no stacked status smear/CSI leaks (RED) |
+| 55 | `snapshot/session-dimensions-wide` | `snapshot` uses session cols/rows: 95-char line not 80-col wrapped (RED) |
 | 15 | `snapshot/unknown-session` | `snapshot` on missing id fails (RED) |
 | 16 | `kill/terminates-detached` | `kill` stops detached session and removes registry (RED) |
 | 17 | `kill/unknown-session` | `kill` on missing id fails (RED) |
@@ -156,6 +182,7 @@ Parameter ranking (most → least significant):
 doctest vet ./script/tty-watch/tests
 doctest test ./script/tty-watch/tests/...
 doctest test -v ./script/tty-watch/tests/run/registers-session
+doctest test ./script/tty-watch/tests/run/custom-session-id/...
 ```
 
 ```go

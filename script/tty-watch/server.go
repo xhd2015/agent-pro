@@ -80,6 +80,6 @@ func runServeSession(args []string) error {
 	time.Sleep(writerAttachGrace)
 	shutdown()
 	mgr.Remove(sessionID)
-	RemoveRegistry(home, sessionID)
+	RemoveRegistryIfMatch(home, sessionID, listenAddr, entry.PID)
 	return nil
 }
