@@ -82,7 +82,7 @@ func runRun(args []string) error {
 
 	// Do not wait on the serve child: on Ctrl-] detach the parent must exit
 	// while the __serve__ process keeps the session alive.
-	detached, err := attachWriter(entry.ListenAddr, sessionID)
+	detached, err := attachWriter(entry.ListenAddr, sessionID, "screen")
 	if err != nil {
 		return err
 	}

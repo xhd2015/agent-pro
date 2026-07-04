@@ -4,6 +4,7 @@
 - List output contains session id (`session-N`).
 - List output contains command name `sleep`.
 - List output contains an uptime indicator (e.g. `s`, `m`, `h`, `ago`, or digit).
+- Tolerates table layout (header row and extra WATCH/ATTACHED columns when implemented).
 
 ```go
 import (

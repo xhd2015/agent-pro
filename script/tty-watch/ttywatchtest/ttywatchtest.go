@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -32,6 +33,7 @@ type Request struct {
 	Detach, SendCtrlC, Background bool
 	WatchProbe, SnapshotID, KillID string
 	SendID, SendMessage string
+	AttachID, AttachInput, AttachInputB, AttachProbe string
 }
 
 // Response is the doctest harness response for tty-watch CLI tests.
@@ -58,6 +60,10 @@ type Response struct {
 	InjectedBytes              []byte
 	AltExitCode                int
 	AltStderr                  string
+	AttachOutput               string
+	AttachBOutput              string
+	WatchOutput                string
+	RunOutput                  string
 }
 
 // RegistryEntry mirrors the tty-watch registry JSON shape for harness helpers.
@@ -123,6 +129,18 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 		return phaseListEmpty(t, req)
 	case "list-second-run-after-exit":
 		return phaseListSecondRunAfterExit(t, req)
+	case "list-table-header":
+		return phaseListTableWithClients(t, req, "idle")
+	case "list-table-idle":
+		return phaseListTableWithClients(t, req, "idle")
+	case "list-table-watch":
+		return phaseListTableWithClients(t, req, "watch")
+	case "list-table-attach":
+		return phaseListTableWithClients(t, req, "attach")
+	case "list-table-writer":
+		return phaseListTableWithClients(t, req, "writer")
+	case "list-table-both":
+		return phaseListTableWithClients(t, req, "both")
 	case "watch-stream":
 		return phaseWatchStream(t, req)
 	case "watch-readonly":
@@ -193,6 +211,28 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 		return phaseSendMissing(t, req)
 	case "send-stale":
 		return phaseSendStale(t, req)
+	case "attach-detached-session":
+		return phaseAttachDetachedSession(t, req)
+	case "attach-forwards-stdin":
+		return phaseAttachForwardsStdin(t, req)
+	case "attach-second-writes":
+		return phaseAttachSecondWrites(t, req)
+	case "attach-visible-to-watch":
+		return phaseAttachVisibleToWatch(t, req)
+	case "attach-visible-to-other":
+		return phaseAttachVisibleToOther(t, req)
+	case "attach-visible-while-run":
+		return phaseAttachVisibleWhileRunAttached(t, req)
+	case "attach-resize":
+		return phaseAttachResize(t, req)
+	case "attach-send-input-queue":
+		return phaseAttachSendInputQueue(t, req)
+	case "attach-detach-survives":
+		return phaseAttachDetachSurvives(t, req)
+	case "attach-unknown":
+		return phaseAttachUnknown(t, req)
+	case "attach-concurrent-ordered":
+		return phaseAttachConcurrentOrdered(t, req)
 	default:
 		return nil, fmt.Errorf("unknown phase %q", req.Phase)
 	}
@@ -772,6 +812,145 @@ func phaseListEmpty(t *testing.T, req *Request) (*Response, error) {
 // run exits and removes the registry file, but the zombie __serve__ process reuses the
 // same session id on the second run and its grace-period RemoveRegistry deletes the
 // live second session's registry entry.
+// listTableHeaderColumns is the list table header order (COMMAND last).
+var listTableHeaderColumns = []string{"SESSION", "UPTIME", "WATCH", "ATTACHED", "COMMAND"}
+
+// listTableRowRE matches aligned list table data rows: SESSION UPTIME WATCH ATTACHED COMMAND.
+var listTableRowRE = regexp.MustCompile(`^(\S+)\s+(\d+[smh]|unknown)\s+(\d+)\s+(\d+)\s+(.+)\s*$`)
+
+// listTableCountAlignRE captures WATCH and ATTACHED numeric fields before the COMMAND column.
+var listTableCountAlignRE = regexp.MustCompile(`^\S+\s+(?:\d+[smh]|unknown)\s+(\d+)\s+(\d+)\s+`)
+
+// ListTableHeaderPresent reports whether list stdout includes the table header columns in order.
+func ListTableHeaderPresent(output string) bool {
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		if !strings.Contains(line, "SESSION") {
+			continue
+		}
+		lastIdx := -1
+		for _, col := range listTableHeaderColumns {
+			idx := strings.Index(line, col)
+			if idx < 0 || idx <= lastIdx {
+				return false
+			}
+			lastIdx = idx
+		}
+		return true
+	}
+	return false
+}
+
+// ListTableClientCounts parses WATCH and ATTACHED for sessionID from list table output.
+func ListTableClientCounts(output, sessionID string) (watch, attached int, ok bool) {
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.Contains(line, sessionID) {
+			continue
+		}
+		m := listTableRowRE.FindStringSubmatch(line)
+		if m == nil || m[1] != sessionID {
+			continue
+		}
+		watch, _ = strconv.Atoi(m[3])
+		attached, _ = strconv.Atoi(m[4])
+		return watch, attached, true
+	}
+	return 0, 0, false
+}
+
+// ListTableCommand parses the COMMAND cell for sessionID from list table output.
+func ListTableCommand(output, sessionID string) (command string, ok bool) {
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.Contains(line, sessionID) {
+			continue
+		}
+		m := listTableRowRE.FindStringSubmatch(line)
+		if m == nil || m[1] != sessionID {
+			continue
+		}
+		return strings.TrimSpace(m[5]), true
+	}
+	return "", false
+}
+
+// ListTableColumnsAligned reports whether header and first data row share aligned columns.
+func ListTableColumnsAligned(output string) bool {
+	lines := nonEmptyLines(output)
+	if len(lines) < 2 {
+		return false
+	}
+	header, data := lines[0], lines[1]
+	lastIdx := -1
+	for _, col := range listTableHeaderColumns {
+		idx := strings.Index(header, col)
+		if idx < 0 || idx <= lastIdx {
+			return false
+		}
+		lastIdx = idx
+	}
+	idx := listTableCountAlignRE.FindStringSubmatchIndex(data)
+	if idx == nil {
+		return false
+	}
+	watchCol := strings.Index(header, "WATCH")
+	attachCol := strings.Index(header, "ATTACHED")
+	watchNum := idx[2]
+	attachNum := idx[4]
+	if watchCol < 0 || attachCol < 0 || watchNum < 0 || attachNum < 0 {
+		return false
+	}
+	return watchNum >= watchCol && attachNum >= attachCol && attachNum > watchNum
+}
+
+func nonEmptyLines(output string) []string {
+	var lines []string
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		if strings.TrimSpace(line) != "" {
+			lines = append(lines, strings.TrimSpace(line))
+		}
+	}
+	return lines
+}
+
+func phaseListTableWithClients(t *testing.T, req *Request, probe string) (*Response, error) {
+	sessionID := StartDetachedSession(t, req)
+	time.Sleep(300 * time.Millisecond)
+
+	var clients []*ttyrunner.WSAttachClient
+	defer func() {
+		for _, c := range clients {
+			c.Close()
+		}
+	}()
+
+	switch probe {
+	case "idle":
+	case "watch":
+		clients = append(clients, dialPTYAttachMode(t, req.TTYWatchHome, sessionID, "observer"))
+	case "attach":
+		clients = append(clients, dialPTYAttachMode(t, req.TTYWatchHome, sessionID, "attach"))
+	case "writer":
+		clients = append(clients, dialPTYAttachMode(t, req.TTYWatchHome, sessionID, "screen"))
+	case "both":
+		clients = append(clients, dialPTYAttachMode(t, req.TTYWatchHome, sessionID, "observer"))
+		clients = append(clients, dialPTYAttachMode(t, req.TTYWatchHome, sessionID, "attach"))
+	default:
+		return nil, fmt.Errorf("unknown list table probe %q", probe)
+	}
+	time.Sleep(200 * time.Millisecond)
+
+	listOut, code, err := runCLI(req.Bin, req.TTYWatchHome, []string{"list"})
+	if err != nil {
+		return nil, err
+	}
+	return &Response{
+		SessionID:  sessionID,
+		ListOutput: listOut,
+		ExitCode:   code,
+	}, nil
+}
+
 func phaseListSecondRunAfterExit(t *testing.T, req *Request) (*Response, error) {
 	_, code, err := runCLI(req.Bin, req.TTYWatchHome, []string{"run", "true"})
 	if err != nil {
@@ -2295,6 +2474,500 @@ func findModuleRoot() (string, error) {
 			return "", fmt.Errorf("could not find module root with script/tty-watch above %s", start)
 		}
 	}
+}
+
+const (
+	defaultAttachLiveMarker      = "ATTACH_LIVE_MARKER"
+	defaultAttachStdinMarker     = "ATTACH_STDIN_MARKER"
+	defaultAttachWriteMarkerA    = "ATTACH_WRITE_MARKER_A"
+	defaultAttachWriteMarkerB    = "ATTACH_WRITE_MARKER_B"
+	defaultAttachConcurrentMarkerA = "CONCURRENT_MARKER_A_END"
+	defaultAttachConcurrentMarkerB = "CONCURRENT_MARKER_B_END"
+)
+
+func attachProbeDuration(req *Request, fallback time.Duration) time.Duration {
+	if req.AttachProbe != "" {
+		if d, err := time.ParseDuration(req.AttachProbe); err == nil {
+			return d
+		}
+	}
+	return fallback
+}
+
+func attachInputOr(req *Request, fallback string) string {
+	if req.AttachInput != "" {
+		return req.AttachInput
+	}
+	return fallback
+}
+
+func attachInputBOr(req *Request, fallback string) string {
+	if req.AttachInputB != "" {
+		return req.AttachInputB
+	}
+	return fallback
+}
+
+func dialAttachModeClient(t *testing.T, home, sessionID string) *ttyrunner.WSAttachClient {
+	return dialPTYAttachMode(t, home, sessionID, "attach")
+}
+
+func dialPTYAttachMode(t *testing.T, home, sessionID, attachMode string) *ttyrunner.WSAttachClient {
+	t.Helper()
+	entry, err := ReadRegistryEntry(home, sessionID)
+	if err != nil {
+		t.Fatalf("read registry for attach dial: %v", err)
+	}
+	client, err := ttyrunner.DialPTYAttach(entry.ListenAddr, sessionID, attachMode)
+	if err != nil {
+		t.Fatalf("dial attach_mode=%s: %v", attachMode, err)
+	}
+	return client
+}
+
+func execAttachPTYSession(t *testing.T, req *Request, sessionID string, opts ptyOpts) (*Response, error) {
+	cmd := exec.Command(req.Bin, "attach", sessionID)
+	cmd.Env = envWithHome(req.TTYWatchHome)
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		return nil, err
+	}
+
+	start := time.Now()
+	readBudget := 8 * time.Second
+	if opts.maxWait > 0 {
+		readBudget = opts.maxWait + 2*time.Second
+	}
+
+	var output bytes.Buffer
+	readDone := make(chan struct{})
+	go func() {
+		defer close(readDone)
+		buf := make([]byte, 4096)
+		deadline := start.Add(readBudget)
+		for time.Now().Before(deadline) {
+			n, readErr := ptmx.Read(buf)
+			if n > 0 {
+				output.Write(buf[:n])
+				if opts.readUntil != "" && strings.Contains(output.String(), opts.readUntil) {
+					break
+				}
+			}
+			if readErr != nil {
+				break
+			}
+		}
+	}()
+
+	if opts.writeAfter > 0 {
+		time.Sleep(opts.writeAfter)
+		if len(opts.writeBytes) > 0 {
+			_, _ = ptmx.Write(opts.writeBytes)
+		}
+	}
+	if opts.detachAfter > 0 {
+		time.Sleep(opts.detachAfter)
+		_, _ = ptmx.Write([]byte{0x1d})
+	}
+
+	waitDone := make(chan error, 1)
+	go func() { waitDone <- cmd.Wait() }()
+
+	var runErr error
+	timedOut := false
+	waitLimit := readBudget
+	if opts.maxWait > 0 {
+		waitLimit = opts.maxWait
+	}
+	select {
+	case runErr = <-waitDone:
+	case <-time.After(waitLimit):
+		timedOut = true
+		terminateProcess(cmd)
+		runErr = <-waitDone
+	}
+	_ = ptmx.Close()
+	<-readDone
+
+	resp := &Response{
+		Stdout:   output.String(),
+		Combined: output.String(),
+		TimedOut: timedOut,
+		Elapsed:  time.Since(start),
+	}
+	if runErr != nil {
+		if exitErr, ok := runErr.(*exec.ExitError); ok {
+			resp.ExitCode = exitErr.ExitCode()
+		} else if !timedOut {
+			return nil, runErr
+		}
+	}
+	return resp, nil
+}
+
+func phaseAttachDetachedSession(t *testing.T, req *Request) (*Response, error) {
+	detachReq := *req
+	detachReq.RunCommand = []string{"sh", "-c",
+		`echo ATTACH_BOOT_MARKER; while true; do echo ` + defaultAttachLiveMarker + `; sleep 0.5; done`}
+	sessionID := StartDetachedSession(t, &detachReq)
+
+	probe := attachProbeDuration(req, 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), probe+5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, req.Bin, "attach", sessionID)
+	cmd.Env = envWithHome(req.TTYWatchHome)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	_ = cmd.Run()
+	combined := out.String()
+	return &Response{
+		SessionID:    sessionID,
+		Stdout:       combined,
+		Combined:     combined,
+		AttachOutput: combined,
+	}, nil
+}
+
+func phaseAttachForwardsStdin(t *testing.T, req *Request) (*Response, error) {
+	detachReq := *req
+	detachReq.RunCommand = []string{"sh", "-c", "cat"}
+	sessionID := StartDetachedSession(t, &detachReq)
+
+	marker := attachInputOr(req, defaultAttachStdinMarker)
+	resp, err := execAttachPTYSession(t, req, sessionID, ptyOpts{
+		writeAfter: 500 * time.Millisecond,
+		writeBytes: []byte(marker + "\n"),
+		readUntil:  marker,
+		maxWait:    4 * time.Second,
+	})
+	if err != nil {
+		return nil, err
+	}
+	resp.SessionID = sessionID
+	resp.AttachOutput = resp.Combined
+	return resp, nil
+}
+
+func phaseAttachSecondWrites(t *testing.T, req *Request) (*Response, error) {
+	detachReq := *req
+	detachReq.RunCommand = []string{"sh", "-c", "cat"}
+	sessionID := StartDetachedSession(t, &detachReq)
+	time.Sleep(300 * time.Millisecond)
+
+	markerA := attachInputOr(req, defaultAttachWriteMarkerA)
+	markerB := attachInputBOr(req, defaultAttachWriteMarkerB)
+
+	clientA := dialAttachModeClient(t, req.TTYWatchHome, sessionID)
+	clientB := dialAttachModeClient(t, req.TTYWatchHome, sessionID)
+	defer clientA.Close()
+	defer clientB.Close()
+
+	if err := clientA.TryWriteInput([]byte(markerA + "\n")); err != nil {
+		return nil, fmt.Errorf("attach A write: %w", err)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if err := clientB.TryWriteInput([]byte(markerB + "\n")); err != nil {
+		return nil, fmt.Errorf("attach B write: %w", err)
+	}
+	time.Sleep(500 * time.Millisecond)
+
+	outA := clientA.Output()
+	outB := clientB.Output()
+	return &Response{
+		SessionID:     sessionID,
+		AttachOutput:  outA,
+		AttachBOutput: outB,
+		Combined:      outA + outB,
+	}, nil
+}
+
+func phaseAttachVisibleToWatch(t *testing.T, req *Request) (*Response, error) {
+	detachReq := *req
+	detachReq.RunCommand = []string{"sh", "-c", "cat"}
+	sessionID := StartDetachedSession(t, &detachReq)
+	time.Sleep(300 * time.Millisecond)
+
+	marker := attachInputOr(req, defaultAttachWriteMarkerA)
+
+	watchCtx, watchCancel := context.WithTimeout(context.Background(), 6*time.Second)
+	defer watchCancel()
+	watchCmd := exec.CommandContext(watchCtx, req.Bin, "watch", sessionID)
+	watchCmd.Env = envWithHome(req.TTYWatchHome)
+	var watchBuf bytes.Buffer
+	watchCmd.Stdout = &watchBuf
+	watchCmd.Stderr = &watchBuf
+	if err := watchCmd.Start(); err != nil {
+		return nil, err
+	}
+
+	time.Sleep(400 * time.Millisecond)
+	client := dialAttachModeClient(t, req.TTYWatchHome, sessionID)
+	if err := client.TryWriteInput([]byte(marker + "\n")); err != nil {
+		client.Close()
+		terminateProcess(watchCmd)
+		return nil, fmt.Errorf("attach write: %w", err)
+	}
+	time.Sleep(600 * time.Millisecond)
+	attachOut := client.Output()
+	client.Close()
+	terminateProcess(watchCmd)
+	_ = watchCmd.Wait()
+
+	return &Response{
+		SessionID:    sessionID,
+		AttachOutput: attachOut,
+		WatchOutput:  watchBuf.String(),
+	}, nil
+}
+
+func phaseAttachVisibleToOther(t *testing.T, req *Request) (*Response, error) {
+	detachReq := *req
+	detachReq.RunCommand = []string{"sh", "-c", "cat"}
+	sessionID := StartDetachedSession(t, &detachReq)
+	time.Sleep(300 * time.Millisecond)
+
+	marker := attachInputOr(req, defaultAttachWriteMarkerA)
+
+	clientA := dialAttachModeClient(t, req.TTYWatchHome, sessionID)
+	clientB := dialAttachModeClient(t, req.TTYWatchHome, sessionID)
+	defer clientA.Close()
+	defer clientB.Close()
+
+	if err := clientA.TryWriteInput([]byte(marker + "\n")); err != nil {
+		return nil, fmt.Errorf("attach A write: %w", err)
+	}
+	time.Sleep(600 * time.Millisecond)
+
+	return &Response{
+		SessionID:     sessionID,
+		AttachOutput:  clientA.Output(),
+		AttachBOutput: clientB.Output(),
+	}, nil
+}
+
+func phaseAttachVisibleWhileRunAttached(t *testing.T, req *Request) (*Response, error) {
+	argv := req.RunCommand
+	if len(argv) == 0 {
+		argv = []string{"sleep", "300"}
+	}
+	detachReq := *req
+	detachReq.RunCommand = argv
+	sessionID := StartDetachedSession(t, &detachReq)
+
+	entry, err := ReadRegistryEntry(req.TTYWatchHome, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	screenWriter, err := ttyrunner.DialPTYAttach(entry.ListenAddr, sessionID, "screen")
+	if err != nil {
+		return nil, fmt.Errorf("dial screen writer like run attach: %w", err)
+	}
+	defer screenWriter.Close()
+
+	marker := attachInputOr(req, defaultAttachWriteMarkerA)
+
+	watchCtx, watchCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer watchCancel()
+	watchCmd := exec.CommandContext(watchCtx, req.Bin, "watch", sessionID)
+	watchCmd.Env = envWithHome(req.TTYWatchHome)
+	var watchBuf bytes.Buffer
+	watchCmd.Stdout = &watchBuf
+	watchCmd.Stderr = &watchBuf
+	if err := watchCmd.Start(); err != nil {
+		return nil, err
+	}
+
+	time.Sleep(400 * time.Millisecond)
+	client := dialAttachModeClient(t, req.TTYWatchHome, sessionID)
+	if err := client.TryWriteInput([]byte(marker + "\n")); err != nil {
+		client.Close()
+		terminateProcess(watchCmd)
+		return nil, fmt.Errorf("attach write while screen writer connected: %w", err)
+	}
+	time.Sleep(600 * time.Millisecond)
+	attachOut := client.Output()
+	client.Close()
+
+	runOut := screenWriter.Output()
+	terminateProcess(watchCmd)
+	_ = watchCmd.Wait()
+
+	return &Response{
+		SessionID:    sessionID,
+		RunOutput:    runOut,
+		WatchOutput:  watchBuf.String(),
+		AttachOutput: attachOut,
+	}, nil
+}
+
+func phaseAttachResize(t *testing.T, req *Request) (*Response, error) {
+	marker := wideSnapshotLineMarker()
+	detachReq := *req
+	detachReq.RunCommand = []string{"sh", "-c", fmt.Sprintf(
+		`printf '\033[?2026h'; printf '\033[30;1H%s'; sleep 300`, marker)}
+	sessionID := StartDetachedSession(t, &detachReq)
+
+	entry, err := ReadRegistryEntry(req.TTYWatchHome, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	screenWriter, err := ttyrunner.DialPTYAttach(entry.ListenAddr, sessionID, "screen")
+	if err != nil {
+		return nil, fmt.Errorf("dial screen writer: %w", err)
+	}
+	if err := screenWriter.TryResize(80, 24); err != nil {
+		screenWriter.Close()
+		return nil, fmt.Errorf("screen writer resize 80x24: %w", err)
+	}
+	time.Sleep(200 * time.Millisecond)
+
+	client := dialAttachModeClient(t, req.TTYWatchHome, sessionID)
+	if err := client.TryResize(100, 32); err != nil {
+		screenWriter.Close()
+		client.Close()
+		return nil, fmt.Errorf("attach resize: %w", err)
+	}
+	attachOut := client.Output()
+	client.Close()
+	screenWriter.Close()
+	time.Sleep(300 * time.Millisecond)
+
+	stdout, stderr, code, err := runCLISeparate(req.Bin, req.TTYWatchHome, []string{"snapshot", sessionID})
+	if err != nil {
+		return nil, err
+	}
+	text := stdout
+	if text == "" {
+		text = stderr
+	}
+	return &Response{
+		SessionID:      sessionID,
+		SnapshotText:   text,
+		ContainsEscape: ContainsANSIEscape(text),
+		Stdout:         stdout,
+		Stderr:         stderr,
+		ExitCode:       code,
+		AttachOutput:   attachOut,
+	}, nil
+}
+
+func phaseAttachSendInputQueue(t *testing.T, req *Request) (*Response, error) {
+	message := req.SendMessage
+	if message == "" {
+		message = "ATTACH_SEND_QUEUE_MARKER"
+	}
+	capturePath, argv := byteCaptureSessionCommand(req.TTYWatchHome)
+	detachReq := *req
+	detachReq.RunCommand = argv
+	sessionID := StartDetachedSession(t, &detachReq)
+	time.Sleep(300 * time.Millisecond)
+
+	client := dialAttachModeClient(t, req.TTYWatchHome, sessionID)
+	time.Sleep(200 * time.Millisecond)
+
+	stdout, stderr, code, err := runCLISeparate(req.Bin, req.TTYWatchHome, []string{"send", sessionID, message})
+	if err != nil {
+		client.Close()
+		return nil, err
+	}
+	time.Sleep(400 * time.Millisecond)
+	attachOut := client.Output()
+	client.Close()
+
+	captured, readErr := os.ReadFile(capturePath)
+	if readErr != nil && !os.IsNotExist(readErr) {
+		return nil, readErr
+	}
+	return &Response{
+		SessionID:     sessionID,
+		Stdout:        stdout,
+		Stderr:        stderr,
+		Combined:      combineOutput(stdout, stderr),
+		ExitCode:      code,
+		InjectedBytes: captured,
+		AttachOutput:  attachOut,
+	}, nil
+}
+
+func phaseAttachDetachSurvives(t *testing.T, req *Request) (*Response, error) {
+	detachReq := *req
+	detachReq.RunCommand = []string{"sleep", "300"}
+	sessionID := StartDetachedSession(t, &detachReq)
+
+	resp, err := execAttachPTYSession(t, req, sessionID, ptyOpts{
+		detachAfter: 400 * time.Millisecond,
+		maxWait:     4 * time.Second,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	listOut, _, err := runCLI(req.Bin, req.TTYWatchHome, []string{"list"})
+	if err != nil {
+		return nil, err
+	}
+	resp.SessionID = sessionID
+	resp.RegistryExists = RegistryExists(req.TTYWatchHome, sessionID)
+	resp.ListOutput = listOut
+	resp.SessionRunning = SessionReachable(req.TTYWatchHome, sessionID)
+	resp.AttachOutput = resp.Combined
+	return resp, nil
+}
+
+func phaseAttachUnknown(t *testing.T, req *Request) (*Response, error) {
+	id := req.AttachID
+	if id == "" {
+		id = "session-99999"
+	}
+	stdout, stderr, code, err := runCLISeparate(req.Bin, req.TTYWatchHome, []string{"attach", id})
+	if err != nil {
+		return nil, err
+	}
+	return &Response{
+		Stdout:   stdout,
+		Stderr:   stderr,
+		Combined: combineOutput(stdout, stderr),
+		ExitCode: code,
+	}, nil
+}
+
+func phaseAttachConcurrentOrdered(t *testing.T, req *Request) (*Response, error) {
+	detachReq := *req
+	detachReq.RunCommand = []string{"sh", "-c", "cat"}
+	sessionID := StartDetachedSession(t, &detachReq)
+	time.Sleep(300 * time.Millisecond)
+
+	markerA := attachInputOr(req, defaultAttachConcurrentMarkerA)
+	markerB := attachInputBOr(req, defaultAttachConcurrentMarkerB)
+
+	clientA := dialAttachModeClient(t, req.TTYWatchHome, sessionID)
+	clientB := dialAttachModeClient(t, req.TTYWatchHome, sessionID)
+	defer clientA.Close()
+	defer clientB.Close()
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		_ = clientA.TryWriteInput([]byte(markerA + "\n"))
+	}()
+	go func() {
+		defer wg.Done()
+		_ = clientB.TryWriteInput([]byte(markerB + "\n"))
+	}()
+	wg.Wait()
+	time.Sleep(600 * time.Millisecond)
+
+	outA := clientA.Output()
+	outB := clientB.Output()
+	combined := outA + outB
+	return &Response{
+		SessionID:     sessionID,
+		AttachOutput:  outA,
+		AttachBOutput: outB,
+		Combined:      combined,
+	}, nil
 }
 
 // DrainPTY reads from ptmx until idle or timeout (test helper).

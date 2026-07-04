@@ -283,8 +283,8 @@ func (d *detachReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func attachWriter(listenAddr, sessionID string) (detached bool, err error) {
-	conn, err := dialTerminal(listenAddr, sessionID, "screen")
+func attachWriter(listenAddr, sessionID, attachMode string) (detached bool, err error) {
+	conn, err := dialTerminal(listenAddr, sessionID, attachMode)
 	if err != nil {
 		return false, err
 	}
@@ -323,8 +323,8 @@ func attachWriter(listenAddr, sessionID string) (detached bool, err error) {
 		}
 	}
 
-	debugLogf("attachWriter session=%s listen=%s rawTTY=%v cols=%d rows=%d attach_mode=screen",
-		sessionID, listenAddr, rawTTY, cols, rows)
+	debugLogf("attachWriter session=%s listen=%s rawTTY=%v cols=%d rows=%d attach_mode=%s",
+		sessionID, listenAddr, rawTTY, cols, rows, attachMode)
 
 	out := &attachStdoutWriter{w: stdoutFile, rawTTY: rawTTY}
 	readerErrCh := make(chan error, 1)

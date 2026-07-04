@@ -8,7 +8,7 @@ End-to-end tests for the standalone `tty-watch` CLI: `run` subcommand embeds pty
 **Participants**
 
 - **tty-watch subprocess** — built from `./script/tty-watch`; subcommands `list`,
-  `run`, `list`, `watch`, `snapshot`, `kill`.
+  `run`, `watch`, `attach`, `snapshot`, `kill`, `send`.
 - **Embedded ptywrap server** — HTTP/WS listener on `127.0.0.1:0` inside the
   owning `tty-watch` process for each session.
 - **Registry** — `$TTY_WATCH_HOME/registry/` JSON files (`session-N.json` or
@@ -27,9 +27,15 @@ End-to-end tests for the standalone `tty-watch` CLI: `run` subcommand embeds pty
 - Ctrl-C forwards interrupt to PTY child; Ctrl-] detaches client only (session +
   registry survive).
 - Command exit while attached removes registry entry and exits host.
-- `list` scans **all** registry `*.json` files, TCP-probes `listen_addr`, prints
-  id + command + uptime; prunes unreachable entries.
+- `list` scans **all** registry `*.json` files, TCP-probes `listen_addr`, fetches
+  ptywrap session info for client counts, prints an aligned table
+  (`SESSION`, `UPTIME`, `WATCH`, `ATTACHED`, `COMMAND`) when ≥1 session; prunes
+  unreachable entries. `COMMAND` is joined argv, truncated to 64 chars with `...`
+  when longer. `WATCH` = observer clients; `ATTACHED` = attach clients +
+  1 when screen writer connected.
 - `watch` attaches as observer: raw PTY bytes to stdout, no stdin forwarding.
+- `attach` joins a live session as multi-writer attacher (`attach_mode=attach`):
+  full write+resize, serialized input queue, multiplexed output to all clients.
 - `snapshot` attaches as snapshot mode; prints scrollback with ANSI/C0 sanitized.
 - `kill` DELETEs session via ptywrap API, SIGTERM owner PID, removes registry;
   unreachable server idempotently prunes registry (exit 0).
@@ -83,6 +89,13 @@ End-to-end tests for the standalone `tty-watch` CLI: `run` subcommand embeds pty
  |    +-- shows-command-uptime/       (LEAF)  list prints id, command, uptime (RED)
  |    +-- empty-when-none/            (LEAF)  empty registry yields empty list (RED)
  |    +-- second-run-after-exit/      (LEAF)  second run after first exit: list not empty (RED)
+ |    +-- table-has-header-and-columns/ (LEAF)  table header + aligned columns (RED)
+ |    +-- shows-zero-clients-idle/    (LEAF)  idle session WATCH=0 ATTACHED=0 (RED)
+ |    +-- shows-watch-count/          (LEAF)  observer client WATCH=1 (RED)
+ |    +-- shows-attached-count/       (LEAF)  attach client ATTACHED=1 (RED)
+ |    +-- shows-attached-includes-writer/ (LEAF) screen writer ATTACHED>=1 (RED)
+ |    +-- shows-both-counts/          (LEAF)  observer+attach WATCH=1 ATTACHED=1 (RED)
+ |    +-- truncates-long-command/      (LEAF)  COMMAND >64 chars truncated with ... (RED)
  |
  +-- watch/
  |    |
@@ -116,6 +129,20 @@ End-to-end tests for the standalone `tty-watch` CLI: `run` subcommand embeds pty
  |    +-- unknown-session/            (LEAF)  kill missing session errors (RED)
  |    +-- prunes-unreachable/         (LEAF)  stale registry pruned, exit 0 (RED)
  |
+ +-- attach/
+ |    |
+ |    +-- attaches-to-detached-session/   (LEAF)  attach streams live session output (RED)
+ |    +-- forwards-stdin-to-pty/          (LEAF)  attach stdin reaches PTY (RED)
+ |    +-- second-attach-also-writes/      (LEAF)  two attachers write; both markers queued (RED)
+ |    +-- write-visible-to-watch/         (LEAF)  attach write visible to watch (RED)
+ |    +-- write-visible-to-other-attach/  (LEAF)  attach A write visible to attach B (RED)
+ |    +-- write-visible-while-run-attached/ (LEAF) attach write visible to run writer + watch (RED)
+ |    +-- resize-applies-to-pty/          (LEAF)  attach resize updates session cols (RED)
+ |    +-- send-uses-input-queue/          (LEAF)  send shares input queue with attach (RED)
+ |    +-- detach-survives/                (LEAF)  attach Ctrl-] detach; session survives (RED)
+ |    +-- unknown-session/                (LEAF)  attach missing session errors (RED)
+ |    +-- concurrent-writes-ordered/      (LEAF)  rapid dual attach writes serialized (RED)
+ |
  +-- errors/
       |
       +-- unknown-subcommand/         (LEAF)  bogus subcommand errors (RED)
@@ -123,7 +150,7 @@ End-to-end tests for the standalone `tty-watch` CLI: `run` subcommand embeds pty
 
 Parameter ranking (most → least significant):
 
-1. **Operation mode** — default run vs list vs watch vs snapshot vs kill vs errors
+1. **Operation mode** — default run vs list vs watch vs attach vs snapshot vs kill vs errors
 2. **Session lifecycle** — attach, detach, exit, kill, stale prune
 3. **I/O contract** — silent host, raw watch, sanitized snapshot
 4. **Session lookup** — known vs unknown id
@@ -161,6 +188,13 @@ Parameter ranking (most → least significant):
 | 10 | `list/shows-command-uptime` | `list` shows session id, command argv, uptime (RED) |
 | 11 | `list/empty-when-none` | Empty registry prints no sessions (RED) |
 | 46 | `list/second-run-after-exit` | Second run after first exit: list shows live session, not empty (RED) |
+| 70 | `list/table-has-header-and-columns` | `list` prints SESSION/UPTIME/WATCH/ATTACHED/COMMAND header; columns align (RED) |
+| 71 | `list/shows-zero-clients-idle` | Idle detached session: WATCH=0, ATTACHED=0 (RED) |
+| 72 | `list/shows-watch-count` | Observer WS client held: WATCH=1 (RED) |
+| 73 | `list/shows-attached-count` | Attach WS client held: ATTACHED=1 (RED) |
+| 74 | `list/shows-attached-includes-writer` | Screen writer WS held: ATTACHED>=1 (RED) |
+| 75 | `list/shows-both-counts` | Observer + attach concurrently: WATCH=1, ATTACHED=1 (RED) |
+| 76 | `list/truncates-long-command` | COMMAND joined argv >64 chars: 61-char prefix + `...`, len ≤64 (RED) |
 | 12 | `watch/streams-output` | `watch` streams raw `WATCH_MARKER` output (RED) |
 | 13 | `watch/readonly-no-input` | `watch` ignores stdin; no echo of probe input (RED) |
 | 29 | `watch/readonly-tty-no-local-echo` | `watch` TTY silently drops typed/mouse input (RED) |
@@ -185,6 +219,17 @@ Parameter ranking (most → least significant):
 | 17 | `kill/unknown-session` | `kill` on missing id fails (RED) |
 | 18 | `kill/prunes-unreachable` | `kill` on stale entry prunes registry, exit 0 (RED) |
 | 19 | `errors/unknown-subcommand` | Unknown subcommand prints error (RED) |
+| 59 | `attach/attaches-to-detached-session` | `attach` on detached session shows live output (RED) |
+| 60 | `attach/forwards-stdin-to-pty` | Attach stdin marker echoed on attach stdout (RED) |
+| 61 | `attach/second-attach-also-writes` | Two attach clients write; both markers present (RED) |
+| 62 | `attach/write-visible-to-watch` | Attach write visible to `watch` observer (RED) |
+| 63 | `attach/write-visible-to-other-attach` | Attach A write visible to attach B (RED) |
+| 64 | `attach/write-visible-while-run-attached` | Attach write visible to run writer and watch (RED) |
+| 65 | `attach/resize-applies-to-pty` | Attach resize cols=100; snapshot not 80-col wrapped (RED) |
+| 66 | `attach/send-uses-input-queue` | `send` injects via shared input queue while attach connected (RED) |
+| 67 | `attach/detach-survives` | Attach Ctrl-] detach exit 0; session in list (RED) |
+| 68 | `attach/unknown-session` | Attach missing session id fails (RED) |
+| 69 | `attach/concurrent-writes-ordered` | Concurrent attach writes; both end-markers intact (RED) |
 
 ## How to Run
 
@@ -193,6 +238,8 @@ doctest vet ./script/tty-watch/tests
 doctest test ./script/tty-watch/tests/...
 doctest test -v ./script/tty-watch/tests/run/registers-session
 doctest test ./script/tty-watch/tests/run/custom-session-id/...
+doctest test ./script/tty-watch/tests/attach/...
+doctest test ./script/tty-watch/tests/list/...
 ```
 
 ```go

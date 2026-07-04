@@ -26,6 +26,8 @@ func run(args []string) error {
 		return runList(args[1:])
 	case "watch":
 		return runWatch(args[1:])
+	case "attach":
+		return runAttach(args[1:])
 	case "snapshot":
 		return runSnapshot(args[1:])
 	case "kill":
@@ -48,6 +50,7 @@ Usage:
                                      Start session and attach (writer)
   tty-watch list                     List sessions
   tty-watch watch <session-id>       Observe session (readonly)
+  tty-watch attach <session-id>      Join session (write+resize)
   tty-watch snapshot <session-id>    Print sanitized scrollback
   tty-watch kill <session-id>        End session and remove registry
   tty-watch send <session-id> <msg>  Inject follow-up text into live session

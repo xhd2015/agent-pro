@@ -1,10 +1,10 @@
 # Scenario
 
-**Feature**: `tty-watch list` scans registry and prints live sessions
+**Feature**: `tty-watch list` scans registry and prints an aligned table of live sessions
 
 ```
-# registry scan + TCP probe
-tty-watch list -> registry dir -> probe listen_addr -> print id command uptime
+# registry scan + TCP probe + ptywrap session info
+tty-watch list -> registry dir -> probe listen_addr -> GET /api/terminal/sessions -> table row
 ```
 
 ## Preconditions
