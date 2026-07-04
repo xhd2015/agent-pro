@@ -23,9 +23,12 @@ type GrokAgent struct {
 	LastSessionID string
 }
 
-// FindAgentPath looks up the grok binary in PATH.
+// FindAgentPath looks up the grok binary in PATH, then probes well-known install locations.
 func FindAgentPath(env *exec.Env) (string, error) {
 	if path, err := env.LookPath("grok"); err == nil {
+		return path, nil
+	}
+	if path, ok := probeGrokInstallPath(); ok {
 		return path, nil
 	}
 	return "", fmt.Errorf("grok not found in PATH")

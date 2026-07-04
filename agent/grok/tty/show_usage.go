@@ -1,4 +1,4 @@
-package main
+package tty
 
 import (
 	"bytes"
@@ -51,7 +51,7 @@ var (
 
 // Options configures FetchUsage.
 type Options struct {
-	Debug      bool
+	Debug       bool
 	MaxAttempts int
 }
 
@@ -111,6 +111,19 @@ func FetchUsageWithOptions(ctx context.Context, opts Options) (*UsageInfo, error
 		time.Sleep(retryBackoff)
 	}
 	return nil, lastErr
+}
+
+// ParseShowUsageOutput extracts weekly limit and next reset from grok scrollback or stdout.
+func ParseShowUsageOutput(stdout string) (*UsageInfo, error) {
+	return parseUsageText(stdout)
+}
+
+// FormatUsageLines returns the canonical two-line CLI output for usage info.
+func FormatUsageLines(info *UsageInfo) string {
+	if info == nil {
+		return ""
+	}
+	return fmt.Sprintf("Weekly limit: %s\nNext reset: %s\n", info.WeeklyLimit, info.NextReset)
 }
 
 func fetchUsageOnce(ctx context.Context, argv []string, v *verboseLog) (*UsageInfo, error) {
@@ -196,7 +209,16 @@ func capturePTY(ctx context.Context, argv []string, v *verboseLog) ([]byte, erro
 		_, _ = io.Copy(&lockedWriter{mu: &mu, w: &scrollback}, ptmx)
 	}()
 
-	defer shutdownPTY(ptmx, cmd, readDone)
+	var waitOnce sync.Once
+	var waitErr error
+	waitCmd := func() error {
+		waitOnce.Do(func() {
+			waitErr = cmd.Wait()
+		})
+		return waitErr
+	}
+
+	defer shutdownPTY(ptmx, cmd, readDone, waitCmd)
 
 	getScrollback := func() []byte {
 		mu.Lock()
@@ -230,14 +252,14 @@ func capturePTY(ctx context.Context, argv []string, v *verboseLog) ([]byte, erro
 	}
 	v.stateChange("submitted", "/usage show")
 
-	if err := waitForUsageResponse(ctx, getScrollback, v, screen); err != nil {
+	if err := waitForUsageResponse(ctx, getScrollback, v, screen, readDone, waitCmd); err != nil {
 		v.printf("usage wait failed; scrollback:\n%s", formatScrollbackDebug(getScrollback()))
 		return nil, err
 	}
 	return getScrollback(), nil
 }
 
-func shutdownPTY(ptmx *os.File, cmd *exec.Cmd, readDone <-chan struct{}) {
+func shutdownPTY(ptmx *os.File, cmd *exec.Cmd, readDone <-chan struct{}, waitCmd func() error) {
 	if cmd != nil && cmd.Process != nil {
 		_ = cmd.Process.Kill()
 	}
@@ -249,13 +271,13 @@ func shutdownPTY(ptmx *os.File, cmd *exec.Cmd, readDone <-chan struct{}) {
 	if cmd == nil || cmd.Process == nil {
 		return
 	}
-	waitDone := make(chan struct{})
+	done := make(chan struct{})
 	go func() {
-		_, _ = cmd.Process.Wait()
-		close(waitDone)
+		_ = waitCmd()
+		close(done)
 	}()
 	select {
-	case <-waitDone:
+	case <-done:
 	case <-time.After(2 * time.Second):
 	}
 }
@@ -432,7 +454,7 @@ func grokReadyOnScreen(screen string) bool {
 	return strings.Contains(screen, "Grok ›") || strings.Contains(screen, "Grok \u203a")
 }
 
-func waitForUsageResponse(ctx context.Context, getScrollback func() []byte, v *verboseLog, baselineScreen string) error {
+func waitForUsageResponse(ctx context.Context, getScrollback func() []byte, v *verboseLog, baselineScreen string, readDone <-chan struct{}, waitCmd func() error) error {
 	var parseableSince time.Time
 	var screenIdleSince time.Time
 	lastParseable := false
@@ -442,6 +464,16 @@ func waitForUsageResponse(ctx context.Context, getScrollback func() []byte, v *v
 		select {
 		case <-ctx.Done():
 			return timeoutErr(ctx)
+		case <-readDone:
+			if err := waitCmd(); err != nil {
+				return fmt.Errorf("grok process exited: %w", err)
+			}
+			if _, parseErr := parseUsage(getScrollback()); parseErr != nil {
+				v.stateChange("parse-failed", parseErr.Error())
+				return parseErr
+			}
+			v.stateChange("usage-ready", "usage fields present after process exit")
+			return nil
 		default:
 		}
 
@@ -495,15 +527,6 @@ func usageFieldsPresentOnScreen(screen string) bool {
 	}
 	_, err := parseUsageText(screen)
 	return err == nil
-}
-
-func scrollbackViews(scrollback []byte) []string {
-	plain := groktty.StripANSI(scrollback)
-	rendered := strings.TrimSpace(renderScrollback(scrollback))
-	if rendered != "" && rendered != plain {
-		return []string{plain, rendered}
-	}
-	return []string{plain}
 }
 
 func renderScrollback(scrollback []byte) string {
