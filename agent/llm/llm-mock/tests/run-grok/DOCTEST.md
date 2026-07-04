@@ -34,6 +34,10 @@ grok exits.
 - **Run mock-events-preset** — optional `--mock-events-preset <name>` on `llm-mock run`; `list`
   prints catalog and exits 0 without grok/mock; other names pass through to background mock
   `--mock-events-preset` to seed `genQueue` after config exchanges.
+- **LLM_MOCK_RUN_FLAGS** — space-separated run flags (GOFLAGS-style) prepended before argv
+  parsing via simple whitespace split (`strings.Fields`); applies to `llm-mock run grok` and
+  `llm-mock-run-grok`; unset or empty is a no-op; explicit CLI flags on `llm-mock run` come
+  after env tokens and win on duplicate flags (last-wins).
 
 **Behaviors**
 
@@ -53,6 +57,9 @@ grok exits.
 - `--log-events` and `--log-http` are combinable on the same `llm-mock run` invocation.
 - `--mock-events-preset` uses `lessflags` `StopOnFirstArg()`; tokens after `grok` are grok argv
   unchanged; combinable with `--log-events` / `--log-http`.
+- `LLM_MOCK_RUN_FLAGS` prepends default run flags before `ParseRunFlags`; shortcut binary has no
+  run-flag argv — env is the only source for `llm-mock-run-grok`; duplicate flag on `llm-mock run`
+  CLI overrides the env value.
 
 ## Version
 
@@ -96,6 +103,12 @@ run-grok/
 │   ├── list-no-grok/              # run --mock-events-preset=list exits 0 without grok/mock
 │   ├── pass-through-think-message/ # preset think-message + fake grok 2 curls → think then message
 │   └── grok-args-after-preset/    # --mock-events-preset=simple grok -p hello passes argv through
+├── run-flags-from-env/            # LLM_MOCK_RUN_FLAGS prepends run flags before argv parse
+│   ├── subcommand-log-events/     # env --log-events; llm-mock run grok → AgentEvent JSONL
+│   ├── shortcut-log-events/       # env --log-events; llm-mock-run-grok → AgentEvent JSONL
+│   ├── cli-overrides-env/         # env a.jsonl + CLI b.jsonl → only b.jsonl written
+│   ├── preset-list-subcommand/    # env --mock-events-preset=list; run grok → catalog, no grok
+│   └── preset-list-shortcut/      # env --mock-events-preset=list; shortcut → catalog, no grok
 └── integration/                   # label: real-grok, slow
     ├── headless-mock-response/    # real grok -p → Paris + grok home events proof
     └── headless-no-config-hello/  # no config, random fallback → assistant reply within 30s
@@ -109,8 +122,9 @@ Parameter ranking (most → least significant):
 4. **Log events output** — `--log-events` unset vs set (valid `.jsonl` vs invalid suffix)
 5. **Log HTTP output** — `--log-http` unset vs set (valid `.jsonl` vs invalid suffix)
 6. **Mock events preset** — unset vs `list` (catalog only) vs named preset pass-through
-7. **CLI entry** — `llm-mock run grok` vs `llm-mock-run-grok` shortcut
-8. **Grok backend** — fake hook vs real grok (`label: real-grok, slow`)
+7. **Run flags source** — CLI argv vs `LLM_MOCK_RUN_FLAGS` env (CLI wins on duplicate)
+8. **CLI entry** — `llm-mock run grok` vs `llm-mock-run-grok` shortcut
+9. **Grok backend** — fake hook vs real grok (`label: real-grok, slow`)
 
 ## Test Index
 
@@ -143,6 +157,11 @@ Parameter ranking (most → least significant):
 | 25 | `mock-events-preset/list-no-grok` | `llm-mock run --mock-events-preset=list` exits 0 without grok/mock |
 | 26 | `mock-events-preset/pass-through-think-message` | `--mock-events-preset=think-message` + fake grok 2 curls → think then message in log-events |
 | 27 | `mock-events-preset/grok-args-after-preset` | `--mock-events-preset=simple grok -p hello` passes `-p hello` to grok |
+| 28 | `run-flags-from-env/subcommand-log-events` | `LLM_MOCK_RUN_FLAGS=--log-events <tmp>.jsonl`; `llm-mock run grok` (no CLI run flags) → ≥2 `type:message` AgentEvents |
+| 29 | `run-flags-from-env/shortcut-log-events` | Same env; `llm-mock-run-grok` → log file created with ≥2 message AgentEvents |
+| 30 | `run-flags-from-env/cli-overrides-env` | Env `a.jsonl` + CLI `--log-events b.jsonl` → only `b.jsonl` written (CLI wins) |
+| 31 | `run-flags-from-env/preset-list-subcommand` | `LLM_MOCK_RUN_FLAGS=--mock-events-preset=list`; `llm-mock run grok` → catalog stdout, grok not started |
+| 32 | `run-flags-from-env/preset-list-shortcut` | Same env; `llm-mock-run-grok` → catalog stdout, grok not started |
 
 ## Coverage
 
@@ -154,6 +173,7 @@ Parameter ranking (most → least significant):
 - **Log events**: `--log-events` wires mock `--agent-events-file` (AgentEvent JSONL on serve), prefix/random-fallback logging, `.jsonl` suffix validation, grok argv passthrough
 - **Log HTTP**: `--log-http` wires mock `--log-http` (full HTTP exchange JSONL), `.jsonl` suffix validation, grok argv passthrough, unset produces no file
 - **Mock events preset**: `--mock-events-preset` catalog (`list` without grok), orchestrator pass-through to mock `genQueue`, grok argv passthrough after preset flag
+- **Run flags from env**: `LLM_MOCK_RUN_FLAGS` prepends `--log-events` / `--mock-events-preset` for subcommand and shortcut; CLI duplicate overrides env; `list` via env without grok
 - **Integration**: real grok headless with mocked LLM routing proof via session events
 
 ## How to Run
@@ -165,6 +185,9 @@ doctest test ./agent/llm/llm-mock/tests/run-grok
 
 # Single leaf
 doctest test ./agent/llm/llm-mock/tests/run-grok/config-resolution/config-file-env
+
+# LLM_MOCK_RUN_FLAGS grouping only
+doctest test ./agent/llm/llm-mock/tests/run-grok/run-flags-from-env/...
 
 # Real grok integration (requires grok on PATH)
 doctest test --label real-grok ./agent/llm/llm-mock/tests/run-grok/integration/...
@@ -208,6 +231,9 @@ type Request struct {
 	LogHTTPPath    string // --log-http output path; empty = flag omitted
 	MockEventsPreset string // --mock-events-preset value (preset name or "list")
 	ListOnly       bool   // run --mock-events-preset only, omit grok subcommand
+	RunFlagsEnv    string // LLM_MOCK_RUN_FLAGS value (space-separated run flags)
+	OmitCLIRunFlags bool  // when true, do not pass --log-events/--log-http/--mock-events-preset on CLI
+	EnvLogEventsOverridePath string // cli-overrides-env: env-only path that must not be written
 	SkipRealGrok   bool
 	ExpectedExit   int
 	ExecTimeout    time.Duration
@@ -276,6 +302,10 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 		env = envWithOverrides(env, map[string]string{"LLM_MOCK_GROK_HOME": req.GrokHome})
 	}
 
+	if req.RunFlagsEnv != "" {
+		env = envWithOverrides(env, map[string]string{"LLM_MOCK_RUN_FLAGS": req.RunFlagsEnv})
+	}
+
 	if req.GrokPathPrepend != "" {
 		env = envWithOverrides(env, map[string]string{
 			"PATH": req.GrokPathPrepend + string(os.PathListSeparator) + os.Getenv("PATH"),
@@ -297,14 +327,16 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 		cmd = exec.CommandContext(ctx, req.ShortcutPath, args...)
 	} else {
 		args := []string{"run"}
-		if req.LogEventsPath != "" {
-			args = append(args, "--log-events", req.LogEventsPath)
-		}
-		if req.LogHTTPPath != "" {
-			args = append(args, "--log-http", req.LogHTTPPath)
-		}
-		if req.MockEventsPreset != "" {
-			args = append(args, "--mock-events-preset", req.MockEventsPreset)
+		if !req.OmitCLIRunFlags {
+			if req.LogEventsPath != "" {
+				args = append(args, "--log-events", req.LogEventsPath)
+			}
+			if req.LogHTTPPath != "" {
+				args = append(args, "--log-http", req.LogHTTPPath)
+			}
+			if req.MockEventsPreset != "" {
+				args = append(args, "--mock-events-preset", req.MockEventsPreset)
+			}
 		}
 		if !req.ListOnly {
 			args = append(args, "grok")

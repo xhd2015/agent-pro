@@ -24,7 +24,6 @@ import (
 	runpkg "github.com/xhd2015/agent-pro/agent/llm/llm-mock/run"
 	"github.com/xhd2015/agent-pro/pkgs/fake-agent/events"
 	"github.com/xhd2015/skills/install"
-	lessflags "github.com/xhd2015/less-flags"
 )
 
 //go:embed SKILL.md
@@ -60,43 +59,7 @@ Options:
         Show this overview (server mode: also shows Go flag help)
 `
 
-const runHelp = `
-Usage: llm-mock run [--mock-events-preset NAME] [--log-events FILE] [--log-http FILE] grok [grok-args...]
 
-Start a background llm-mock HTTP server, configure an isolated GROK_HOME pointing
-at the mock, and run grok in the foreground. The mock stops when grok exits.
-
-Options:
-  --mock-events-preset NAME
-        Named AgentEvent sequence to seed mock genQueue after config exchanges,
-        or "list" to print the preset catalog and exit (no grok, no mock server).
-  --log-events FILE
-        Append standard AgentEvent JSONL for each served mock response.
-        FILE must end with .jsonl. Passed to the mock as --agent-events-file.
-  --log-http FILE
-        Append full HTTP request/response exchange JSONL for each mock HTTP call.
-        FILE must end with .jsonl. Passed to the mock as --log-http.
-
-Environment (orchestrator):
-  LLM_MOCK_CONFIG_FILE, LLM_MOCK_CONFIG   Mock exchange config JSON path
-  LLM_MOCK_EVENTS_FILE                    Optional input exchanges JSONL (appended)
-  LLM_MOCK_GROK_HOME                      Explicit grok home (default: temp dir)
-  LLM_MOCK_RUN_GROK_COMMAND               Replace grok executable (tests/plumbing)
-  LLM_MOCK_RUN_GROK_DEBUG=1               Verbose orchestrator stderr debug logs
-
-Config is optional; with no config env vars, uses inline default {"exchanges": []}.
-
-Examples:
-  llm-mock run --mock-events-preset=list
-  llm-mock run grok
-  llm-mock run --mock-events-preset=think-message grok
-  llm-mock run --log-events session.jsonl grok
-  llm-mock run --log-http http.jsonl grok
-  llm-mock run --log-events session.jsonl --log-http http.jsonl grok -p hello --always-approve
-
-  -h, --help
-        Show this help
-`
 
 // RecordedRequest stores a received HTTP request for the admin endpoint.
 type RecordedRequest struct {
@@ -250,32 +213,17 @@ func printMainHelp() {
 }
 
 func handleRunCommand(args []string) error {
-	var logEvents, logHTTP, mockEventsPreset *string
-	remain, err := lessflags.String("--mock-events-preset", &mockEventsPreset).
-		String("--log-events", &logEvents).
-		String("--log-http", &logHTTP).
-		Help("-h,--help", runHelp).
-		StopOnFirstArg().
-		Parse(args)
+	args = runpkg.PrependRunFlagsFromEnv(args)
+	opts, remain, err := runpkg.ParseRunFlags(args)
 	if err != nil {
 		return err
 	}
-	if mockEventsPreset != nil && *mockEventsPreset == "list" {
+	if opts.MockEventsPreset == "list" {
 		mockpreset.PrintList(os.Stdout)
 		return nil
 	}
 	if len(remain) < 1 || remain[0] != "grok" {
 		return fmt.Errorf("usage: llm-mock run [--mock-events-preset NAME] [--log-events FILE] [--log-http FILE] grok [grok-args...]\n(hint: llm-mock run --help)")
-	}
-	opts := runpkg.RunGrokOptions{}
-	if mockEventsPreset != nil {
-		opts.MockEventsPreset = *mockEventsPreset
-	}
-	if logEvents != nil {
-		opts.LogEventsPath = *logEvents
-	}
-	if logHTTP != nil {
-		opts.LogHTTPPath = *logHTTP
 	}
 	return runpkg.RunGrok(remain[1:], opts)
 }
