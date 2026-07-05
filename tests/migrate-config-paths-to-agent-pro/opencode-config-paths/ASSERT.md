@@ -1,0 +1,24 @@
+## Expected
+
+- `GlobalUserConfigPath()` is `$HOME/.config/opencode/opencode.jsonc`
+
+## Exit Code
+
+- 0.
+
+```go
+import (
+	"path/filepath"
+	"testing"
+)
+
+func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(req.Home, ".config", "opencode", "opencode.jsonc")
+	if len(resp.Paths) != 1 || resp.Paths[0] != want {
+		t.Fatalf("GlobalUserConfigPath() = %v, want [%s]", resp.Paths, want)
+	}
+}
+```

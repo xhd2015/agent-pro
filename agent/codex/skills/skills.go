@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	agentskills "github.com/xhd2015/agent-pro/agent/skills"
 )
@@ -16,6 +17,25 @@ type SkillListResult struct {
 	Local  []SkillInfo // from .agents/skills/ (project-local)
 }
 
+// GlobalSkillDirs returns the global Codex-compatible skill directories.
+func GlobalSkillDirs() []string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	return []string{
+		filepath.Join(home, ".codex", "skills") + string(os.PathSeparator),
+		filepath.Join(home, ".agents", "skills") + string(os.PathSeparator),
+	}
+}
+
+// LocalSkillDirs returns the project-local Codex-compatible skill directories.
+func LocalSkillDirs(projectDir string) []string {
+	return []string{
+		filepath.Join(projectDir, ".agents", "skills") + string(os.PathSeparator),
+	}
+}
+
 // List returns skills from Codex and agent-skills-standard directories.
 //
 // Codex reads skills from:
@@ -23,36 +43,23 @@ type SkillListResult struct {
 //   - ~/.agents/skills/          (open agent skills standard, user-level)
 //   - .agents/skills/            (open agent skills standard, repo-level)
 func List(projectDir string) (*SkillListResult, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("find home dir: %w", err)
-	}
-
 	result := &SkillListResult{}
 
-	// Codex-native global directory
-	codexDir := filepath.Join(home, ".codex", "skills")
-	skills, err := agentskills.ListDir(codexDir)
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", codexDir, err)
+	for _, d := range GlobalSkillDirs() {
+		skills, err := agentskills.ListDir(strings.TrimSuffix(d, string(os.PathSeparator)))
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", d, err)
+		}
+		result.Global = append(result.Global, skills...)
 	}
-	result.Global = append(result.Global, skills...)
 
-	// Open agent skills standard: global (~/.agents/skills/)
-	agentsGlobalDir := filepath.Join(home, ".agents", "skills")
-	skills, err = agentskills.ListDir(agentsGlobalDir)
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", agentsGlobalDir, err)
+	for _, d := range LocalSkillDirs(projectDir) {
+		skills, err := agentskills.ListDir(strings.TrimSuffix(d, string(os.PathSeparator)))
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", d, err)
+		}
+		result.Local = append(result.Local, skills...)
 	}
-	result.Global = append(result.Global, skills...)
-
-	// Open agent skills standard: project-local (.agents/skills/)
-	agentsLocalDir := filepath.Join(projectDir, ".agents", "skills")
-	skills, err = agentskills.ListDir(agentsLocalDir)
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", agentsLocalDir, err)
-	}
-	result.Local = append(result.Local, skills...)
 
 	return result, nil
 }

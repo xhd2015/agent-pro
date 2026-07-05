@@ -18,6 +18,16 @@ type Config struct {
 	Data Data
 }
 
+// GlobalUserConfigPath returns the path to the global user opencode config file.
+func GlobalUserConfigPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join("~", ".config", "opencode", "opencode.jsonc")
+	}
+	return filepath.Join(home, ".config", "opencode", "opencode.jsonc")
+}
+
+// Read reads the opencode config from the given directory (project-local).
 func Read(dir string) (*Config, error) {
 	opencodeDir := filepath.Join(dir, ".opencode")
 	return ReadDir(opencodeDir)

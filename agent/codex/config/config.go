@@ -155,11 +155,16 @@ func ReadFile(configPath string) (*Config, error) {
 	return &cfg, nil
 }
 
-// ReadDefault reads the default config from ~/.codex/config.toml.
-func ReadDefault() (*Config, error) {
+// DefaultConfigPath returns the path to the default Codex config file.
+func DefaultConfigPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return nil, err
+		return filepath.Join("~", ".codex", DefaultConfigFile)
 	}
-	return ReadFile(filepath.Join(home, ".codex", DefaultConfigFile))
+	return filepath.Join(home, ".codex", DefaultConfigFile)
+}
+
+// ReadDefault reads the default config from ~/.codex/config.toml.
+func ReadDefault() (*Config, error) {
+	return ReadFile(DefaultConfigPath())
 }
