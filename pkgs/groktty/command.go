@@ -3,6 +3,7 @@ package groktty
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	codexagent "github.com/xhd2015/agent-pro/agent/cli/codex"
@@ -20,55 +21,131 @@ func BuildCommandArgv(env *exec.Env, settingsPath, agentPath, model, resumeSessi
 }
 
 // BuildGrokCommandArgv returns argv for the interactive grok TUI inside the PTY.
-func BuildGrokCommandArgv(env *exec.Env, settingsPath, agentPath, model, resumeSession string) ([]string, error) {
+// agentRunnerBinary may be a bare binary name/path or a shell-style "binary flag..." spec.
+func BuildGrokCommandArgv(env *exec.Env, settingsPath, agentRunnerBinary, model, resumeSession string) ([]string, error) {
 	if hook := strings.TrimSpace(os.Getenv(envGrokTTYCommand)); hook != "" {
 		return parseShellWords(hook)
 	}
 
-	agent := &grokagent.GrokAgent{
-		AgentPath:    agentPath,
-		SettingsPath: settingsPath,
-		Env:          env,
-	}
-	path, err := resolveGrokPath(agent)
+	path, userFlags, err := resolveGrokRunnerSpec(env, settingsPath, agentRunnerBinary)
 	if err != nil {
 		return nil, err
 	}
 
-	args := []string{path, "--always-approve", "--permission-mode=bypassPermissions"}
-	if model != "" {
+	args := append([]string{path}, userFlags...)
+	args = append(args, "--always-approve", "--permission-mode=bypassPermissions")
+	if model != "" && !hasFlagPair(args, "--model") {
 		args = append(args, "--model", model)
 	}
-	if resumeSession != "" {
+	if resumeSession != "" && !hasFlagPair(args, "--resume") {
 		args = append(args, "--resume", resumeSession)
 	}
 	return args, nil
 }
 
 // BuildCodexCommandArgv returns argv for the interactive Codex TUI inside the PTY.
-func BuildCodexCommandArgv(env *exec.Env, settingsPath, agentPath, model, resumeSession string) ([]string, error) {
+// agentRunnerBinary may be a bare binary name/path or a shell-style "binary flag..." spec.
+func BuildCodexCommandArgv(env *exec.Env, settingsPath, agentRunnerBinary, model, resumeSession string) ([]string, error) {
 	if hook := strings.TrimSpace(os.Getenv(envCodexTTYCommand)); hook != "" {
 		return parseShellWords(hook)
 	}
 
-	agent := &codexagent.CodexAgent{
-		AgentPath:    agentPath,
-		SettingsPath: settingsPath,
-		Env:          env,
-	}
-	path, err := resolveCodexPath(agent)
+	path, userFlags, err := resolveCodexRunnerSpec(env, settingsPath, agentRunnerBinary)
 	if err != nil {
 		return nil, err
 	}
 
-	args := []string{path, "--dangerously-bypass-approvals-and-sandbox"}
-	if model != "" {
+	args := append([]string{path}, userFlags...)
+	args = append(args, "--dangerously-bypass-approvals-and-sandbox")
+	if model != "" && !hasFlagPair(args, "--model") {
 		args = append(args, "--model", model)
 	}
-	if resumeSession != "" {
+	if resumeSession != "" && !hasCodexResume(args) {
 		args = append(args, "resume", resumeSession)
 	}
 	return args, nil
+}
+
+func resolveGrokRunnerSpec(env *exec.Env, settingsPath, spec string) (path string, userFlags []string, err error) {
+	spec = strings.TrimSpace(spec)
+	if spec == "" {
+		agent := &grokagent.GrokAgent{SettingsPath: settingsPath, Env: env}
+		path, err = resolveGrokPath(agent)
+		return path, nil, err
+	}
+	words, err := parseShellWords(spec)
+	if err != nil {
+		return "", nil, err
+	}
+	path, err = lookupRunnerBinary(env, words[0], func() (string, error) {
+		agent := &grokagent.GrokAgent{SettingsPath: settingsPath, Env: env}
+		return resolveGrokPath(agent)
+	})
+	if err != nil {
+		return "", nil, err
+	}
+	return path, words[1:], nil
+}
+
+func resolveCodexRunnerSpec(env *exec.Env, settingsPath, spec string) (path string, userFlags []string, err error) {
+	spec = strings.TrimSpace(spec)
+	if spec == "" {
+		agent := &codexagent.CodexAgent{SettingsPath: settingsPath, Env: env}
+		path, err = resolveCodexPath(agent)
+		return path, nil, err
+	}
+	words, err := parseShellWords(spec)
+	if err != nil {
+		return "", nil, err
+	}
+	path, err = lookupRunnerBinary(env, words[0], func() (string, error) {
+		agent := &codexagent.CodexAgent{SettingsPath: settingsPath, Env: env}
+		return resolveCodexPath(agent)
+	})
+	if err != nil {
+		return "", nil, err
+	}
+	return path, words[1:], nil
+}
+
+func lookupRunnerBinary(env *exec.Env, binary string, fallback func() (string, error)) (string, error) {
+	binary = strings.TrimSpace(binary)
+	if binary == "" {
+		if fallback == nil {
+			return "", fmt.Errorf("runner binary is required")
+		}
+		return fallback()
+	}
+	if filepath.IsAbs(binary) {
+		return binary, nil
+	}
+	if strings.Contains(binary, "/") || strings.Contains(binary, string(os.PathSeparator)) {
+		return binary, nil
+	}
+	if env != nil {
+		if path, err := env.LookPath(binary); err == nil {
+			return path, nil
+		}
+	}
+	return binary, nil
+}
+
+func hasFlagPair(args []string, flag string) bool {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == flag {
+			return true
+		}
+	}
+	return false
+}
+
+func hasCodexResume(args []string) bool {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == "resume" {
+			return true
+		}
+	}
+	return false
 }
 
 func resolveGrokPath(agent *grokagent.GrokAgent) (string, error) {

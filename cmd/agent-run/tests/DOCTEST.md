@@ -72,7 +72,9 @@ cmd/agent-run/tests/
 ├── run/
 │   ├── json-fake-codex-hi/          run --json --agent-runner fake-codex "hi"
 │   ├── events-persisted-to-home/    stdout NDJSON lines match events.jsonl
-│   └── human-readable-no-json/      without --json, stdout not all JSON lines
+│   ├── human-readable-no-json/      without --json, stdout not all JSON lines
+│   ├── agent-runner-binary/         nested: --agent-runner-binary SPEC (see agent-runner-binary/DOCTEST.md)
+│   └── agent-runner-config-home/    nested: --agent-runner-config-home PATH (see agent-runner-config-home/DOCTEST.md)
 ├── web/                             split: token mode (omit | explicit | auto)
 │   ├── timeline/                    session detail events (role, timestamps)
 │   │   ├── session-detail-includes-user-prompt/
@@ -103,7 +105,8 @@ cmd/agent-run/tests/
 │   ├── auth-wrong-token-401/        wrong Bearer → 401
 │   ├── auth-valid-bearer-200/       Bearer test → 200
 │   ├── health-port-zero-starts/     --port 0 + explicit token
-│   └── default-port-8192/           default port + explicit token
+│   ├── default-port-8192/           default port + explicit token
+│   └── grok-mock-config/            nested: --grok-home + --grok-tty-runner-binary (see grok-mock-config/DOCTEST.md)
 ├── home/
 │   └── agent-run-home-isolation/    no files outside AGENT_RUN_HOME after run
 ├── sessions/                        split: list vs print
@@ -148,6 +151,12 @@ cmd/agent-run/tests/
 | 4 | `run/json-fake-codex-hi` | `run --json --agent-runner fake-codex "hi"` → valid NDJSON, last event type `done` |
 | 5 | `run/events-persisted-to-home` | Same run; `events.jsonl` under home matches stdout lines |
 | 6 | `run/human-readable-no-json` | `run` without `--json` uses human-readable print, not all JSON lines |
+| 40 | `run/agent-runner-binary/fake-binary-receives-argv` | `--agent-runner-binary` fake script; stderr argv includes grok-tty defaults |
+| 41 | `run/agent-runner-binary/inner-model-wins` | Binary spec `--model inner` beats CLI `--model outer` |
+| 42 | `run/agent-runner-binary/llm-mock-auto-home` | `llm-mock-run-grok` auto-provisions grok home; discovery streams (no scrollback pollution) |
+| 43 | `run/agent-runner-config-home/discovers-session` | `--agent-runner-config-home` + seeded `updates.jsonl` → stderr grok session |
+| 44 | `run/agent-runner-config-home/child-env-grok-home-only` | Child env has `GROK_HOME=` only; no `AGENT_RUNNER_CONFIG_HOME=` |
+| 45 | `web/grok-mock-config/uses-mock-binary-and-home` | Web `--grok-home` + `--grok-tty-runner-binary`; POST grok-tty uses mock + shared home |
 | 7 | `web/no-token-health-200` | `web --port 0` (no `--token`); GET health without auth → 200; no `auth.token` |
 | 8 | `web/no-token-startup-warning` | Same startup; stderr mentions `--token` |
 | 9 | `web/token-auto-generates-and-requires-auth` | `--token auto`; stderr prints token; no auth → 401; Bearer printed → 200 |
@@ -181,6 +190,29 @@ cmd/agent-run/tests/
 | 34 | `web/timeline/streaming/assistant-phases-share-stable-id` | Phased assistant rows share one `id` |
 | 35 | `web/stream/sse-delivers-new-events` | SSE after=0 delivers user + assistant events |
 | 36 | `web/stream/sse-after-offset-skips-prior` | SSE at EOF offset on finished session → no replay |
+
+## Nested: run agent-runner-binary / config-home
+
+Grok-tty flag tests under `cmd/agent-run/tests/run/` are **nested DOCTEST roots** (inheritance
+firewall). They exercise `--agent-runner-binary` and `--agent-runner-config-home` on
+`agent-run run --agent-runner grok-tty` with fake runner scripts (not `AGENT_RUN_GROK_TTY_COMMAND`).
+
+```sh
+doctest vet ./cmd/agent-run/tests/run/agent-runner-binary
+doctest vet ./cmd/agent-run/tests/run/agent-runner-config-home
+doctest test ./cmd/agent-run/tests/run/agent-runner-binary
+doctest test ./cmd/agent-run/tests/run/agent-runner-config-home
+```
+
+## Nested: web grok-mock-config
+
+Web flag tests for `--grok-home` and `--grok-tty-runner-binary` live at
+`cmd/agent-run/tests/web/grok-mock-config/` (nested DOCTEST root).
+
+```sh
+doctest vet ./cmd/agent-run/tests/web/grok-mock-config
+doctest test ./cmd/agent-run/tests/web/grok-mock-config
+```
 
 ## Nested: grok-tty (PTY interactive runner)
 

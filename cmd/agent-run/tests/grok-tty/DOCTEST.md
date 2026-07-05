@@ -82,7 +82,8 @@ cmd/agent-run/tests/grok-tty/
 │   ├── connects-via-registry/         # background run → attach WS probe OK
 │   └── missing-session-error/         # unknown id → exit 1, helpful stderr
 ├── help/
-│   └── lists-attach/                  # --help lists attach subcommand
+│   ├── lists-attach/                  # --help lists attach subcommand
+│   └── lists-send/                    # --help lists send subcommand
 └── real-grok/                         # label: grok (skipped by default)
     ├── banner-appears/                # real grok banner detected before inject
     ├── run-simple-prompt/             # "say hi" → exit 0, captured output non-empty
@@ -115,6 +116,7 @@ Parameter ranking (most → least significant):
 | 8 | `attach/connects-via-registry` | Background run; `attach` probe resolves port from registry, WS OK |
 | 9 | `attach/missing-session-error` | Unknown/expired id → exit 1, stderr mentions session not found or expired |
 | 10 | `help/lists-attach` | `--help` lists `attach` subcommand |
+| 10a | `help/lists-send` | `--help` lists `send` subcommand |
 | 11 | `real-grok/banner-appears` | Real grok banner detected; no `banner not detected` error (`label: grok`) |
 | 12 | `real-grok/run-simple-prompt` | `run --agent-runner grok-tty "say hi"` exit 0; output/events non-empty (`label: grok`) |
 | 13 | `real-grok/prompt-executes-not-stuck` | Real grok `run ls`; scrollback has `total`/`drwx` listing (`label: grok`) |

@@ -186,10 +186,20 @@ func isAgentEventType(t eventtypes.ActionType) bool {
 
 func isNonDisplayableAgentEvent(t eventtypes.ActionType) bool {
 	switch t {
-	case eventtypes.ActionStepStart, eventtypes.ActionStepFinish:
+	case eventtypes.ActionStepStart, eventtypes.ActionStepFinish, eventtypes.ActionDone:
 		return true
 	}
 	return false
+}
+
+// FormatAgentEventForStdout formats an AgentEvent for live human stdout streaming.
+// Turn-boundary events (ActionDone, step markers) are suppressed; they still persist
+// to events.jsonl via the emit path before formatting.
+func FormatAgentEventForStdout(event eventtypes.AgentEvent) string {
+	if isNonDisplayableAgentEvent(event.Type) {
+		return ""
+	}
+	return FormatAgentEvent(event)
 }
 
 // FormatAgentEvent formats an AgentEvent into a human-readable string.

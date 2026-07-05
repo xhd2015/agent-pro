@@ -27,6 +27,11 @@ Options:
   --dev           proxy to vite dev server
   --no-open       do not open browser
   --agent-runner RUNNER
+                  default agent runner for new web sessions
+  --grok-home PATH
+                  grok data directory (e.g. ~/.mock/grok); sets GROK_HOME on child processes
+  --grok-tty-runner-binary SPEC
+                  grok-tty binary name/path for web runs (e.g. llm-mock-run-grok)
   -h, --help      show help
 `
 
@@ -36,20 +41,41 @@ func runWeb(args []string, defaultRunner string) error {
 	var dev bool
 	var noOpen bool
 	var agentRunner string
+	var grokHome string
+	var grokTTYRunnerBinary string
 	_, err := flags.Int("--port", &port).
 		String("--token", &token).
 		Bool("--dev", &dev).
 		Bool("--no-open", &noOpen).
 		String("--agent-runner", &agentRunner).
+		String("--grok-home", &grokHome).
+		String("--grok-tty-runner-binary", &grokTTYRunnerBinary).
 		Help("-h,--help", webHelp).
 		Parse(args)
 	if err != nil {
 		return err
 	}
-	_ = defaultRunner
 	_ = dev
 	_ = noOpen
-	_ = agentRunner
+
+	expandedGrokHome, err := expandHomePath(grokHome)
+	if err != nil {
+		return err
+	}
+	if expandedGrokHome != "" {
+		if err := os.MkdirAll(expandedGrokHome, 0755); err != nil {
+			return fmt.Errorf("create grok home %s: %w", expandedGrokHome, err)
+		}
+	}
+
+	runCfg := webRunConfig{
+		GrokHome:            expandedGrokHome,
+		GrokTTYRunnerBinary: strings.TrimSpace(grokTTYRunnerBinary),
+		DefaultRunner:       strings.TrimSpace(agentRunner),
+	}
+	if runCfg.DefaultRunner == "" {
+		runCfg.DefaultRunner = strings.TrimSpace(defaultRunner)
+	}
 
 	store, err := openStore()
 	if err != nil {
@@ -92,7 +118,7 @@ func runWeb(args []string, defaultRunner string) error {
 	fmt.Fprintf(os.Stderr, "agent-run web listening at %s\n", baseURL)
 
 	mux := http.NewServeMux()
-	registerAPI(mux, store, token, requireAuth)
+	registerAPI(mux, store, token, requireAuth, runCfg)
 	if err := registerStatic(mux); err != nil {
 		return err
 	}
@@ -148,7 +174,7 @@ func writeAuthToken(home, token string) error {
 	return os.WriteFile(filepath.Join(home, "auth.token"), []byte(token), 0600)
 }
 
-func registerAPI(mux *http.ServeMux, store agentstorage.Store, token string, requireAuth bool) {
+func registerAPI(mux *http.ServeMux, store agentstorage.Store, token string, requireAuth bool, runCfg webRunConfig) {
 	wrap := func(next http.HandlerFunc) http.HandlerFunc {
 		if !requireAuth {
 			return next
@@ -186,9 +212,9 @@ func registerAPI(mux *http.ServeMux, store agentstorage.Store, token string, req
 			"workspace": workspace,
 		})
 	}))
-	mux.HandleFunc("/api/agent-run/runners", auth(handleRunners(store)))
-	mux.HandleFunc("/api/agent-run/sessions", auth(handleSessionsCollection(store)))
-	mux.HandleFunc("/api/agent-run/sessions/", auth(handleSessionResource(store)))
+	mux.HandleFunc("/api/agent-run/runners", auth(handleRunners(store, runCfg)))
+	mux.HandleFunc("/api/agent-run/sessions", auth(handleSessionsCollection(store, runCfg)))
+	mux.HandleFunc("/api/agent-run/sessions/", auth(handleSessionResource(store, runCfg)))
 }
 
 func registerStatic(mux *http.ServeMux) error {

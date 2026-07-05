@@ -92,6 +92,7 @@ cmd/agent-run/tests/codex-tty/
 │   └── missing-session-error/         # unknown id → exit 1, helpful stderr
 ├── help/
 │   ├── lists-attach/                  # top-level help lists attach subcommand
+│   ├── lists-send/                    # top-level help lists send subcommand
 │   └── lists-codex-tty-runner/        # runner help lists codex-tty backend
 └── real-codex/                        # label: codex (skipped by default)
     ├── banner-appears/                # real codex banner detected before inject
@@ -128,6 +129,7 @@ Parameter ranking (most → least significant):
 | 11 | `attach/missing-session-error` | Unknown/expired id → exit 1, stderr mentions session not found or expired |
 | 12 | `run/fallback-scrollback-when-no-session` | No structured sidecar stream; scrollback fallback still emits assistant text |
 | 13 | `help/lists-attach` | Top-level help lists `attach` |
+| 13a | `help/lists-send` | Top-level help lists `send` |
 | 14 | `help/lists-codex-tty-runner` | Run help lists `codex-tty` as a supported runner |
 | 15 | `real-codex/banner-appears` | Real Codex banner detected; no banner timeout (`label: codex`) |
 | 16 | `real-codex/prompt-executes-not-stuck` | Real Codex prompt exits or produces visible scrollback (`label: codex`) |

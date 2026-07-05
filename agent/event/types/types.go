@@ -23,20 +23,31 @@ const (
 )
 
 type AgentEvent struct {
-	ID        string         `json:"id,omitempty"`
-	Type      ActionType     `json:"type"`
-	Role      string         `json:"role,omitempty"`
-	Phase     EventPhase     `json:"phase,omitempty"`
-	Timestamp int64          `json:"timestamp,omitempty"`
-	Text      string         `json:"text,omitempty"`
-	Tool      string         `json:"tool,omitempty"`
-	ToolInput map[string]any `json:"tool_input,omitempty"`
-	Output    string         `json:"output,omitempty"`
-	Stderr    string         `json:"stderr,omitempty"`
-	ExitCode  *int           `json:"exit_code,omitempty"`
-	DelayMs   int            `json:"delay_ms,omitempty"`
-	Mock      *MockConfig    `json:"mock,omitempty"`
-	Changes   []FileChange   `json:"changes,omitempty"`
+	ID         string            `json:"id,omitempty"`
+	Type       ActionType        `json:"type"`
+	Role       string            `json:"role,omitempty"`
+	Phase      EventPhase        `json:"phase,omitempty"`
+	Timestamp  int64             `json:"timestamp,omitempty"`
+	Text       string            `json:"text,omitempty"`
+	Tool       string            `json:"tool,omitempty"`
+	ToolInput  map[string]any    `json:"tool_input,omitempty"`
+	ToolCallID string            `json:"tool_call_id,omitempty"`
+	Output     string            `json:"output,omitempty"`
+	Stderr     string            `json:"stderr,omitempty"`
+	ExitCode   *int              `json:"exit_code,omitempty"`
+	DelayMs    int               `json:"delay_ms,omitempty"`
+	Mock       *MockConfig       `json:"mock,omitempty"`
+	Changes    []FileChange      `json:"changes,omitempty"`
+	Extensions *EventExtensions  `json:"extensions,omitempty"`
+}
+
+type EventExtensions struct {
+	GrokSession *GrokSessionExtension `json:"grok_session,omitempty"`
+}
+
+type GrokSessionExtension struct {
+	Status    string `json:"status,omitempty"`
+	TurnIndex int    `json:"turn_index,omitempty"`
 }
 
 type FileChange struct {

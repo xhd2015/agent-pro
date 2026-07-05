@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	grok_session "github.com/xhd2015/agent-pro/agent/event/grok_session"
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 )
 
@@ -35,7 +36,7 @@ func TailUpdates(ctx context.Context, updatesPath string, emit func(types.AgentE
 // TailUpdatesFromOffset tails updates.jsonl starting at the given byte offset.
 // Use updatesTailStartOffset at discovery time to skip bytes already on disk.
 func TailUpdatesFromOffset(ctx context.Context, updatesPath string, startOffset int64, emit func(types.AgentEvent) error) error {
-	converter := NewACPConverter()
+	converter := grok_session.NewConverter()
 	offset := startOffset
 
 	ticker := time.NewTicker(tailPollInterval)
@@ -68,7 +69,7 @@ func TailUpdatesFromOffset(ctx context.Context, updatesPath string, startOffset 
 	}
 }
 
-func readNewACPUpdates(path string, offset int64, converter *ACPConverter, emit func(types.AgentEvent) error) (int64, bool, error) {
+func readNewACPUpdates(path string, offset int64, converter *grok_session.Converter, emit func(types.AgentEvent) error) (int64, bool, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -92,7 +93,7 @@ func readNewACPUpdates(path string, offset int64, converter *ACPConverter, emit 
 			continue
 		}
 		hadLines = true
-		if upd, ok := parseACPUpdateLine(line); ok && upd.SessionUpdate == "turn_completed" {
+		if upd, ok := grok_session.ParseLine(line); ok && upd.SessionUpdate == "turn_completed" {
 			turnCompleted = true
 		}
 		for _, ev := range converter.ProcessLine(line) {

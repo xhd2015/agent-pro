@@ -19,6 +19,11 @@ Options:
   --session ID        session id
   --keep-tty          keep TTY session alive after run completes
   --agent-runner RUNNER   codex, codex-tty, grok-tty, opencode, fake-codex, ...
+  --agent-runner-binary SPEC
+                      agent executable: bare name/path or shell-style "binary flags..."
+  --agent-runner-config-home PATH
+                      agent data directory (grok: GROK_HOME, codex: CODEX_HOME);
+                      default: AGENT_RUNNER_CONFIG_HOME env
   -h, --help          show help
 `
 
@@ -27,12 +32,16 @@ func runHeadless(args []string, defaultRunner string) error {
 	var model string
 	var sessionID string
 	var agentRunner string
+	var agentRunnerBinary string
+	var agentRunnerConfigHome string
 	var keepTTY bool
 	remaining, err := flags.Bool("--json", &jsonFlag).
 		String("--model", &model).
 		String("--session", &sessionID).
 		Bool("--keep-tty", &keepTTY).
 		String("--agent-runner", &agentRunner).
+		String("--agent-runner-binary", &agentRunnerBinary).
+		String("--agent-runner-config-home", &agentRunnerConfigHome).
 		Help("-h,--help", runHelp).
 		Parse(args)
 	if err != nil {
@@ -54,14 +63,16 @@ func runHeadless(args []string, defaultRunner string) error {
 		return err
 	}
 	return agentui.Run(context.Background(), agentui.RunOptions{
-		Prompt:            prompt,
-		Runner:            runner,
-		Model:             model,
-		SessionID:         sessionID,
-		JSON:              jsonFlag,
-		KeepTerminalAlive: keepTTY,
-		Store:             store,
-		Stdout:            os.Stdout,
-		Stderr:            os.Stderr,
+		Prompt:              prompt,
+		Runner:              runner,
+		Model:               model,
+		SessionID:           sessionID,
+		AgentRunnerBinary:     agentRunnerBinary,
+		AgentRunnerConfigHome: agentRunnerConfigHome,
+		JSON:                jsonFlag,
+		KeepTerminalAlive:   keepTTY,
+		Store:               store,
+		Stdout:              os.Stdout,
+		Stderr:              os.Stderr,
 	})
 }

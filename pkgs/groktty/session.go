@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	grok_session "github.com/xhd2015/agent-pro/agent/event/grok_session"
 )
 
 const (
@@ -286,11 +288,11 @@ func firstUserMessageChunk(updatesPath string) (string, bool) {
 		if line == "" {
 			continue
 		}
-		upd, ok := parseACPUpdateLine(line)
+		upd, ok := grok_session.ParseLine(line)
 		if !ok || upd.SessionUpdate != "user_message_chunk" {
 			continue
 		}
-		text := acpTextContent(upd.Content)
+		text := grok_session.TextContent(upd.Content)
 		if text != "" {
 			return text, true
 		}

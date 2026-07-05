@@ -26,17 +26,19 @@ import (
 
 // RunOptions configures a headless agent-run invocation.
 type RunOptions struct {
-	Prompt            string
-	Runner            string
-	Model             string
-	SessionID         string
-	JSON              bool
-	Workspace         string
-	Store             agentstorage.Store
-	Stdout            io.Writer
-	Stderr            io.Writer
-	StreamPhases      bool // web: phased assistant start/update/end; CLI: single message events
-	KeepTerminalAlive bool
+	Prompt              string
+	Runner              string
+	Model               string
+	SessionID           string
+	AgentRunnerBinary     string // optional binary name/path or "binary flag..." shell spec
+	AgentRunnerConfigHome string // grok/codex data dir; falls back to AGENT_RUNNER_CONFIG_HOME
+	JSON                bool
+	Workspace           string
+	Store               agentstorage.Store
+	Stdout              io.Writer
+	Stderr              io.Writer
+	StreamPhases        bool // web: phased assistant start/update/end; CLI: single message events
+	KeepTerminalAlive   bool
 }
 
 // Run executes the agent runner, streams output, and persists AgentEvents.
@@ -125,7 +127,7 @@ func Run(ctx context.Context, opts RunOptions) error {
 			_, err = fmt.Fprintln(stdout, string(line))
 			return err
 		}
-		if formatted := eventprint.FormatAgentEvent(ev); formatted != "" {
+		if formatted := eventprint.FormatAgentEventForStdout(ev); formatted != "" {
 			_, err = fmt.Fprintln(stdout, formatted)
 		}
 		return err
@@ -138,7 +140,7 @@ func Run(ctx context.Context, opts RunOptions) error {
 		}
 		_ = opts.Store.UpdateSessionTerminalSessionID(runner, sessionID, id)
 	}
-	newRunnerSessionID, newTerminalSessionID, runErr := streamRunner(ctx, runner, opts.Store.Home(), workspace, env, runnerPrompt, opts.Model, runnerSessionID, sessionID, opts.StreamPhases, opts.KeepTerminalAlive, persistTerminalSessionID, emit, stderr)
+	newRunnerSessionID, newTerminalSessionID, runErr := streamRunner(ctx, runner, opts.Store.Home(), workspace, env, runnerPrompt, opts.Model, opts.AgentRunnerBinary, opts.AgentRunnerConfigHome, runnerSessionID, sessionID, opts.StreamPhases, opts.KeepTerminalAlive, persistTerminalSessionID, emit, stderr)
 	if strings.TrimSpace(newRunnerSessionID) != "" {
 		_ = opts.Store.UpdateSessionRunnerSessionID(runner, sessionID, newRunnerSessionID)
 	}
@@ -156,7 +158,7 @@ func Run(ctx context.Context, opts RunOptions) error {
 	return runErr
 }
 
-func streamRunner(ctx context.Context, runner, home, workspace string, env *agentexec.Env, prompt, model, runnerSessionID, agentSessionID string, streamPhases, keepTerminalAlive bool, onTerminalSessionID func(string), emit func(types.AgentEvent) error, stderr io.Writer) (string, string, error) {
+func streamRunner(ctx context.Context, runner, home, workspace string, env *agentexec.Env, prompt, model, agentRunnerBinary, agentRunnerConfigHome, runnerSessionID, agentSessionID string, streamPhases, keepTerminalAlive bool, onTerminalSessionID func(string), emit func(types.AgentEvent) error, stderr io.Writer) (string, string, error) {
 	if ttyrunner.IsTTYRunner(runner) {
 		terminalSessionID := ""
 		onID := ttyrunner.PatchRunWithDualWrite(home, runner, agentSessionID, func(id string) {
@@ -173,7 +175,9 @@ func streamRunner(ctx context.Context, runner, home, workspace string, env *agen
 			ResumeSessionID:     runnerSessionID,
 			RunnerID:            runner,
 			AgentSessionID:      agentSessionID,
-			KeepTerminalAlive:   keepTerminalAlive,
+			AgentPath:               agentRunnerBinary,
+			AgentRunnerConfigHome:   agentRunnerConfigHome,
+			KeepTerminalAlive:       keepTerminalAlive,
 			Stderr:              stderr,
 			Emit:                emit,
 			OnTerminalSessionID: onID,

@@ -25,8 +25,9 @@ type RunOptions struct {
 	Model               string
 	ResumeSessionID     string
 	SettingsPath        string
-	AgentPath           string
-	RunnerID            string
+	AgentPath             string
+	AgentRunnerConfigHome string
+	RunnerID              string
 	StderrPrefix        string
 	RegistryDir         string
 	BannerProvider      string
@@ -102,6 +103,17 @@ func Run(ctx context.Context, opts RunOptions) (captured string, grokSessionID s
 			return "", "", reserveErr
 		}
 	}
+	configHome := ResolveAgentRunnerConfigHome(opts.AgentRunnerConfigHome)
+	if configHome == "" {
+		if provisioned, provErr := AutoProvisionGrokConfigHome(cfg.runnerID, opts.AgentPath, ""); provErr != nil {
+			shutdown()
+			return "", "", provErr
+		} else if provisioned != "" {
+			configHome = provisioned
+		}
+	}
+	argv = PrependCommandEnv(argv, cfg.runnerID, configHome)
+
 	sess, err := mgr.CreateCommandWithID(sessionID, cfg.runnerID, opts.Workspace, argv)
 	if err != nil {
 		if releaseSessionID != nil {
@@ -184,7 +196,7 @@ func Run(ctx context.Context, opts RunOptions) (captured string, grokSessionID s
 	var tailWG sync.WaitGroup
 
 	if opts.Emit != nil && !cfg.disableTail {
-		grokHome := GrokHome()
+		grokHome := GrokHomeForRunner(configHome)
 		tailCtx, cancel := context.WithCancel(ctx)
 		tailCancel = cancel
 		tailWG.Add(1)
@@ -219,7 +231,7 @@ func Run(ctx context.Context, opts RunOptions) (captured string, grokSessionID s
 		}()
 	}
 	if opts.Emit != nil && cfg.runnerID == "codex-tty" {
-		codexHome := CodexHome()
+		codexHome := CodexHomeForRunner(configHome)
 		tailCtx, cancel := context.WithCancel(ctx)
 		tailCancel = cancel
 		tailWG.Add(1)

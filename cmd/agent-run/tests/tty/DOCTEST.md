@@ -1,14 +1,16 @@
 # agent-run tty Subcommand Tests
 
 Doc-style tests for `agent-run tty` subcommands — status, attach, and send
-operations on live TTY sessions, plus the `agent-run attach` shortcut alias.
+operations on live TTY sessions, plus the `agent-run attach` and `agent-run send`
+shortcut aliases.
 
 # DSN (Domain Specific Notion)
 
 **Participants**
 
 - **agent-run CLI** — dispatches `tty status`, `tty attach`, `tty send`, and
-  `attach` (alias for `tty attach`) against TTY runner sessions.
+  `attach` (alias for `tty attach`) and `send` (alias for `tty send`) against
+  TTY runner sessions.
 - **TTY session registry** — JSON files at `AGENT_RUN_HOME/<runner>-registry/<session-id>.json`
   mapping session id to `pid`, `listen_addr`, and `created_at`. Persists while
   the terminal is alive; normally removed on run exit unless `--keep-tty` is set.
@@ -31,6 +33,8 @@ operations on live TTY sessions, plus the `agent-run attach` shortcut alias.
   `ptyclient.Attach` to the hidden ptywrap listener, and pipes interactive I/O.
 - `agent-run attach <session-id>` is an alias that delegates to the same logic
   as `tty attach`.
+- `agent-run send <session-id> "msg"` is an alias that delegates to the same
+  logic as `tty send`.
 - `agent-run tty send <session-id> "msg"` resolves the terminal, connects a
   WebSocket, injects the prompt via the same path as `sendPromptToLiveTerminal`,
   captures the assistant response, and appends events to the session file.
@@ -71,6 +75,10 @@ cmd/agent-run/tests/tty/
 ├── attach-shortcut/                   # agent-run attach <session-id> (alias)
 │   ├── delegates-to-tty-attach/       # both attach and tty attach produce same error output
 │   └── same-error-for-missing/        # attach bad-id gives same error as tty attach bad-id
+├── send-shortcut/                     # agent-run send <session-id> "msg" (alias)
+│   ├── delegates-to-tty-send/         # send bad-id gives same error as tty send bad-id
+│   ├── sends-to-live-terminal/        # fake ptywrap WS; send injects prompt, captures response
+│   └── same-error-for-missing-args/   # send with no args gives same error as tty send
 └── send/                              # agent-run tty send <session-id> "msg"
     ├── SETUP.md                       # writes mock registry entry
     ├── missing-args/                  # missing session-id or message → error
@@ -81,7 +89,7 @@ cmd/agent-run/tests/tty/
 
 Parameter ranking (most → least significant):
 
-1. **Subcommand** — status vs attach vs send vs --help
+1. **Subcommand** — status vs attach vs send vs attach/send shortcuts vs --help
 2. **Session state** — registry found + reachable vs missing vs expired
 3. **Output format** — human-readable vs --json (status only)
 4. **Screen state** — banner / input-prompt / idle / error / unknown (status only)
@@ -105,10 +113,13 @@ Parameter ranking (most → least significant):
 | 12 | `attach/connects-via-registry` | Valid registry + live ptywrap → attach probe OK |
 | 13 | `attach-shortcut/delegates-to-tty-attach` | `attach` and `tty attach` with bad id produce identical errors |
 | 14 | `attach-shortcut/same-error-for-missing` | `attach bogus-id` same error as `tty attach bogus-id` |
-| 15 | `send/missing-args` | `tty send` without args → error |
-| 16 | `send/session-not-found` | `tty send bogus-id "hi"` → error |
-| 17 | `send/sends-to-live-terminal` | Fake ptywrap WS → send prompt, captures response, appends events |
-| 18 | `send/terminal-unreachable` | Registry with closed port → send fails with error |
+| 15 | `send-shortcut/delegates-to-tty-send` | `send` and `tty send` with bad id produce identical errors |
+| 16 | `send-shortcut/sends-to-live-terminal` | `send` via fake ptywrap WS → inject prompt, captures response |
+| 17 | `send-shortcut/same-error-for-missing-args` | `send` with no args same error as `tty send` with no args |
+| 18 | `send/missing-args` | `tty send` without args → error |
+| 19 | `send/session-not-found` | `tty send bogus-id "hi"` → error |
+| 20 | `send/sends-to-live-terminal` | Fake ptywrap WS → send prompt, captures response, appends events |
+| 21 | `send/terminal-unreachable` | Registry with closed port → send fails with error |
 
 ## How to Run
 
@@ -117,6 +128,7 @@ doctest vet ./cmd/agent-run/tests/tty
 doctest test ./cmd/agent-run/tests/tty
 doctest test -v ./cmd/agent-run/tests/tty/status/registry-entry-valid/human-readable
 doctest test -v ./cmd/agent-run/tests/tty/send/sends-to-live-terminal
+doctest test -v ./cmd/agent-run/tests/tty/send-shortcut/sends-to-live-terminal
 ```
 
 ```go

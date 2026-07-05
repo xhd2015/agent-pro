@@ -109,6 +109,8 @@ run-grok/
 │   ├── cli-overrides-env/         # env a.jsonl + CLI b.jsonl → only b.jsonl written
 │   ├── preset-list-subcommand/    # env --mock-events-preset=list; run grok → catalog, no grok
 │   └── preset-list-shortcut/      # env --mock-events-preset=list; shortcut → catalog, no grok
+├── shortcut-env-help/             # LLM_MOCK_RUN_FLAGS=--help → help text, no GROK_HOME=
+├── shortcut-forwards-grok-flags/  # llm-mock-run-grok --always-approve → fake grok argv
 └── integration/                   # label: real-grok, slow
     ├── headless-mock-response/    # real grok -p → Paris + grok home events proof
     └── headless-no-config-hello/  # no config, random fallback → assistant reply within 30s
@@ -162,6 +164,8 @@ Parameter ranking (most → least significant):
 | 30 | `run-flags-from-env/cli-overrides-env` | Env `a.jsonl` + CLI `--log-events b.jsonl` → only `b.jsonl` written (CLI wins) |
 | 31 | `run-flags-from-env/preset-list-subcommand` | `LLM_MOCK_RUN_FLAGS=--mock-events-preset=list`; `llm-mock run grok` → catalog stdout, grok not started |
 | 32 | `run-flags-from-env/preset-list-shortcut` | Same env; `llm-mock-run-grok` → catalog stdout, grok not started |
+| 33 | `shortcut-env-help` | `LLM_MOCK_RUN_FLAGS=--help llm-mock-run-grok` → exit 0, help text, no `GROK_HOME=` |
+| 34 | `shortcut-forwards-grok-flags` | `llm-mock-run-grok --always-approve` → fake grok `GROK_ARGV=--always-approve` |
 
 ## Coverage
 
@@ -188,6 +192,10 @@ doctest test ./agent/llm/llm-mock/tests/run-grok/config-resolution/config-file-e
 
 # LLM_MOCK_RUN_FLAGS grouping only
 doctest test ./agent/llm/llm-mock/tests/run-grok/run-flags-from-env/...
+
+# Shortcut argv / env help leaves
+doctest test ./agent/llm/llm-mock/tests/run-grok/shortcut-env-help
+doctest test ./agent/llm/llm-mock/tests/run-grok/shortcut-forwards-grok-flags
 
 # Real grok integration (requires grok on PATH)
 doctest test --label real-grok ./agent/llm/llm-mock/tests/run-grok/integration/...

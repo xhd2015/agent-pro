@@ -1,16 +1,20 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
+	lessflags "github.com/xhd2015/less-flags"
 	"github.com/xhd2015/agent-pro/agent/llm/llm-mock/mockpreset"
 	"github.com/xhd2015/agent-pro/agent/llm/llm-mock/run"
 )
 
 func main() {
-	args := run.PrependRunFlagsFromEnv(os.Args[1:])
-	opts, remain, err := run.ParseRunFlags(args)
+	opts, err := run.ParseRunFlagsFromEnv()
+	if errors.Is(err, lessflags.ErrHelp) {
+		return
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "llm-mock-run-grok: %v\n", err)
 		os.Exit(1)
@@ -19,7 +23,7 @@ func main() {
 		mockpreset.PrintList(os.Stdout)
 		return
 	}
-	if err := run.RunGrok(remain, opts); err != nil {
+	if err := run.RunGrok(os.Args[1:], opts); err != nil {
 		fmt.Fprintf(os.Stderr, "llm-mock-run-grok: %v\n", err)
 		os.Exit(1)
 	}

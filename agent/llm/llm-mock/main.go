@@ -3,6 +3,7 @@ package main
 import (
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/openai/openai-go/v3"
+	lessflags "github.com/xhd2015/less-flags"
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	anthropicenc "github.com/xhd2015/agent-pro/agent/llm/anthropic"
 	"github.com/xhd2015/agent-pro/agent/llm/llm-mock/mockconfig"
@@ -214,6 +216,9 @@ func printMainHelp() {
 func handleRunCommand(args []string) error {
 	args = runpkg.PrependRunFlagsFromEnv(args)
 	opts, remain, err := runpkg.ParseRunFlags(args)
+	if errors.Is(err, lessflags.ErrHelp) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}

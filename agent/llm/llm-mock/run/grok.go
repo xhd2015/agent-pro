@@ -20,9 +20,10 @@ import (
 
 // RunGrokOptions configures optional behavior for RunGrok.
 type RunGrokOptions struct {
-	MockEventsPreset string // --mock-events-preset; passed to mock server
-	LogEventsPath    string // --log-events output path; passed to mock server as --agent-events-file
-	LogHTTPPath      string // --log-http output path; passed to mock server as --log-http
+	MockEventsPreset      string // --mock-events-preset; passed to mock server
+	LogEventsPath         string // --log-events output path; passed to mock server as --agent-events-file
+	LogHTTPPath           string // --log-http output path; passed to mock server as --log-http
+	AgentRunnerConfigHome string // --agent-runner-config-home or AGENT_RUNNER_CONFIG_HOME
 }
 
 // RunGrok starts the mock server in the background, configures an isolated GROK_HOME,
@@ -83,7 +84,7 @@ func RunGrok(grokArgs []string, opts RunGrokOptions) error {
 		runGrokDebugf("mock teardown done after %s", since(teardownStart))
 	}()
 
-	grokHome, _, err := resolveGrokHome(tmpDir)
+	grokHome, _, err := resolveGrokHome(tmpDir, opts.AgentRunnerConfigHome)
 	if err != nil {
 		return err
 	}
@@ -158,7 +159,19 @@ func RunGrok(grokArgs []string, opts RunGrokOptions) error {
 	return nil
 }
 
-func resolveGrokHome(tmpDir string) (home string, cleanup bool, err error) {
+func resolveGrokHome(tmpDir, configHome string) (home string, cleanup bool, err error) {
+	if v := strings.TrimSpace(configHome); v != "" {
+		if err := os.MkdirAll(v, 0755); err != nil {
+			return "", false, fmt.Errorf("mkdir grok home: %w", err)
+		}
+		return v, false, nil
+	}
+	if v := strings.TrimSpace(os.Getenv("AGENT_RUNNER_CONFIG_HOME")); v != "" {
+		if err := os.MkdirAll(v, 0755); err != nil {
+			return "", false, fmt.Errorf("mkdir grok home: %w", err)
+		}
+		return v, false, nil
+	}
 	if v := os.Getenv("LLM_MOCK_GROK_HOME"); v != "" {
 		if err := os.MkdirAll(v, 0755); err != nil {
 			return "", false, fmt.Errorf("mkdir grok home: %w", err)

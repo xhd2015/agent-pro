@@ -24,6 +24,9 @@ must NOT block ~60s in waitAndMirrorSessions when session dir lacks events.jsonl
 import "testing"
 
 func Setup(t *testing.T, req *Request) error {
+	if req.ExecTimeout <= 0 {
+		req.ExecTimeout = 5 * time.Second
+	}
 	return nil
 }
 ```

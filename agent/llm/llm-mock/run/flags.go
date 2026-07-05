@@ -26,6 +26,8 @@ Options:
   --log-http FILE
         Append full HTTP request/response exchange JSONL for each mock HTTP call.
         FILE must end with .jsonl. Passed to the mock as --log-http.
+  --agent-runner-config-home PATH
+        Agent data directory (grok: GROK_HOME). Default: AGENT_RUNNER_CONFIG_HOME env.
 
 Environment (orchestrator, grok):
   LLM_MOCK_GROK_HOME                      Explicit grok home (default: temp dir)
@@ -47,6 +49,7 @@ Shared environment:
   LLM_MOCK_CONFIG_FILE, LLM_MOCK_CONFIG   Mock exchange config JSON path
   LLM_MOCK_EVENTS_FILE                    Optional input exchanges JSONL (appended)
   LLM_MOCK_RUN_FLAGS                      Space-separated default run flags (prepended before argv; CLI wins on duplicate)
+  AGENT_RUNNER_CONFIG_HOME                Agent data directory when --agent-runner-config-home is unset
 
 Config is optional; with no config env vars, uses inline default {"exchanges": []}.
 
@@ -80,16 +83,35 @@ func PrependRunFlagsFromEnv(args []string) []string {
 	return out
 }
 
+// ParseRunFlagsFromEnv parses llm-mock run flags from LLM_MOCK_RUN_FLAGS only.
+// Shortcut binaries (llm-mock-run-grok) use this so all argv is forwarded to the agent.
+func ParseRunFlagsFromEnv() (RunGrokOptions, error) {
+	env := strings.TrimSpace(os.Getenv(RunFlagsEnvVar))
+	if env == "" {
+		return RunGrokOptions{}, nil
+	}
+	opts, _, err := parseRunFlags(strings.Fields(env), false)
+	return opts, err
+}
+
 // ParseRunFlags parses --mock-events-preset, --log-events, and --log-http from args
 // (lessflags + StopOnFirstArg). Returns RunGrokOptions, remaining args, and error.
 func ParseRunFlags(args []string) (RunGrokOptions, []string, error) {
-	var logEvents, logHTTP, mockEventsPreset *string
-	remain, err := lessflags.String("--mock-events-preset", &mockEventsPreset).
+	return parseRunFlags(args, true)
+}
+
+func parseRunFlags(args []string, stopOnFirstArg bool) (RunGrokOptions, []string, error) {
+	var logEvents, logHTTP, mockEventsPreset, agentRunnerConfigHome *string
+	builder := lessflags.String("--mock-events-preset", &mockEventsPreset).
 		String("--log-events", &logEvents).
 		String("--log-http", &logHTTP).
+		String("--agent-runner-config-home", &agentRunnerConfigHome).
 		Help("-h,--help", RunCommandHelp).
-		StopOnFirstArg().
-		Parse(args)
+		HelpNoExit()
+	if stopOnFirstArg {
+		builder = builder.StopOnFirstArg()
+	}
+	remain, err := builder.Parse(args)
 	if err != nil {
 		return RunGrokOptions{}, nil, err
 	}
@@ -102,6 +124,9 @@ func ParseRunFlags(args []string) (RunGrokOptions, []string, error) {
 	}
 	if logHTTP != nil {
 		opts.LogHTTPPath = *logHTTP
+	}
+	if agentRunnerConfigHome != nil {
+		opts.AgentRunnerConfigHome = *agentRunnerConfigHome
 	}
 	return opts, remain, nil
 }

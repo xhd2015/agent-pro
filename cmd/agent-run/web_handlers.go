@@ -58,7 +58,10 @@ func knownRunners() []string {
 	}
 }
 
-func defaultRunner(store agentstorage.Store) string {
+func defaultRunner(store agentstorage.Store, runCfg webRunConfig) string {
+	if strings.TrimSpace(runCfg.DefaultRunner) != "" {
+		return runCfg.DefaultRunner
+	}
 	cfg, err := store.Config()
 	if err == nil && strings.TrimSpace(cfg.DefaultAgentRunner) != "" {
 		return cfg.DefaultAgentRunner
@@ -118,7 +121,7 @@ func appendUserPromptEvent(store agentstorage.Store, runner, sessionID, text str
 	})
 }
 
-func startAgentRun(store agentstorage.Store, runner, sessionID, prompt string) {
+func startAgentRun(store agentstorage.Store, runCfg webRunConfig, runner, sessionID, prompt string) {
 	workspace, _ := sessionWorkspace(store, runner, sessionID)
 	webRunWG.Add(1)
 	go func() {
@@ -126,7 +129,7 @@ func startAgentRun(store agentstorage.Store, runner, sessionID, prompt string) {
 		if sendPromptToLiveTerminal(store, runner, sessionID, prompt) {
 			return
 		}
-		_ = agentui.Run(context.Background(), agentui.RunOptions{
+		runOpts := agentui.RunOptions{
 			Prompt:            prompt,
 			Runner:            runner,
 			SessionID:         sessionID,
@@ -136,7 +139,9 @@ func startAgentRun(store agentstorage.Store, runner, sessionID, prompt string) {
 			Stderr:            io.Discard,
 			StreamPhases:      true,
 			KeepTerminalAlive: isTTYRunner(runner),
-		})
+		}
+		applyWebGrokRunOptions(runner, runCfg, &runOpts)
+		_ = agentui.Run(context.Background(), runOpts)
 	}()
 }
 
@@ -150,7 +155,7 @@ type sendMessageRequest struct {
 	Text string `json:"text"`
 }
 
-func handleRunners(store agentstorage.Store) http.HandlerFunc {
+func handleRunners(store agentstorage.Store, runCfg webRunConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -158,12 +163,12 @@ func handleRunners(store agentstorage.Store) http.HandlerFunc {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"runners": knownRunners(),
-			"default": defaultRunner(store),
+			"default": defaultRunner(store, runCfg),
 		})
 	}
 }
 
-func handleSessionsCollection(store agentstorage.Store) http.HandlerFunc {
+func handleSessionsCollection(store agentstorage.Store, runCfg webRunConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -184,7 +189,7 @@ func handleSessionsCollection(store agentstorage.Store) http.HandlerFunc {
 			}
 			runner := strings.TrimSpace(req.Runner)
 			if runner == "" {
-				runner = defaultRunner(store)
+				runner = defaultRunner(store, runCfg)
 			}
 			if err := validateRunner(runner); err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
@@ -221,7 +226,7 @@ func handleSessionsCollection(store agentstorage.Store) http.HandlerFunc {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			startAgentRun(store, runner, sessionID, prompt)
+			startAgentRun(store, runCfg, runner, sessionID, prompt)
 			writeJSON(w, http.StatusAccepted, map[string]any{
 				"session": agentstorage.SessionMeta{
 					Runner:    runner,
@@ -236,7 +241,7 @@ func handleSessionsCollection(store agentstorage.Store) http.HandlerFunc {
 	}
 }
 
-func handleSessionResource(store agentstorage.Store) http.HandlerFunc {
+func handleSessionResource(store agentstorage.Store, runCfg webRunConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		rest := strings.TrimPrefix(r.URL.Path, "/api/agent-run/sessions/")
 		rest = strings.Trim(rest, "/")
@@ -302,7 +307,7 @@ func handleSessionResource(store agentstorage.Store) http.HandlerFunc {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			startAgentRun(store, runner, sessionID, text)
+			startAgentRun(store, runCfg, runner, sessionID, text)
 			writeJSON(w, http.StatusAccepted, map[string]any{"ok": true})
 			return
 		}

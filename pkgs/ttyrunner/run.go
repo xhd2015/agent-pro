@@ -23,8 +23,9 @@ type RunOptions struct {
 	RunnerID          string
 	AgentSessionID    string
 	SettingsPath      string
-	AgentPath         string
-	KeepTerminalAlive bool
+	AgentPath               string
+	AgentRunnerConfigHome   string
+	KeepTerminalAlive       bool
 	Stderr            io.Writer
 	Emit              func(types.AgentEvent) error
 	OnTerminalSessionID func(string)
@@ -67,8 +68,9 @@ func Run(ctx context.Context, opts RunOptions) (captured, runnerSessionID string
 		Model:                 opts.Model,
 		ResumeSessionID:       opts.ResumeSessionID,
 		SettingsPath:          opts.SettingsPath,
-		AgentPath:             opts.AgentPath,
-		RunnerID:              runnerID,
+		AgentPath:               opts.AgentPath,
+		AgentRunnerConfigHome:   opts.AgentRunnerConfigHome,
+		RunnerID:                runnerID,
 		StderrPrefix:          runnerID,
 		RegistryDir:           provider.RegistryDir,
 		BannerProvider:        provider.BannerProvider,

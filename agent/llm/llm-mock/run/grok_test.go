@@ -41,9 +41,10 @@ func TestReadPort(t *testing.T) {
 
 func TestResolveGrokHomeExplicit(t *testing.T) {
 	explicit := filepath.Join(t.TempDir(), "explicit-home")
+	t.Setenv("AGENT_RUNNER_CONFIG_HOME", "")
 	t.Setenv("LLM_MOCK_GROK_HOME", explicit)
 
-	home, cleanup, err := resolveGrokHome(t.TempDir())
+	home, cleanup, err := resolveGrokHome(t.TempDir(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,11 +56,29 @@ func TestResolveGrokHomeExplicit(t *testing.T) {
 	}
 }
 
+func TestResolveGrokHomeAgentRunnerConfigHome(t *testing.T) {
+	shared := filepath.Join(t.TempDir(), "shared-home")
+	t.Setenv("AGENT_RUNNER_CONFIG_HOME", shared)
+	t.Setenv("LLM_MOCK_GROK_HOME", "")
+
+	home, cleanup, err := resolveGrokHome(t.TempDir(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if home != shared {
+		t.Fatalf("home = %q, want %q", home, shared)
+	}
+	if cleanup {
+		t.Fatal("expected no cleanup for shared config home")
+	}
+}
+
 func TestResolveGrokHomeDefaultTemp(t *testing.T) {
+	t.Setenv("AGENT_RUNNER_CONFIG_HOME", "")
 	t.Setenv("LLM_MOCK_GROK_HOME", "")
 	tmp := t.TempDir()
 
-	home, cleanup, err := resolveGrokHome(tmp)
+	home, cleanup, err := resolveGrokHome(tmp, "")
 	if err != nil {
 		t.Fatal(err)
 	}

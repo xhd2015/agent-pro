@@ -1,9 +1,9 @@
 # Scenario
 
-**Subcommand**: `help` — top-level usage includes new `attach` command
+**Subcommand**: `help` — top-level usage includes `attach` and `send` commands
 
 ```
-agent-run --help → lists attach alongside web, run, sessions, status
+agent-run --help → lists attach and send alongside web, run, sessions, status
 ```
 
 ## Preconditions

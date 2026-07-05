@@ -16,6 +16,7 @@ Commands:
   web        start localhost web UI and API
   run        headless one-shot agent invocation
   attach     attach to a live grok-tty or codex-tty session by id
+  send       send a message to a live grok-tty or codex-tty session by id
   sessions   list stored sessions or print one session's events
   status     show agent-run status
 
@@ -70,6 +71,8 @@ func run(args []string) error {
 		return runHeadless(sub, agentRunner)
 	case "attach":
 		return runAttach(sub)
+	case "send":
+		return runSend(sub)
 	case "tty":
 		return runTty(sub)
 	case "sessions":
