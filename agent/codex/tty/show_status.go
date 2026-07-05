@@ -26,11 +26,10 @@ const (
 	envShowStatusDebug     = "CODEX_SHOW_STATUS_DEBUG"
 	envTTYWatchHome        = "TTY_WATCH_HOME"
 
-	defaultSessionID      = "codex-status-usage"
-	defaultTimeoutSeconds = 60
-	statusSettleDelay     = 1 * time.Second
-	idleDebounce          = 200 * time.Millisecond
-	pollInterval          = 50 * time.Millisecond
+	defaultSessionID       = "codex-status-usage"
+	defaultTimeoutSeconds  = 60
+	pollInterval           = 1 * time.Second
+	retryPollInterval      = 300 * time.Millisecond
 )
 
 // UsageInfo holds parsed Codex /status output.
@@ -119,8 +118,10 @@ func FetchStatusWithOptions(ctx context.Context, opts Options) (*UsageInfo, erro
 	v.phaseDone("start-session", startPhase)
 	v.stateChange("session-registered", sessionID)
 
+	fetchDeadline := deadlineForFetch(ctx)
+
 	waitPromptPhase := time.Now()
-	if err := waitForPrompt(ctx, session, v); err != nil {
+	if err := waitForPrompt(ctx, session, fetchDeadline, v); err != nil {
 		logCodexError("wait_prompt", err, snapshotExcerptFields(session))
 		return nil, err
 	}
@@ -141,7 +142,7 @@ func FetchStatusWithOptions(ctx context.Context, opts Options) (*UsageInfo, erro
 	})
 
 	waitStatusPhase := time.Now()
-	snapshot, err := waitForStatusSnapshot(ctx, session, v)
+	snapshot, err := waitForStatusSnapshot(ctx, session, fetchDeadline, v)
 	if err != nil {
 		logCodexError("wait_status", err, snapshotExcerptFields(session))
 		return nil, err
@@ -283,23 +284,22 @@ func buildCodexArgv(env *agentexec.Env) ([]string, error) {
 	return []string{path, "--dangerously-bypass-approvals-and-sandbox", "-c", "mcp_servers={}"}, nil
 }
 
-func waitForPrompt(ctx context.Context, session *ttywatch.EphemeralSession, v *verboseLog) error {
+func deadlineForFetch(ctx context.Context) time.Time {
+	if ctxDeadline, ok := ctx.Deadline(); ok {
+		return ctxDeadline
+	}
+	return time.Now().Add(timeoutFromEnv())
+}
+
+func waitForPrompt(ctx context.Context, session *ttywatch.EphemeralSession, deadline time.Time, v *verboseLog) error {
 	provider, ok := ttyrunner.Get("codex-tty")
 	if !ok {
 		return fmt.Errorf("codex-tty provider not registered")
 	}
 
-	timeout := timeoutFromEnv()
-	if deadline, ok := ctx.Deadline(); ok {
-		if remaining := time.Until(deadline); remaining > 0 && remaining < timeout {
-			timeout = remaining
-		}
-	}
-
-	v.stateChange("waiting-prompt", fmt.Sprintf("codex prompt on screen (timeout=%s)", timeout))
+	v.stateChange("waiting-prompt", fmt.Sprintf("codex prompt on screen (deadline=%s)", deadline.Format(time.RFC3339)))
 
 	waitStart := time.Now()
-	deadline := waitStart.Add(timeout)
 	var lastPollLog time.Time
 	pollCount := 0
 	var snapshotTotal time.Duration
@@ -335,7 +335,7 @@ func waitForPrompt(ctx context.Context, session *ttywatch.EphemeralSession, v *v
 						"elapsed_ms": time.Since(waitStart).Milliseconds(),
 					},
 				})
-				time.Sleep(pollInterval)
+				sleepUntilPoll(ctx, deadline, retryPollInterval)
 				continue
 			}
 			return err
@@ -385,7 +385,21 @@ func waitForPrompt(ctx context.Context, session *ttywatch.EphemeralSession, v *v
 			})
 		}
 
-		time.Sleep(pollInterval)
+		sleepUntilPoll(ctx, deadline, pollInterval)
+	}
+}
+
+func sleepUntilPoll(ctx context.Context, deadline time.Time, interval time.Duration) {
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return
+	}
+	if interval > remaining {
+		interval = remaining
+	}
+	select {
+	case <-ctx.Done():
+	case <-time.After(interval):
 	}
 }
 
@@ -415,21 +429,8 @@ func statusFieldsPresent(text string) bool {
 	return err == nil
 }
 
-func waitForStatusSnapshot(ctx context.Context, session *ttywatch.EphemeralSession, v *verboseLog) (string, error) {
-	v.stateChange("status-settle", fmt.Sprintf("sleep %s after /status", statusSettleDelay))
-	select {
-	case <-ctx.Done():
-		return "", timeoutErr(ctx)
-	case <-time.After(statusSettleDelay):
-	}
-
-	timeout := timeoutFromEnv()
-	if deadline, ok := ctx.Deadline(); ok {
-		if remaining := time.Until(deadline); remaining > 0 && remaining < timeout {
-			timeout = remaining
-		}
-	}
-	deadline := time.Now().Add(timeout)
+func waitForStatusSnapshot(ctx context.Context, session *ttywatch.EphemeralSession, deadline time.Time, v *verboseLog) (string, error) {
+	v.stateChange("waiting-status", fmt.Sprintf("poll for /status output (deadline=%s)", deadline.Format(time.RFC3339)))
 	var lastPollLog time.Time
 	lastParseable := false
 	pollCount := 0
@@ -465,7 +466,7 @@ func waitForStatusSnapshot(ctx context.Context, session *ttywatch.EphemeralSessi
 						"poll":  pollCount,
 					},
 				})
-				time.Sleep(pollInterval)
+				sleepUntilPoll(ctx, deadline, retryPollInterval)
 				continue
 			}
 			return "", err
@@ -519,7 +520,7 @@ func waitForStatusSnapshot(ctx context.Context, session *ttywatch.EphemeralSessi
 			})
 		}
 
-		time.Sleep(pollInterval)
+		sleepUntilPoll(ctx, deadline, pollInterval)
 	}
 }
 

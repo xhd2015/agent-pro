@@ -92,8 +92,22 @@ func checkCodexWritable(scrollback []byte) WritableStatus {
 	if strings.Contains(compact, "model:loading") {
 		return WritableStatus{Reason: "codex model loading", State: "loading"}
 	}
-	if strings.Contains(compact, "startingmcpservers") || strings.Contains(lower, "starting mcp") {
+	if strings.Contains(compact, "startingmcpservers") || strings.Contains(lower, "starting mcp") ||
+		strings.Contains(lower, "booting mcp") {
 		return WritableStatus{Reason: "codex MCP servers starting", State: "loading"}
+	}
+	if strings.Contains(compact, "mcpstartupincomplete") || strings.Contains(lower, "mcp startup incomplete") {
+		if !strings.Contains(plain, "\u203a") && !strings.Contains(plain, "›") {
+			return WritableStatus{Reason: "codex MCP startup incomplete", State: "loading"}
+		}
+	}
+	if strings.Contains(compact, "queuedfollow-up") || strings.Contains(compact, "queuedfollowup") ||
+		strings.Contains(lower, "queued follow-up") {
+		return WritableStatus{Reason: "codex queued follow-up", State: "busy"}
+	}
+	if strings.Contains(lower, "/status") &&
+		(strings.Contains(lower, "queued") || strings.Contains(lower, "follow-up") || strings.Contains(lower, "follow up")) {
+		return WritableStatus{Reason: "codex /status queued", State: "busy"}
 	}
 	if strings.Contains(compact, "doyoutrustthecontentsofthisdirectory") {
 		return WritableStatus{Reason: "codex trust prompt visible", State: "loading"}
