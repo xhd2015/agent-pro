@@ -89,7 +89,10 @@ cmd/agent-run/tests/
 │   │   └── sse-after-offset-skips-prior/
 │   ├── process-output/              web process must not leak agent UI to terminal
 │   │   ├── web-stdout-silent-on-agent-run/
-│   │   └── startup-listen-line-newline/
+│   │   ├── startup-listen-line-newline/
+│   │   ├── startup-stderr-no-leading-blank-line/
+│   │   ├── startup-stderr-no-trailing-whitespace/
+│   │   └── startup-auto-no-leading-blank-line/
 │   ├── workspace/                   server cwd exposed via status + session meta
 │   │   ├── status-includes-workspace/
 │   │   └── session-meta-includes-workspace/
@@ -168,6 +171,9 @@ cmd/agent-run/tests/
 | 29 | `web/timeline/assistant-message-includes-timestamp` | After fake-codex run → assistant `message` event has `timestamp` > 0 |
 | 30 | `web/process-output/web-stdout-silent-on-agent-run` | Background run → web process streams lack `💬` / `[done]` agent print |
 | 31 | `web/process-output/startup-listen-line-newline` | No `--token` → listen URL line ends with newline (own line) |
+| 37 | `web/process-output/startup-stderr-no-leading-blank-line` | No `--token` → stderr does not start with `\n`; first bytes `no API token` |
+| 38 | `web/process-output/startup-stderr-no-trailing-whitespace` | No `--token` → stderr ends with `\n` only (no trailing space/tab) |
+| 39 | `web/process-output/startup-auto-no-leading-blank-line` | `--token auto` → stderr does not start with `\n`; first bytes `agent-run web token:` |
 | 20 | `web/workspace/status-includes-workspace` | GET `/api/agent-run/status` → non-empty `workspace` |
 | 21 | `web/workspace/session-meta-includes-workspace` | POST create session → GET detail `session.workspace` = server cwd |
 | 32 | `web/timeline/continuation/follow-up-agent-recalls-first-message` | POST hi → follow-up → assistant mentions hi |

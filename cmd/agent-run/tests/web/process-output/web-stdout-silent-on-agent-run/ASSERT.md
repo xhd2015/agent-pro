@@ -26,8 +26,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	}
 	stderr := webProcessStderrText(req)
 	stdout := webProcessStdoutText(req)
-	assert.Output(t, stderr, `
-<contains>
+	assert.Output(t, stderr, `<contains>
 listening at
 </contains>`)
 	for _, stream := range []struct {

@@ -321,6 +321,23 @@ func waitForPrompt(ctx context.Context, session *ttywatch.EphemeralSession, v *v
 		snapshotTotal += snapDur
 		if err != nil {
 			v.snapshot("wait-prompt", snapDur, "error: "+err.Error())
+			if isRetryableSnapshotError(err) && time.Now().Before(deadline) {
+				debuglog.Log(debuglog.Entry{
+					Event: "snapshot_retry",
+					Labels: map[string]string{
+						"component": "codex_tty",
+						"provider":  "codex",
+						"phase":     "prompt",
+					},
+					Fields: map[string]any{
+						"error":      err.Error(),
+						"poll":       pollCount,
+						"elapsed_ms": time.Since(waitStart).Milliseconds(),
+					},
+				})
+				time.Sleep(pollInterval)
+				continue
+			}
 			return err
 		}
 		if statusFieldsPresent(snapshot) {
@@ -435,6 +452,22 @@ func waitForStatusSnapshot(ctx context.Context, session *ttywatch.EphemeralSessi
 		snapshotTotal += snapDur
 		if err != nil {
 			v.snapshot("wait-status", snapDur, "error: "+err.Error())
+			if isRetryableSnapshotError(err) && time.Now().Before(deadline) {
+				debuglog.Log(debuglog.Entry{
+					Event: "snapshot_retry",
+					Labels: map[string]string{
+						"component": "codex_tty",
+						"provider":  "codex",
+						"phase":     "status",
+					},
+					Fields: map[string]any{
+						"error": err.Error(),
+						"poll":  pollCount,
+					},
+				})
+				time.Sleep(pollInterval)
+				continue
+			}
 			return "", err
 		}
 
@@ -493,6 +526,15 @@ func waitForStatusSnapshot(ctx context.Context, session *ttywatch.EphemeralSessi
 func malformedStatusResponse(text string) bool {
 	lower := strings.ToLower(text)
 	return strings.Contains(lower, "not status")
+}
+
+func isRetryableSnapshotError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "timeout waiting for snapshot frame") ||
+		strings.Contains(msg, "timeout waiting for snapshot scrollback")
 }
 
 func timeoutErr(ctx context.Context) error {

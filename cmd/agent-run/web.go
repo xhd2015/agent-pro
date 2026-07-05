@@ -60,7 +60,6 @@ func runWeb(args []string, defaultRunner string) error {
 	switch mode {
 	case webTokenOmit:
 		requireAuth = false
-		fmt.Fprint(os.Stderr, "\n")
 		fmt.Fprintf(os.Stderr, "no API token configured\n")
 		fmt.Fprintf(os.Stderr, "--token <secret> or --token auto to require Bearer authentication\n")
 	case webTokenAuto:
@@ -72,7 +71,6 @@ func runWeb(args []string, defaultRunner string) error {
 		if err := writeAuthToken(store.Home(), token); err != nil {
 			return err
 		}
-		fmt.Fprint(os.Stderr, "\n")
 		fmt.Fprintf(os.Stderr, "agent-run web token: %s\n", token)
 	case webTokenExplicit:
 		requireAuth = true
@@ -91,7 +89,7 @@ func runWeb(args []string, defaultRunner string) error {
 	}
 	actualPort := ln.Addr().(*net.TCPAddr).Port
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", actualPort)
-	fmt.Fprintf(os.Stderr, "agent-run web listening at %s\n ", baseURL)
+	fmt.Fprintf(os.Stderr, "agent-run web listening at %s\n", baseURL)
 
 	mux := http.NewServeMux()
 	registerAPI(mux, store, token, requireAuth)
