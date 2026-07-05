@@ -94,4 +94,60 @@ func processArgsLine(t *testing.T, home, sessionID string) (string, error) {
 	}
 	return strings.TrimSpace(string(out)), nil
 }
+
+func phaseRunHeadlessPrintsSessionID(t *testing.T, req *Request) (*Response, error) {
+	return ttywatchtest.PhaseRunHeadlessPrintsSessionID(t, req)
+}
+
+func phaseRunHeadlessNoAttachOutput(t *testing.T, req *Request) (*Response, error) {
+	return ttywatchtest.PhaseRunHeadlessNoAttachOutput(t, req)
+}
+
+func phaseRunHeadlessWaitsUntilChildExits(t *testing.T, req *Request) (*Response, error) {
+	return ttywatchtest.PhaseRunHeadlessWaitsUntilChildExits(t, req)
+}
+
+func phaseRunHeadlessCtrlCForwardsExits(t *testing.T, req *Request) (*Response, error) {
+	return ttywatchtest.PhaseRunHeadlessCtrlCForwardsExits(t, req)
+}
+
+func phaseRunHeadlessCtrlCWaitingLogs(t *testing.T, req *Request) (*Response, error) {
+	return ttywatchtest.PhaseRunHeadlessCtrlCWaitingLogs(t, req)
+}
+
+func phaseRunHeadlessSessionLiveWhileWaiting(t *testing.T, req *Request) (*Response, error) {
+	return ttywatchtest.PhaseRunHeadlessSessionLiveWhileWaiting(t, req)
+}
+
+func phaseRunHeadlessWithCustomSessionID(t *testing.T, req *Request) (*Response, error) {
+	return ttywatchtest.PhaseRunHeadlessWithCustomSessionID(t, req)
+}
+
+func phaseRunHeadlessStopOnFirstArg(t *testing.T, req *Request) (*Response, error) {
+	return ttywatchtest.PhaseRunHeadlessStopOnFirstArg(t, req)
+}
+
+func phaseRunDetachPrintsSessionID(t *testing.T, req *Request) (*Response, error) {
+	return ttywatchtest.PhaseRunDetachPrintsSessionID(t, req)
+}
+
+func phaseRunDetachNoAttachOutput(t *testing.T, req *Request) (*Response, error) {
+	return ttywatchtest.PhaseRunDetachNoAttachOutput(t, req)
+}
+
+func phaseRunDetachSessionSurvivesInList(t *testing.T, req *Request) (*Response, error) {
+	return ttywatchtest.PhaseRunDetachSessionSurvivesInList(t, req)
+}
+
+func phaseRunDetachWithCustomSessionID(t *testing.T, req *Request) (*Response, error) {
+	return ttywatchtest.PhaseRunDetachWithCustomSessionID(t, req)
+}
+
+func phaseRunDetachMutuallyExclusiveWithHeadless(t *testing.T, req *Request) (*Response, error) {
+	return ttywatchtest.PhaseRunDetachMutuallyExclusiveWithHeadless(t, req)
+}
+
+func phaseRunDetachStopOnFirstArg(t *testing.T, req *Request) (*Response, error) {
+	return ttywatchtest.PhaseRunDetachStopOnFirstArg(t, req)
+}
 ```

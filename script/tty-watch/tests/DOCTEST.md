@@ -21,6 +21,19 @@ End-to-end tests for the standalone `tty-watch` CLI: `run` subcommand embeds pty
 
 - Default run reserves `session-N`, starts ptywrap, writes registry, attaches as
   interactive writer; **host stays silent** (no session-id on stdout/stderr).
+- `run --headless` skips writer attach; prints `session-id: <id>\n` on stdout and
+  blocks until the inner command exits or the user sends Ctrl-C (SIGINT). No PTY
+  bytes on host stdout. Session stays in registry while the headless parent waits.
+  Ctrl-C forwards SIGINT to the inner PTY program, waits up to 10s, prints a single
+  `waiting for program to exit...` line on stderr after 1s, then force-kills (exit 1).
+- `run --detach` skips writer attach; prints `session-id: <id>\n` on stdout and
+  **exits 0 immediately** — parent does not wait on serve child, install SIGINT
+  handler, or print waiting logs. Serve child and registry entry survive; session
+  reachable via `list`, `attach`, `watch`, `kill`. `--detach` and `--headless` are
+  mutually exclusive (error before start).
+- `run` flags (`--headless`, `--detach`, `--session-id`) parse only before the first command
+  token (`less-flags` + `StopOnFirstArg`); argv after `<command>` is never interpreted
+  as tty-watch flags.
 - Optional `run --session-id <id>` (before `<command>`) reserves a user-chosen id;
   pattern `[a-zA-Z0-9][a-zA-Z0-9._-]*`; live duplicate errors; stale entry pruned
   and reused; invalid id rejected before start.
@@ -68,6 +81,26 @@ End-to-end tests for the standalone `tty-watch` CLI: `run` subcommand embeds pty
  |    +-- bash-c-raw-tty-crlf/      (LEAF)  bash -c echo yes: CRLF on raw TTY (regression lock)
  |    +-- echo-raw-tty-crlf/        (LEAF)  echo yes: CRLF on raw TTY (regression lock)
  |    +-- cr-overwrite-raw-tty-crlf/ (LEAF)  \\r overwrite + CRLF on raw TTY (regression lock)
+ |    |
+ |    +-- headless/
+ |         |
+ |         +-- prints-session-id/         (LEAF)  --headless prints session-id line on stdout (RED)
+ |         +-- no-attach-output/          (LEAF)  no PTY bytes on host stdout (RED)
+ |         +-- waits-until-child-exits/    (LEAF)  blocks until inner cmd exits; registry cleaned (RED)
+ |         +-- ctrl-c-forwards-exits/      (LEAF)  SIGINT forwarded; child exits 0 (RED)
+ |         +-- ctrl-c-waiting-logs/        (LEAF)  stderr waiting line after 1s; force-kill exit 1 (RED)
+ |         +-- session-live-while-waiting/ (LEAF)  list shows live session while parent blocked (RED)
+ |         +-- with-custom-session-id/     (LEAF)  --session-id with headless stdout + registry (RED)
+ |         +-- stop-on-first-arg/          (LEAF)  command argv never parsed as flags (RED)
+ |    |
+ |    +-- detach/
+ |         |
+ |         +-- prints-session-id/              (LEAF)  --detach prints session-id; exit 0 promptly (RED)
+ |         +-- no-attach-output/               (LEAF)  no PTY bytes on host stdout (RED)
+ |         +-- session-survives-in-list/       (LEAF)  list shows live session after parent exit (RED)
+ |         +-- with-custom-session-id/         (LEAF)  --session-id with detach stdout + registry (RED)
+ |         +-- mutually-exclusive-with-headless/ (LEAF)  --detach + --headless errors; no registry (RED)
+ |         +-- stop-on-first-arg/              (LEAF)  command argv never parsed as flags (RED)
  |    |
  |    +-- custom-session-id/
  |         |
@@ -177,6 +210,20 @@ Parameter ranking (most → least significant):
 | 24 | `run/bash-c-raw-tty-crlf` | `run bash -c 'echo yes'` emits CRLF on raw TTY so host prompt stays column 0 (regression lock) |
 | 56 | `run/echo-raw-tty-crlf` | `run echo yes` emits CRLF on raw TTY so host prompt stays column 0 (regression lock) |
 | 57 | `run/cr-overwrite-raw-tty-crlf` | `printf MARKER_A\\rMARKER_B\\n` preserves CR overwrite and CRLF on raw TTY (regression lock) |
+| 77 | `run/headless/prints-session-id` | `--headless` prints `session-id: session-N` on stdout; no PTY bytes (RED) |
+| 78 | `run/headless/no-attach-output` | Headless host stdout is session-id line only; `HEADLESS_MARKER` absent (RED) |
+| 79 | `run/headless/waits-until-child-exits` | `run --headless true` exits 0 promptly; registry pruned (RED) |
+| 80 | `run/headless/ctrl-c-forwards-exits` | Headless SIGINT forwarded; trap child exits 0; registry cleaned (RED) |
+| 81 | `run/headless/ctrl-c-waiting-logs` | Ignored INT: single stderr waiting line after ~1s; force-kill exit 1 (RED) |
+| 82 | `run/headless/session-live-while-waiting` | `list` shows `sleep 120` while headless parent still running (RED) |
+| 83 | `run/headless/with-custom-session-id` | `--headless --session-id my-job` prints id; `my-job.json` in registry (RED) |
+| 84 | `run/headless/stop-on-first-arg` | `sh -c 'echo --not-a-flag'`: token literal; no flag parse error (RED) |
+| 85 | `run/detach/prints-session-id` | `--detach` prints `session-id: session-N`; exit 0 within 5s (RED) |
+| 86 | `run/detach/no-attach-output` | Detach host stdout is session-id line only; `DETACH_MARKER` absent (RED) |
+| 87 | `run/detach/session-survives-in-list` | `list` shows `sleep 120` after detach parent exited (RED) |
+| 88 | `run/detach/with-custom-session-id` | `--detach --session-id my-job` prints id; `my-job.json` in registry (RED) |
+| 89 | `run/detach/mutually-exclusive-with-headless` | `--detach --headless true` exit 1; both flags in error; no registry (RED) |
+| 90 | `run/detach/stop-on-first-arg` | `sh -c 'echo --not-a-flag'`: token literal; no flag parse error (RED) |
 | 47 | `run/custom-session-id/registers-custom-id` | `--session-id` detached run writes `test-with-grok.json`; list shows id + sleep (RED) |
 | 48 | `run/custom-session-id/duplicate-live-errors` | Second `run --session-id` same live id exits 1; already in use (RED) |
 | 49 | `run/custom-session-id/reuses-stale-id` | Stale custom registry pruned; id reused; live in list (RED) |
@@ -240,6 +287,10 @@ doctest vet ./script/tty-watch/tests
 doctest test ./script/tty-watch/tests/...
 doctest test -v ./script/tty-watch/tests/run/registers-session
 doctest test ./script/tty-watch/tests/run/custom-session-id/...
+doctest test ./script/tty-watch/tests/run/headless/...
+doctest test ./script/tty-watch/tests/run/detach/...
+doctest test -v ./script/tty-watch/tests/run/headless/prints-session-id
+doctest test -v ./script/tty-watch/tests/run/detach/prints-session-id
 doctest test ./script/tty-watch/tests/attach/...
 doctest test ./script/tty-watch/tests/list/...
 ```
@@ -255,7 +306,38 @@ type Request = ttywatchtest.Request
 type Response = ttywatchtest.Response
 
 func Run(t *testing.T, req *Request) (*Response, error) {
-	return ttywatchtest.Run(t, req)
+	switch req.Phase {
+	case "run-headless-prints-session-id":
+		return phaseRunHeadlessPrintsSessionID(t, req)
+	case "run-headless-no-attach-output":
+		return phaseRunHeadlessNoAttachOutput(t, req)
+	case "run-headless-waits-until-child-exits":
+		return phaseRunHeadlessWaitsUntilChildExits(t, req)
+	case "run-headless-ctrl-c-forwards-exits":
+		return phaseRunHeadlessCtrlCForwardsExits(t, req)
+	case "run-headless-ctrl-c-waiting-logs":
+		return phaseRunHeadlessCtrlCWaitingLogs(t, req)
+	case "run-headless-session-live-while-waiting":
+		return phaseRunHeadlessSessionLiveWhileWaiting(t, req)
+	case "run-headless-with-custom-session-id":
+		return phaseRunHeadlessWithCustomSessionID(t, req)
+	case "run-headless-stop-on-first-arg":
+		return phaseRunHeadlessStopOnFirstArg(t, req)
+	case "run-detach-prints-session-id":
+		return phaseRunDetachPrintsSessionID(t, req)
+	case "run-detach-no-attach-output":
+		return phaseRunDetachNoAttachOutput(t, req)
+	case "run-detach-session-survives-in-list":
+		return phaseRunDetachSessionSurvivesInList(t, req)
+	case "run-detach-with-custom-session-id":
+		return phaseRunDetachWithCustomSessionID(t, req)
+	case "run-detach-mutually-exclusive-with-headless":
+		return phaseRunDetachMutuallyExclusiveWithHeadless(t, req)
+	case "run-detach-stop-on-first-arg":
+		return phaseRunDetachStopOnFirstArg(t, req)
+	default:
+		return ttywatchtest.Run(t, req)
+	}
 }
 
 func buildTTYWatch(t *testing.T) string {

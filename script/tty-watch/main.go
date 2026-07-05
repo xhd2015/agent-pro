@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -9,6 +10,10 @@ import (
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
+		var exitErr *cliExitError
+		if errors.As(err, &exitErr) {
+			os.Exit(exitErr.code)
+		}
 		fmt.Fprintf(os.Stderr, "%s\n", err.Error())
 		os.Exit(1)
 	}
@@ -49,8 +54,10 @@ func printHelp() {
 	fmt.Print(`tty-watch — embedded PTY session manager
 
 Usage:
-  tty-watch run [--session-id <id>] <command> [args...]
-                                     Start session and attach (writer)
+  tty-watch run [--headless] [--detach] [--session-id <id>] <command> [args...]
+                                     Start session; default attaches (writer)
+                                     --headless prints session-id and waits
+                                     --detach prints session-id and exits
   tty-watch list                     List sessions
   tty-watch watch <session-id>       Observe session (readonly)
   tty-watch attach <session-id>      Join session (write+resize)
