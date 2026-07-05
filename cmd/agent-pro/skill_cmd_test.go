@@ -22,6 +22,23 @@ func TestDebugWithUserSkillIsRegistered(t *testing.T) {
 	}
 }
 
+func TestInvestigateSkillIsRegistered(t *testing.T) {
+	names := knownSkillNames()
+	if !containsString(names, "investigate") {
+		t.Fatalf("knownSkillNames missing investigate: %v", names)
+	}
+	sk, ok := knownSkills["investigate"]
+	if !ok {
+		t.Fatal("knownSkills missing investigate")
+	}
+	if !strings.Contains(sk.Content, "name: investigate") {
+		t.Fatalf("skill content missing frontmatter name:\n%s", sk.Content)
+	}
+	if sk.Description == "" {
+		t.Fatal("investigate skill missing description")
+	}
+}
+
 func TestGitResolveConflictsSkillIsRegistered(t *testing.T) {
 	names := knownSkillNames()
 	if !containsString(names, "git-resolve-conflicts") {
