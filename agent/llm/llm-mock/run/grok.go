@@ -282,7 +282,8 @@ func mockServerExecutable() (string, error) {
 		return "", fmt.Errorf("resolve executable: %w", err)
 	}
 	dir := filepath.Dir(exe)
-	if filepath.Base(exe) == "llm-mock-run-grok" {
+	base := filepath.Base(exe)
+	if base == "llm-mock-run-grok" || base == "llm-mock-run-codex" || base == "llm-mock-run-opencode" {
 		sibling := filepath.Join(dir, "llm-mock")
 		if _, err := os.Stat(sibling); err == nil {
 			return sibling, nil

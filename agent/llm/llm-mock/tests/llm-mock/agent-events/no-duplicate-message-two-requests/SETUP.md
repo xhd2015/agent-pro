@@ -1,21 +1,19 @@
 # Scenario
 
-**Feature**: grok think+message split must not duplicate message in agent-events log
+**Feature**: genStream think+message breakpoint must not duplicate message within one serve
 
-Reproduces `llm-mock run --log-events test.jsonl grok` + one user turn where grok issues
-two chat completion HTTP calls (think response, then message response).
-
-Bug: first request logs think **and** peeked message; second request logs message again → 3 lines.
+With breakpoint dequeue, each HTTP request consumes leading think(s) plus one message breakpoint.
+Agent-events must log exactly that consumed slice per serve (no peek-ahead duplicate message).
 
 ```
-POST #1 user:Hello -> think served -> agent-events: think + message (peek) WRONG
-POST #2 user:Hello -> message served -> agent-events: message again DUPLICATE
+POST #1 user:Hello -> think+message breakpoint -> agent-events: think, message
+POST #2 user:Hello -> renewed genStream breakpoint -> agent-events: think, message
 ```
 
 ## Steps
 
 1. Empty `exchanges[]` (random fallback).
-2. Two identical single-message requests (simulates grok per-event HTTP split).
+2. Two identical single-message requests.
 3. Read `--agent-events-file` after both requests.
 
 ```go

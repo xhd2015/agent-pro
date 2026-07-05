@@ -2,7 +2,6 @@ package main
 
 import (
 	_ "embed"
-	"crypto/rand"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -13,15 +12,16 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/openai/openai-go/v3"
-	"github.com/openai/openai-go/v3/shared/constant"
 	types "github.com/xhd2015/agent-pro/agent/event/types"
+	anthropicenc "github.com/xhd2015/agent-pro/agent/llm/anthropic"
 	"github.com/xhd2015/agent-pro/agent/llm/llm-mock/mockconfig"
 	"github.com/xhd2015/agent-pro/agent/llm/llm-mock/mockgen"
 	"github.com/xhd2015/agent-pro/agent/llm/llm-mock/mockpreset"
 	runpkg "github.com/xhd2015/agent-pro/agent/llm/llm-mock/run"
+	openaienc "github.com/xhd2015/agent-pro/agent/llm/openai"
+	"github.com/xhd2015/agent-pro/agent/llm/queue"
 	"github.com/xhd2015/agent-pro/pkgs/fake-agent/events"
 	"github.com/xhd2015/skills/install"
 )
@@ -35,7 +35,7 @@ const mainHelp = `
 Usage: llm-mock <command> [options]
 
 Commands:
-  run       Run grok with a background mock LLM server (llm-mock run --help)
+  run       Run grok, codex, or opencode with a background mock LLM server (llm-mock run --help)
   skill     Show or install the llm-mock skill (llm-mock skill show)
 
 Server mode (default, no subcommand):
@@ -58,8 +58,6 @@ Options:
   -h, --help
         Show this overview (server mode: also shows Go flag help)
 `
-
-
 
 // RecordedRequest stores a received HTTP request for the admin endpoint.
 type RecordedRequest struct {
@@ -169,6 +167,7 @@ func main() {
 	mux := http.NewServeMux()
 	registerHandler(mux, "/v1/chat/completions", handler.handleChatCompletions, httpLog)
 	registerHandler(mux, "/v1/responses", handler.handleResponses, httpLog)
+	registerHandler(mux, "/v1/messages", handler.handleMessages, httpLog)
 	registerHandler(mux, "/v1/models", handler.handleModels, httpLog)
 	registerHandler(mux, "/admin/requests", handler.handleAdminRequests, httpLog)
 
@@ -222,10 +221,27 @@ func handleRunCommand(args []string) error {
 		mockpreset.PrintList(os.Stdout)
 		return nil
 	}
-	if len(remain) < 1 || remain[0] != "grok" {
-		return fmt.Errorf("usage: llm-mock run [--mock-events-preset NAME] [--log-events FILE] [--log-http FILE] grok [grok-args...]\n(hint: llm-mock run --help)")
+	if len(remain) < 1 {
+		return fmt.Errorf("usage: llm-mock run [--mock-events-preset NAME] [--log-events FILE] [--log-http FILE] (grok|codex|opencode) [agent-args...]\n(hint: llm-mock run --help)")
 	}
-	return runpkg.RunGrok(remain[1:], opts)
+	switch remain[0] {
+	case "grok":
+		return runpkg.RunGrok(remain[1:], opts)
+	case "codex":
+		return runpkg.RunCodex(remain[1:], runpkg.RunCodexOptions{
+			MockEventsPreset: opts.MockEventsPreset,
+			LogEventsPath:    opts.LogEventsPath,
+			LogHTTPPath:      opts.LogHTTPPath,
+		})
+	case "opencode":
+		return runpkg.RunOpencode(remain[1:], runpkg.RunOpencodeOptions{
+			MockEventsPreset: opts.MockEventsPreset,
+			LogEventsPath:    opts.LogEventsPath,
+			LogHTTPPath:      opts.LogHTTPPath,
+		})
+	default:
+		return fmt.Errorf("usage: llm-mock run [--mock-events-preset NAME] [--log-events FILE] [--log-http FILE] (grok|codex|opencode) [agent-args...]\n(hint: llm-mock run --help)")
+	}
 }
 
 func handleSkillCommand(args []string) error {
@@ -358,21 +374,31 @@ func (h *mockHandler) handleResponses(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find matching exchange
-	exchange, agentEvents := h.findMatch(req.Messages)
-	if exchange == nil {
+	serve, ok := h.findMatch(req.Messages)
+	if !ok {
 		writeError(w, "no matching exchange", "no_match", http.StatusBadRequest)
 		return
 	}
-	h.writeAgentEvents(agentEvents)
+	h.writeAgentEvents(serve.agentEvents)
 
 	stream, _ := rawBody["stream"].(bool)
-
 	if stream {
-		h.handleResponsesStream(w, model, exchange)
-	} else {
-		h.handleResponsesNonStream(w, model, exchange)
+		if serve.fromLegacy {
+			if err := openaienc.WriteResponsesStreamFromExchange(w, model, serve.legacy.Response); err != nil {
+				writeError(w, err.Error(), "internal_error", http.StatusInternalServerError)
+			}
+			return
+		}
+		if err := openaienc.WriteResponsesStream(w, model, serve.batch); err != nil {
+			writeError(w, err.Error(), "internal_error", http.StatusInternalServerError)
+		}
+		return
 	}
+	if serve.fromLegacy {
+		openaienc.WriteResponsesNonStreamFromExchange(w, model, serve.legacy.Response)
+		return
+	}
+	openaienc.WriteResponsesNonStream(w, model, serve.batch)
 }
 
 // convertResponsesInput converts OpenAI Responses API input to Chat Completions messages.
@@ -422,194 +448,6 @@ func convertContentToString(content any) string {
 	return ""
 }
 
-// handleResponsesNonStream returns an OpenAI Responses API format response.
-func (h *mockHandler) handleResponsesNonStream(w http.ResponseWriter, model string, exchange *mockconfig.Exchange) {
-	respID := genRespID()
-	msgID := genMsgID()
-	ts := time.Now().Unix()
-
-	content := ""
-	if exchange.Response.Content != nil {
-		content = *exchange.Response.Content
-	}
-
-	response := map[string]any{
-		"id":         respID,
-		"object":     "response",
-		"created_at": ts,
-		"model":      model,
-		"status":     "completed",
-		"output": []map[string]any{
-			{
-				"type":   "message",
-				"id":     msgID,
-				"status": "completed",
-				"role":   "assistant",
-				"content": []map[string]any{
-					{
-						"type": "output_text",
-						"text": content,
-					},
-				},
-			},
-		},
-		"usage": map[string]any{
-			"input_tokens":  0,
-			"output_tokens": 0,
-			"total_tokens":  0,
-		},
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
-}
-
-// handleResponsesStream returns an OpenAI Responses API SSE stream.
-func (h *mockHandler) handleResponsesStream(w http.ResponseWriter, model string, exchange *mockconfig.Exchange) {
-	respID := genRespID()
-	msgID := genMsgID()
-	ts := time.Now().Unix()
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		writeError(w, "streaming not supported", "internal_error", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	content := ""
-	if exchange.Response.Content != nil {
-		content = *exchange.Response.Content
-	}
-
-	seq := 0
-	writeRespStreamEvent(w, flusher, &seq, map[string]any{
-		"type": "response.created",
-		"response": map[string]any{
-			"id":         respID,
-			"object":     "response",
-			"created_at": ts,
-			"model":      model,
-			"status":     "in_progress",
-			"output":     []any{},
-		},
-	})
-
-	writeRespStreamEvent(w, flusher, &seq, map[string]any{
-		"type":         "response.output_item.added",
-		"output_index": 0,
-		"item": map[string]any{
-			"type":    "message",
-			"id":      msgID,
-			"status":  "in_progress",
-			"role":    "assistant",
-			"content": []any{},
-		},
-	})
-
-	writeRespStreamEvent(w, flusher, &seq, map[string]any{
-		"type":          "response.content_part.added",
-		"item_id":       msgID,
-		"output_index":  0,
-		"content_index": 0,
-		"part": map[string]any{
-			"type":        "output_text",
-			"text":        "",
-			"annotations": []any{},
-		},
-	})
-
-	for i := 0; i < len(content); i += 3 {
-		end := i + 3
-		if end > len(content) {
-			end = len(content)
-		}
-		delta := content[i:end]
-		writeRespStreamEvent(w, flusher, &seq, map[string]any{
-			"type":          "response.output_text.delta",
-			"item_id":       msgID,
-			"output_index":  0,
-			"content_index": 0,
-			"delta":         delta,
-		})
-	}
-
-	writeRespStreamEvent(w, flusher, &seq, map[string]any{
-		"type":          "response.content_part.done",
-		"item_id":       msgID,
-		"output_index":  0,
-		"content_index": 0,
-		"part": map[string]any{
-			"type":        "output_text",
-			"text":        content,
-			"annotations": []any{},
-		},
-	})
-
-	writeRespStreamEvent(w, flusher, &seq, map[string]any{
-		"type":         "response.output_item.done",
-		"output_index": 0,
-		"item": map[string]any{
-			"type":   "message",
-			"id":     msgID,
-			"status": "completed",
-			"role":   "assistant",
-			"content": []map[string]any{
-				{
-					"type":        "output_text",
-					"text":        content,
-					"annotations": []any{},
-				},
-			},
-		},
-	})
-
-	writeRespStreamEvent(w, flusher, &seq, map[string]any{
-		"type": "response.completed",
-		"response": map[string]any{
-			"id":         respID,
-			"object":     "response",
-			"created_at": ts,
-			"model":      model,
-			"status":     "completed",
-			"output": []map[string]any{
-				{
-					"type":   "message",
-					"id":     msgID,
-					"status": "completed",
-					"role":   "assistant",
-					"content": []map[string]any{
-						{
-							"type":        "output_text",
-							"text":        content,
-							"annotations": []any{},
-						},
-					},
-				},
-			},
-			"usage": map[string]any{
-				"input_tokens":  0,
-				"output_tokens": 0,
-				"total_tokens":  0,
-				"input_tokens_details": map[string]any{
-					"cached_tokens": 0,
-				},
-				"output_tokens_details": map[string]any{
-					"reasoning_tokens": 0,
-				},
-			},
-		},
-	})
-
-	// [DONE] marker
-	fmt.Fprintf(w, "data: [DONE]\n\n")
-	flusher.Flush()
-}
-
 func (h *mockHandler) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -646,22 +484,111 @@ func (h *mockHandler) handleChatCompletions(w http.ResponseWriter, r *http.Reque
 	h.mu.Unlock()
 	h.writeEvent(rec)
 
-	// Find matching exchange
-	exchange, agentEvents := h.findMatch(req.Messages)
-	if exchange == nil {
+	serve, ok := h.findMatch(req.Messages)
+	if !ok {
 		writeError(w, "no matching exchange", "no_match", http.StatusBadRequest)
 		return
 	}
-	h.writeAgentEvents(agentEvents)
+	h.writeAgentEvents(serve.agentEvents)
 
 	stream, _ := rawBody["stream"].(bool)
 	model := string(req.Model)
 
 	if stream {
-		h.handleStream(w, model, exchange)
-	} else {
-		h.handleNonStream(w, model, exchange)
+		if serve.fromLegacy {
+			if err := openaienc.WriteChatStreamFromExchange(w, model, serve.legacy.Response); err != nil {
+				writeError(w, err.Error(), "internal_error", http.StatusInternalServerError)
+			}
+			return
+		}
+		if err := openaienc.WriteChatStream(w, model, serve.batch); err != nil {
+			writeError(w, err.Error(), "internal_error", http.StatusInternalServerError)
+		}
+		return
 	}
+	if serve.fromLegacy {
+		completion := openaienc.EncodeChatCompletionFromExchange(model, serve.legacy.Response)
+		data, err := openaienc.MarshalChatCompletionJSON(serve.legacy.Response, completion)
+		if err != nil {
+			writeError(w, "failed to encode response", "internal_error", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(data)
+		return
+	}
+	completion := openaienc.EncodeChatCompletion(model, serve.batch)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if serve.batch.Breakpoint.Type == types.ActionToolCall {
+		data, _ := json.Marshal(completion)
+		data = []byte(strings.Replace(string(data), `"content":""`, `"content":null`, 1))
+		w.Write(data)
+		return
+	}
+	json.NewEncoder(w).Encode(completion)
+}
+
+func (h *mockHandler) handleMessages(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	var rawBody map[string]any
+	if err := json.Unmarshal(body, &rawBody); err != nil {
+		writeError(w, "invalid request JSON", "invalid_request", http.StatusBadRequest)
+		return
+	}
+
+	h.mu.Lock()
+	h.requests = append(h.requests, RecordedRequest{
+		Index:  len(h.requests),
+		Method: r.Method,
+		Path:   r.URL.Path,
+		Body:   rawBody,
+	})
+	rec := h.requests[len(h.requests)-1]
+	h.mu.Unlock()
+	h.writeEvent(rec)
+
+	model, _ := rawBody["model"].(string)
+	messages := convertAnthropicMessages(rawBody["messages"])
+	chatBody := map[string]any{"model": model, "messages": messages}
+	chatJSON, _ := json.Marshal(chatBody)
+	var req openai.ChatCompletionNewParams
+	if err := json.Unmarshal(chatJSON, &req); err != nil {
+		writeError(w, "invalid request JSON", "invalid_request", http.StatusBadRequest)
+		return
+	}
+
+	serve, ok := h.findMatch(req.Messages)
+	if !ok {
+		writeError(w, "no matching exchange", "no_match", http.StatusBadRequest)
+		return
+	}
+	h.writeAgentEvents(serve.agentEvents)
+
+	stream, _ := rawBody["stream"].(bool)
+	if serve.fromLegacy {
+		writeError(w, "anthropic endpoint requires generated preset queue", "no_match", http.StatusBadRequest)
+		return
+	}
+	if stream {
+		if err := anthropicenc.WriteMessagesStream(w, model, serve.batch); err != nil {
+			writeError(w, err.Error(), "internal_error", http.StatusInternalServerError)
+		}
+		return
+	}
+	anthropicenc.WriteMessagesNonStream(w, model, serve.batch)
 }
 
 // writeEvent writes a recorded request to the events file if configured.
@@ -688,27 +615,30 @@ func (h *mockHandler) writeAgentEvents(events []types.AgentEvent) {
 	}
 }
 
-func (h *mockHandler) findMatch(messages []openai.ChatCompletionMessageParamUnion) (*mockconfig.Exchange, []types.AgentEvent) {
+type serveResult struct {
+	legacy      *mockconfig.Exchange
+	batch       queue.Batch
+	agentEvents []types.AgentEvent
+	fromLegacy  bool
+}
+
+func (h *mockHandler) findMatch(messages []openai.ChatCompletionMessageParamUnion) (*serveResult, bool) {
 	for i := range h.exchanges {
 		ex := h.exchanges[i].Exchange
 
-		// Check effective index (explicit or implicit sequential)
 		if h.counter != h.effectiveIndices[i] {
 			continue
 		}
 
-		// Check if ANY message matches the exchange request criteria
 		matched := false
 		for _, msg := range messages {
 			info := extractMessageInfo(msg)
 			if info == nil {
 				continue
 			}
-			// Check role
 			if ex.Request.Role != "" && info.Role != ex.Request.Role {
 				continue
 			}
-			// Check content (substring match)
 			if ex.Request.Content != "" && !strings.Contains(info.Content, ex.Request.Content) {
 				continue
 			}
@@ -719,30 +649,32 @@ func (h *mockHandler) findMatch(messages []openai.ChatCompletionMessageParamUnio
 			continue
 		}
 
-		// Match found
 		h.counter++
-		return &ex, mockgen.ExchangeResponseToAgentEvents(ex.Response)
+		return &serveResult{
+			legacy:      &ex,
+			agentEvents: mockgen.ExchangeResponseToAgentEvents(ex.Response),
+			fromLegacy:  true,
+		}, true
 	}
 
-	// Prefix exchange expected but request did not match.
 	if h.counter < len(h.exchanges) {
-		return nil, nil
+		return nil, false
 	}
 
-	// Prefix exhausted: dequeue generated AgentEvent fallback.
 	return h.findGeneratedMatch(messages)
 }
 
-func (h *mockHandler) findGeneratedMatch(messages []openai.ChatCompletionMessageParamUnion) (*mockconfig.Exchange, []types.AgentEvent) {
+func (h *mockHandler) findGeneratedMatch(messages []openai.ChatCompletionMessageParamUnion) (*serveResult, bool) {
 	prompt := extractPrompt(messages)
 
 	h.genMu.Lock()
-	if len(h.genQueue) > 0 {
-		evt := h.genQueue[0]
-		h.genQueue = h.genQueue[1:]
+	if batch, ok := queue.DequeueToBreakpoint(&h.genQueue); ok {
 		h.genMu.Unlock()
-		resp := mockgen.AgentEventToExchangeResponse(sanitizeGeneratedEvent(evt))
-		return &mockconfig.Exchange{Response: resp}, []types.AgentEvent{evt}
+		batch = sanitizeBatch(batch)
+		return &serveResult{
+			batch:       batch,
+			agentEvents: queue.ConsumedEvents(batch),
+		}, true
 	}
 
 	if h.genStream == nil {
@@ -752,24 +684,41 @@ func (h *mockHandler) findGeneratedMatch(messages []openai.ChatCompletionMessage
 	stream := h.genStream
 	h.genMu.Unlock()
 
-	// Do not hold genMu (or handler mu) across probe execution; slow tool probes
-	// must not block other HTTP handlers or starve the first think response.
-	evt, ok := stream.Next()
-	if !ok {
-		// Shared stream yields think then message; once exhausted, start a fresh
-		// cycle seeded from the latest user prompt for the next turn.
-		h.genMu.Lock()
-		seed := mockgen.SeedFromPrompt(prompt)
-		h.genStream = events.NewMockEventStream(seed, prompt)
-		stream = h.genStream
-		h.genMu.Unlock()
-		evt, ok = stream.Next()
+	var prefixThink []types.AgentEvent
+	for {
+		evt, ok := stream.Next()
 		if !ok {
-			return nil, nil
+			h.genMu.Lock()
+			seed := mockgen.SeedFromPrompt(prompt)
+			h.genStream = events.NewMockEventStream(seed, prompt)
+			stream = h.genStream
+			h.genMu.Unlock()
+			evt, ok = stream.Next()
+			if !ok {
+				return nil, false
+			}
+		}
+		evt = sanitizeGeneratedEvent(evt)
+		if evt.Type == types.ActionThink {
+			prefixThink = append(prefixThink, evt)
+			continue
+		}
+		if evt.Type == types.ActionToolCall || evt.Type == types.ActionMessage {
+			batch := queue.Batch{PrefixThink: prefixThink, Breakpoint: evt}
+			return &serveResult{
+				batch:       batch,
+				agentEvents: queue.ConsumedEvents(batch),
+			}, true
 		}
 	}
-	resp := mockgen.AgentEventToExchangeResponse(sanitizeGeneratedEvent(evt))
-	return &mockconfig.Exchange{Response: resp}, []types.AgentEvent{evt}
+}
+
+func sanitizeBatch(batch queue.Batch) queue.Batch {
+	for i := range batch.PrefixThink {
+		batch.PrefixThink[i] = sanitizeGeneratedEvent(batch.PrefixThink[i])
+	}
+	batch.Breakpoint = sanitizeGeneratedEvent(batch.Breakpoint)
+	return batch
 }
 
 // sanitizeGeneratedEvent normalizes generated events for HTTP JSON responses.
@@ -842,125 +791,25 @@ func extractMessageInfo(msg openai.ChatCompletionMessageParamUnion) *messageInfo
 	return info
 }
 
-func (h *mockHandler) handleNonStream(w http.ResponseWriter, model string, exchange *mockconfig.Exchange) {
-	id := genID()
-	ts := time.Now().Unix()
-
-	finishReason := exchange.Response.FinishReason
-	if finishReason == "" {
-		finishReason = "stop"
-	}
-
-	// Build message using SDK types
-	message := openai.ChatCompletionMessage{
-		Role: constant.Assistant("assistant"),
-	}
-
-	// Handle content (may be nil for tool_calls)
-	if exchange.Response.Content != nil {
-		message.Content = *exchange.Response.Content
-	}
-
-	// Handle tool_calls using SDK types
-	if exchange.Response.ToolCalls != nil {
-		tcUnions := make([]openai.ChatCompletionMessageToolCallUnion, len(exchange.Response.ToolCalls))
-		for i, tc := range exchange.Response.ToolCalls {
-			tcUnions[i] = openai.ChatCompletionMessageToolCallUnion{
-				ID:   tc.ID,
-				Type: tc.Type,
-				Function: openai.ChatCompletionMessageFunctionToolCallFunction{
-					Name:      tc.Function.Name,
-					Arguments: tc.Function.Arguments,
-				},
-			}
-		}
-		message.ToolCalls = tcUnions
-	}
-
-	// Build full response using SDK ChatCompletion type
-	response := openai.ChatCompletion{
-		ID:      id,
-		Created: ts,
-		Model:   openai.ChatModel(model),
-		Object:  constant.ChatCompletion("chat.completion"),
-		Choices: []openai.ChatCompletionChoice{
-			{
-				Index:        0,
-				FinishReason: finishReason,
-				Message:      message,
-			},
-		},
-		Usage: openai.CompletionUsage{
-			PromptTokens:     0,
-			CompletionTokens: 0,
-			TotalTokens:      0,
-		},
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	// For tool_calls responses, OpenAI returns "content": null.
-	// The SDK's ChatCompletionMessage uses string, not *string,
-	// so we post-process to replace empty-string content with null.
-	if exchange.Response.Content == nil && exchange.Response.ToolCalls != nil {
-		data, _ := json.Marshal(response)
-		data = []byte(strings.Replace(string(data), `"content":""`, `"content":null`, 1))
-		w.Write(data)
-	} else {
-		json.NewEncoder(w).Encode(response)
-	}
-}
-
-func (h *mockHandler) handleStream(w http.ResponseWriter, model string, exchange *mockconfig.Exchange) {
-	id := genID()
-	ts := time.Now().Unix()
-
-	flusher, ok := w.(http.Flusher)
+func convertAnthropicMessages(input any) []map[string]any {
+	arr, ok := input.([]any)
 	if !ok {
-		writeError(w, "streaming not supported", "internal_error", http.StatusInternalServerError)
-		return
+		return nil
 	}
-
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	content := ""
-	if exchange.Response.Content != nil {
-		content = *exchange.Response.Content
-	}
-
-	finishReason := exchange.Response.FinishReason
-	if finishReason == "" {
-		finishReason = "stop"
-	}
-
-	writeChatStreamChunk(w, flusher, id, ts, model, map[string]any{"role": "assistant"}, "")
-
-	for i := 0; i < len(content); i += 3 {
-		end := i + 3
-		if end > len(content) {
-			end = len(content)
+	var messages []map[string]any
+	for _, item := range arr {
+		msg, ok := item.(map[string]any)
+		if !ok {
+			continue
 		}
-		chunkContent := content[i:end]
-		writeChatStreamChunk(w, flusher, id, ts, model, map[string]any{"content": chunkContent}, "")
+		role, _ := msg["role"].(string)
+		content := convertContentToString(msg["content"])
+		messages = append(messages, map[string]any{
+			"role":    role,
+			"content": content,
+		})
 	}
-
-	writeChatStreamChunk(w, flusher, id, ts, model, map[string]any{}, finishReason)
-
-	// [DONE] marker
-	fmt.Fprintf(w, "data: [DONE]\n\n")
-	flusher.Flush()
-}
-
-func writeSSE[T any](w io.Writer, flusher http.Flusher, obj T) {
-	data, err := json.Marshal(obj)
-	if err != nil {
-		return
-	}
-	fmt.Fprintf(w, "data: %s\n\n", string(data))
-	flusher.Flush()
+	return messages
 }
 
 func writeError(w http.ResponseWriter, message, typ string, statusCode int) {
@@ -974,60 +823,4 @@ func writeError(w http.ResponseWriter, message, typ string, statusCode int) {
 	})
 }
 
-func genID() string {
-	// Generate a simple UUID-like string without external dependencies
-	b := make([]byte, 16)
-	rand.Read(b)
-	// Set version 4
-	b[6] = (b[6] & 0x0f) | 0x40
-	b[8] = (b[8] & 0x3f) | 0x80
-	return fmt.Sprintf("chatcmpl-%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
-}
 
-func genRespID() string {
-	b := make([]byte, 16)
-	rand.Read(b)
-	b[6] = (b[6] & 0x0f) | 0x40
-	b[8] = (b[8] & 0x3f) | 0x80
-	return fmt.Sprintf("resp_%x%x%x%x%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
-}
-
-func genMsgID() string {
-	b := make([]byte, 16)
-	rand.Read(b)
-	b[6] = (b[6] & 0x0f) | 0x40
-	b[8] = (b[8] & 0x3f) | 0x80
-	return fmt.Sprintf("msg_%x%x%x%x%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
-}
-
-func writeRespSSE(w io.Writer, flusher http.Flusher, obj map[string]any) {
-	data, err := json.Marshal(obj)
-	if err != nil {
-		return
-	}
-	fmt.Fprintf(w, "data: %s\n\n", string(data))
-	flusher.Flush()
-}
-
-func writeRespStreamEvent(w io.Writer, flusher http.Flusher, seq *int, obj map[string]any) {
-	obj["sequence_number"] = *seq
-	*seq++
-	writeRespSSE(w, flusher, obj)
-}
-
-func writeChatStreamChunk(w io.Writer, flusher http.Flusher, id string, created int64, model string, delta map[string]any, finishReason string) {
-	choice := map[string]any{
-		"index": 0,
-		"delta": delta,
-	}
-	if finishReason != "" {
-		choice["finish_reason"] = finishReason
-	}
-	writeRespSSE(w, flusher, map[string]any{
-		"id":      id,
-		"object":  "chat.completion.chunk",
-		"created": created,
-		"model":   model,
-		"choices": []map[string]any{choice},
-	})
-}

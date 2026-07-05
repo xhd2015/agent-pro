@@ -91,7 +91,8 @@ llm-mock
 │   ├── think-message-two-requests/   preset think-message; 2 HTTP → think then message (agent-events)
 │   ├── prefix-then-preset/           1 prefix exchange + preset simple → 2nd HTTP preset message
 │   ├── preset-then-genstream/        preset simple drained → 2nd HTTP genStream think fallback
-│   └── tool-bash-response/           preset tool-bash → tool_calls bash, finish_reason tool_calls
+│   ├── tool-bash-response/           preset tool-bash → chat tool_calls bash, finish_reason tool_calls
+│   └── tool-bash-responses-stream/   preset tool-bash → /v1/responses SSE function_call bash (codex wire)
 └── integration/                      Real binary integration tests
     ├── opencode/                     Spawns opencode with mock as LLM backend
     └── pi/                           Spawns pi with mock as LLM backend
@@ -136,7 +137,8 @@ llm-mock
 | 33 | `mock-events-preset/think-message-two-requests` | Preset `think-message`, empty exchanges; 2 HTTP → think then message via agent-events |
 | 34 | `mock-events-preset/prefix-then-preset` | 1 config exchange + preset `simple`; 2nd HTTP gets preset message (not genStream) |
 | 35 | `mock-events-preset/preset-then-genstream` | Preset `simple` (1 message); 2nd HTTP gets genStream think (not no_match) |
-| 36 | `mock-events-preset/tool-bash-response` | Preset `tool-bash`; 1 HTTP → `tool_calls` with bash, `finish_reason: tool_calls` |
+| 36 | `mock-events-preset/tool-bash-response` | Preset `tool-bash`; 1 chat completion HTTP → `tool_calls` with bash, `finish_reason: tool_calls` |
+| 37 | `mock-events-preset/tool-bash-responses-stream` | Preset `tool-bash`; 1 `/v1/responses` stream → SSE `function_call` bash with `preset-bash` args |
 
 ## Coverage
 

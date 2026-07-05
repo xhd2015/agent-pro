@@ -1,8 +1,8 @@
 ## Expected
 
 - Both HTTP responses return 200.
-- Agent-events log has **exactly 2** JSONL lines for this turn: one `think`, one `message`.
-- Exactly **one** `message` event (no duplicate message from peek-ahead logging).
+- Agent-events log has **exactly 4** JSONL lines: two serves × (one `think`, one `message`) with breakpoint dequeue.
+- Exactly **two** `message` events (one per serve, no peek-ahead duplicate within a serve).
 - Every `id` field matches `evt_<digits>` (valid JSON, no embedded control characters).
 
 ## Exit Code
@@ -29,8 +29,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 		}
 	}
 
-	if len(resp.AgentEventsLines) != 2 {
-		t.Fatalf("agent-events: want exactly 2 lines (think+message), got %d\ncontent:\n%s",
+	if len(resp.AgentEventsLines) != 4 {
+		t.Fatalf("agent-events: want exactly 4 lines (2 serves × think+message), got %d\ncontent:\n%s",
 			len(resp.AgentEventsLines), resp.AgentEventsContent)
 	}
 
@@ -53,15 +53,17 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 		}
 	}
 
-	if thinkCount != 1 {
-		t.Fatalf("want 1 think event, got %d in:\n%s", thinkCount, resp.AgentEventsContent)
+	if thinkCount != 2 {
+		t.Fatalf("want 2 think events (one per serve), got %d in:\n%s", thinkCount, resp.AgentEventsContent)
 	}
-	if messageCount != 1 {
-		t.Fatalf("want 1 message event (no duplicate), got %d in:\n%s", messageCount, resp.AgentEventsContent)
+	if messageCount != 2 {
+		t.Fatalf("want 2 message events (one per serve, no duplicate), got %d in:\n%s", messageCount, resp.AgentEventsContent)
 	}
-	if events[0]["type"] != "think" || events[1]["type"] != "message" {
-		t.Fatalf("want think then message order, got types %v %v\n%s",
-			events[0]["type"], events[1]["type"], resp.AgentEventsContent)
+	for i := 0; i < len(events); i += 2 {
+		if events[i]["type"] != "think" || events[i+1]["type"] != "message" {
+			t.Fatalf("want think then message per serve, got %v then %v at lines %d-%d\n%s",
+				events[i]["type"], events[i+1]["type"], i+1, i+2, resp.AgentEventsContent)
+		}
 	}
 }
 ```

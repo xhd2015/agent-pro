@@ -1,11 +1,11 @@
 # Scenario
 
-**Feature**: preset `think-message` dequeues think then message across two HTTP serves
+**Feature**: preset `think-message` dequeues think+message as one breakpoint on first HTTP serve
 
 ```
 empty exchanges[] -> genQueue [think, message]
-POST #1 -> think AgentEvent -> HTTP 200
-POST #2 -> message AgentEvent -> HTTP 200
+POST #1 -> merged think+message content (one breakpoint)
+POST #2 -> genStream fallback
 ```
 
 ## Steps

@@ -19,6 +19,30 @@ func runGrokDebugf(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "llm-mock[run-grok]: "+format+"\n", args...)
 }
 
+func runCodexDebugEnabled() bool {
+	v := os.Getenv("LLM_MOCK_RUN_CODEX_DEBUG")
+	return v == "1" || v == "true" || v == "yes"
+}
+
+func runCodexDebugf(format string, args ...any) {
+	if !runCodexDebugEnabled() {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "llm-mock[run-codex]: "+format+"\n", args...)
+}
+
+func runOpencodeDebugEnabled() bool {
+	v := os.Getenv("LLM_MOCK_RUN_OPENCODE_DEBUG")
+	return v == "1" || v == "true" || v == "yes"
+}
+
+func runOpencodeDebugf(format string, args ...any) {
+	if !runOpencodeDebugEnabled() {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "llm-mock[run-opencode]: "+format+"\n", args...)
+}
+
 func describeSessionRoots(grokHome string) string {
 	sessionsRoot := filepath.Join(grokHome, "sessions")
 	entries, err := os.ReadDir(sessionsRoot)

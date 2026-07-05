@@ -1,9 +1,9 @@
 ## Expected
 
 - Two HTTP 200 responses with non-empty `message.content`.
-- Agent-events log has exactly 2 lines: `type` = `think` then `type` = `message`.
-- Both AgentEvents have non-empty `text`.
-- First and second HTTP response bodies differ (distinct preset events).
+- Response #1 merges preset think+message into one content (breakpoint dequeue).
+- Response #2 serves genStream fallback (distinct non-empty content).
+- Agent-events after both requests: at least 2 lines with `think` then `message` from preset serve on #1.
 
 ## Exit Code
 
@@ -36,12 +36,14 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 			content2 = content
 		}
 	}
+	assertContains(t, content1, "preset:think:think-message")
+	assertContains(t, content1, "preset:message:think-message")
 	if content1 == content2 {
-		t.Fatalf("expected distinct think vs message content, got same %q", content1)
+		t.Fatalf("expected distinct preset vs fallback content, got same %q", content1)
 	}
 
-	if len(resp.AgentEventsLines) != 2 {
-		t.Fatalf("agent-events: want exactly 2 lines (think+message), got %d\ncontent:\n%s",
+	if len(resp.AgentEventsLines) < 2 {
+		t.Fatalf("agent-events: want at least 2 lines from preset serve, got %d\ncontent:\n%s",
 			len(resp.AgentEventsLines), resp.AgentEventsContent)
 	}
 	events, parseErr := parseAgentEventMaps(resp.AgentEventsLines)
@@ -49,13 +51,13 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 		t.Fatal(parseErr)
 	}
 	if events[0]["type"] != "think" || events[1]["type"] != "message" {
-		t.Fatalf("want think then message order, got %v then %v\n%s",
+		t.Fatalf("want think then message order on #1 serve, got %v then %v\n%s",
 			events[0]["type"], events[1]["type"], resp.AgentEventsContent)
 	}
-	for i, ev := range events {
-		text, _ := ev["text"].(string)
+	for i := 0; i < 2; i++ {
+		text, _ := events[i]["text"].(string)
 		if text == "" {
-			t.Fatalf("line %d: AgentEvent missing text: %#v", i+1, ev)
+			t.Fatalf("line %d: AgentEvent missing text: %#v", i+1, events[i])
 		}
 	}
 }

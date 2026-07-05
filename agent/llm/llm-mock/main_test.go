@@ -12,6 +12,7 @@ import (
 	"github.com/openai/openai-go/v3"
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	"github.com/xhd2015/agent-pro/agent/llm/llm-mock/mockconfig"
+	"github.com/xhd2015/agent-pro/agent/llm/queue"
 )
 
 func TestSkillShow(t *testing.T) {
@@ -95,20 +96,24 @@ func TestSkillContentEmbedded(t *testing.T) {
 
 func TestFindMatchEmptyPrefixUsesGeneratorQueue(t *testing.T) {
 	h := &mockHandler{
-		genQueue: []types.AgentEvent{{
-			Type: types.ActionThink,
-			Text: "queued think response",
-		}},
+		genQueue: []types.AgentEvent{
+			{Type: types.ActionThink, Text: "queued think response"},
+			{Type: types.ActionMessage, Text: "queued message response"},
+		},
 	}
-	ex, _ := h.findMatch(userMessages(t, "random-fallback-first-prompt"))
-	if ex == nil {
-		t.Fatal("expected generated exchange")
+	serve, ok := h.findMatch(userMessages(t, "random-fallback-first-prompt"))
+	if !ok || serve == nil {
+		t.Fatal("expected generated serve result")
 	}
-	if ex.Response.Content == nil || *ex.Response.Content != "queued think response" {
-		t.Fatalf("expected queued think content, got %+v", ex.Response)
+	content := serveMessageContent(serve)
+	if !strings.Contains(content, "queued think response") || !strings.Contains(content, "queued message response") {
+		t.Fatalf("expected merged think+message content, got %q", content)
 	}
 	if len(h.genQueue) != 0 {
 		t.Fatalf("expected queue drained, left %d", len(h.genQueue))
+	}
+	if len(serve.agentEvents) != 2 {
+		t.Fatalf("expected think+message agent events, got %d", len(serve.agentEvents))
 	}
 }
 
@@ -132,18 +137,18 @@ func TestFindMatchPrefixThenGeneratorQueue(t *testing.T) {
 		},
 		effectiveIndices: []int{0},
 		genQueue: []types.AgentEvent{{
-			Type: types.ActionThink,
+			Type: types.ActionMessage,
 			Text: "generated after prefix",
 		}},
 	}
 
-	first, _ := h.findMatch(userMessages(t, "prefix-only-prompt"))
-	if first == nil || first.Response.Content == nil || *first.Response.Content != "from-prefix" {
+	first, ok := h.findMatch(userMessages(t, "prefix-only-prompt"))
+	if !ok || serveMessageContent(first) != "from-prefix" {
 		t.Fatalf("first match = %+v, want from-prefix", first)
 	}
 
-	second, _ := h.findMatch(userMessages(t, "overflow-to-random-prompt"))
-	if second == nil || second.Response.Content == nil || *second.Response.Content != "generated after prefix" {
+	second, ok := h.findMatch(userMessages(t, "overflow-to-random-prompt"))
+	if !ok || serveMessageContent(second) != "generated after prefix" {
 		t.Fatalf("second match = %+v, want generated after prefix", second)
 	}
 }
@@ -169,39 +174,55 @@ func TestFindMatchPrefixNonMatchReturnsNil(t *testing.T) {
 		effectiveIndices: []int{0},
 	}
 
-	if ex, _ := h.findMatch(userMessages(t, "completely different message")); ex != nil {
-		t.Fatalf("expected nil for non-match, got %+v", ex)
+	if serve, ok := h.findMatch(userMessages(t, "completely different message")); ok || serve != nil {
+		t.Fatalf("expected no match, got %+v", serve)
 	}
 }
 
 func TestFindMatchExhaustedGenStreamRenewsPerTurn(t *testing.T) {
 	h := &mockHandler{}
 
-	// Turn 1: think then message from one stream (same prompt).
-	first, _ := h.findMatch(userMessages(t, "Hello"))
-	if first == nil || first.Response.Content == nil || *first.Response.Content == "" {
-		t.Fatalf("first match = %+v, want generated think", first)
+	first, ok := h.findMatch(userMessages(t, "Hello"))
+	if !ok || serveMessageContent(first) == "" {
+		t.Fatalf("first match = %+v, want generated think+message", first)
 	}
-	second, _ := h.findMatch(userMessages(t, "Hello"))
-	if second == nil || second.Response.Content == nil || *second.Response.Content == "" {
-		t.Fatalf("second match = %+v, want generated message", second)
-	}
-	if first.Response.Content == second.Response.Content {
-		t.Fatalf("expected distinct think and message content, both %q", *first.Response.Content)
+	if len(first.agentEvents) < 2 {
+		t.Fatalf("expected think+message agent events on first serve, got %d", len(first.agentEvents))
 	}
 
-	// Turn 2: stream exhausted; new user prompt must still random-fallback.
-	third, _ := h.findMatch(multiTurnMessages(t,
+	second, ok := h.findMatch(userMessages(t, "Hello"))
+	if !ok || serveMessageContent(second) == "" {
+		t.Fatalf("second match = %+v, want renewed generated batch", second)
+	}
+
+	third, ok := h.findMatch(multiTurnMessages(t,
 		"Hello",
 		"Here's the result for your request about Hello. I've made the necessary changes.",
 		"what's wrong with me?",
 	))
-	if third == nil || third.Response.Content == nil || *third.Response.Content == "" {
+	if !ok || serveMessageContent(third) == "" {
 		t.Fatalf("third match = %+v, want renewed stream for second user turn", third)
 	}
-	if *third.Response.Content == *second.Response.Content {
-		t.Fatalf("third match replayed turn-1 message %q", *third.Response.Content)
+	if serveMessageContent(third) == serveMessageContent(second) {
+		t.Fatalf("third match replayed prior merged message %q", serveMessageContent(second))
 	}
+}
+
+func serveMessageContent(serve *serveResult) string {
+	if serve == nil {
+		return ""
+	}
+	if serve.fromLegacy {
+		if serve.legacy.Response.Content != nil {
+			return *serve.legacy.Response.Content
+		}
+		return ""
+	}
+	if serve.batch.Breakpoint.Type != types.ActionMessage {
+		return ""
+	}
+	think := queue.CollapsedThinkText(serve.batch.PrefixThink)
+	return think + serve.batch.Breakpoint.Text
 }
 
 func multiTurnMessages(t *testing.T, user1, assistant, user2 string) []openai.ChatCompletionMessageParamUnion {

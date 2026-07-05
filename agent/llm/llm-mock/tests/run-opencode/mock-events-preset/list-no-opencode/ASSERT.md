@@ -1,0 +1,33 @@
+## Expected
+
+- Exit code 0.
+- Stdout contains all MVP preset names.
+- Opencode did not run (`OPENCODE_CONFIG_DIR=` absent; orchestrator did not start opencode foreground).
+- Mock server did not announce a listening port in output.
+
+## Exit Code
+
+0
+
+```go
+import "testing"
+
+func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	assertSuccess(t, resp)
+
+	combined := resp.Stdout + resp.Stderr
+	for _, name := range []string{
+		"simple",
+		"think-message",
+		"multi-think",
+		"tool-bash",
+		"tool-read",
+		"think-tool-message",
+	} {
+		assertContains(t, combined, name)
+	}
+
+	assertNotContains(t, combined, "OPENCODE_CONFIG_DIR=")
+	assertNotContains(t, combined, "OPENCODE_RAN")
+}
+```

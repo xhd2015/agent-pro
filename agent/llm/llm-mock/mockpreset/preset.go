@@ -23,6 +23,7 @@ const (
 	textMessageMulti      = "preset:message:multi-think"
 	textThinkToolMessage  = "preset:think:think-tool-message"
 	textMessageToolMsg    = "preset:message:think-tool-message"
+	textMessageTwoTool    = "preset:message:two-tool-message"
 )
 
 var catalog = []Entry{
@@ -32,6 +33,7 @@ var catalog = []Entry{
 	{Name: "tool-bash", Description: "one bash tool_call"},
 	{Name: "tool-read", Description: "one read tool_call"},
 	{Name: "think-tool-message", Description: "think, tool_call, then message"},
+	{Name: "two-tool-message", Description: "tool_call bash, tool_call read, then message"},
 }
 
 var presets = map[string][]types.AgentEvent{
@@ -72,6 +74,21 @@ var presets = map[string][]types.AgentEvent{
 			ToolInput: map[string]any{"command": "echo preset-inline-bash"},
 		},
 		{Type: types.ActionMessage, Text: textMessageToolMsg},
+	},
+	"two-tool-message": {
+		{
+			ID:        "preset-two-tool-bash",
+			Type:      types.ActionToolCall,
+			Tool:      "bash",
+			ToolInput: map[string]any{"command": "echo preset-bash"},
+		},
+		{
+			ID:        "preset-two-tool-read",
+			Type:      types.ActionToolCall,
+			Tool:      "read",
+			ToolInput: map[string]any{"path": "preset-read-target.txt"},
+		},
+		{Type: types.ActionMessage, Text: textMessageTwoTool},
 	},
 }
 
