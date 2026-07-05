@@ -5,9 +5,9 @@ package ttywatch
 import "golang.org/x/sys/unix"
 
 func ioctlGetTermios() uint {
-	return unix.TIOCGETS
+	return unix.TCGETS
 }
 
 func ioctlSetTermios() uint {
-	return unix.TIOCSETS
+	return unix.TCSETS
 }
