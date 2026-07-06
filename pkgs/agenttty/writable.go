@@ -28,19 +28,19 @@ func detectGenericScreenStatus(scrollback []byte, markers []string) string {
 	plain := stripPlain(scrollback)
 	lower := strings.ToLower(plain)
 	if strings.Contains(lower, "response:") || strings.Contains(lower, "submitted:") {
-		if strings.Contains(plain, "\u203a") {
+		if hasPromptMarker(plain) {
 			return "idle"
 		}
 	}
 	for _, marker := range markers {
 		if marker != "" && strings.Contains(plain, marker) {
-			if strings.Contains(plain, "\u203a") {
+			if hasPromptMarker(plain) {
 				return "idle"
 			}
 			return "banner"
 		}
 	}
-	if strings.Contains(plain, "\u203a") {
+	if hasPromptMarker(plain) {
 		return "banner"
 	}
 	return "unknown"
@@ -48,6 +48,7 @@ func detectGenericScreenStatus(scrollback []byte, markers []string) string {
 
 func hasPromptMarker(plain string) bool {
 	return strings.Contains(plain, "\u203a") || strings.Contains(plain, "›") ||
+		strings.Contains(plain, "❯") ||
 		strings.Contains(plain, "Grok >") || strings.Contains(plain, "> ")
 }
 
@@ -61,8 +62,7 @@ func checkGrokWritable(scrollback []byte) WritableStatus {
 		return WritableStatus{Ready: true, State: "idle"}
 	}
 	if strings.Contains(plain, "Grok \u203a") || strings.Contains(plain, "Grok ›") ||
-		strings.Contains(plain, "Grok >") ||
-		(strings.Contains(lower, "grok") && hasPromptMarker(plain)) {
+		strings.Contains(plain, "Grok >") || hasPromptMarker(plain) {
 		if strings.Contains(lower, "working") || strings.Contains(lower, "thinking") {
 			return WritableStatus{Reason: "agent still responding", State: "busy"}
 		}
