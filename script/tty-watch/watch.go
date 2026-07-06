@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"github.com/xhd2015/agent-pro/pkgs/ttywatch"
 )
 
 func runWatch(args []string) error {
@@ -24,5 +26,5 @@ func runWatch(args []string) error {
 		return fmt.Errorf("tty-watch session %s not found", sessionID)
 	}
 
-	return streamObserver(entry.ListenAddr, sessionID, os.Stdout)
+	return ttywatch.StreamObserver(entry.ListenAddr, sessionID, os.Stdout)
 }

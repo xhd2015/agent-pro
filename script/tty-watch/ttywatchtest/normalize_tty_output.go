@@ -2,7 +2,7 @@ package ttywatchtest
 
 import "bytes"
 
-// NormalizeTTYOutput mirrors script/tty-watch/attach.go normalizeTTYOutput for doctest
+// NormalizeTTYOutput mirrors pkgs/ttywatch/attach_client.go normalizeTTYOutput for doctest
 // regression locks on raw TTY CRLF shaping (bare LF → CRLF; standalone CR preserved).
 func NormalizeTTYOutput(b []byte) []byte {
 	if len(b) == 0 {

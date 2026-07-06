@@ -20,7 +20,7 @@ import (
 	"github.com/xhd2015/agent-pro/agent/opencode/plugins"
 	"github.com/xhd2015/agent-pro/frontend"
 	"github.com/xhd2015/agent-pro/pkgs/agentconfig"
-	"github.com/xhd2015/agent-pro/pkgs/groktty"
+	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 	"github.com/xhd2015/agent-pro/run"
 	"github.com/xhd2015/agent-pro/server"
 	"github.com/xhd2015/less-gen/flags"
@@ -783,7 +783,7 @@ func handleGrokSessions(args []string) error {
 		limit = *limitFlag
 	}
 
-	grokHome := groktty.GrokHome()
+	grokHome := agenttty.GrokHome()
 	sessions, err := groksessions.List(grokHome, limit)
 	if err != nil {
 		return fmt.Errorf("list grok sessions: %w", err)
@@ -842,7 +842,7 @@ func handleGrokSessionInfo(args []string) error {
 		return fmt.Errorf("session id is required")
 	}
 
-	grokHome := groktty.GrokHome()
+	grokHome := agenttty.GrokHome()
 	info, err := groksessions.Info(grokHome, sessionID)
 	if err != nil {
 		return err

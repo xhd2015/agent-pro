@@ -18,6 +18,7 @@ import (
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
+	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 	"github.com/xhd2015/agent-pro/pkgs/agentui"
 )
 
@@ -138,7 +139,7 @@ func startAgentRun(store agentstorage.Store, runCfg webRunConfig, runner, sessio
 			Stdout:            io.Discard,
 			Stderr:            io.Discard,
 			StreamPhases:      true,
-			KeepTerminalAlive: isTTYRunner(runner),
+			KeepTerminalAlive: agenttty.IsTTYRunner(runner),
 		}
 		applyWebGrokRunOptions(runner, runCfg, &runOpts)
 		_ = agentui.Run(context.Background(), runOpts)

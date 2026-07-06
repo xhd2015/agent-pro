@@ -21,7 +21,7 @@ import (
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	agentexec "github.com/xhd2015/agent-pro/agent/exec"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
-	"github.com/xhd2015/agent-pro/pkgs/ttyrunner"
+	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 )
 
 // RunOptions configures a headless agent-run invocation.
@@ -159,28 +159,28 @@ func Run(ctx context.Context, opts RunOptions) error {
 }
 
 func streamRunner(ctx context.Context, runner, home, workspace string, env *agentexec.Env, prompt, model, agentRunnerBinary, agentRunnerConfigHome, runnerSessionID, agentSessionID string, streamPhases, keepTerminalAlive bool, onTerminalSessionID func(string), emit func(types.AgentEvent) error, stderr io.Writer) (string, string, error) {
-	if ttyrunner.IsTTYRunner(runner) {
+	if agenttty.IsTTYRunner(runner) {
 		terminalSessionID := ""
-		onID := ttyrunner.PatchRunWithDualWrite(home, runner, agentSessionID, func(id string) {
+		onID := func(id string) {
 			terminalSessionID = strings.TrimSpace(id)
 			if onTerminalSessionID != nil {
 				onTerminalSessionID(terminalSessionID)
 			}
-		})
-		_, newRunnerSessionID, err := ttyrunner.Run(ctx, ttyrunner.RunOptions{
-			Home:                home,
-			Workspace:           workspace,
-			Prompt:              prompt,
-			Model:               model,
-			ResumeSessionID:     runnerSessionID,
-			RunnerID:            runner,
-			AgentSessionID:      agentSessionID,
-			AgentPath:               agentRunnerBinary,
-			AgentRunnerConfigHome:   agentRunnerConfigHome,
-			KeepTerminalAlive:       keepTerminalAlive,
-			Stderr:              stderr,
-			Emit:                emit,
-			OnTerminalSessionID: onID,
+		}
+		newRunnerSessionID, _, err := agenttty.RunHeadless(ctx, agenttty.RunOptions{
+			Home:                  home,
+			Workspace:             workspace,
+			Prompt:                prompt,
+			Model:                 model,
+			ResumeSessionID:       runnerSessionID,
+			RunnerID:              runner,
+			AgentSessionID:        agentSessionID,
+			AgentPath:             agentRunnerBinary,
+			AgentRunnerConfigHome: agentRunnerConfigHome,
+			KeepTerminalAlive:     keepTerminalAlive,
+			Stderr:                stderr,
+			Emit:                  emit,
+			OnTerminalSessionID:   onID,
 		})
 		if strings.TrimSpace(newRunnerSessionID) != "" {
 			return newRunnerSessionID, terminalSessionID, err

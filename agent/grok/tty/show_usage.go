@@ -16,7 +16,7 @@ import (
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
 	"github.com/xhd2015/agent-pro/agent/debuglog"
 	agentexec "github.com/xhd2015/agent-pro/agent/exec"
-	"github.com/xhd2015/agent-pro/pkgs/groktty"
+	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 	"github.com/creack/pty"
 	"github.com/hinshun/vt10x"
 )
@@ -201,7 +201,7 @@ func debugEnabled() bool {
 
 func buildArgv(env *agentexec.Env) ([]string, error) {
 	if hook := strings.TrimSpace(os.Getenv(envShowUsageCommand)); hook != "" {
-		return groktty.ParseShellWords(hook)
+		return agenttty.ParseShellWords(hook)
 	}
 
 	path, err := registry.ResolveConfiguredCLIPath(
@@ -317,7 +317,7 @@ func shutdownPTY(ptmx *os.File, cmd *exec.Cmd, readDone <-chan struct{}, waitCmd
 }
 
 func formatScrollbackDebug(scrollback []byte) string {
-	plain := groktty.StripANSI(scrollback)
+	plain := agenttty.StripANSI(scrollback)
 	rendered := renderScrollback(scrollback)
 	if rendered != "" {
 		return "--- rendered ---\n" + rendered + "\n--- plain ---\n" + plain
@@ -407,7 +407,7 @@ func currentScreen(scrollback []byte) string {
 
 func trustPromptVisible(scrollback []byte) bool {
 	screen := currentScreen(scrollback)
-	plain := groktty.StripANSI(scrollback)
+	plain := agenttty.StripANSI(scrollback)
 	if !trustPromptInText(screen) && !trustPromptInText(plain) {
 		return false
 	}
@@ -416,7 +416,7 @@ func trustPromptVisible(scrollback []byte) bool {
 
 func postTrustReady(scrollback []byte) bool {
 	return promptPastTrustScreen(currentScreen(scrollback)) ||
-		promptPastTrustScreen(groktty.StripANSI(scrollback))
+		promptPastTrustScreen(agenttty.StripANSI(scrollback))
 }
 
 func promptPastTrustScreen(text string) bool {
@@ -625,7 +625,7 @@ func parseUsageText(corpus string) (*UsageInfo, error) {
 }
 
 func usageCorpus(scrollback []byte) string {
-	plain := groktty.StripANSI(scrollback)
+	plain := agenttty.StripANSI(scrollback)
 	rendered := renderScrollback(scrollback)
 	if rendered != "" {
 		return plain + "\n" + rendered

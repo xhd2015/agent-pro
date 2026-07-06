@@ -10,6 +10,7 @@ type Store interface {
 	Config() (Config, error)
 	SaveConfig(Config) error
 	ListSessions(runner string) ([]SessionMeta, error)
+	ClearAllSessions() error
 	GetSession(runner, sessionID string) (*Session, error)
 	CreateSession(runner, sessionID string, meta SessionMeta) error
 	UpdateSessionStatus(runner, sessionID, status string) error

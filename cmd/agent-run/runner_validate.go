@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
-	"github.com/xhd2015/agent-pro/pkgs/ttyrunner"
+	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 )
 
 func validateRunner(runner string) error {
@@ -13,7 +13,7 @@ func validateRunner(runner string) error {
 	if runner == "" {
 		return nil
 	}
-	if ttyrunner.IsTTYRunner(runner) {
+	if agenttty.IsTTYRunner(runner) {
 		return nil
 	}
 	switch registry.AgentRunnerID(runner) {

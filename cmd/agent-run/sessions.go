@@ -10,10 +10,12 @@ import (
 
 const sessionsHelp = `
 Usage: agent-run sessions [--json]
+       agent-run sessions --clear
        agent-run sessions <runner>/<session_id> --print
 
 Options:
   --json      list sessions as JSON (list mode only)
+  --clear     delete all stored sessions under agent-run home
   --print     print formatted session events (required with <runner>/<session_id>)
   -h, --help  show help
 `
@@ -21,8 +23,10 @@ Options:
 func runSessions(args []string) error {
 	var jsonFlag bool
 	var printFlag bool
+	var clearFlag bool
 	remaining, err := flags.Bool("--json", &jsonFlag).
 		Bool("--print", &printFlag).
+		Bool("--clear", &clearFlag).
 		Help("-h,--help", sessionsHelp).
 		Parse(args)
 	if err != nil {
@@ -31,6 +35,18 @@ func runSessions(args []string) error {
 	store, err := openStore()
 	if err != nil {
 		return err
+	}
+	if clearFlag {
+		if len(remaining) > 0 {
+			return fmt.Errorf("--clear cannot be used with a session reference")
+		}
+		if printFlag {
+			return fmt.Errorf("--clear cannot be used with --print")
+		}
+		if jsonFlag {
+			return fmt.Errorf("--clear cannot be used with --json")
+		}
+		return store.ClearAllSessions()
 	}
 	if len(remaining) > 0 {
 		if len(remaining) != 1 {

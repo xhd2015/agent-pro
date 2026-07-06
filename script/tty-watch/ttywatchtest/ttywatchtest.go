@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/creack/pty"
-	"github.com/xhd2015/agent-pro/pkgs/ttyrunner"
+	"github.com/xhd2015/agent-pro/pkgs/ttywatch"
 )
 
 const registrySubdir = "registry"
@@ -919,7 +919,7 @@ func phaseListTableWithClients(t *testing.T, req *Request, probe string) (*Respo
 	sessionID := StartDetachedSession(t, req)
 	time.Sleep(300 * time.Millisecond)
 
-	var clients []*ttyrunner.WSAttachClient
+	var clients []*ttywatch.WSAttachClient
 	defer func() {
 		for _, c := range clients {
 			c.Close()
@@ -1448,7 +1448,7 @@ func phaseUnitObserverDetachStdinBeforeCleanup(t *testing.T, req *Request) (*Res
 	if err != nil {
 		return &Response{SourceCheckOK: false, SourceCheckNote: err.Error()}, nil
 	}
-	path := filepath.Join(root, "script/tty-watch/attach.go")
+	path := filepath.Join(root, "pkgs/ttywatch/observer.go")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return &Response{SourceCheckOK: false, SourceCheckNote: err.Error()}, nil
@@ -1472,7 +1472,7 @@ func phaseUnitAttachStdoutWriterCRLF(t *testing.T, req *Request) (*Response, err
 	if err != nil {
 		return &Response{SourceCheckOK: false, SourceCheckNote: err.Error()}, nil
 	}
-	path := filepath.Join(root, "script/tty-watch/attach.go")
+	path := filepath.Join(root, "pkgs/ttywatch/attach_client.go")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return &Response{SourceCheckOK: false, SourceCheckNote: err.Error()}, nil
@@ -1491,7 +1491,7 @@ func attachGoStdoutWriterNormalizesRawTTY(src string) (bool, string) {
 	marker := "func (a *attachStdoutWriter) Write"
 	idx := strings.Index(src, marker)
 	if idx < 0 {
-		return false, "attachStdoutWriter.Write not found in attach.go"
+		return false, "attachStdoutWriter.Write not found in attach_client.go"
 	}
 	rest := src[idx:]
 	end := strings.Index(rest, "\nfunc ")
@@ -1513,7 +1513,7 @@ func phaseUnitObserverDetachKittyPopCleanup(t *testing.T, req *Request) (*Respon
 	if err != nil {
 		return &Response{SourceCheckOK: false, SourceCheckNote: err.Error()}, nil
 	}
-	path := filepath.Join(root, "script/tty-watch/attach.go")
+	path := filepath.Join(root, "pkgs/ttywatch/observer.go")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return &Response{SourceCheckOK: false, SourceCheckNote: err.Error()}, nil
@@ -1532,7 +1532,7 @@ func attachGoKittyPopCleanup(src string) (bool, string) {
 	const marker = "observerTTYDetachCleanup"
 	idx := strings.Index(src, marker)
 	if idx < 0 {
-		return false, "observerTTYDetachCleanup constant not found in attach.go"
+		return false, "observerTTYDetachCleanup constant not found in observer.go"
 	}
 	rest := src[idx:]
 	end := strings.Index(rest, "\n")
@@ -1550,7 +1550,7 @@ func attachGoStdinRestoredBeforeCleanup(src string) (bool, string) {
 	marker := "detachCleanup := func"
 	idx := strings.Index(src, marker)
 	if idx < 0 {
-		return false, "detachCleanup closure not found in attach.go"
+		return false, "detachCleanup closure not found in observer.go"
 	}
 	rest := src[idx:]
 	cleanupIdx := strings.Index(rest, "writeObserverTTYDetachCleanup")
@@ -1912,7 +1912,7 @@ func phaseSnapshotSessionDimensionsWide(t *testing.T, req *Request) (*Response, 
 	if err != nil {
 		return nil, err
 	}
-	writer, err := ttyrunner.DialPTYAttach(entry.ListenAddr, sessionID, "")
+	writer, err := ttywatch.DialPTYAttach(entry.ListenAddr, sessionID, "")
 	if err != nil {
 		return nil, fmt.Errorf("dial writer ws: %w", err)
 	}
@@ -2541,17 +2541,17 @@ func attachInputBOr(req *Request, fallback string) string {
 	return fallback
 }
 
-func dialAttachModeClient(t *testing.T, home, sessionID string) *ttyrunner.WSAttachClient {
+func dialAttachModeClient(t *testing.T, home, sessionID string) *ttywatch.WSAttachClient {
 	return dialPTYAttachMode(t, home, sessionID, "attach")
 }
 
-func dialPTYAttachMode(t *testing.T, home, sessionID, attachMode string) *ttyrunner.WSAttachClient {
+func dialPTYAttachMode(t *testing.T, home, sessionID, attachMode string) *ttywatch.WSAttachClient {
 	t.Helper()
 	entry, err := ReadRegistryEntry(home, sessionID)
 	if err != nil {
 		t.Fatalf("read registry for attach dial: %v", err)
 	}
-	client, err := ttyrunner.DialPTYAttach(entry.ListenAddr, sessionID, attachMode)
+	client, err := ttywatch.DialPTYAttach(entry.ListenAddr, sessionID, attachMode)
 	if err != nil {
 		t.Fatalf("dial attach_mode=%s: %v", attachMode, err)
 	}
@@ -2792,7 +2792,7 @@ func phaseAttachVisibleWhileRunAttached(t *testing.T, req *Request) (*Response, 
 	if err != nil {
 		return nil, err
 	}
-	screenWriter, err := ttyrunner.DialPTYAttach(entry.ListenAddr, sessionID, "screen")
+	screenWriter, err := ttywatch.DialPTYAttach(entry.ListenAddr, sessionID, "screen")
 	if err != nil {
 		return nil, fmt.Errorf("dial screen writer like run attach: %w", err)
 	}
@@ -2845,7 +2845,7 @@ func phaseAttachResize(t *testing.T, req *Request) (*Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	screenWriter, err := ttyrunner.DialPTYAttach(entry.ListenAddr, sessionID, "screen")
+	screenWriter, err := ttywatch.DialPTYAttach(entry.ListenAddr, sessionID, "screen")
 	if err != nil {
 		return nil, fmt.Errorf("dial screen writer: %w", err)
 	}

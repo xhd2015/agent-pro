@@ -146,6 +146,14 @@ func (s *fileStore) UpdateSessionTerminalSessionID(runner, sessionID, terminalSe
 	return os.WriteFile(filepath.Join(s.sessionDir(runner, sessionID), "meta.json"), data, 0644)
 }
 
+func (s *fileStore) ClearAllSessions() error {
+	root := filepath.Join(s.home, "sessions")
+	if err := os.RemoveAll(root); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (s *fileStore) ListSessions(runner string) ([]SessionMeta, error) {
 	root := filepath.Join(s.home, "sessions", runner)
 	entries, err := os.ReadDir(root)

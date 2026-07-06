@@ -5,7 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/xhd2015/agent-pro/pkgs/ttyrunner"
+	"github.com/xhd2015/agent-pro/pkgs/agenttty"
+	"github.com/xhd2015/agent-pro/pkgs/ttywatch"
 )
 
 const help = `
@@ -17,6 +18,8 @@ Commands:
   run        headless one-shot agent invocation
   attach     attach to a live grok-tty or codex-tty session by id
   send       send a message to a live grok-tty or codex-tty session by id
+  snapshot   print a sanitized snapshot of a live TTY session by id
+  watch      stream readonly output from a live TTY session by id
   sessions   list stored sessions or print one session's events
   status     show agent-run status
 
@@ -35,8 +38,11 @@ func main() {
 }
 
 func run(args []string) error {
+	if len(args) > 0 && ttywatch.IsServeSubcommand(args[0]) {
+		return runServeSession(args[1:])
+	}
 	if len(args) > 0 && args[0] == "__stub-tty" {
-		return ttyrunner.RunStubTTYMain()
+		return agenttty.RunStubTTYMain()
 	}
 	var agentRunner string
 	var cmdArgs []string
@@ -73,6 +79,10 @@ func run(args []string) error {
 		return runAttach(sub)
 	case "send":
 		return runSend(sub)
+	case "snapshot":
+		return runSnapshot(sub)
+	case "watch":
+		return runWatch(sub)
 	case "tty":
 		return runTty(sub)
 	case "sessions":

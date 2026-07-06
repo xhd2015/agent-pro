@@ -4,20 +4,23 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"syscall"
 	"time"
 
 	ptyclient "github.com/xhd2015/dot-pkgs/go-pkgs/shell/ptywrap/client"
-	"github.com/xhd2015/agent-pro/pkgs/ttyrunner"
 )
+
+func (s *EphemeralSession) registryConfig() RegistryConfig {
+	return registryConfigFor(s.Home, s.RegistrySubdir)
+}
 
 // EphemeralSession manages a short-lived tty-watch session without CLI subprocesses.
 type EphemeralSession struct {
-	Home       string
-	SessionID  string
-	Command    []string
-	ExtraPaths []string
+	Home           string
+	RegistrySubdir string
+	SessionID      string
+	Command        []string
+	ExtraPaths     []string
 
 	entry       *RegistryEntry
 	serveCancel context.CancelFunc
@@ -45,14 +48,15 @@ func (s *EphemeralSession) StartInProcess(ctx context.Context) error {
 	s.serveDone = make(chan error, 1)
 	go func() {
 		s.serveDone <- ServeSession(serveCtx, ServeOptions{
-			SessionID:  s.SessionID,
-			Command:    s.Command,
-			Home:       s.Home,
-			ExtraPaths: s.ExtraPaths,
+			SessionID:      s.SessionID,
+			Command:        s.Command,
+			Home:           s.Home,
+			RegistrySubdir: s.RegistrySubdir,
+			ExtraPaths:     s.ExtraPaths,
 		})
 	}()
 
-	entry, err := WaitForRegistryEntry(s.Home, s.SessionID, 15*time.Second)
+	entry, err := WaitForRegistryEntry(s.registryConfig(), s.SessionID, 15*time.Second)
 	if err != nil {
 		cancel()
 		<-s.serveDone
@@ -67,31 +71,19 @@ func (s *EphemeralSession) StartDetached(ctx context.Context, binaryPath string)
 	if s == nil {
 		return fmt.Errorf("ephemeral session is nil")
 	}
-	release, err := ReserveCustomSessionID(s.Home, s.SessionID)
+	result, err := HeadlessRun(ctx, HeadlessRunOptions{
+		Home:           s.Home,
+		RegistrySubdir: s.RegistrySubdir,
+		SessionID:      s.SessionID,
+		Command:        s.Command,
+		BinaryPath:     binaryPath,
+		ExtraPaths:     s.ExtraPaths,
+		KeepAlive:      true,
+	})
 	if err != nil {
 		return err
 	}
-	defer release()
-
-	serveToken := ServeSubcommand(s.Command)
-	argv := append([]string{serveToken, s.SessionID}, s.Command...)
-	cmd := exec.CommandContext(ctx, binaryPath, argv...)
-	cmd.Env = os.Environ()
-	cmd.Stdin = nil
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-
-	entry, err := WaitForRegistryEntry(s.Home, s.SessionID, 15*time.Second)
-	if err != nil {
-		_ = cmd.Process.Kill()
-		_, _ = cmd.Process.Wait()
-		return err
-	}
-	s.entry = entry
+	s.entry = result.Entry
 	return nil
 }
 
@@ -102,13 +94,13 @@ func (s *EphemeralSession) Send(message string) error {
 		return err
 	}
 	if !TCPReachable(entry.ListenAddr) {
-		RemoveRegistryIfMatch(s.Home, s.SessionID, entry.ListenAddr, entry.PID)
+		RemoveRegistryIfMatch(s.registryConfig(), s.SessionID, entry.ListenAddr, entry.PID)
 		return fmt.Errorf("tty-watch session %s not found", s.SessionID)
 	}
 	if err := PrepareSessionInjectMode(entry.ListenAddr, s.SessionID); err != nil {
 		return err
 	}
-	return ttyrunner.InjectInput(entry.ListenAddr, s.SessionID, []byte(message))
+	return InjectInput(entry.ListenAddr, s.SessionID, []byte(message))
 }
 
 // Snapshot returns rendered printable snapshot text.
@@ -118,7 +110,7 @@ func (s *EphemeralSession) Snapshot() (string, error) {
 		return "", err
 	}
 	if !TCPReachable(entry.ListenAddr) {
-		RemoveRegistryIfMatch(s.Home, s.SessionID, entry.ListenAddr, entry.PID)
+		RemoveRegistryIfMatch(s.registryConfig(), s.SessionID, entry.ListenAddr, entry.PID)
 		return "", fmt.Errorf("tty-watch session %s not found", s.SessionID)
 	}
 	return SnapshotText(entry.ListenAddr, s.SessionID)
@@ -131,7 +123,7 @@ func (s *EphemeralSession) Kill() error {
 		return nil
 	}
 	if !TCPReachable(entry.ListenAddr) {
-		RemoveRegistryIfMatch(s.Home, s.SessionID, entry.ListenAddr, entry.PID)
+		RemoveRegistryIfMatch(s.registryConfig(), s.SessionID, entry.ListenAddr, entry.PID)
 		s.entry = nil
 		return nil
 	}
@@ -158,18 +150,18 @@ func (s *EphemeralSession) Kill() error {
 		}
 	}
 
-	RemoveRegistryIfMatch(s.Home, s.SessionID, entry.ListenAddr, entry.PID)
+	RemoveRegistryIfMatch(s.registryConfig(), s.SessionID, entry.ListenAddr, entry.PID)
 	s.entry = nil
 	return nil
 }
 
-// WaitWritable polls provider readiness against live scrollback.
-func (s *EphemeralSession) WaitWritable(provider ttyrunner.Provider, timeout time.Duration) ttyrunner.WritableStatus {
+// WaitWritable polls check readiness against live scrollback.
+func (s *EphemeralSession) WaitWritable(check CheckWritableFunc, timeout time.Duration) WritableStatus {
 	entry, err := s.loadEntry()
 	if err != nil {
-		return ttyrunner.WritableStatus{Reason: err.Error()}
+		return WritableStatus{Reason: err.Error()}
 	}
-	return ttyrunner.WaitUntilWritable(provider, entry.ListenAddr, s.SessionID, timeout)
+	return WaitUntilWritable(check, entry.ListenAddr, s.SessionID, timeout)
 }
 
 // Entry returns the current registry entry when available.
@@ -185,7 +177,7 @@ func (s *EphemeralSession) loadEntry() (*RegistryEntry, error) {
 	if s.entry != nil && s.entry.ListenAddr != "" {
 		return s.entry, nil
 	}
-	entry, err := ReadRegistry(s.Home, s.SessionID)
+	entry, err := ReadRegistry(s.registryConfig(), s.SessionID)
 	if err != nil {
 		return nil, err
 	}

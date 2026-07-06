@@ -1,32 +1,28 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"net"
-	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/gorilla/websocket"
 	types "github.com/xhd2015/agent-pro/agent/event/types"
-	"github.com/xhd2015/agent-pro/pkgs/ttyrunner"
-	ptyclient "github.com/xhd2015/dot-pkgs/go-pkgs/shell/ptywrap/client"
+	"github.com/xhd2015/agent-pro/pkgs/agenttty"
+	"github.com/xhd2015/agent-pro/pkgs/ttywatch"
 	"github.com/xhd2015/less-gen/flags"
-	"golang.org/x/term"
 )
 
 const ttyHelp = `
 Usage: agent-run tty <subcommand> [ARGS]
 
 Subcommands:
-  status   show status of a TTY session
-  attach   attach to a live TTY session interactively
-  send     send a message to a live TTY session
+  status    show status of a TTY session
+  attach    attach to a live TTY session interactively
+  send      send a message to a live TTY session
+  snapshot  print a sanitized snapshot of a live TTY session
+  watch     stream readonly output from a live TTY session
 
 Options:
   -h, --help   show help
@@ -56,7 +52,25 @@ Options:
 const ttySendHelp = `
 Usage: agent-run tty send <session-id> "message"
 
-Send a follow-up message to a live TTY session and capture the response.
+Send a follow-up message to a live TTY session.
+
+Options:
+  -h, --help   show help
+`
+
+const ttySnapshotHelp = `
+Usage: agent-run tty snapshot <session-id>
+
+Print a sanitized snapshot of a live TTY session.
+
+Options:
+  -h, --help   show help
+`
+
+const ttyWatchHelp = `
+Usage: agent-run tty watch <session-id>
+
+Stream readonly output from a live TTY session.
 
 Options:
   -h, --help   show help
@@ -96,9 +110,21 @@ func runTty(args []string) error {
 		return runTtyAttach(sub)
 	case "send":
 		return runTtySend(sub)
+	case "snapshot":
+		return runTtySnapshot(sub)
+	case "watch":
+		return runTtyWatch(sub)
 	default:
 		return fmt.Errorf("unknown tty subcommand: %s", cmd)
 	}
+}
+
+func resolveRegistryEntry(sessionID string) (*ttywatch.RegistryEntry, string, error) {
+	store, err := openStore()
+	if err != nil {
+		return nil, "", err
+	}
+	return agenttty.LookupSession(store.Home(), sessionID)
 }
 
 func runTtyStatus(args []string) error {
@@ -120,7 +146,7 @@ func runTtyStatus(args []string) error {
 	}
 	home := store.Home()
 
-	ttySess, err := ttyrunner.ResolveByTerminalID(home, sessionID)
+	ttySess, err := agenttty.ResolveByTerminalID(home, sessionID)
 	if err != nil {
 		return err
 	}
@@ -136,11 +162,12 @@ func runTtyStatus(args []string) error {
 		screenStatus = "unknown"
 	}
 
-	var writable ttyrunner.WritableStatus
-	provider, ok := ttyrunner.Get(ttySess.RunnerID)
+	var writable agenttty.WritableStatus
+	provider, ok := agenttty.Get(ttySess.RunnerID)
 	if tcpReachable && ok && provider.CheckWritable != nil {
-		scrollback := ttyrunner.FetchScrollbackSnapshot(ttySess.Registry.ListenAddr, sessionID)
-		if len(scrollback) > 0 {
+		scrollbackText, err := ttywatch.SnapshotText(ttySess.Registry.ListenAddr, sessionID)
+		if err == nil && len(scrollbackText) > 0 {
+			scrollback := []byte(scrollbackText)
 			writable = provider.CheckWritable(scrollback)
 			if provider.DetectScreenStatus != nil &&
 				(screenStatus == "" || screenStatus == "unknown") {
@@ -149,10 +176,10 @@ func runTtyStatus(args []string) error {
 				}
 			}
 		} else {
-			writable = ttyrunner.WritableStatus{Reason: "no terminal output", State: "unknown"}
+			writable = agenttty.WritableStatus{Reason: "no terminal output", State: "unknown"}
 		}
 	} else {
-		writable = ttyrunner.WritableStatus{Reason: "terminal unreachable", State: "unreachable"}
+		writable = agenttty.WritableStatus{Reason: "terminal unreachable", State: "unreachable"}
 	}
 
 	data := ttyStatusData{
@@ -208,28 +235,13 @@ func runTtyAttach(args []string) error {
 	}
 	sessionID := remaining[0]
 
-	store, err := openStore()
-	if err != nil {
-		return err
-	}
-	entry, _, err := ttyrunner.LookupSession(store.Home(), sessionID)
+	entry, _, err := resolveRegistryEntry(sessionID)
 	if err != nil {
 		return err
 	}
 
-	wait := isTerminal(os.Stdin) && isTerminal(os.Stdout)
-
-	c := ptyclient.NewClient("http://" + entry.ListenAddr)
-	_, err = ptyclient.Attach(c, ptyclient.ConnectOptions{
-		SessionID:      sessionID,
-		AttachSnapshot: true,
-		Wait:           wait,
-	})
+	_, err = ttywatch.AttachWriter(entry.ListenAddr, sessionID, "attach")
 	return err
-}
-
-func isTerminal(f *os.File) bool {
-	return term.IsTerminal(int(f.Fd()))
 }
 
 func runTtySend(args []string) error {
@@ -244,7 +256,7 @@ func runTtySend(args []string) error {
 		return fmt.Errorf("tty send: requires <session-id> and <message>")
 	}
 	sessionID := remaining[0]
-	prompt := strings.Join(remaining[1:], " ")
+	message := strings.Join(remaining[1:], " ")
 
 	store, err := openStore()
 	if err != nil {
@@ -252,7 +264,7 @@ func runTtySend(args []string) error {
 	}
 	home := store.Home()
 
-	ttySess, err := ttyrunner.ResolveByTerminalID(home, sessionID)
+	ttySess, err := agenttty.ResolveByTerminalID(home, sessionID)
 	if err != nil {
 		return err
 	}
@@ -261,12 +273,12 @@ func runTtySend(args []string) error {
 		return fmt.Errorf("terminal unreachable at %s", ttySess.Registry.ListenAddr)
 	}
 
-	provider, ok := ttyrunner.Get(ttySess.RunnerID)
+	provider, ok := agenttty.Get(ttySess.RunnerID)
 	if !ok {
 		return fmt.Errorf("unknown tty runner: %s", ttySess.RunnerID)
 	}
 
-	writable := ttyrunner.WaitUntilWritable(provider, ttySess.Registry.ListenAddr, sessionID, 10*time.Second)
+	writable := agenttty.WaitUntilWritable(provider, ttySess.Registry.ListenAddr, sessionID, 10*time.Second)
 	if !writable.Ready {
 		reason := writable.Reason
 		if reason == "" {
@@ -275,8 +287,7 @@ func runTtySend(args []string) error {
 		return fmt.Errorf("tty send: timed out after 10s: %s", reason)
 	}
 
-	input := []byte("\x15" + strings.TrimSpace(prompt) + "\r")
-	if err := injectTTYInput(ttySess.Registry.ListenAddr, sessionID, input); err != nil {
+	if err := ttywatch.SendMessage(ttySess.Registry.ListenAddr, sessionID, message, true); err != nil {
 		return err
 	}
 
@@ -287,95 +298,48 @@ func runTtySend(args []string) error {
 		Timestamp: time.Now().UnixMilli(),
 	})
 
-	_ = readWSResponseAfterInject(ttySess.Registry.ListenAddr, sessionID, 5*time.Second)
 	return nil
 }
 
-func injectTTYInput(listenAddr, sessionID string, input []byte) error {
-	if err := ttyrunner.InjectInput(listenAddr, sessionID, input); err == nil {
-		return nil
-	}
-	// Fallback for sealed-test fake ptywrap servers without HTTP inject API.
-	return injectViaWebSocketSnapshot(listenAddr, sessionID, input)
-}
-
-func injectViaWebSocketSnapshot(listenAddr, sessionID string, input []byte) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	wsURL := url.URL{Scheme: "ws", Host: listenAddr, Path: "/api/terminal"}
-	q := wsURL.Query()
-	q.Set("session_id", sessionID)
-	// Legacy fake ptywrap servers accept writes on a persistent interactive attach.
-	q.Set("attach_mode", "interactive")
-	wsURL.RawQuery = q.Encode()
-
-	conn, _, err := websocket.DefaultDialer.DialContext(ctx, wsURL.String(), nil)
+func runTtySnapshot(args []string) error {
+	remaining, err := flags.Help("-h,--help", ttySnapshotHelp).Parse(args)
 	if err != nil {
-		return fmt.Errorf("terminal unreachable: %v", err)
+		return err
 	}
-	defer conn.Close()
+	if len(remaining) != 1 {
+		return fmt.Errorf("snapshot: requires <session-id>")
+	}
+	sessionID := remaining[0]
 
-	// Consume handshake frames before writing.
-	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	_, _, _ = conn.ReadMessage()
-	_, _, _ = conn.ReadMessage()
-	_ = conn.SetReadDeadline(time.Time{})
+	entry, _, err := resolveRegistryEntry(sessionID)
+	if err != nil {
+		return err
+	}
 
-	if err := conn.WriteMessage(websocket.BinaryMessage, input); err != nil {
-		return fmt.Errorf("terminal unreachable: %v", err)
+	text, err := ttywatch.SnapshotText(entry.ListenAddr, sessionID)
+	if err != nil {
+		return err
+	}
+	if text != "" {
+		fmt.Println(text)
 	}
 	return nil
 }
 
-func readWSResponseAfterInject(listenAddr, sessionID string, timeout time.Duration) string {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	wsURL := url.URL{Scheme: "ws", Host: listenAddr, Path: "/api/terminal"}
-	q := wsURL.Query()
-	q.Set("session_id", sessionID)
-	q.Set("attach_mode", "snapshot")
-	wsURL.RawQuery = q.Encode()
-
-	conn, _, err := websocket.DefaultDialer.DialContext(ctx, wsURL.String(), nil)
+func runTtyWatch(args []string) error {
+	remaining, err := flags.Help("-h,--help", ttyWatchHelp).Parse(args)
 	if err != nil {
-		return ""
+		return err
 	}
-	defer conn.Close()
-	return readWSResponse(conn, timeout)
-}
+	if len(remaining) != 1 {
+		return fmt.Errorf("watch: requires <session-id>")
+	}
+	sessionID := remaining[0]
 
-func tcpIsReachable(addr string) bool {
-	if addr == "" {
-		return false
-	}
-	conn, err := net.DialTimeout("tcp", addr, 300*time.Millisecond)
+	entry, _, err := resolveRegistryEntry(sessionID)
 	if err != nil {
-		return false
+		return err
 	}
-	_ = conn.Close()
-	return true
-}
 
-func readWSResponse(conn *websocket.Conn, timeout time.Duration) string {
-	deadline := time.Now().Add(timeout)
-	var out strings.Builder
-	for {
-		_ = conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
-		if time.Now().After(deadline) {
-			_ = conn.SetReadDeadline(time.Time{})
-			break
-		}
-		_, msg, err := conn.ReadMessage()
-		if err != nil {
-			_ = conn.SetReadDeadline(time.Time{})
-			break
-		}
-		out.Write(msg)
-	}
-	return out.String()
+	return ttywatch.StreamObserver(entry.ListenAddr, sessionID, os.Stdout)
 }
-
-// ensure inject endpoint discoverable in tests
-var _ = http.MethodPost

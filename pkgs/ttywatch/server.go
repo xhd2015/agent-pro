@@ -13,11 +13,12 @@ import (
 
 // ServeOptions configures an embedded PTY server session.
 type ServeOptions struct {
-	SessionID  string
-	Command    []string
-	Home       string
-	Cwd        string
-	ExtraPaths []string
+	SessionID      string
+	Command        []string
+	Home           string
+	RegistrySubdir string
+	Cwd            string
+	ExtraPaths     []string
 }
 
 // ServeSession runs the embedded ptywrap HTTP server until the command exits.
@@ -47,8 +48,8 @@ func ServeSession(ctx context.Context, opts ServeOptions) error {
 	}
 
 	mgr := ptywrap.NewManager()
-	if len(opts.ExtraPaths) > 0 {
-		mgr.Spawn.ExtraPaths = append([]string(nil), opts.ExtraPaths...)
+	if extraPaths := serveExtraPaths(opts.ExtraPaths); len(extraPaths) > 0 {
+		mgr.Spawn.ExtraPaths = extraPaths
 	}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -85,7 +86,8 @@ func ServeSession(ctx context.Context, opts ServeOptions) error {
 		Command:    opts.Command,
 		Cwd:        cwd,
 	}
-	if err := WriteRegistry(home, entry); err != nil {
+	cfg := serveRegistryConfig(home, opts.RegistrySubdir)
+	if err := WriteRegistry(cfg, entry); err != nil {
 		mgr.Remove(opts.SessionID)
 		shutdown()
 		return err
@@ -101,7 +103,7 @@ func ServeSession(ctx context.Context, opts ServeOptions) error {
 	case <-ctx.Done():
 		mgr.Remove(opts.SessionID)
 		shutdown()
-		RemoveRegistryIfMatch(home, opts.SessionID, listenAddr, entry.PID)
+		RemoveRegistryIfMatch(cfg, opts.SessionID, listenAddr, entry.PID)
 		return ctx.Err()
 	case <-waitDone:
 	}
@@ -110,6 +112,6 @@ func ServeSession(ctx context.Context, opts ServeOptions) error {
 	time.Sleep(writerAttachGrace)
 	shutdown()
 	mgr.Remove(opts.SessionID)
-	RemoveRegistryIfMatch(home, opts.SessionID, listenAddr, entry.PID)
+	RemoveRegistryIfMatch(cfg, opts.SessionID, listenAddr, entry.PID)
 	return nil
 }

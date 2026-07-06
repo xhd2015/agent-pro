@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/xhd2015/agent-pro/pkgs/ttyrunner"
+	"github.com/xhd2015/agent-pro/pkgs/ttywatch"
 )
 
 func runSend(args []string) error {
@@ -30,7 +30,7 @@ func runSend(args []string) error {
 	if err := prepareSessionInjectMode(entry.ListenAddr, sessionID); err != nil {
 		return err
 	}
-	if err := ttyrunner.InjectInput(entry.ListenAddr, sessionID, []byte(message)); err != nil {
+	if err := ttywatch.InjectInput(entry.ListenAddr, sessionID, []byte(message)); err != nil {
 		return err
 	}
 	return nil

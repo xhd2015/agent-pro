@@ -14,8 +14,7 @@ import (
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
 	"github.com/xhd2015/agent-pro/agent/debuglog"
 	agentexec "github.com/xhd2015/agent-pro/agent/exec"
-	"github.com/xhd2015/agent-pro/pkgs/groktty"
-	"github.com/xhd2015/agent-pro/pkgs/ttyrunner"
+	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 	"github.com/xhd2015/agent-pro/pkgs/ttywatch"
 )
 
@@ -83,7 +82,7 @@ func FetchStatusWithOptions(ctx context.Context, opts Options) (*UsageInfo, erro
 		return nil, err
 	}
 
-	release, err := ttywatch.ReserveCustomSessionID(home, sessionID)
+	release, err := ttywatch.ReserveCustomSessionID(ttywatch.DefaultRegistryConfig(home), sessionID)
 	if err != nil {
 		logCodexError("reserve_session", err, map[string]any{"session_id": sessionID})
 		return nil, err
@@ -266,7 +265,7 @@ func commandExtraPaths(argv []string) []string {
 
 func buildCodexArgv(env *agentexec.Env) ([]string, error) {
 	if hook := strings.TrimSpace(os.Getenv(envShowStatusCommand)); hook != "" {
-		return groktty.ParseShellWords(hook)
+		return agenttty.ParseShellWords(hook)
 	}
 
 	path, err := registry.ResolveConfiguredCLIPath(
@@ -292,7 +291,7 @@ func deadlineForFetch(ctx context.Context) time.Time {
 }
 
 func waitForPrompt(ctx context.Context, session *ttywatch.EphemeralSession, deadline time.Time, v *verboseLog) error {
-	provider, ok := ttyrunner.Get("codex-tty")
+	provider, ok := agenttty.Get("codex-tty")
 	if !ok {
 		return fmt.Errorf("codex-tty provider not registered")
 	}

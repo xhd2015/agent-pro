@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+
+	"github.com/xhd2015/agent-pro/pkgs/ttywatch"
 )
 
 func runAttach(args []string) error {
@@ -23,6 +25,6 @@ func runAttach(args []string) error {
 		return fmt.Errorf("tty-watch session %s not found", sessionID)
 	}
 
-	_, err = attachWriter(entry.ListenAddr, sessionID, "attach")
+	_, err = ttywatch.AttachWriter(entry.ListenAddr, sessionID, "attach")
 	return err
 }

@@ -10,25 +10,30 @@ import (
 type RegistryEntry = ttywatch.RegistryEntry
 
 func TTYWatchHome() (string, error) { return ttywatch.TTYWatchHome() }
+func registryConfig(home string) ttywatch.RegistryConfig {
+	return ttywatch.DefaultRegistryConfig(home)
+}
 func ReserveCustomSessionID(home, sessionID string) (func(), error) {
-	return ttywatch.ReserveCustomSessionID(home, sessionID)
+	return ttywatch.ReserveCustomSessionID(registryConfig(home), sessionID)
 }
 func ReserveRegistrySessionID(home string) (string, func(), error) {
-	return ttywatch.ReserveRegistrySessionID(home)
+	return ttywatch.ReserveRegistrySessionID(registryConfig(home))
 }
-func WriteRegistry(home string, entry RegistryEntry) error { return ttywatch.WriteRegistry(home, entry) }
+func WriteRegistry(home string, entry RegistryEntry) error {
+	return ttywatch.WriteRegistry(registryConfig(home), entry)
+}
 func ReadRegistry(home, sessionID string) (*RegistryEntry, error) {
-	return ttywatch.ReadRegistry(home, sessionID)
+	return ttywatch.ReadRegistry(registryConfig(home), sessionID)
 }
-func RemoveRegistry(home, sessionID string) { ttywatch.RemoveRegistry(home, sessionID) }
+func RemoveRegistry(home, sessionID string) { ttywatch.RemoveRegistry(registryConfig(home), sessionID) }
 func RemoveRegistryIfMatch(home, sessionID, listenAddr string, pid int) {
-	ttywatch.RemoveRegistryIfMatch(home, sessionID, listenAddr, pid)
+	ttywatch.RemoveRegistryIfMatch(registryConfig(home), sessionID, listenAddr, pid)
 }
 func ListRegistryEntries(home string, prune bool) ([]RegistryEntry, error) {
-	return ttywatch.ListRegistryEntries(home, prune)
+	return ttywatch.ListRegistryEntries(registryConfig(home), prune)
 }
 func waitForRegistryEntry(home, sessionID string, timeout time.Duration) (*RegistryEntry, error) {
-	return ttywatch.WaitForRegistryEntry(home, sessionID, timeout)
+	return ttywatch.WaitForRegistryEntry(registryConfig(home), sessionID, timeout)
 }
 func tcpReachable(addr string) bool { return ttywatch.TCPReachable(addr) }
 func processAlive(pid int) bool     { return ttywatch.ProcessAlive(pid) }
@@ -42,9 +47,6 @@ func renderSnapshotScrollback(raw string, cols, rows int) string {
 }
 func readSnapshot(listenAddr, sessionID string) (frame, scrollback string, cols, rows int, err error) {
 	return ttywatch.ReadSnapshot(listenAddr, sessionID)
-}
-func renderObserverFrame(data []byte, cols, rows int) []byte {
-	return ttywatch.RenderObserverFrame(data, cols, rows)
 }
 func prepareSessionInjectMode(listenAddr, sessionID string) error {
 	return ttywatch.PrepareSessionInjectMode(listenAddr, sessionID)
