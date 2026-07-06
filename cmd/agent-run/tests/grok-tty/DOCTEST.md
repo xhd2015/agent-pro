@@ -67,6 +67,7 @@ cmd/agent-run/tests/grok-tty/
 │   ├── waits-for-banner/              # delayed GROK_TTY_BANNER before prompt inject
 │   ├── prompt-submits-on-enter/       # CR-only fake TUI → SUBMITTED:prompt (RED: bare \n)
 │   ├── streams-events-before-exit/    # tail updates.jsonl → stdout before fake TUI exits
+│   ├── streams-second-turn-after-completed/  # turn 2 stdout after turn_completed (primary bug)
 │   ├── discovers-session-by-cwd-and-prompt/  # two grok dirs; prompt match picks correct tail
 │   ├── persists-multiple-event-types/ # events.jsonl has user + tool + assistant (+ think)
 │   ├── stores-grok-session-id/        # meta.json runner_session_id == grok UUID
@@ -124,6 +125,7 @@ Parameter ranking (most → least significant):
 | 13 | `real-grok/prompt-executes-not-stuck` | Real grok `run ls`; scrollback has `total`/`drwx` listing (`label: grok`) |
 | 14 | `real-grok/attach-while-running` | Background real run → attach connects; grok output visible (`label: grok`) |
 | 15 | `run/streams-events-before-exit` | Temp `GROK_HOME` + synthetic `updates.jsonl`; stdout has streamed marker before fake TUI exits |
+| 15a | `run/streams-second-turn-after-completed` | Turn 1 `turn_completed` seeded; turn 2 marker on stdout before fake TUI exits |
 | 16 | `run/discovers-session-by-cwd-and-prompt` | Two grok session dirs; prompt `run ls` selects correct session to tail |
 | 17 | `run/persists-multiple-event-types` | Streamed `events.jsonl` has user + tool_call + assistant (+ think) events |
 | 18 | `run/stores-grok-session-id` | `meta.json` `runner_session_id` equals discovered grok UUID |
@@ -147,6 +149,7 @@ doctest vet ./cmd/agent-run/tests/grok-tty
 doctest test ./cmd/agent-run/tests/grok-tty
 doctest test -v ./cmd/agent-run/tests/grok-tty/run/captures-tui-output
 doctest test ./cmd/agent-run/tests/grok-tty/run/streams-events-before-exit
+doctest test ./cmd/agent-run/tests/grok-tty/run/streams-second-turn-after-completed
 doctest test ./cmd/agent-run/tests/grok-tty/run/prints-grok-session-on-stderr
 doctest test ./cmd/agent-run/tests/grok-tty/run/discovery-polls-until-session-appears
 doctest test ./cmd/agent-run/tests/grok-tty/run/keep-tty-registry-persists

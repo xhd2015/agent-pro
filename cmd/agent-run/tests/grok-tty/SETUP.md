@@ -173,6 +173,10 @@ func acpToolCall(toolCallID, kind, title string) string {
 	return string(line)
 }
 
+func acpTurnCompleted() string {
+	return `{"sessionUpdate":"turn_completed"}`
+}
+
 func acpToolCallUpdate(toolCallID, status, output string) string {
 	line, _ := json.Marshal(map[string]any{
 		"sessionUpdate": "tool_call_update",
@@ -247,6 +251,17 @@ func grokTTYRegistryPath(home, sessionID string) string {
 	return filepath.Join(grokTTYRegistryDir(home), sessionID+".json")
 }
 
+func normalizeTTYStreamStdout(s string) string {
+	if s == "" {
+		return s
+	}
+	s = strings.TrimSuffix(s, "\n")
+	if !strings.HasPrefix(s, "\n") {
+		s = "\n" + s
+	}
+	return s
+}
+
 func execCmd(t *testing.T, command string, args []string, dir string, env []string, timeout time.Duration) (*Response, error) {
 	t.Helper()
 	if timeout <= 0 {
@@ -262,7 +277,7 @@ func execCmd(t *testing.T, command string, args []string, dir string, env []stri
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	resp := &Response{
-		Stdout:   stdout.String(),
+		Stdout:   normalizeTTYStreamStdout(stdout.String()),
 		Stderr:   stderr.String(),
 		Err:      err,
 	}
@@ -549,7 +564,6 @@ func runSnapshotProbe(t *testing.T, req *Request) (*Response, error) {
 		SnapshotExitCode: snapResp.ExitCode,
 		BackgroundStdout: req.BackgroundStdout.String(),
 		BackgroundStderr: req.BackgroundStderr.String(),
-		GrokTTYSessionID: req.GrokTTYSessionID,
 	}
 	return resp, err
 }

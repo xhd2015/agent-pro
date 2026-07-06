@@ -11,6 +11,7 @@ import (
 
 	grok_session "github.com/xhd2015/agent-pro/agent/event/grok_session"
 	types "github.com/xhd2015/agent-pro/agent/event/types"
+	"github.com/xhd2015/dot-pkgs/go-pkgs/logs"
 )
 
 const (
@@ -46,86 +47,83 @@ func updatesTailStartOffset(path string, runStart time.Time) int64 {
 // TailUpdatesFromOffset tails updates.jsonl starting at the given byte offset.
 func TailUpdatesFromOffset(ctx context.Context, updatesPath string, startOffset int64, emit func(types.AgentEvent) error) error {
 	converter := grok_session.NewConverter()
-	offset := startOffset
+	emitEvent := func(ev types.AgentEvent) error {
+		return emit(trimACPAgentEventNewlines(ev))
+	}
 
-	ticker := time.NewTicker(tailPollInterval)
-	defer ticker.Stop()
+	if _, err := readNewACPUpdates(updatesPath, startOffset, converter, emitEvent); err != nil {
+		return err
+	}
 
-	for {
-		select {
-		case <-ctx.Done():
-			for _, ev := range converter.Flush() {
-				if err := emit(ev); err != nil {
-					return err
-				}
-			}
-			return ctx.Err()
-		case <-ticker.C:
-			newOffset, done, err := readNewACPUpdates(updatesPath, offset, converter, emit)
-			if err != nil {
-				return err
-			}
-			offset = newOffset
-			if done {
-				for _, ev := range converter.Flush() {
-					if err := emit(ev); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+	watchErr := logs.WatchLine(ctx, updatesPath, logs.WatchLineOptions{DisableDebounce: true}, func(line string) error {
+		return processACPUpdateLine(line, converter, emitEvent)
+	})
+
+	for _, ev := range converter.Flush() {
+		if err := emitEvent(ev); err != nil {
+			return err
 		}
 	}
+
+	if watchErr != nil {
+		return watchErr
+	}
+	return ctx.Err()
 }
 
-func readNewACPUpdates(path string, offset int64, converter *grok_session.Converter, emit func(types.AgentEvent) error) (int64, bool, error) {
+func trimACPAgentEventNewlines(ev types.AgentEvent) types.AgentEvent {
+	ev.Text = strings.TrimRight(ev.Text, "\n")
+	ev.Output = strings.TrimRight(ev.Output, "\n")
+	return ev
+}
+
+func processACPUpdateLine(line string, converter *grok_session.Converter, emit func(types.AgentEvent) error) error {
+	line = strings.TrimRight(line, "\n")
+	if strings.TrimSpace(line) == "" {
+		return nil
+	}
+	for _, ev := range converter.ProcessLine(line) {
+		if err := emit(ev); err != nil {
+			return err
+		}
+	}
+	for _, ev := range converter.Flush() {
+		if err := emit(ev); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func readNewACPUpdates(path string, offset int64, converter *grok_session.Converter, emit func(types.AgentEvent) error) (int64, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return offset, false, nil
+			return offset, nil
 		}
-		return offset, false, err
+		return offset, err
 	}
 	defer f.Close()
 
 	if _, err := f.Seek(offset, 0); err != nil {
-		return offset, false, err
+		return offset, err
 	}
 
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 256*1024), 2*1024*1024)
-	turnCompleted := false
-	hadLines := false
 	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		hadLines = true
-		if upd, ok := grok_session.ParseLine(line); ok && upd.SessionUpdate == "turn_completed" {
-			turnCompleted = true
-		}
-		for _, ev := range converter.ProcessLine(line) {
-			if err := emit(ev); err != nil {
-				return offset, false, err
-			}
+		if err := processACPUpdateLine(scanner.Text(), converter, emit); err != nil {
+			return offset, err
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return offset, false, err
-	}
-	if hadLines {
-		for _, ev := range converter.Flush() {
-			if err := emit(ev); err != nil {
-				return offset, false, err
-			}
-		}
+		return offset, err
 	}
 	newOffset, err := f.Seek(0, 1)
 	if err != nil {
-		return offset, false, err
+		return offset, err
 	}
-	return newOffset, turnCompleted, nil
+	return newOffset, nil
 }
 
 func sessionRoot(grokHome, workspace string) (string, error) {
