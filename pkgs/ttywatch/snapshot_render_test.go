@@ -61,6 +61,51 @@ func TestRenderSnapshotOutput_prefersFrameOverGarbledScrollback(t *testing.T) {
 	}
 }
 
+// grokPostTurnGoodScrollback mimics a completed grok turn: prompt, assistant reply,
+// stop indicator, turn-complete status, and input box — content between UI chrome
+// must not be dropped by snapshot rendering.
+func grokPostTurnGoodScrollback() string {
+	var b strings.Builder
+	b.WriteString("\x1b[?1049h\x1b[?25l")
+	b.WriteString("\x1b[2;1H  worktree header")
+	b.WriteString("\x1b[5;1H     ❯ one word of France captial                                   11:39 AM")
+	b.WriteString("\x1b[8;1H     making changes. Looking at the task: one word of France captial.")
+	b.WriteString("\x1b[9;1H     Your request has been processed. Everything looks good.")
+	b.WriteString("\x1b[14;1H     ◆ stop  [hooks: 1]")
+	b.WriteString("\x1b[16;1H     Turn completed in 1.4s.")
+	b.WriteString("\x1b[19;1H  ╭──────────────────────────────────────────────────────────╮")
+	b.WriteString("\x1b[20;1H  │ ❯                                                        │")
+	b.WriteString("\x1b[21;1H  ╰──────────────────────────────────────────────────────────╯")
+	b.WriteString("\x1b[23;1H  Shift+Tab:mode  │  Ctrl+.:shortcuts")
+	return b.String()
+}
+
+func grokPostTurnWants() []string {
+	return []string{
+		"one word of France captial",
+		"processed. Everything looks good",
+		"stop  [hooks: 1]",
+		"Turn completed in 1.4s.",
+		"╭",
+		"Ctrl+.:shortcuts",
+	}
+}
+
+func TestRenderSnapshotOutput_grokPostTurnFrameKeepsConversation(t *testing.T) {
+	good := grokPostTurnGoodScrollback()
+	frame, ok := renderScreenSnapshotFrame([]byte(good), 80, 24)
+	if !ok {
+		t.Fatal("failed to build grok post-turn screen snapshot frame")
+	}
+
+	out := renderSnapshotOutput(string(frame), "", 80, 24)
+	for _, want := range grokPostTurnWants() {
+		if !strings.Contains(out, want) {
+			t.Fatalf("snapshot must keep grok post-turn conversation (watch parity); missing %q, got %q", want, out)
+		}
+	}
+}
+
 func TestScrollbackToScreenText_singlePassMatchesGoodFixture(t *testing.T) {
 	good := grokChangelogGoodScrollback()
 	direct, ok := screenSnapshotToText([]byte(good), 80, 24)

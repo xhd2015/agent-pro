@@ -59,7 +59,10 @@ func renderSnapshotOutput(frame, scrollback string, cols, rows int) string {
 		frameData := []byte(frame)
 		if isScreenSnapshotFrame(frameData) {
 			infCols, infRows := inferSnapshotDimensions(frameData, cols, rows)
-			if rendered, ok := screenSnapshotFrameToText(frameData, infCols, infRows); ok {
+			// Live ptywrap screen frames use the same vt10x replay as watch/attach
+			// (RenderObserverFrame / screenSnapshotToText). CUP-line ghost filtering
+			// is for scrollback smear only and drops grok conversation rows.
+			if rendered, ok := screenSnapshotToText(frameData, infCols, infRows); ok {
 				out := mergePlainTextPrefix(strings.TrimRight(string(rendered), "\n"), scrollbackData)
 				if scrollback == "" || !snapshotMissingPlainPrefix(out, scrollbackData) {
 					return out

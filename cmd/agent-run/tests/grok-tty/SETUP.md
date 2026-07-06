@@ -453,9 +453,37 @@ func probeAttachCLI(t *testing.T, req *Request, sessionID string) (*Response, er
 	return resp, err
 }
 
+func buildLLMMockRunGrok(t *testing.T, req *Request) error {
+	t.Helper()
+	if req.LLMMockRunGrok != "" {
+		if _, err := os.Stat(req.LLMMockRunGrok); err == nil {
+			return nil
+		}
+	}
+	req.LLMMockRunGrok = filepath.Join(req.TempDir, "bin", "llm-mock-run-grok")
+	if err := os.MkdirAll(filepath.Dir(req.LLMMockRunGrok), 0755); err != nil {
+		return err
+	}
+	build := exec.Command("go", "build", "-o", req.LLMMockRunGrok, "./agent/llm/llm-mock/llm-mock-run-grok")
+	build.Dir = req.RepoRoot
+	if out, err := build.CombinedOutput(); err != nil {
+		return fmt.Errorf("build llm-mock-run-grok: %w\n%s", err, string(out))
+	}
+	return nil
+}
+
 func startGrokTTYBackground(t *testing.T, req *Request) {
 	t.Helper()
 	args := []string{"run", "--agent-runner", "grok-tty"}
+	if req.AgentRunnerBinary != "" {
+		args = append(args, "--agent-runner-binary", req.AgentRunnerBinary)
+	}
+	if req.AgentRunnerConfigHome != "" {
+		args = append(args, "--agent-runner-config-home", req.AgentRunnerConfigHome)
+	}
+	if req.KeepTTY {
+		args = append(args, "--keep-tty")
+	}
 	if req.GrokTTYPrompt != "" {
 		args = append(args, req.GrokTTYPrompt)
 	} else {
@@ -482,6 +510,48 @@ func startGrokTTYBackground(t *testing.T, req *Request) {
 		_ = cmd.Wait()
 	})
 	req.GrokTTYSessionID = waitForGrokTTYSessionLine(t, req.BackgroundStderr, 15*time.Second)
+}
+
+func runSnapshotProbe(t *testing.T, req *Request) (*Response, error) {
+	t.Helper()
+	if req.GrokTTYSessionID == "" {
+		t.Fatal("snapshot-probe requires GrokTTYSessionID from background Setup")
+	}
+	marker := strings.TrimSpace(req.SnapshotReadyMarker)
+	if marker == "" {
+		marker = "💬"
+	}
+	deadline := time.Now().Add(45 * time.Second)
+	ready := false
+	for time.Now().Before(deadline) {
+		if strings.Contains(req.BackgroundStdout.String(), marker) {
+			ready = true
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if !ready {
+		t.Fatalf("timeout waiting for snapshot-ready marker %q in background stdout:\n%s\nstderr:\n%s",
+			marker, req.BackgroundStdout.String(), req.BackgroundStderr.String())
+	}
+	delay := req.SnapshotDelay
+	if delay <= 0 {
+		delay = 2 * time.Second
+	}
+	time.Sleep(delay)
+	snapResp, err := execCmd(t, req.AgentRun, []string{"snapshot", req.GrokTTYSessionID}, req.TempDir, req.Env, 15*time.Second)
+	resp := &Response{
+		Stdout:           snapResp.Stdout,
+		Stderr:           snapResp.Stderr,
+		ExitCode:         snapResp.ExitCode,
+		Err:              snapResp.Err,
+		SnapshotStdout:   snapResp.Stdout,
+		SnapshotExitCode: snapResp.ExitCode,
+		BackgroundStdout: req.BackgroundStdout.String(),
+		BackgroundStderr: req.BackgroundStderr.String(),
+		GrokTTYSessionID: req.GrokTTYSessionID,
+	}
+	return resp, err
 }
 
 func runRegistryWhileRunning(t *testing.T, req *Request) (*Response, error) {

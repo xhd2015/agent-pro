@@ -81,6 +81,8 @@ cmd/agent-run/tests/grok-tty/
 ├── attach/
 │   ├── connects-via-registry/         # background run → attach WS probe OK
 │   └── missing-session-error/         # unknown id → exit 1, helpful stderr
+├── snapshot/
+│   └── grok-mock-run-post-turn/       # llm-mock-run-grok + snapshot shows grok UI, not status-bar only (RED)
 ├── help/
 │   ├── lists-attach/                  # --help lists attach subcommand
 │   └── lists-send/                    # --help lists send subcommand
@@ -135,6 +137,7 @@ Parameter ranking (most → least significant):
 | 26 | `run/rejects-prior-session-same-prompt` | Prior session same prompt + old `created_at` ignored; new session marker streamed |
 | 27 | `run/keep-tty-registry-persists` | `run --keep-tty` → registry entry persists after run exit |
 | 28 | `run/keep-tty-terminal-stays-alive` | `run --keep-tty` → ptywrap listen_addr still reachable after run exit |
+| 29 | `snapshot/grok-mock-run-post-turn` | `agent-run snapshot` after llm-mock grok turn shows prompt/UI, not status-bar only (RED) |
 
 ## How to Run
 
@@ -196,7 +199,13 @@ type Request struct {
 	StreamProbeSubstring string
 	StreamProbeTimeout   time.Duration
 	SkipGrokSessionDir   bool // fallback test: do not seed GROK_HOME session dirs
-	Mode           string // "" | "registry-while-running" | "attach-probe" | "attach-interactive-probe" | "attach-scrollback-probe" | "stream-probe"
+	LLMMockRunGrok         string
+	AgentRunnerBinary      string
+	AgentRunnerConfigHome  string
+	KeepTTY                bool
+	SnapshotReadyMarker    string
+	SnapshotDelay          time.Duration
+	Mode           string // "" | "registry-while-running" | "attach-probe" | "attach-interactive-probe" | "attach-scrollback-probe" | "stream-probe" | "snapshot-probe"
 	ExecTimeout    time.Duration
 	BackgroundCmd    *exec.Cmd
 	BackgroundStderr *bytes.Buffer
@@ -229,6 +238,8 @@ type Response struct {
 	StreamProbeStdout      string
 	MetaJSONPath           string
 	MetaRunnerSessionID    string
+	SnapshotStdout         string
+	SnapshotExitCode       int
 }
 
 func Run(t *testing.T, req *Request) (*Response, error) {
@@ -243,6 +254,8 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 		return runAttachScrollbackProbe(t, req)
 	case "stream-probe":
 		return runStreamProbe(t, req)
+	case "snapshot-probe":
+		return runSnapshotProbe(t, req)
 	default:
 		return runAgentRun(t, req, req.Args...)
 	}
