@@ -115,7 +115,7 @@ func TestRemoveStaleIndexLock_AllowsCommit(t *testing.T) {
 		t.Fatalf("stale lock still present after RemoveStaleIndexLock: %v", err)
 	}
 
-	output, err := CommitWithRetry(dir, "feat: after stale lock", 1)
+	output, err := CommitWithRetry(dir, "feat: after stale lock", 1, false)
 	if err != nil {
 		t.Fatalf("CommitWithRetry failed: %s: %v", string(output), err)
 	}

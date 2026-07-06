@@ -92,6 +92,26 @@ func InitGitRepo(t *testing.T, dir string) {
 	RunGit(t, dir, "commit", "-m", "initial")
 }
 
+func InitGitRepoWithFailingPreCommitHook(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatalf("mkdir git dir: %v", err)
+	}
+	RunGit(t, dir, "init", "--template=")
+	RunGit(t, dir, "config", "user.email", "test@example.com")
+	RunGit(t, dir, "config", "user.name", "Test User")
+	WriteFile(t, filepath.Join(dir, "README.md"), "initial\n")
+	RunGit(t, dir, "add", "README.md")
+	RunGit(t, dir, "commit", "-m", "initial")
+	hookPath := filepath.Join(dir, ".git", "hooks", "pre-commit")
+	if err := os.MkdirAll(filepath.Dir(hookPath), 0755); err != nil {
+		t.Fatalf("mkdir hooks dir: %v", err)
+	}
+	if err := os.WriteFile(hookPath, []byte("#!/bin/sh\nexit 1\n"), 0755); err != nil {
+		t.Fatalf("write pre-commit hook: %v", err)
+	}
+}
+
 func InitGitRepoWithWorktree(t *testing.T, mainDir, worktreeDir string) {
 	t.Helper()
 	InitGitRepo(t, mainDir)
@@ -158,6 +178,9 @@ func captureRunGenCommitMsg(t *testing.T, req *Request) (*Response, error) {
 	}
 	if req.Commit {
 		args = append(args, "--commit")
+	}
+	if req.NoVerify {
+		args = append(args, "--no-verify")
 	}
 
 	runErr := commit_msg.RunGenCommitMsg(args)

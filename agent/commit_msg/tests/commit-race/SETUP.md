@@ -7,9 +7,15 @@
 2. Leaf configures fake-opencode to spawn background git loops before returning.
 
 ```go
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func Setup(t *testing.T, req *Request) error {
+	if req.TempDir == "" {
+		return fmt.Errorf("commit-race subtree requires initialized TempDir from root Setup")
+	}
 	return nil
 }
 ```

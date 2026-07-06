@@ -32,6 +32,7 @@ Options:
   --agent-runner-binary PATH
               Override the agent runner executable path
   --commit     Run git commit with the generated message after printing it
+  --no-verify  Skip git commit hooks (requires --commit)
   -h, --help   Show this help message
 `
 
@@ -41,16 +42,22 @@ func RunGenCommitMsg(args []string) error {
 	var agentRunner string
 	var agentRunnerBinary string
 	var commit bool
+	var noVerify bool
 	_, err := flags.
 		String("--dir", &dir).
 		String("--model", &model).
 		String("--agent-runner", &agentRunner).
 		String("--agent-runner-binary", &agentRunnerBinary).
 		Bool("--commit", &commit).
+		Bool("--no-verify", &noVerify).
 		Help("-h,--help", genCommitMsgHelp).
 		Parse(args)
 	if err != nil {
 		return err
+	}
+
+	if noVerify && !commit {
+		return fmt.Errorf("--no-verify requires --commit")
 	}
 
 	if dir == "" {
@@ -77,11 +84,15 @@ func RunGenCommitMsg(args []string) error {
 	fmt.Println(msg)
 
 	quotedMsg := shellQuote(msg)
-	fmt.Fprintf(os.Stderr, "\nRun:\n  git commit -m %s\n", quotedMsg)
+	commitCmd := "git commit -m " + quotedMsg
+	if noVerify {
+		commitCmd += " --no-verify"
+	}
+	fmt.Fprintf(os.Stderr, "\nRun:\n  %s\n", commitCmd)
 
 	if commit {
 		fmt.Fprintf(os.Stderr, "\nRunning git commit...\n")
-		output, err := git_runner.CommitWithRetry(dir, msg, 5)
+		output, err := git_runner.CommitWithRetry(dir, msg, 5, noVerify)
 		if len(output) > 0 {
 			fmt.Fprint(os.Stderr, string(output))
 		}

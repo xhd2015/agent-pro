@@ -319,8 +319,12 @@ func Reset(paths ...string) *Command {
 	return NewCommand(args...)
 }
 
-func Commit(message string) *Command {
-	return NewCommand("commit", "-m", message)
+func Commit(message string, noVerify bool) *Command {
+	args := []string{"commit", "-m", message}
+	if noVerify {
+		args = append(args, "--no-verify")
+	}
+	return NewCommand(args...)
 }
 
 func IndexLockPath(dir string) (string, error) {
@@ -349,7 +353,7 @@ func RemoveStaleIndexLock(dir string) error {
 	return nil
 }
 
-func CommitWithRetry(dir, message string, maxAttempts int) ([]byte, error) {
+func CommitWithRetry(dir, message string, maxAttempts int, noVerify bool) ([]byte, error) {
 	if maxAttempts < 1 {
 		maxAttempts = 1
 	}
@@ -360,7 +364,7 @@ func CommitWithRetry(dir, message string, maxAttempts int) ([]byte, error) {
 			time.Sleep(time.Duration(attempt) * 50 * time.Millisecond)
 		}
 		_ = RemoveStaleIndexLock(dir)
-		output, err := Commit(message).Dir(dir).Run()
+		output, err := Commit(message, noVerify).Dir(dir).Run()
 		if err == nil {
 			return output, nil
 		}
