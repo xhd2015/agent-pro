@@ -193,6 +193,8 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 		return phaseSnapshotCodexMCPBootSmeared(t, req)
 	case "snapshot-session-dimensions-wide":
 		return phaseSnapshotSessionDimensionsWide(t, req)
+	case "snapshot-grok-like-changelog-screen":
+		return phaseSnapshotGrokLikeChangelogScreen(t, req)
 	case "snapshot-missing":
 		return phaseSnapshotMissing(t, req)
 	case "kill-stop":
@@ -1038,6 +1040,12 @@ const codexLikeSnapshotCommand = `printf '\033[?1049h\033[2J\033[H\033[38;2;255;
 // protocol bytes that leak when snapshot render is wrong.
 const codexCursorDrawnMCPBootCommand = `printf '⚠ codex_hooks deprecated. See https://developers.openai.com/codex/config-basic#feature-flags for details.\n'; printf '\033[?2026h'; printf '\033[4;1H╭──────────────────────────────────────────────────────────╮'; printf '\033[5;1H│ >_ OpenAI Codex (v0.142.5)                               │'; printf '\033[6;1H│                                                          │'; printf '\033[7;1H│ model:     gpt-5.5 medium   /model to change             │'; printf '\033[8;1H│ directory: ~/worktrees/…support-send-followup            │'; printf '\033[9;1H╰──────────────────────────────────────────────────────────╯'; printf '\033[11;1H  Tip: New Use /fast to enable our fastest inference.'; i=0; while [ "$i" -lt 8 ]; do printf '\033[22;1H\033[K• Starting MCP servers (%s/5): codex_apps, computer-use, …' "$i"; printf '\033[<43;52;23M'; i=$((i+1)); sleep 0.05; done; printf '\033[22;1H\033[K⚠ MCP client for computer-use failed to start'; printf '\033[23;1H\033[K⚠ MCP startup incomplete (failed: computer-use)'; printf '\033[20;1H› Write tests for @filename'; printf '\033[24;1Hgpt-5.5 medium · ~/.wrk/worktrees/agent-pro-master-2026-07-04-support-send-followup'; while true; do sleep 1; done`
 
+// grokLikeChangelogSnapshotCommand mimics grok's changelog alt-screen UI: ?1049h entry,
+// changelog-only boot redraws that pollute scrollback, then absolute CUP draws of menu
+// (ctrl+q), bordered changelog box, prompt, and footer. Final UI uses CUP only (no 2J)
+// like real grok; scrollback replay leaves a ghost Quit q line until frame path wins.
+const grokLikeChangelogSnapshotCommand = `printf '\033[?1049h\033[?25l'; printf '\033[2J\033[HChangelog\nQuit q\n'; sleep 0.15; printf '\033[1;1H\033[K  Quit ctrl+q    Changelog    Settings'; printf '\033[3;1H╭──────────────────────────────────────────────────────────╮'; printf '\033[4;1H│ Grok Build Changelog                                     │'; printf '\033[5;1H│                                                          │'; printf '\033[6;1H│ • Snapshot screen-frame parity fix                       │'; printf '\033[7;1H╰──────────────────────────────────────────────────────────╯'; printf '\033[20;1H❯ Ask anything'; printf '\033[24;1HLogged in with API key · Grok Build'; while true; do sleep 1; done`
+
 // grokTUISnapshotReplayCommand mimics ptywrap scrollback replay (?25l prefix) plus
 // live true-color incremental input-area updates like grok's cursor animation.
 const grokTUISnapshotReplayCommand = `printf '\033[?25l\033[?1049l\033[0m\033[H\033[2J\033[38;2;255;255;255m╭────╮\033[0m\n\033[38;2;255;255;255m│ ❯ \033[0m'; sleep 0.2; i=0; while [ "$i" -lt 12 ]; do printf '\033[38;2;%d;%d;%dm█\033[0m' $((100+i)) $((100+i)) $((100+i)); i=$((i+1)); sleep 0.05; done; while true; do sleep 1; done`
@@ -1811,6 +1819,31 @@ func phaseWatchReadonly(t *testing.T, req *Request) (*Response, error) {
 		Combined: combined,
 		Stdout:   combined,
 		SessionID: sessionID,
+	}, nil
+}
+
+func phaseSnapshotGrokLikeChangelogScreen(t *testing.T, req *Request) (*Response, error) {
+	detachReq := *req
+	detachReq.CustomSessionID = "grok"
+	detachReq.RunCommand = []string{"sh", "-c", grokLikeChangelogSnapshotCommand}
+	sessionID := StartDetachedSession(t, &detachReq)
+	time.Sleep(1500 * time.Millisecond)
+
+	stdout, stderr, code, err := runCLISeparate(req.Bin, req.TTYWatchHome, []string{"snapshot", sessionID})
+	if err != nil {
+		return nil, err
+	}
+	text := stdout
+	if text == "" {
+		text = stderr
+	}
+	return &Response{
+		SessionID:      sessionID,
+		SnapshotText:   text,
+		ContainsEscape: ContainsANSIEscape(text),
+		Stdout:         stdout,
+		Stderr:         stderr,
+		ExitCode:       code,
 	}, nil
 }
 

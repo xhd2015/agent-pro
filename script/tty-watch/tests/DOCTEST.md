@@ -155,6 +155,7 @@ End-to-end tests for the standalone `tty-watch` CLI: `run` subcommand embeds pty
  |    +-- codex-cursor-drawn-mcp-boot/(LEAF)  ?2026h+CUP: full warning, no MCP smear/leaks (RED)
  |    +-- codex-mcp-boot-smeared/     (LEAF)  mid MCP boot: no stacked status smear/leaks (RED)
  |    +-- session-dimensions-wide/    (LEAF)  resized session: wide line not 80-col wrapped (RED)
+ |    +-- grok-like-changelog-screen/ (LEAF)  grok alt-screen: ctrl+q, box, prompt, footer (RED)
  |    +-- unknown-session/            (LEAF)  missing session errors (RED)
  |
  +-- kill/
@@ -263,6 +264,7 @@ Parameter ranking (most → least significant):
 | 53 | `snapshot/codex-cursor-drawn-mcp-boot` | `snapshot` on ?2026h codex UI: full warning, no MCP smear/CSI leaks (RED) |
 | 54 | `snapshot/codex-mcp-boot-smeared` | `snapshot` mid MCP boot: no stacked status smear/CSI leaks (RED) |
 | 55 | `snapshot/session-dimensions-wide` | `snapshot` uses session cols/rows: 95-char line not 80-col wrapped (RED) |
+| 91 | `snapshot/grok-like-changelog-screen` | `snapshot` on grok-like changelog: ctrl+q, box, prompt, footer (RED) |
 | 15 | `snapshot/unknown-session` | `snapshot` on missing id fails (RED) |
 | 16 | `kill/terminates-detached` | `kill` stops detached session and removes registry (RED) |
 | 17 | `kill/unknown-session` | `kill` on missing id fails (RED) |

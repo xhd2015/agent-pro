@@ -11,17 +11,15 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// ReadSnapshot fetches the current screen frame and scrollback for a live session.
+// ReadSnapshot fetches the current screen frame for a live session via a single
+// attach_mode=screen WebSocket (no resize). Scrollback is left empty so rendering
+// prefers the server screen frame.
 func ReadSnapshot(listenAddr, sessionID string) (frame string, scrollback string, cols, rows int, err error) {
 	frame, cols, rows, err = readScreenSnapshotFrame(listenAddr, sessionID)
 	if err != nil {
 		return "", "", cols, rows, err
 	}
-	scrollback, _, _, scrollErr := readSnapshotScrollback(listenAddr, sessionID)
-	if scrollErr != nil {
-		scrollback = ""
-	}
-	return frame, scrollback, cols, rows, nil
+	return frame, "", cols, rows, nil
 }
 
 // SnapshotText returns rendered printable snapshot text for a live session.

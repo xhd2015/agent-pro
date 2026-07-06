@@ -54,14 +54,6 @@ func renderSnapshotOutput(frame, scrollback string, cols, rows int) string {
 	var scrollbackData []byte
 	if scrollback != "" {
 		scrollbackData = []byte(scrollback)
-		data := preprocessSnapshotScrollback(scrollbackData)
-		useRows := adequateSnapshotRows(data, cols, rows)
-		if text, ok := scrollbackToScreenText(data, cols, useRows); ok {
-			out := mergePlainTextPrefix(strings.TrimRight(string(text), "\n"), scrollbackData)
-			if !snapshotMissingPlainPrefix(out, scrollbackData) {
-				return out
-			}
-		}
 	}
 	if frame != "" {
 		frameData := []byte(frame)
@@ -72,6 +64,16 @@ func renderSnapshotOutput(frame, scrollback string, cols, rows int) string {
 				if scrollback == "" || !snapshotMissingPlainPrefix(out, scrollbackData) {
 					return out
 				}
+			}
+		}
+	}
+	if scrollback != "" {
+		data := preprocessSnapshotScrollback(scrollbackData)
+		useRows := adequateSnapshotRows(data, cols, rows)
+		if text, ok := scrollbackToScreenText(data, cols, useRows); ok {
+			out := mergePlainTextPrefix(strings.TrimRight(string(text), "\n"), scrollbackData)
+			if !snapshotMissingPlainPrefix(out, scrollbackData) {
+				return out
 			}
 		}
 	}
@@ -115,17 +117,13 @@ func adequateSnapshotRows(data []byte, cols, rows int) int {
 	if rows <= 0 {
 		rows = 24
 	}
-	best := rows
-	for try := rows; try <= 80; try += 4 {
-		if text, ok := scrollbackToScreenText(data, cols, try); ok {
-			best = try
-			out := mergePlainTextPrefix(strings.TrimRight(string(text), "\n"), data)
-			if !snapshotMissingPlainPrefix(out, data) {
-				return try
-			}
+	if text, ok := scrollbackToScreenText(data, cols, rows); ok {
+		out := mergePlainTextPrefix(strings.TrimRight(string(text), "\n"), data)
+		if !snapshotMissingPlainPrefix(out, data) {
+			return rows
 		}
 	}
-	return best
+	return rows
 }
 
 func mergePlainTextPrefix(text string, scrollback []byte) string {
@@ -233,11 +231,6 @@ func scrollbackToScreenText(scrollback []byte, cols, rows int) ([]byte, bool) {
 	if len(scrollback) == 0 || !needsVTRender(scrollback) {
 		return nil, false
 	}
-	if snapshot, ok := renderScreenSnapshotFrame(scrollback, cols, rows); ok {
-		if text, ok := screenSnapshotFrameToText(snapshot, cols, rows); ok {
-			return text, true
-		}
-	}
 	return screenSnapshotToText(scrollback, cols, rows)
 }
 
@@ -309,11 +302,44 @@ func renderVTStateToText(vt vt10x.Terminal, cols, rows int) ([]byte, bool) {
 			lines = append(lines, line)
 		}
 	}
+	lines = mergeSnapshotWrappedLines(lines)
 	if len(lines) == 0 {
 		return nil, false
 	}
 	text := []byte(strings.Join(lines, "\n") + "\n")
 	return text, true
+}
+
+func shouldMergeSnapshotWrappedLine(prev, next string) bool {
+	prev = strings.TrimRight(prev, " \t")
+	next = strings.TrimLeft(next, " \t")
+	if prev == "" || next == "" {
+		return false
+	}
+	prevRunes := []rune(prev)
+	nextRunes := []rune(next)
+	last := prevRunes[len(prevRunes)-1]
+	first := nextRunes[0]
+	if (last >= 'a' && last <= 'z' || last >= 'A' && last <= 'Z') && first >= 'a' && first <= 'z' {
+		return true
+	}
+	return false
+}
+
+func mergeSnapshotWrappedLines(lines []string) []string {
+	if len(lines) == 0 {
+		return lines
+	}
+	out := []string{lines[0]}
+	for i := 1; i < len(lines); i++ {
+		line := lines[i]
+		if shouldMergeSnapshotWrappedLine(out[len(out)-1], line) {
+			out[len(out)-1] = strings.TrimRight(out[len(out)-1], " \t") + strings.TrimLeft(line, " \t")
+			continue
+		}
+		out = append(out, line)
+	}
+	return out
 }
 
 func renderScreenSnapshotFrame(scrollback []byte, cols, rows int) ([]byte, bool) {
@@ -371,11 +397,97 @@ func clampSnapshot(v, min, max int) int {
 	return v
 }
 
+type snapshotCUPLine struct {
+	row  int
+	text string
+}
+
+func parseSnapshotFrameCUPLines(data []byte) []snapshotCUPLine {
+	matches := snapshotCUPRe.FindAllSubmatchIndex(data, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	var out []snapshotCUPLine
+	for idx, loc := range matches {
+		row, err := strconv.Atoi(string(data[loc[2]:loc[3]]))
+		if err != nil || row <= 0 {
+			continue
+		}
+		start := loc[1]
+		end := len(data)
+		if idx+1 < len(matches) {
+			end = matches[idx+1][0]
+		}
+		text := string(data[start:end])
+		text = strings.TrimSuffix(text, "\x1b[?25h")
+		if cut := strings.Index(text, "\x1b["); cut >= 0 {
+			text = text[:cut]
+		}
+		if strings.TrimSpace(text) == "" {
+			continue
+		}
+		out = append(out, snapshotCUPLine{row: row, text: text})
+	}
+	return out
+}
+
+func snapshotLineHasUIMarkers(line string) bool {
+	s := strings.TrimSpace(line)
+	if s == "" {
+		return false
+	}
+	if strings.ContainsAny(s, "╭│╰") {
+		return true
+	}
+	if strings.Contains(s, "ctrl+") || strings.Contains(s, "Ctrl+") {
+		return true
+	}
+	if strings.ContainsAny(s, "❯›") {
+		return true
+	}
+	return false
+}
+
+func isSnapshotFrameGhostRow(prevRow, row, nextRow int, line string) bool {
+	if prevRow <= 0 || nextRow <= 0 || !(prevRow < row && row < nextRow) {
+		return false
+	}
+	if prevRow+2 > nextRow {
+		return false
+	}
+	return !snapshotLineHasUIMarkers(line)
+}
+
 func screenSnapshotFrameToText(data []byte, cols, rows int) ([]byte, bool) {
 	if !bytes.HasPrefix(data, screenSnapshotMarker) || !bytes.Contains(data, []byte("\x1b[2J")) {
 		return nil, false
 	}
-	return screenSnapshotToText(data, cols, rows)
+	cups := parseSnapshotFrameCUPLines(data)
+	if len(cups) == 0 {
+		return screenSnapshotToText(data, cols, rows)
+	}
+	var lines []string
+	for i, cup := range cups {
+		prevRow, nextRow := 0, 0
+		if i > 0 {
+			prevRow = cups[i-1].row
+		}
+		if i+1 < len(cups) {
+			nextRow = cups[i+1].row
+		}
+		if isSnapshotFrameGhostRow(prevRow, cup.row, nextRow, cup.text) {
+			continue
+		}
+		line := normalizeSnapshotPrintableLine(strings.TrimRight(cup.text, " \t\r\n"))
+		if line == "" {
+			continue
+		}
+		lines = append(lines, line)
+	}
+	if len(lines) == 0 {
+		return screenSnapshotToText(data, cols, rows)
+	}
+	return []byte(strings.Join(lines, "\n") + "\n"), true
 }
 
 func normalizeSnapshotPrintableLine(line string) string {
