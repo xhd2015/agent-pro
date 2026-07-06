@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	types "github.com/xhd2015/agent-pro/agent/event/types"
+	"github.com/xhd2015/agent-pro/pkgs/agentsend"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 	"github.com/xhd2015/agent-pro/pkgs/ttywatch"
 	"github.com/xhd2015/less-gen/flags"
@@ -50,12 +50,15 @@ Options:
 `
 
 const ttySendHelp = `
-Usage: agent-run tty send <session-id> "message"
+Usage: agent-run tty send [OPTIONS] <session-id> "message"
 
-Send a follow-up message to a live TTY session.
+Send a follow-up message to a live TTY session via the per-session send queue.
+On successful enqueue, prints the session-local message id (msg_1, msg_2, …) to stdout.
 
 Options:
-  -h, --help   show help
+  --no-wait            enqueue and exit immediately without waiting for delivery
+  --max-wait DURATION  enqueue, print id, then wait up to DURATION for delivery
+  -h, --help           show help
 `
 
 const ttySnapshotHelp = `
@@ -245,9 +248,17 @@ func runTtyAttach(args []string) error {
 }
 
 func runTtySend(args []string) error {
-	remaining, err := flags.Help("-h,--help", ttySendHelp).Parse(args)
+	var noWait bool
+	var maxWait time.Duration
+	remaining, err := flags.Bool("--no-wait", &noWait).
+		Duration("--max-wait", &maxWait).
+		Help("-h,--help", ttySendHelp).
+		Parse(args)
 	if err != nil {
 		return err
+	}
+	if noWait && maxWait > 0 {
+		return fmt.Errorf("tty send: --no-wait and --max-wait are mutually exclusive")
 	}
 	if len(remaining) < 1 {
 		return fmt.Errorf("tty send: requires <session-id> and <message>")
@@ -278,27 +289,38 @@ func runTtySend(args []string) error {
 		return fmt.Errorf("unknown tty runner: %s", ttySess.RunnerID)
 	}
 
-	writable := agenttty.WaitUntilWritable(provider, ttySess.Registry.ListenAddr, sessionID, 10*time.Second)
-	if !writable.Ready {
-		reason := writable.Reason
-		if reason == "" {
-			reason = "alternate screen not ready for input"
-		}
-		return fmt.Errorf("tty send: timed out after 10s: %s", reason)
+	sess := agentsend.Session{
+		Home:              home,
+		Runner:            ttySess.RunnerID,
+		TerminalSessionID: sessionID,
+		ListenAddr:        ttySess.Registry.ListenAddr,
 	}
 
-	if err := ttywatch.SendMessage(ttySess.Registry.ListenAddr, sessionID, message, true); err != nil {
+	enqueuedAt := time.Now()
+	id, err := agentsend.Enqueue(home, sess, message)
+	if err != nil {
 		return err
 	}
+	fmt.Println(id)
 
-	_ = store.AppendEvent(ttySess.RunnerID, ttySess.AgentSessionID, types.AgentEvent{
-		Type:      types.ActionMessage,
-		Role:      "assistant",
-		Text:      "",
-		Timestamp: time.Now().UnixMilli(),
-	})
+	waitOpts := agentsend.WaitOptions{EnqueuedAt: enqueuedAt}
+	switch {
+	case noWait:
+		waitOpts.Mode = agentsend.WaitNoWait
+	case maxWait > 0:
+		waitOpts.Mode = agentsend.WaitMaxWait
+		waitOpts.MaxWait = maxWait
+		waitOpts.StartDrainer = true
+	default:
+		waitOpts.Mode = agentsend.WaitDefault
+		waitOpts.StartDrainer = true
+	}
 
-	return nil
+	if waitOpts.StartDrainer {
+		agentsend.StartDrainer(home, sess, provider)
+	}
+
+	return agentsend.WaitForDelivery(home, sess, id, waitOpts)
 }
 
 func runTtySnapshot(args []string) error {

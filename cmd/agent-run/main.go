@@ -18,6 +18,7 @@ Commands:
   run        headless one-shot agent invocation
   attach     attach to a live grok-tty or codex-tty session by id
   send       send a message to a live grok-tty or codex-tty session by id
+  msg        inspect or cancel queued send messages
   snapshot   print a sanitized snapshot of a live TTY session by id
   watch      stream readonly output from a live TTY session by id
   sessions   list stored sessions or print one session's events
@@ -79,6 +80,8 @@ func run(args []string) error {
 		return runAttach(sub)
 	case "send":
 		return runSend(sub)
+	case "msg":
+		return runMsg(sub)
 	case "snapshot":
 		return runSnapshot(sub)
 	case "watch":

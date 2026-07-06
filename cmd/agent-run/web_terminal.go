@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	types "github.com/xhd2015/agent-pro/agent/event/types"
+	"github.com/xhd2015/agent-pro/pkgs/agentsend"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 	"github.com/xhd2015/agent-pro/pkgs/ttywatch"
@@ -125,29 +125,17 @@ func sendPromptToLiveTerminal(store agentstorage.Store, runner, sessionID, promp
 	if !ok {
 		return false
 	}
-	writable := agenttty.WaitUntilWritable(provider, resolved.Entry.ListenAddr, resolved.TerminalSessionID, 10*time.Second)
-	if !writable.Ready {
+
+	sess := agentsend.Session{
+		Home:              store.Home(),
+		Runner:            runner,
+		TerminalSessionID: resolved.TerminalSessionID,
+		ListenAddr:        resolved.Entry.ListenAddr,
+	}
+	if _, err := agentsend.Enqueue(store.Home(), sess, prompt); err != nil {
 		return false
 	}
-
-	if err := ttywatch.SendMessage(resolved.Entry.ListenAddr, resolved.TerminalSessionID, prompt, true); err != nil {
-		return true
-	}
-
-	if text := captureAssistantFromSnapshot(resolved, prompt, runner); text != "" {
-		_ = store.AppendEvent(runner, sessionID, types.AgentEvent{
-			Type:      types.ActionMessage,
-			Role:      "assistant",
-			Text:      text,
-			Timestamp: time.Now().UnixMilli(),
-		})
-		_ = store.AppendEvent(runner, sessionID, types.AgentEvent{
-			Type:      types.ActionDone,
-			Timestamp: time.Now().UnixMilli(),
-		})
-		time.Sleep(2 * time.Second)
-		_ = store.UpdateSessionStatus(runner, sessionID, "finished")
-	}
+	agentsend.StartDrainer(store.Home(), sess, provider)
 	return true
 }
 

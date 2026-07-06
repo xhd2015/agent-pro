@@ -129,6 +129,9 @@ func checkStubWritable(scrollback []byte) WritableStatus {
 		(strings.Contains(plain, "•") && strings.Contains(lower, "working")) {
 		return WritableStatus{Reason: "stub waiting for turn complete", State: "busy"}
 	}
+	if strings.Contains(plain, "\u203a") || strings.Contains(plain, "›") {
+		return WritableStatus{Ready: true, State: "idle"}
+	}
 	if scenario != nil {
 		if scenario.WritableReason != "" {
 			if scenario.ScreenStatus == "busy" || scenario.ScreenStatus == "loading" {
@@ -136,16 +139,13 @@ func checkStubWritable(scrollback []byte) WritableStatus {
 			}
 		}
 		if scenario.ScreenStatus == "idle" {
-			if strings.Contains(plain, "\u203a") || strings.Contains(plain, "STUB_TTY_BANNER") {
+			if strings.Contains(plain, "STUB_TTY_BANNER") {
 				return WritableStatus{Ready: true, State: "idle"}
 			}
 			if scenario.BannerDelayMs > 0 && !strings.Contains(plain, "STUB_TTY_BANNER") {
 				return WritableStatus{Reason: "stub waiting for banner_delay_ms", State: "loading"}
 			}
 		}
-	}
-	if strings.Contains(plain, "\u203a") {
-		return WritableStatus{Ready: true, State: "idle"}
 	}
 	if strings.Contains(plain, "STUB_TTY_BANNER") {
 		return WritableStatus{Reason: "alternate screen not ready for input", State: "banner"}

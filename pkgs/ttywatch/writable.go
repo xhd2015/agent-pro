@@ -13,15 +13,27 @@ type WritableStatus struct {
 type CheckWritableFunc func(scrollback []byte) WritableStatus
 
 // WaitUntilWritable polls check until ready or timeout.
+// A zero or negative timeout waits indefinitely.
 func WaitUntilWritable(check CheckWritableFunc, listenAddr, sessionID string, timeout time.Duration) WritableStatus {
-	deadline := time.Now().Add(timeout)
 	var last WritableStatus
-	for time.Now().Before(deadline) {
+	poll := func() WritableStatus {
 		text, err := SnapshotText(listenAddr, sessionID)
 		if err == nil && check != nil {
 			last = check([]byte(text))
 		}
-		if last.Ready {
+		return last
+	}
+	if timeout <= 0 {
+		for {
+			if poll().Ready {
+				return last
+			}
+			time.Sleep(150 * time.Millisecond)
+		}
+	}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if poll().Ready {
 			return last
 		}
 		time.Sleep(150 * time.Millisecond)
