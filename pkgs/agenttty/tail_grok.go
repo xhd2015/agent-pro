@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -45,7 +46,8 @@ func updatesTailStartOffset(path string, runStart time.Time) int64 {
 }
 
 // TailUpdatesFromOffset tails updates.jsonl starting at the given byte offset.
-func TailUpdatesFromOffset(ctx context.Context, updatesPath string, startOffset int64, emit func(types.AgentEvent) error) error {
+// onInitialSynced, when non-nil, is invoked after the first batch of updates is emitted.
+func TailUpdatesFromOffset(ctx context.Context, updatesPath string, startOffset int64, emit func(types.AgentEvent) error, onInitialSynced func()) error {
 	converter := grok_session.NewConverter()
 	emitEvent := func(ev types.AgentEvent) error {
 		return emit(trimACPAgentEventNewlines(ev))
@@ -53,6 +55,14 @@ func TailUpdatesFromOffset(ctx context.Context, updatesPath string, startOffset 
 
 	if _, err := readNewACPUpdates(updatesPath, startOffset, converter, emitEvent); err != nil {
 		return err
+	}
+	for _, ev := range converter.Flush() {
+		if err := emitEvent(ev); err != nil {
+			return err
+		}
+	}
+	if onInitialSynced != nil {
+		onInitialSynced()
 	}
 
 	watchErr := logs.WatchLine(ctx, updatesPath, logs.WatchLineOptions{DisableDebounce: true}, func(line string) error {
@@ -79,7 +89,11 @@ func trimACPAgentEventNewlines(ev types.AgentEvent) types.AgentEvent {
 
 func processACPUpdateLine(line string, converter *grok_session.Converter, emit func(types.AgentEvent) error) error {
 	line = strings.TrimRight(line, "\n")
-	if strings.TrimSpace(line) == "" {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return nil
+	}
+	if _, ok := grok_session.ParseLine(trimmed); !ok {
 		return nil
 	}
 	for _, ev := range converter.ProcessLine(line) {
@@ -201,6 +215,28 @@ func updatesJSONLPath(grokHome, workspace, sessionID string) (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "updates.jsonl"), nil
+}
+
+// UpdatesTailOffset returns the current byte size of a grok session updates.jsonl.
+func UpdatesTailOffset(grokHome, workspace, grokSessionID string) int64 {
+	path, ok := findUpdatesBySessionID(grokHome, workspace, grokSessionID)
+	if !ok {
+		return 0
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0
+	}
+	return info.Size()
+}
+
+// TailGrokSessionFromOffset tails updates.jsonl for an existing grok session id.
+func TailGrokSessionFromOffset(ctx context.Context, grokHome, workspace, grokSessionID string, startOffset int64, emit func(types.AgentEvent) error) error {
+	path, ok := findUpdatesBySessionID(grokHome, workspace, grokSessionID)
+	if !ok {
+		return fmt.Errorf("grok updates not found for session %s", grokSessionID)
+	}
+	return TailUpdatesFromOffset(ctx, path, startOffset, emit, nil)
 }
 
 // DiscoverSession locates the grok on-disk session matching workspace cwd and prompt.

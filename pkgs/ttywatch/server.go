@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/xhd2015/dot-pkgs/go-pkgs/shell/ptywrap"
@@ -19,6 +20,14 @@ type ServeOptions struct {
 	RegistrySubdir string
 	Cwd            string
 	ExtraPaths     []string
+	KeepAlive      bool
+}
+
+func serveKeepAlive(opts ServeOptions) bool {
+	if opts.KeepAlive {
+		return true
+	}
+	return strings.TrimSpace(os.Getenv(envTTYWatchKeepAlive)) == "1"
 }
 
 // ServeSession runs the embedded ptywrap HTTP server until the command exits.
@@ -106,6 +115,16 @@ func ServeSession(ctx context.Context, opts ServeOptions) error {
 		RemoveRegistryIfMatch(cfg, opts.SessionID, listenAddr, entry.PID)
 		return ctx.Err()
 	case <-waitDone:
+	}
+
+	if serveKeepAlive(opts) {
+		// Keep the ptywrap server and registry reachable after the PTY child exits
+		// so web/CLI attach can replay scrollback on finished keep-tty sessions.
+		<-ctx.Done()
+		shutdown()
+		mgr.Remove(opts.SessionID)
+		RemoveRegistryIfMatch(cfg, opts.SessionID, listenAddr, entry.PID)
+		return ctx.Err()
 	}
 
 	const writerAttachGrace = 2 * time.Second

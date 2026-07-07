@@ -4,7 +4,7 @@
 follow-up does not produce a visible assistant response.
 
 ```
-new codex-tty chat
+new grok-tty chat
   -> user opens Terminal while first turn is running
   -> first response appears in Terminal and chat
   -> user closes Terminal
@@ -15,37 +15,35 @@ new codex-tty chat
 
 ## Preconditions
 
-- The session is created through the real web API.
-- The fake `codex` command stays alive after the first answer.
-- The fake `codex` command prints `FOLLOWUP_RESPONSE` only after it reads a
-  submitted second line from the PTY.
+- The session is created through the real web API with grok mock two-turn hook.
+- The mock hook stays alive after the first answer and emits `FOLLOWUP_RESPONSE`
+  after reading a second PTY line.
 
 ## Steps
 
-1. Start a `codex-tty` web session with `one word of France capital`.
+1. Start a `grok-tty` web session with `one word of France capital`.
 2. Open the terminal modal while the first turn is still running.
 3. Wait for the first terminal response `Paris`.
 4. Close the terminal modal.
 5. Send `What did I say` from the chat composer.
 6. Reopen the terminal.
-7. Assert `FOLLOWUP_RESPONSE` appears in chat, proving the follow-up was both
-   submitted to the backend TTY and surfaced back to the web session.
+7. Assert `FOLLOWUP_RESPONSE` appears in chat.
 
 ```go
 import (
 	"net/http"
-	"os"
-	"path/filepath"
 	"testing"
 )
 
 func Setup(t *testing.T, req *Request) error {
 	req.Mode = "ui"
-	writeTwoTurnFakeCodexTTYBinary(t, req)
-	body := `{"runner":"codex-tty","prompt":"one word of France capital"}`
+	prompt := "one word of France capital"
+	setGrokMockHook(t, req, llmMockGrokTTYTwoTurnHook(prompt, persistentGrokMockUUID))
+	restartWebWithGrokMock(t, req)
+	body := `{"runner":"grok-tty","prompt":"one word of France capital"}`
 	status, respBody := doHTTP(t, "POST", req.WebBaseURL+"/api/agent-run/sessions", req.WebToken, "application/json", body)
 	if status != http.StatusAccepted {
-		t.Fatalf("create two-turn web codex-tty session status=%d body=%s", status, respBody)
+		t.Fatalf("create two-turn web grok-tty session status=%d body=%s", status, respBody)
 	}
 	created := decodeJSONBody(t, respBody)
 	session, _ := created["session"].(map[string]any)
@@ -53,7 +51,7 @@ func Setup(t *testing.T, req *Request) error {
 	if sessionID == "" {
 		t.Fatalf("create response missing session_id: %s", respBody)
 	}
-	req.Runner = "codex-tty"
+	req.Runner = "grok-tty"
 	req.ChatSessionID = sessionID
 	waitForAnyRegistryID(t, req, 3_000_000_000)
 	req.PlaywrightScript = sessionBrowserScript(req, `
@@ -106,21 +104,5 @@ try {
 }
 `)
 	return nil
-}
-
-func writeTwoTurnFakeCodexTTYBinary(t *testing.T, req *Request) {
-	t.Helper()
-	path := filepath.Join(filepath.Dir(req.AgentRun), "codex")
-	script := `#!/bin/sh
-printf 'CODEX_TTY_BANNER\nCodex › '
-IFS= read -r first
-printf '\nResponse: Paris\nCodex › '
-IFS= read -r second
-printf '\nFOLLOWUP_RESPONSE: received %s\n' "$second"
-sleep 3
-`
-	if err := os.WriteFile(path, []byte(script), 0755); err != nil {
-		t.Fatalf("write two-turn fake codex binary: %v", err)
-	}
 }
 ```

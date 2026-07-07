@@ -1,13 +1,13 @@
 ---
 label: chromium, slow
-explanation: Live fake-codex run; 15s passive watch — session-detail GET must stay at initial snapshot only
+explanation: Live grok-tty run; 15s passive watch — session-detail GET must stay at initial snapshot only
 ---
 
 ## Expected
 
 - Playwright exit code **0**.
 - Viewport 390×844; no horizontal document scroll.
-- During the **15s** passive monitoring window after opening a live `fake-codex` session (no composer interaction):
+- During the **15s** passive monitoring window after opening a live `grok-tty` session (no composer interaction):
   - Session-detail `GET .../sessions/:runner/:id` count is **exactly 1** (initial page-load snapshot only).
   - Exactly **one** `GET .../events/stream` request started.
   - **Zero** stream requests aborted or cancelled (`net::ERR_ABORTED` / client abort).
@@ -15,7 +15,7 @@ explanation: Live fake-codex run; 15s passive watch — session-detail GET must 
 
 ## Side Effects
 
-- New `fake-codex` session created via API POST.
+- New `grok-tty` session created via API POST (`runner: grok-tty`).
 - Background `agent-run web` serves SSE and session detail endpoints.
 
 ## Exit Code

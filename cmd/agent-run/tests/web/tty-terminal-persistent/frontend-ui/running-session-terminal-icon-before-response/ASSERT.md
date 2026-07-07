@@ -6,7 +6,7 @@ explanation: Requires playwright-debug and browser automation.
 ## Expected
 
 - Playwright exits 0.
-- A running `codex-tty` chat shows the terminal button before the assistant
+- A running `grok-tty` chat shows the terminal button before the assistant
   response finishes.
 - The button is enabled while the server-side tty is already available.
 

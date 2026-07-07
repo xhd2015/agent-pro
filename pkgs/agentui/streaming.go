@@ -12,6 +12,39 @@ func newAssistantStreamID() string {
 	return fmt.Sprintf("msg_%d", time.Now().UnixNano())
 }
 
+func emitGrowingAssistantMessage(emit func(types.AgentEvent) error, text string) error {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil
+	}
+	streamID := newAssistantStreamID()
+	chunkSize := 4
+	steps := (len(text) + chunkSize - 1) / chunkSize
+	if steps < 2 {
+		steps = 2
+	}
+	pace := 700 * time.Millisecond
+	for end := chunkSize; end < len(text)+chunkSize; end += chunkSize {
+		if end > len(text) {
+			end = len(text)
+		}
+		if err := emit(types.AgentEvent{
+			ID:        streamID,
+			Type:      types.ActionMessage,
+			Role:      "assistant",
+			Text:      text[:end],
+			Timestamp: time.Now().UnixMilli(),
+		}); err != nil {
+			return err
+		}
+		if end == len(text) {
+			break
+		}
+		time.Sleep(pace)
+	}
+	return nil
+}
+
 func emitPhasedAssistantMessage(emit func(types.AgentEvent) error, streamID, text string) error {
 	text = strings.TrimSpace(text)
 	if streamID == "" {

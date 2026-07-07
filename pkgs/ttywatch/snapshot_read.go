@@ -31,6 +31,41 @@ func SnapshotText(listenAddr, sessionID string) (string, error) {
 	return RenderSnapshotOutput(frame, scrollback, cols, rows), nil
 }
 
+// primeSnapshotText fetches a short-deadline printable snapshot for web attach priming.
+func primeSnapshotText(listenAddr, sessionID string) (string, error) {
+	cols, rows := 80, 24
+	deadline := time.Now().Add(2 * time.Second)
+	frame, c, r, done, err := readScreenSnapshotFrameOnce(listenAddr, sessionID, deadline, cols, rows)
+	if err == nil && done && strings.TrimSpace(frame) != "" {
+		cols, rows = c, r
+		text := RenderSnapshotOutput(frame, "", cols, rows)
+		if strings.TrimSpace(text) != "" {
+			return text, nil
+		}
+	}
+	scrollback, c, r, err := readSnapshotScrollbackWithDeadline(listenAddr, sessionID, 2*time.Second)
+	if err != nil || strings.TrimSpace(scrollback) == "" {
+		if err != nil {
+			return "", err
+		}
+		return "", fmt.Errorf("empty snapshot scrollback")
+	}
+	if c > 0 {
+		cols = c
+	}
+	if r > 0 {
+		rows = r
+	}
+	text := RenderSnapshotOutput("", scrollback, cols, rows)
+	if strings.TrimSpace(text) == "" {
+		text = scrollback
+	}
+	if strings.TrimSpace(text) == "" {
+		return "", fmt.Errorf("empty snapshot text")
+	}
+	return text, nil
+}
+
 type serverMessage struct {
 	Type      string `json:"type"`
 	Message   string `json:"message,omitempty"`
@@ -150,8 +185,12 @@ func readScreenSnapshotFrameOnce(listenAddr, sessionID string, deadline time.Tim
 }
 
 func readSnapshotScrollback(listenAddr, sessionID string) (string, int, int, error) {
+	return readSnapshotScrollbackWithDeadline(listenAddr, sessionID, 10*time.Second)
+}
+
+func readSnapshotScrollbackWithDeadline(listenAddr, sessionID string, timeout time.Duration) (string, int, int, error) {
 	cols, rows := 80, 24
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(timeout)
 	var out strings.Builder
 	for time.Now().Before(deadline) {
 		chunk, c, r, done, err := readSnapshotScrollbackOnce(listenAddr, sessionID, deadline, cols, rows)

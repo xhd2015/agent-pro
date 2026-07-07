@@ -21,6 +21,7 @@ const (
 
 	envTTYWatchRegistrySubdir = "TTY_WATCH_REGISTRY_SUBDIR"
 	envTTYWatchExtraPaths     = "TTY_WATCH_EXTRA_PATHS"
+	envTTYWatchKeepAlive      = "TTY_WATCH_KEEP_ALIVE"
 )
 
 // HeadlessRunOptions configures a detached __serve__ child session.
@@ -169,6 +170,9 @@ func serveChildEnv(base []string, opts HeadlessRunOptions) []string {
 	}
 	if len(opts.ExtraPaths) > 0 {
 		env = setEnvVar(env, envTTYWatchExtraPaths, strings.Join(opts.ExtraPaths, string(os.PathListSeparator)))
+	}
+	if opts.KeepAlive {
+		env = setEnvVar(env, envTTYWatchKeepAlive, "1")
 	}
 	return env
 }

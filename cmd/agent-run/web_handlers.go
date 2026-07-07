@@ -17,6 +17,8 @@ import (
 
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
 	types "github.com/xhd2015/agent-pro/agent/event/types"
+	"github.com/xhd2015/agent-pro/pkgs/agentevents"
+	"github.com/xhd2015/agent-pro/pkgs/agentsend"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 	"github.com/xhd2015/agent-pro/pkgs/agentui"
@@ -122,12 +124,90 @@ func appendUserPromptEvent(store agentstorage.Store, runner, sessionID, text str
 	})
 }
 
+func waitForLiveTerminal(store agentstorage.Store, runner, sessionID string, timeout time.Duration) {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if ttySess, err := agenttty.ResolveTerminalStatus(store, runner, sessionID); err == nil && ttySess.TCPReachable {
+			if strings.TrimSpace(ttySess.Meta.TerminalSessionID) == "" && ttySess.TerminalSessionID != "" {
+				_ = store.UpdateSessionTerminalSessionID(runner, sessionID, ttySess.TerminalSessionID)
+			}
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func enqueueLiveTerminalMessage(store agentstorage.Store, runCfg webRunConfig, runner, sessionID, text string) bool {
+	ttySess, err := agenttty.ResolveByAgentSession(store, runner, sessionID)
+	if err != nil || !ttySess.TCPReachable {
+		return false
+	}
+	provider, ok := agenttty.Get(runner)
+	if !ok {
+		return false
+	}
+	sess := agentsend.Session{
+		Home:              store.Home(),
+		Runner:            runner,
+		TerminalSessionID: ttySess.TerminalSessionID,
+		ListenAddr:        ttySess.Registry.ListenAddr,
+	}
+	if _, err := agentsend.Enqueue(store.Home(), sess, text); err != nil {
+		return false
+	}
+	go agentsend.StartDrainer(store.Home(), sess, provider)
+	if runner == "grok-tty" {
+		startGrokFollowUpEventTail(store, runCfg, runner, sessionID)
+	}
+	return true
+}
+
+func startGrokFollowUpEventTail(store agentstorage.Store, runCfg webRunConfig, runner, sessionID string) {
+	meta, err := store.GetSession(runner, sessionID)
+	if err != nil {
+		return
+	}
+	grokSessionID := strings.TrimSpace(meta.Meta.RunnerSessionID)
+	if grokSessionID == "" {
+		grokSessionID = strings.TrimSpace(os.Getenv("AGENT_RUN_GROK_TTY_GROK_SESSION_ID"))
+	}
+	if grokSessionID == "" {
+		return
+	}
+	workspace, err := sessionWorkspace(store, runner, sessionID)
+	if err != nil {
+		return
+	}
+	grokHome := agenttty.GrokHomeForRunner(runCfg.GrokHome)
+	startOffset := agenttty.UpdatesTailOffset(grokHome, workspace, grokSessionID)
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+		emit := func(ev types.AgentEvent) error {
+			if ev.Type == types.ActionMessage && strings.TrimSpace(ev.Role) == "" {
+				ev.Role = "assistant"
+			}
+			if ev.Type == types.ActionMessage && ev.Timestamp == 0 {
+				ev.Timestamp = time.Now().UnixMilli()
+			}
+			return store.AppendEvent(runner, sessionID, ev)
+		}
+		_ = agenttty.TailGrokSessionFromOffset(ctx, grokHome, workspace, grokSessionID, startOffset, emit)
+		_ = emit(types.AgentEvent{Type: types.ActionDone})
+		_ = store.UpdateSessionStatus(runner, sessionID, "finished")
+	}()
+}
+
 func startAgentRun(store agentstorage.Store, runCfg webRunConfig, runner, sessionID, prompt string) {
 	workspace, _ := sessionWorkspace(store, runner, sessionID)
 	webRunWG.Add(1)
 	go func() {
 		defer webRunWG.Done()
-		if sendPromptToLiveTerminal(store, runner, sessionID, prompt) {
+		if _, err := agentsend.SendToAgentSession(store, runner, sessionID, prompt, agentsend.WaitOptions{
+			Mode:         agentsend.WaitNoWait,
+			StartDrainer: true,
+		}); err == nil {
 			return
 		}
 		runOpts := agentui.RunOptions{
@@ -138,7 +218,7 @@ func startAgentRun(store agentstorage.Store, runCfg webRunConfig, runner, sessio
 			Store:             store,
 			Stdout:            io.Discard,
 			Stderr:            io.Discard,
-			StreamPhases:      true,
+			StreamPhases:      false,
 			KeepTerminalAlive: agenttty.IsTTYRunner(runner),
 		}
 		applyWebGrokRunOptions(runner, runCfg, &runOpts)
@@ -153,7 +233,8 @@ type createSessionRequest struct {
 }
 
 type sendMessageRequest struct {
-	Text string `json:"text"`
+	Text    string `json:"text"`
+	Message string `json:"message"`
 }
 
 func handleRunners(store agentstorage.Store, runCfg webRunConfig) http.HandlerFunc {
@@ -228,6 +309,9 @@ func handleSessionsCollection(store agentstorage.Store, runCfg webRunConfig) htt
 				return
 			}
 			startAgentRun(store, runCfg, runner, sessionID, prompt)
+			if agenttty.IsTTYRunner(runner) {
+				waitForLiveTerminal(store, runner, sessionID, 15*time.Second)
+			}
 			writeJSON(w, http.StatusAccepted, map[string]any{
 				"session": agentstorage.SessionMeta{
 					Runner:    runner,
@@ -296,6 +380,9 @@ func handleSessionResource(store agentstorage.Store, runCfg webRunConfig) http.H
 			}
 			text := strings.TrimSpace(req.Text)
 			if text == "" {
+				text = strings.TrimSpace(req.Message)
+			}
+			if text == "" {
 				http.Error(w, "text is required", http.StatusBadRequest)
 				return
 			}
@@ -306,6 +393,10 @@ func handleSessionResource(store agentstorage.Store, runCfg webRunConfig) http.H
 			_ = store.UpdateSessionStatus(runner, sessionID, "running")
 			if err := appendUserPromptEvent(store, runner, sessionID, text); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if sent := enqueueLiveTerminalMessage(store, runCfg, runner, sessionID, text); sent {
+				writeJSON(w, http.StatusAccepted, map[string]any{"ok": true})
 				return
 			}
 			startAgentRun(store, runCfg, runner, sessionID, text)
@@ -370,44 +461,12 @@ func handleSessionEventsStream(store agentstorage.Store, runner, sessionID strin
 		w.Header().Set("Connection", "keep-alive")
 		w.Header().Set("X-Accel-Buffering", "no")
 
-		offset := after
-		for {
-			if err := r.Context().Err(); err != nil {
-				return
+		_ = agentevents.WatchEvents(r.Context(), store, runner, sessionID, after, func(line string) error {
+			if _, err := fmt.Fprintf(w, "data: %s\n\n", line); err != nil {
+				return err
 			}
-
-			events, newOffset, err := store.ReadEvents(runner, sessionID, offset)
-			if err != nil {
-				return
-			}
-			for _, ev := range events {
-				if ev.Type != types.ActionMessage {
-					continue
-				}
-				line, err := json.Marshal(ev)
-				if err != nil {
-					return
-				}
-				if _, err := fmt.Fprintf(w, "data: %s\n\n", line); err != nil {
-					return
-				}
-				flusher.Flush()
-			}
-			offset = newOffset
-
-			meta, err := store.GetSession(runner, sessionID)
-			if err != nil {
-				return
-			}
-			if len(events) == 0 && meta.Meta.Status != "running" {
-				return
-			}
-
-			select {
-			case <-r.Context().Done():
-				return
-			case <-time.After(50 * time.Millisecond):
-			}
-		}
+			flusher.Flush()
+			return nil
+		})
 	}
 }

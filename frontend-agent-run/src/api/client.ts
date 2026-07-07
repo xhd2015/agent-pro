@@ -95,12 +95,41 @@ export type AgentEvent = {
   phase?: string
   id?: string
   timestamp?: number
+  tool?: string
+  tool_input?: Record<string, unknown>
+  tool_call_id?: string
+  output?: string
+  stderr?: string
+  exit_code?: number
 }
 
 export type SessionDetail = {
   session: SessionSummary
   events: AgentEvent[]
   events_offset?: number
+}
+
+export function readSessionBootstrap(
+  runner?: string,
+  sessionId?: string,
+): SessionDetail | null {
+  const el = document.getElementById('agent-run-session-bootstrap')
+  if (!el?.textContent) {
+    return null
+  }
+  try {
+    const data = JSON.parse(el.textContent) as SessionDetail
+    if (
+      runner &&
+      sessionId &&
+      (data.session?.runner !== runner || data.session?.session_id !== sessionId)
+    ) {
+      return null
+    }
+    return data
+  } catch {
+    return null
+  }
 }
 
 export type TerminalStatus = {
@@ -218,8 +247,6 @@ export function subscribeSessionEvents(
             try {
               const ev = JSON.parse(payload) as AgentEvent
               onEvent(ev)
-              // Yield between back-to-back SSE events so phased stream updates paint incrementally.
-              await new Promise((resolve) => setTimeout(resolve, 50))
             } catch {
               // ignore malformed chunks
             }

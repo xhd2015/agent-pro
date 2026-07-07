@@ -3,21 +3,19 @@
 **Feature**: follow mode — auto-scroll while user is at bottom during streaming
 
 ```
-live fake-codex stream → message-list at bottom → assistant text grows → scrollTop stays at max
+live grok-tty stream → message-list at bottom → assistant text grows → scrollTop stays at max
 ```
 
 ## Preconditions
 
-- `fake-codex` built into temp `bin/` and on PATH.
-- Open API (`WebTokenMode=omit`).
-- Live session created via POST; assistant bubble text grows during SSE stream.
+- Web started with grok mock harness.
+- Open API.
 
 ## Steps
 
-1. Build `fake-codex`, start web with open API.
-2. Create live session and open session route.
-3. Ensure `message-list` starts at bottom (`distanceFromBottom <= 80`).
-4. Poll while assistant text grows; assert `scrollTop` remains at effective bottom on each growth tick.
+1. Start grok mock web on free port.
+2. POST `grok-tty` session and open session page at bottom.
+3. Poll while assistant text grows; assert `distanceFromBottom <= 80`.
 
 ```go
 import (
@@ -27,19 +25,21 @@ import (
 func Setup(t *testing.T, req *Request) error {
 	requirePlaywright(t)
 
-	if err := buildFakeCodexIntoPath(t, req); err != nil {
-		return err
-	}
-
 	req.Layout = "session-auto-follow-at-bottom"
 	req.WebTokenMode = "omit"
+	prompt := "grow the stream for follow mode"
+	marker := layoutGrokStreamMarker
+
 	req.Port = findFreePort(t)
+	if err := ensureLayoutGrokMockEnv(t, req, prompt, marker, 10); err != nil {
+		return err
+	}
 	if err := startWebBackground(t, req); err != nil {
 		return err
 	}
 
-	body := openLiveFakeCodexSession(req.BaseURL, "grow the stream for follow mode") +
-		assertMessageListAtBottom() + assertFollowAtBottomDuringStreaming()
+	body := openLiveGrokTTYSession(req.BaseURL, prompt) +
+		assertFollowAtBottomDuringStreaming()
 
 	req.PlaywrightScript = mobileViewportScript(body)
 	return nil

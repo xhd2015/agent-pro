@@ -59,6 +59,7 @@ func TestResolveGrokHomeExplicit(t *testing.T) {
 func TestResolveGrokHomeAgentRunnerConfigHome(t *testing.T) {
 	shared := filepath.Join(t.TempDir(), "shared-home")
 	t.Setenv("AGENT_RUNNER_CONFIG_HOME", shared)
+	t.Setenv("GROK_HOME", "")
 	t.Setenv("LLM_MOCK_GROK_HOME", "")
 
 	home, cleanup, err := resolveGrokHome(t.TempDir(), "")
@@ -70,6 +71,41 @@ func TestResolveGrokHomeAgentRunnerConfigHome(t *testing.T) {
 	}
 	if cleanup {
 		t.Fatal("expected no cleanup for shared config home")
+	}
+}
+
+func TestResolveGrokHomeFromEnvGrokHome(t *testing.T) {
+	shared := filepath.Join(t.TempDir(), "grok-home-env")
+	t.Setenv("AGENT_RUNNER_CONFIG_HOME", "")
+	t.Setenv("GROK_HOME", shared)
+	t.Setenv("LLM_MOCK_GROK_HOME", "")
+
+	home, cleanup, err := resolveGrokHome(t.TempDir(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if home != shared {
+		t.Fatalf("home = %q, want %q", home, shared)
+	}
+	if cleanup {
+		t.Fatal("expected no cleanup for GROK_HOME env")
+	}
+}
+
+func TestRunGrokHookSkipsMockServer(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "hook-home")
+	t.Setenv("GROK_HOME", home)
+	t.Setenv("LLM_MOCK_RUN_GROK_COMMAND", `sh -c 'echo hooked > "$GROK_HOME/hook.txt"; exit 0'`)
+
+	if err := RunGrok(nil, RunGrokOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(home, "hook.txt"))
+	if err != nil {
+		t.Fatalf("hook artifact: %v", err)
+	}
+	if string(data) != "hooked\n" {
+		t.Fatalf("hook artifact = %q", string(data))
 	}
 }
 

@@ -27,10 +27,11 @@ the chat route id, provider resume id, and backend PTY registry id are distinct.
   `available: true`, even when the chat session is `finished`.
 - **Follow-up sender** — posts a new user message to the same web chat and
   reuses the mapped PTY instead of allocating a fresh registry id.
-- **Test harness** — builds `agent-run`, starts `agent-run web` with isolated
-  `AGENT_RUN_HOME`, writes session/registry fixtures with distinct ids, probes
-  HTTP/websocket endpoints, and uses `playwright-debug` for the browser icon
-  check.
+- **Test harness** — builds `agent-run` + `llm-mock-run-grok`, starts
+  `agent-run web` with `--grok-home` / `--grok-tty-runner-binary` /
+  `--agent-runner grok-tty` for web-created sessions, writes session/registry
+  fixtures with distinct ids, probes HTTP/websocket endpoints, and uses
+  `playwright-debug` for browser UI leaves.
 
 **Behaviors**
 
@@ -144,6 +145,10 @@ type Request struct {
 	TempDir  string
 	Home     string
 	AgentRun string
+	LLMMockRunGrok        string
+	GrokHome              string
+	GrokTTYRunnerBinary   string
+	GrokMockHook          string
 	Env      []string
 
 	Mode string // "http" | "ws" | "followup" | "ui"
@@ -272,7 +277,7 @@ func runPlaywright(t *testing.T, req *Request) (*Response, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 240*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "playwright-debug", "run", req.PlaywrightScript)
+	cmd := exec.CommandContext(ctx, "playwright-debug", "-e", req.PlaywrightScript)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

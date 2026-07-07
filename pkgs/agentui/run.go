@@ -109,13 +109,7 @@ func Run(ctx context.Context, opts RunOptions) error {
 		BinDirName:  "bin",
 	}, "AGENT_PRO_CONFIG_HOME")
 
-	emit := func(ev types.AgentEvent) error {
-		if ev.Type == types.ActionMessage && strings.TrimSpace(ev.Role) == "" {
-			ev.Role = "assistant"
-		}
-		if ev.Type == types.ActionMessage && ev.Timestamp == 0 {
-			ev.Timestamp = time.Now().UnixMilli()
-		}
+	appendEvent := func(ev types.AgentEvent) error {
 		if err := opts.Store.AppendEvent(runner, sessionID, ev); err != nil {
 			return err
 		}
@@ -131,6 +125,15 @@ func Run(ctx context.Context, opts RunOptions) error {
 			_, err = fmt.Fprintln(stdout, formatted)
 		}
 		return err
+	}
+	emit := func(ev types.AgentEvent) error {
+		if ev.Type == types.ActionMessage && strings.TrimSpace(ev.Role) == "" {
+			ev.Role = "assistant"
+		}
+		if ev.Type == types.ActionMessage && ev.Timestamp == 0 {
+			ev.Timestamp = time.Now().UnixMilli()
+		}
+		return appendEvent(ev)
 	}
 
 	persistTerminalSessionID := func(id string) {

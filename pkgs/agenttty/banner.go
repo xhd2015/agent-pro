@@ -172,7 +172,7 @@ func autoExitCodexAfterTurnRemote(ctx context.Context, listenAddr, sessionID, pr
 	}
 }
 
-func waitForPersistentTurnRemote(ctx context.Context, listenAddr, sessionID, prompt string, cfg runConfig) error {
+func waitForPersistentTurnRemote(ctx context.Context, listenAddr, sessionID, prompt string, cfg runConfig, extraComplete func() bool) error {
 	timeout := 90 * time.Second
 	if isCodexProvider(cfg.bannerProvider) || cfg.runnerID == "codex-tty" {
 		timeout = 3 * time.Minute
@@ -190,11 +190,19 @@ func waitForPersistentTurnRemote(ctx context.Context, listenAddr, sessionID, pro
 			return ctx.Err()
 		case <-ticker.C:
 		}
-		snapshot, err := fetchSnapshotBytes(listenAddr, sessionID)
-		if err != nil {
-			continue
+		complete := false
+		if extraComplete != nil && cfg.runnerID == "grok-tty" {
+			complete = extraComplete()
+		} else {
+			snapshot, err := fetchSnapshotBytes(listenAddr, sessionID)
+			if err == nil {
+				complete = persistentTurnComplete(snapshot, prompt, promptCompact, cfg)
+			}
+			if !complete && extraComplete != nil {
+				complete = extraComplete()
+			}
 		}
-		if persistentTurnComplete(snapshot, prompt, promptCompact, cfg) {
+		if complete {
 			if completeSince.IsZero() {
 				completeSince = time.Now()
 				continue

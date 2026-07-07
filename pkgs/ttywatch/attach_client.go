@@ -2,14 +2,13 @@ package ttywatch
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -229,83 +228,30 @@ func (d *detachReader) Read(p []byte) (int, error) {
 // AttachWriter attaches stdin/stdout to a live terminal session.
 // Returns detached=true when the user pressed Ctrl-].
 func AttachWriter(listenAddr, sessionID, attachMode string) (detached bool, err error) {
-	conn, err := dialTerminal(listenAddr, sessionID, attachMode)
+	stdoutFile := os.Stdout
+	rawTTY := term.IsTerminal(int(stdoutFile.Fd()))
+	cols, rows := TTYAttachTerminalSize(stdoutFile)
+
+	sink, cleanup, err := NewTTYAttachSink()
 	if err != nil {
 		return false, err
 	}
-	defer conn.Close()
-
-	stdoutFile := os.Stdout
-	rawTTY := term.IsTerminal(int(stdoutFile.Fd()))
-
-	stdin := &detachReader{r: os.Stdin}
-	stdinFile := os.Stdin
-	stdinIsTTY := term.IsTerminal(int(stdinFile.Fd()))
-	var oldStdinState *term.State
-	if stdinIsTTY {
-		if state, err := term.MakeRaw(int(stdinFile.Fd())); err == nil {
-			oldStdinState = state
-			defer term.Restore(int(stdinFile.Fd()), oldStdinState)
-		}
-	}
-
-	writer := &wsWriter{conn: conn}
-	if rawTTY {
-		_ = sendTerminalResize(writer, stdoutFile)
-		if term.IsTerminal(int(stdinFile.Fd())) {
-			sigWinch := make(chan os.Signal, 1)
-			signal.Notify(sigWinch, syscall.SIGWINCH)
-			defer signal.Stop(sigWinch)
-			go func() {
-				for range sigWinch {
-					_ = sendTerminalResize(writer, stdoutFile)
-				}
-			}()
-		}
-	}
-
-	cols, rows := 80, 24
-	if rawTTY {
-		if c, r, err := term.GetSize(int(stdoutFile.Fd())); err == nil {
-			cols, rows = c, r
-		}
+	if cleanup != nil {
+		defer cleanup()
 	}
 
 	debugLogf("attachWriter session=%s listen=%s rawTTY=%v cols=%d rows=%d attach_mode=%s",
 		sessionID, listenAddr, rawTTY, cols, rows, attachMode)
 
-	out := &attachStdoutWriter{w: stdoutFile, rawTTY: rawTTY}
-	readerErrCh := make(chan error, 1)
-	go func() {
-		readerErrCh <- relayTerminalOutput(conn, out, true, cols, rows, false, false)
-	}()
-
-	var runErr error
-	if stdinIsTTY {
-		stdinErrCh := make(chan error, 1)
-		go func() {
-			detached, err := forwardInputWithDetach(writer, stdin)
-			if detached {
-				stdin.detached = true
-				err = nil
-			}
-			stdinErrCh <- err
-		}()
-
-		select {
-		case err := <-readerErrCh:
-			runErr = normalizeTerminalReadError(err)
-		case err := <-stdinErrCh:
-			if err != nil && err != io.EOF {
-				runErr = err
-			}
-		}
-	} else {
-		runErr = normalizeTerminalReadError(<-readerErrCh)
+	cfg := AttachRelayConfig{
+		ExitOnTerminalExit:           true,
+		SkipScreenSnapshotConversion: false,
+		Cols:                         cols,
+		Rows:                         rows,
+		OnConnect:                    TTYAttachOnConnect(stdoutFile),
 	}
-
-	_ = writer.close(websocket.CloseNormalClosure)
-	if stdin.detached {
+	runErr := AttachRelay(context.Background(), listenAddr, sessionID, attachMode, cfg, sink)
+	if sink.Detached() {
 		debugLogf("attachWriter detached session=%s", sessionID)
 		return true, nil
 	}

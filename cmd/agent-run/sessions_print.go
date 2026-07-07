@@ -6,12 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/xhd2015/dot-pkgs/go-pkgs/logs"
-
 	"github.com/xhd2015/agent-pro/agent/event/print"
+	"github.com/xhd2015/agent-pro/pkgs/agentevents"
 	"github.com/xhd2015/agent-pro/agent/subagent"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 )
@@ -167,48 +165,35 @@ func runSessionsPrint(store agentstorage.Store, runner, sessionID string) error 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var watchErr error
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		var watchState print.FormatState
-		watchErr = logs.WatchLine(ctx, eventsPath, logs.WatchLineOptions{}, func(line string) error {
-			header, body, isMsg := watchState.FormatLine(line)
-			if header == "" && body == "" && !isMsg {
-				return nil
-			}
-			if isMsg {
-				if header != "" {
-					n++
-					subagent.Logf("[%d]  %s", n, header)
-				}
-				fmt.Print(body)
-			} else {
-				n++
-				subagent.Logf("[%d]  %s", n, header)
-				if body != "" {
-					fmt.Print(body)
-				}
-			}
-			return nil
-		})
-	}()
-
-	for {
-		time.Sleep(2 * time.Second)
-		meta, err := store.GetSession(runner, sessionID)
+	tailOffset := int64(0)
+	if hasEvents {
+		_, tailOffset, err = store.ReadEvents(runner, sessionID, 0)
 		if err != nil {
-			cancel()
-			break
-		}
-		if meta.Meta.Status != "running" {
-			cancel()
-			break
+			return fmt.Errorf("read events offset: %w", err)
 		}
 	}
 
-	wg.Wait()
+	var watchState print.FormatState
+	watchErr := agentevents.WatchEvents(ctx, store, runner, sessionID, tailOffset, func(line string) error {
+		header, body, isMsg := watchState.FormatLine(line)
+		if header == "" && body == "" && !isMsg {
+			return nil
+		}
+		if isMsg {
+			if header != "" {
+				n++
+				subagent.Logf("[%d]  %s", n, header)
+			}
+			fmt.Print(body)
+		} else {
+			n++
+			subagent.Logf("[%d]  %s", n, header)
+			if body != "" {
+				fmt.Print(body)
+			}
+		}
+		return nil
+	})
 
 	if watchErr != nil && watchErr != context.Canceled {
 		return watchErr

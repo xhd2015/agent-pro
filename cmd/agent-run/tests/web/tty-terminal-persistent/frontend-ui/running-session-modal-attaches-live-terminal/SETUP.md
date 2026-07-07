@@ -3,22 +3,21 @@
 **Bug**: terminal modal says unavailable during a running tty turn and only shows exited content after finish
 
 ```
-web-created codex-tty running session + live server-side PTY
+web-created grok-tty running session + live server-side PTY
   -> click Terminal before assistant response finishes
-  -> modal renders live CODEX_TTY_BANNER / prompt
+  -> modal renders live GROK_TTY_BANNER / prompt
   -> modal does not show terminal unavailable or exited
 ```
 
 ## Preconditions
 
-- The session is created through the real web API.
-- The fake `codex` command prints an initial TTY banner and prompt, then sleeps
-  before printing the final assistant response.
+- The session is created through the real web API with grok mock harness.
+- The mock hook prints `GROK_TTY_BANNER` and sleeps before the final assistant response.
 - The test opens the terminal modal while the turn is still running.
 
 ## Steps
 
-1. Create a slow running `codex-tty` web session.
+1. Create a slow running `grok-tty` web session.
 2. Wait for the tty registry entry so the backend PTY exists.
 3. Open the generated chat route in Playwright.
 4. Click the terminal button while the turn is running.
@@ -29,7 +28,7 @@ import "testing"
 
 func Setup(t *testing.T, req *Request) error {
 	req.Mode = "ui"
-	createRunningWebCodexTTYSessionThroughAPI(t, req)
+	createRunningWebGrokTTYSessionThroughAPI(t, req)
 	waitForAnyRegistryID(t, req, 3_000_000_000)
 	req.PlaywrightScript = sessionBrowserScript(req, `
 const terminalButton = page.getByRole('button', { name: /terminal/i });
@@ -41,7 +40,7 @@ const terminalText = async () => await page.locator('body').textContent();
 try {
   await page.waitForFunction(() => {
     const text = document.body ? document.body.textContent || '' : '';
-    return text.includes('CODEX_TTY_BANNER') || text.includes('Codex');
+    return text.includes('GROK_TTY_BANNER') || text.includes('Grok');
   }, null, { timeout: 2000 });
 } catch (err) {
   const text = await terminalText();

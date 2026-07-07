@@ -6,7 +6,7 @@ explanation: Requires playwright-debug and browser automation.
 ## Expected
 
 - Playwright exits 0.
-- Clicking Terminal during an active `codex-tty` turn attaches to the live PTY.
+- Clicking Terminal during an active `grok-tty` turn attaches to the live PTY (`GROK_TTY_BANNER` visible).
 - The modal shows initial terminal output from the running process.
 - The modal does not show `terminal unavailable`.
 - The modal does not show an exited terminal before the active turn finishes.

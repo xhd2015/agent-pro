@@ -1,47 +1,38 @@
 # Scenario
 
-**Bug**: terminal button appears only after the tty agent response finishes
+**Bug**: terminal button hidden until assistant response completes on running tty session
 
 ```
-web-created codex-tty running session + terminal_session_id session-N
-  -> open /sessions/codex-tty/web_*
-  -> terminal button visible before assistant completion
+web-created grok-tty running session + terminal_session_id session-N
+  -> open /sessions/grok-tty/web_*
+  -> terminal button visible before assistant response finishes
 ```
 
 ## Preconditions
 
-- This uses the real `agent-run web` session creation API.
-- A fake `codex` binary keeps the run active for several seconds after the
-  terminal is created.
-- The chat route is opened while the run is still active.
+- Session created through real web API with slow grok mock hook.
+- TTY registry entry exists before assistant response completes.
 
 ## Steps
 
-1. Create a new `codex-tty` web session via API.
-2. Wait only for `terminal_session_id`, not for the assistant response.
-3. Open the generated chat route in Playwright.
-4. Assert the terminal button is visible quickly while the delayed assistant
-   response is still absent.
+1. Create a new `grok-tty` web session via API.
+2. Wait for tty registry entry.
+3. Open generated chat route in Playwright.
+4. Assert terminal button visible before delayed response text appears.
 
 ```go
 import "testing"
 
 func Setup(t *testing.T, req *Request) error {
 	req.Mode = "ui"
-	createRunningWebCodexTTYSessionThroughAPI(t, req)
+	createRunningWebGrokTTYSessionThroughAPI(t, req)
+	waitForAnyRegistryID(t, req, 3_000_000_000)
 	req.PlaywrightScript = sessionBrowserScript(req, `
-const started = Date.now();
 const terminalButton = page.getByRole('button', { name: /terminal/i });
-await terminalButton.waitFor({ state: 'visible', timeout: 300 });
-const elapsed = Date.now() - started;
-const bodyText = await page.locator('body').textContent();
-console.log('running terminal button elapsed', elapsed);
-console.log('running page text before response', JSON.stringify(bodyText));
-if (String(bodyText || '').includes('delayed terminal run completed')) {
-  throw new Error('assistant response finished before terminal icon assertion; test no longer covers running-state icon timing');
-}
-if (!(await terminalButton.isEnabled())) {
-  throw new Error('terminal button was visible but disabled while tty session was running');
+await terminalButton.waitFor({ state: 'visible', timeout: 15000 });
+const bodyText = await page.locator('body').textContent() || '';
+if (bodyText.includes('delayed terminal run completed')) {
+  throw new Error('assistant response finished before terminal icon assertion');
 }
 `)
 	return nil

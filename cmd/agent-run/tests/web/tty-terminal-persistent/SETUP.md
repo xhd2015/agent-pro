@@ -23,7 +23,7 @@ web chat id web_* + runner_session_id provider-resume-id + terminal_session_id s
 
 ## Context
 
-- Default runner is `codex-tty`.
+- Default runner is `codex-tty` for fixture-only leaves; web-created session helpers use `grok-tty` + grok mock harness.
 - Default chat id is `web_persistent_terminal`.
 - Default provider id is `019f2233-004b-72a2-9a91-480507fb5398`.
 - Default PTY registry id is `session-1`.
@@ -78,14 +78,142 @@ func Setup(t *testing.T, req *Request) error {
 		"AGENT_RUN_HOME="+req.Home,
 		"PATH="+filepath.Dir(req.AgentRun)+string(os.PathListSeparator)+os.Getenv("PATH"),
 	)
+	if err := buildLLMMockRunGrok(t, req); err != nil {
+		return err
+	}
 	startAgentRunWeb(t, req)
 	return nil
 }
 
+const persistentGrokMockUUID = "b2222222-2222-4222-8222-222222222222"
+
+func buildLLMMockRunGrok(t *testing.T, req *Request) error {
+	t.Helper()
+	if req.LLMMockRunGrok == "" {
+		req.LLMMockRunGrok = filepath.Join(req.TempDir, "bin", "llm-mock-run-grok")
+	}
+	if req.GrokHome == "" {
+		req.GrokHome = filepath.Join(req.TempDir, "web-grok-home")
+	}
+	if err := os.MkdirAll(filepath.Dir(req.LLMMockRunGrok), 0755); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(req.GrokHome, 0755); err != nil {
+		return err
+	}
+	build := exec.Command("go", "build", "-o", req.LLMMockRunGrok, "./agent/llm/llm-mock/llm-mock-run-grok")
+	build.Dir = req.RepoRoot
+	if out, err := build.CombinedOutput(); err != nil {
+		return fmt.Errorf("build llm-mock-run-grok: %w\n%s", err, string(out))
+	}
+	req.GrokTTYRunnerBinary = req.LLMMockRunGrok
+	return nil
+}
+
+func setGrokMockHook(t *testing.T, req *Request, hook string) {
+	t.Helper()
+	req.GrokMockHook = hook
+	stripEnvPrefix(req, "LLM_MOCK_RUN_GROK_COMMAND=")
+	stripEnvPrefix(req, "AGENT_RUN_GROK_TTY_GROK_SESSION_ID=")
+	req.Env = append(req.Env,
+		"LLM_MOCK_RUN_GROK_COMMAND="+hook,
+		"AGENT_RUN_GROK_TTY_GROK_SESSION_ID="+persistentGrokMockUUID,
+	)
+}
+
+func stripEnvPrefix(req *Request, prefix string) {
+	var kept []string
+	for _, e := range req.Env {
+		if strings.HasPrefix(e, prefix) {
+			continue
+		}
+		kept = append(kept, e)
+	}
+	req.Env = kept
+}
+
+func llmMockGrokTTYHook(prompt, sessionUUID, assistantText string, sleepSec int) string {
+	if sleepSec < 0 {
+		sleepSec = 0
+	}
+	return fmt.Sprintf(`sh -c '
+printf "GROK_TTY_BANNER\nGrok › "
+read -r line || true
+submitted="${line:-%s}"
+wd=$(pwd)
+enc=$(python3 -c '"'"'import os,sys,urllib.parse
+p=os.path.abspath(sys.argv[1])
+if p.startswith("/private/var/"): p="/var/"+p[len("/private/var/"):]
+elif p.startswith("/private/tmp/"): p="/tmp/"+p[len("/private/tmp/"):]
+print(urllib.parse.quote(p, safe=""))'"'"' "$wd")
+dir="$GROK_HOME/sessions/$enc/%s"
+mkdir -p "$dir"
+now=$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)
+cat > "$dir/summary.json" <<EOF
+{"info":{"cwd":"$wd","sessionId":"%s","openedAt":"$now"},"created_at":"$now"}
+EOF
+cat > "$dir/updates.jsonl" <<EOF
+{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"$submitted"}}
+{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"%s"}}
+EOF
+sleep %d
+exit 0
+'`, prompt, sessionUUID, sessionUUID, assistantText, sleepSec)
+}
+
+func llmMockGrokTTYTwoTurnHook(firstPrompt, sessionUUID string) string {
+	return fmt.Sprintf(`sh -c '
+printf "GROK_TTY_BANNER\nGrok › "
+read -r first || true
+first="${first:-%s}"
+printf "\nResponse: Paris\nGrok › "
+read -r second || true
+wd=$(pwd)
+enc=$(python3 -c '"'"'import os,sys,urllib.parse
+p=os.path.abspath(sys.argv[1])
+if p.startswith("/private/var/"): p="/var/"+p[len("/private/var/"):]
+elif p.startswith("/private/tmp/"): p="/tmp/"+p[len("/private/tmp/"):]
+print(urllib.parse.quote(p, safe=""))'"'"' "$wd")
+dir="$GROK_HOME/sessions/$enc/%s"
+mkdir -p "$dir"
+now=$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)
+cat > "$dir/summary.json" <<EOF
+{"info":{"cwd":"$wd","sessionId":"%s","openedAt":"$now"},"created_at":"$now"}
+EOF
+cat > "$dir/updates.jsonl" <<EOF
+{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"$first"}}
+{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Response: Paris"}}
+EOF
+if [ -n "$second" ]; then
+  printf "\nFOLLOWUP_RESPONSE: received %%s\n" "$second" >> "$dir/updates.jsonl"
+fi
+sleep 3
+exit 0
+'`, firstPrompt, sessionUUID, sessionUUID)
+}
+
+func restartWebWithGrokMock(t *testing.T, req *Request) {
+	t.Helper()
+	if req.WebCmd != nil && req.WebCmd.Process != nil {
+		_ = req.WebCmd.Process.Kill()
+		_ = req.WebCmd.Wait()
+		req.WebCmd = nil
+	}
+	startAgentRunWeb(t, req)
+}
+
 func startAgentRunWeb(t *testing.T, req *Request) {
 	t.Helper()
+	args := []string{"web", "--no-open", "--port", "0", "--token", req.WebToken}
+	if req.GrokTTYRunnerBinary != "" {
+		args = append(args,
+			"--agent-runner", "grok-tty",
+			"--grok-home", req.GrokHome,
+			"--grok-tty-runner-binary", req.GrokTTYRunnerBinary,
+		)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, req.AgentRun, "web", "--no-open", "--port", "0", "--token", req.WebToken)
+	cmd := exec.CommandContext(ctx, req.AgentRun, args...)
 	cmd.Dir = req.TempDir
 	cmd.Env = append(os.Environ(), req.Env...)
 	req.webStdout = &bytes.Buffer{}
@@ -482,40 +610,15 @@ await page.goto(%s, { waitUntil: 'domcontentloaded' });
 `, jsQuote(req.WebBaseURL), jsQuote(req.WebToken), jsQuote(path), body)
 }
 
-func writeFakeCodexTTYBinary(t *testing.T, req *Request) {
+func createRunningWebGrokTTYSessionThroughAPI(t *testing.T, req *Request) {
 	t.Helper()
-	path := filepath.Join(filepath.Dir(req.AgentRun), "codex")
-	script := `#!/bin/sh
-printf 'CODEX_TTY_BANNER\nCodex › '
-IFS= read -r line
-printf '\nResponse: Paris\n'
-`
-	if err := os.WriteFile(path, []byte(script), 0755); err != nil {
-		t.Fatalf("write fake codex binary: %v", err)
-	}
-}
-
-func writeSlowFakeCodexTTYBinary(t *testing.T, req *Request) {
-	t.Helper()
-	path := filepath.Join(filepath.Dir(req.AgentRun), "codex")
-	script := `#!/bin/sh
-printf 'CODEX_TTY_BANNER\nCodex › '
-IFS= read -r line
-sleep 5
-printf '\nResponse: delayed terminal run completed\n'
-`
-	if err := os.WriteFile(path, []byte(script), 0755); err != nil {
-		t.Fatalf("write slow fake codex binary: %v", err)
-	}
-}
-
-func createRunningWebCodexTTYSessionThroughAPI(t *testing.T, req *Request) {
-	t.Helper()
-	writeSlowFakeCodexTTYBinary(t, req)
-	body := `{"runner":"codex-tty","prompt":"keep terminal alive before assistant response"}`
+	prompt := "keep terminal alive before assistant response"
+	setGrokMockHook(t, req, llmMockGrokTTYHook(prompt, persistentGrokMockUUID, "delayed terminal run completed", 5))
+	restartWebWithGrokMock(t, req)
+	body := `{"runner":"grok-tty","prompt":"keep terminal alive before assistant response"}`
 	status, respBody := doHTTP(t, "POST", req.WebBaseURL+"/api/agent-run/sessions", req.WebToken, "application/json", body)
 	if status != http.StatusAccepted {
-		t.Fatalf("create running web codex-tty session status=%d body=%s", status, respBody)
+		t.Fatalf("create running web grok-tty session status=%d body=%s", status, respBody)
 	}
 	created := decodeJSONBody(t, respBody)
 	session, _ := created["session"].(map[string]any)
@@ -523,17 +626,19 @@ func createRunningWebCodexTTYSessionThroughAPI(t *testing.T, req *Request) {
 	if sessionID == "" {
 		t.Fatalf("create response missing session_id: %s", respBody)
 	}
-	req.Runner = "codex-tty"
+	req.Runner = "grok-tty"
 	req.ChatSessionID = sessionID
 }
 
-func createWebCodexTTYSessionThroughAPI(t *testing.T, req *Request) {
+func createWebGrokTTYSessionThroughAPI(t *testing.T, req *Request) {
 	t.Helper()
-	writeFakeCodexTTYBinary(t, req)
-	body := `{"runner":"codex-tty","prompt":"one word of France capital"}`
+	prompt := "one word of France capital"
+	setGrokMockHook(t, req, llmMockGrokTTYHook(prompt, persistentGrokMockUUID, "Response: Paris", 2))
+	restartWebWithGrokMock(t, req)
+	body := `{"runner":"grok-tty","prompt":"one word of France capital"}`
 	status, respBody := doHTTP(t, "POST", req.WebBaseURL+"/api/agent-run/sessions", req.WebToken, "application/json", body)
 	if status != http.StatusAccepted {
-		t.Fatalf("create web codex-tty session status=%d body=%s", status, respBody)
+		t.Fatalf("create web grok-tty session status=%d body=%s", status, respBody)
 	}
 	created := decodeJSONBody(t, respBody)
 	session, _ := created["session"].(map[string]any)
@@ -541,7 +646,7 @@ func createWebCodexTTYSessionThroughAPI(t *testing.T, req *Request) {
 	if sessionID == "" {
 		t.Fatalf("create response missing session_id: %s", respBody)
 	}
-	req.Runner = "codex-tty"
+	req.Runner = "grok-tty"
 	req.ChatSessionID = sessionID
 	waitForCreatedTTYSessionFinished(t, req)
 }

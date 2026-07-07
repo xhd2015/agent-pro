@@ -1,6 +1,6 @@
 ---
 label: chromium
-explanation: Playwright mobile follow-up; live fake-codex run ~60s
+explanation: Playwright mobile follow-up; live grok-tty run ~60s
 ---
 
 ## Expected
@@ -13,8 +13,8 @@ explanation: Playwright mobile follow-up; live fake-codex run ~60s
 
 ## Side Effects
 
-- Session files under `AGENT_RUN_HOME/sessions/fake-codex/follow-up-dedupe/`.
-- Follow-up POST enqueues agent run via `fake-codex`.
+- Session files under `AGENT_RUN_HOME/sessions/grok-tty/follow-up-dedupe/`.
+- Follow-up POST enqueues agent run via `grok-tty` mock harness.
 
 ## Exit Code
 

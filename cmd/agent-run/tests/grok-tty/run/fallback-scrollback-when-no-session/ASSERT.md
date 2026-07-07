@@ -2,8 +2,9 @@
 
 - Exit code 0.
 - Stderr contains a warning that grok session discovery failed (mentions grok session /
-  updates / scrollback fallback — not only the `grok-tty: session-N` registry line).
-- Stdout or `events.jsonl` still contains scrollback-captured assistant text `hi`.
+  updates / discovery — not only the `grok-tty: session-N` registry line).
+- `events.jsonl` contains `error` event with prefix `Cannot resolve session id:`.
+- No scrollback-captured assistant text `hi` in stdout or `events.jsonl`.
 
 ## Exit Code
 
@@ -11,11 +12,12 @@
 
 ```go
 import (
+	"encoding/json"
 	"strings"
 	"testing"
-
-	"github.com/xhd2015/doctest/assert"
 )
+
+const resolveErrorPrefix = "Cannot resolve session id:"
 
 func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	if err != nil {
@@ -26,22 +28,28 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	stderrLower := strings.ToLower(resp.Stderr)
 	hasWarning := strings.Contains(stderrLower, "grok session") ||
 		strings.Contains(stderrLower, "updates.jsonl") ||
-		strings.Contains(stderrLower, "scrollback")
+		strings.Contains(stderrLower, "discovery")
 	if !hasWarning {
 		t.Fatalf("expected stderr warning when grok session dir missing; stderr:\n%s", resp.Stderr)
 	}
 
-	if !strings.Contains(resp.Stdout, "hi") {
-		t.Fatalf("expected scrollback fallback hi on stdout:\n%s", resp.Stdout)
-	}
 	_, lines := findGrokTTYEventsJSONL(t, req.Home)
-	if !eventsContainSubstring(t, lines, "hi") {
-		t.Fatalf("expected scrollback fallback hi in events.jsonl:\n%s", strings.Join(lines, "\n"))
+	if !eventsContainSubstring(t, lines, resolveErrorPrefix) {
+		t.Fatalf("events.jsonl missing error prefix %q:\n%s", resolveErrorPrefix, strings.Join(lines, "\n"))
 	}
-
-	assert.Output(t, resp.Stdout, `
-<contains>
-hi
-</contains>`)
+	for _, line := range lines {
+		var ev map[string]any
+		if json.Unmarshal([]byte(line), &ev) != nil {
+			continue
+		}
+		text, _ := ev["text"].(string)
+		trimmed := strings.TrimSpace(text)
+		if trimmed == "hi" || strings.Contains(text, "Response: hi") {
+			t.Fatalf("scrollback fallback text should not appear in events.jsonl:\n%s", strings.Join(lines, "\n"))
+		}
+	}
+	if strings.Contains(resp.Stdout, "hi") {
+		t.Fatalf("scrollback fallback hi should not appear on stdout:\n%s", resp.Stdout)
+	}
 }
 ```

@@ -1,6 +1,7 @@
 package agentsend
 
 import (
+	"strings"
 	"time"
 
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
@@ -53,7 +54,11 @@ func drainStep(home string, sess Session, provider agenttty.Provider) bool {
 		return true
 	}
 
-	if err := ttywatch.SendMessage(sess.ListenAddr, sess.TerminalSessionID, current.Text, true); err != nil {
+	payload := current.Text
+	if sess.Runner == "grok-tty" && !strings.Contains(payload, "\n") {
+		payload += "\n"
+	}
+	if err := ttywatch.SendMessage(sess.ListenAddr, sess.TerminalSessionID, payload, true); err != nil {
 		return true
 	}
 	if err := dequeueHead(path); err != nil {

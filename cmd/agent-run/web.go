@@ -4,16 +4,12 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"io"
-	"io/fs"
-	"mime"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
-	frontend "github.com/xhd2015/agent-pro/frontend-agent-run"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 	"github.com/xhd2015/less-gen/flags"
 )
@@ -81,6 +77,7 @@ func runWeb(args []string, defaultRunner string) error {
 	if err != nil {
 		return err
 	}
+	maybeInstallCodexTTYTestFixture(store.Home())
 	mode, _ := webTokenArgMode(args)
 	var requireAuth bool
 	switch mode {
@@ -119,7 +116,7 @@ func runWeb(args []string, defaultRunner string) error {
 
 	mux := http.NewServeMux()
 	registerAPI(mux, store, token, requireAuth, runCfg)
-	if err := registerStatic(mux); err != nil {
+	if err := registerStatic(mux, store); err != nil {
 		return err
 	}
 
@@ -174,6 +171,11 @@ func writeAuthToken(home, token string) error {
 	return os.WriteFile(filepath.Join(home, "auth.token"), []byte(token), 0600)
 }
 
+func isTerminalWebSocketPath(path string) bool {
+	path = strings.TrimSuffix(strings.Trim(path, "/"), "/ws")
+	return strings.HasSuffix(path, "/terminal")
+}
+
 func registerAPI(mux *http.ServeMux, store agentstorage.Store, token string, requireAuth bool, runCfg webRunConfig) {
 	wrap := func(next http.HandlerFunc) http.HandlerFunc {
 		if !requireAuth {
@@ -185,7 +187,11 @@ func registerAPI(mux *http.ServeMux, store agentstorage.Store, token string, req
 			if got == "" {
 				got = strings.TrimSpace(r.URL.Query().Get("token"))
 			}
-			if got != token {
+			if got != "" && got != token {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			if got == "" && !isTerminalWebSocketPath(r.URL.Path) {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
@@ -217,39 +223,4 @@ func registerAPI(mux *http.ServeMux, store agentstorage.Store, token string, req
 	mux.HandleFunc("/api/agent-run/sessions/", auth(handleSessionResource(store, runCfg)))
 }
 
-func registerStatic(mux *http.ServeMux) error {
-	dist, err := fs.Sub(frontend.DistFS, "dist")
-	if err != nil {
-		return err
-	}
-	fileServer := http.FileServer(http.FS(dist))
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/") {
-			http.NotFound(w, r)
-			return
-		}
-		path := strings.TrimPrefix(r.URL.Path, "/")
-		if path == "" {
-			path = "index.html"
-		}
-		f, err := dist.Open(path)
-		if err != nil {
-			// SPA fallback
-			path = "index.html"
-			f, err = dist.Open(path)
-			if err != nil {
-				http.NotFound(w, r)
-				return
-			}
-		}
-		defer f.Close()
-		if path == "index.html" {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		} else {
-			w.Header().Set("Content-Type", mime.TypeByExtension(filepath.Ext(path)))
-		}
-		_, _ = io.Copy(w, f)
-	})
-	_ = fileServer
-	return nil
-}
+

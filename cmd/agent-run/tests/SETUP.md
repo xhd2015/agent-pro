@@ -527,25 +527,31 @@ func collectSSESessionEvents(t *testing.T, req *Request, runner, sessionID strin
 	}
 
 	var events []map[string]any
-	sc := bufio.NewScanner(resp.Body)
-	sc.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if !strings.HasPrefix(line, "data:") {
-			continue
+	reader := bufio.NewReader(resp.Body)
+	for {
+		line, err := reader.ReadString('\n')
+		if len(line) > 0 {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "data:") {
+				payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+				if payload != "" && payload != "[DONE]" {
+					var obj map[string]any
+					if err := json.Unmarshal([]byte(payload), &obj); err != nil {
+						t.Fatalf("invalid SSE JSON: %v\n%s", err, payload)
+					}
+					events = append(events, obj)
+				}
+			}
 		}
-		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-		if payload == "" || payload == "[DONE]" {
-			continue
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			if ctx.Err() != nil {
+				break
+			}
+			t.Fatalf("read SSE: %v", err)
 		}
-		var obj map[string]any
-		if err := json.Unmarshal([]byte(payload), &obj); err != nil {
-			t.Fatalf("invalid SSE JSON: %v\n%s", err, payload)
-		}
-		events = append(events, obj)
-	}
-	if err := sc.Err(); err != nil && ctx.Err() == nil {
-		t.Fatalf("read SSE: %v", err)
 	}
 	return events
 }

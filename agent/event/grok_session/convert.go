@@ -95,6 +95,7 @@ func (c *Converter) processUpdate(upd SessionUpdate) []types.AgentEvent {
 			return out
 		}
 		c.pendingAssistant.WriteString(text)
+		out = append(out, c.flushAssistant()...)
 		return out
 	case "tool_call":
 		var out []types.AgentEvent

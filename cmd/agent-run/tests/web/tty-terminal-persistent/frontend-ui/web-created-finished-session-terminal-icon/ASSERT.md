@@ -1,6 +1,6 @@
 ---
 label: ui-automation
-explanation: Uses playwright-debug against a generated web-created codex-tty session.
+explanation: Uses playwright-debug against a generated web-created grok-tty session.
 ---
 
 ## Expected
@@ -8,12 +8,12 @@ explanation: Uses playwright-debug against a generated web-created codex-tty ses
 - Playwright exits 0.
 - Browser-side terminal API call reports `available:true`.
 - Browser-side terminal API call echoes the generated `terminal_session_id`.
-- Generated finished codex-tty chat page shows a visible enabled terminal button.
+- Generated finished grok-tty chat page shows a visible enabled terminal button.
 
 ## Side Effects
 
 - Browser localStorage stores the test auth token.
-- Creates one isolated codex-tty web session in the test home.
+- Creates one isolated grok-tty web session in the test home.
 
 ## Errors
 

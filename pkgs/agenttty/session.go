@@ -119,6 +119,11 @@ func ResolveByAgentSession(store agentstorage.Store, runner, agentSessionID stri
 	}
 	terminalSessionID := strings.TrimSpace(sess.Meta.TerminalSessionID)
 	if terminalSessionID == "" {
+		if snap := readTTYJSON(store.Home(), runner, agentSessionID); snap != nil {
+			terminalSessionID = strings.TrimSpace(snap.TerminalSessionID)
+		}
+	}
+	if terminalSessionID == "" {
 		return nil, fmt.Errorf("tty session not found or expired")
 	}
 	cfg := ttywatch.RegistryConfig{Home: store.Home(), Subdir: runner + "-registry"}
@@ -155,6 +160,74 @@ func ResolveByAgentSession(store agentstorage.Store, runner, agentSessionID stri
 		}
 	}
 	return result, nil
+}
+
+// ResolveTerminalStatus resolves a live terminal for status probes. It avoids
+// removing stale registry entries and scans the runner registry when
+// meta.terminal_session_id has not been persisted yet for a running session.
+func ResolveTerminalStatus(store agentstorage.Store, runner, agentSessionID string) (*TTYSession, error) {
+	if sess, err := ResolveByAgentSession(store, runner, agentSessionID); err == nil {
+		return sess, nil
+	}
+
+	sess, err := store.GetSession(runner, agentSessionID)
+	if err != nil {
+		return nil, err
+	}
+	status := sess.Meta.Status
+	if status != "running" && status != "finished" {
+		return nil, fmt.Errorf("tty session not found or expired")
+	}
+
+	provider, ok := Get(runner)
+	if !ok {
+		return nil, fmt.Errorf("unknown tty runner: %s", runner)
+	}
+
+	cfg := ttywatch.RegistryConfig{Home: store.Home(), Subdir: provider.RegistryDir}
+	registryDir := filepath.Join(store.Home(), provider.RegistryDir)
+	entries, err := os.ReadDir(registryDir)
+	if err != nil {
+		return nil, fmt.Errorf("tty session not found or expired")
+	}
+
+	var fallback *TTYSession
+	for _, ent := range entries {
+		if ent.IsDir() || !strings.HasSuffix(ent.Name(), ".json") {
+			continue
+		}
+		terminalID := strings.TrimSuffix(ent.Name(), ".json")
+		entry, err := ttywatch.ReadRegistry(cfg, terminalID)
+		if err != nil || !ttywatch.TCPReachable(entry.ListenAddr) {
+			continue
+		}
+		linked := findAgentSessionByTerminalID(store.Home(), runner, terminalID)
+		if linked != "" && linked != agentSessionID {
+			continue
+		}
+		candidate := &TTYSession{
+			RunnerID:          runner,
+			AgentSessionID:    agentSessionID,
+			TerminalSessionID: terminalID,
+			Registry:          *entry,
+			Meta:              &sess.Meta,
+			TCPReachable:      true,
+		}
+		if snap := readTTYJSON(store.Home(), runner, agentSessionID); snap != nil {
+			candidate.TTY = snap
+			if snap.ScreenStatus != "" {
+				candidate.ScreenStatus = snap.ScreenStatus
+			}
+		}
+		if linked == agentSessionID {
+			return candidate, nil
+		}
+		fallback = candidate
+	}
+	if fallback != nil {
+		return fallback, nil
+	}
+	return nil, fmt.Errorf("tty session not found or expired")
 }
 
 func registryNotFound(err error) bool {

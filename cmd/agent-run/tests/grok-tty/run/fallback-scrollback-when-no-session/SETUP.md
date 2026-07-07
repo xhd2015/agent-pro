@@ -1,18 +1,19 @@
 # Scenario
 
-**Feature**: when grok session dir is missing, warn on stderr and fall back to scrollback capture
+**Feature**: when grok session dir is missing, warn on stderr and emit error event (no scrollback fallback)
 
 ```
 GROK_HOME has no matching session dir
   -> stderr warns about discovery failure
-  -> end-of-run scrollback still emits fake TUI Response: hi
+  -> events.jsonl emits error "Cannot resolve session id: ..."
+  -> no PTY scrollback assistant text in events
 ```
 
 ## Steps
 
 1. Set empty `GROK_HOME` temp dir with no `sessions/` tree.
 2. Run with respond fake TUI and prompt `hi`.
-3. Assert stderr warning plus scrollback fallback on stdout/events.
+3. Assert stderr warning plus error event; no scrollback `hi` in stdout/events.
 
 ```go
 import "testing"

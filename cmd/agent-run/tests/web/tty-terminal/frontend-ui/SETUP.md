@@ -3,15 +3,17 @@
 **Feature**: browser UI exposes tty runner choice and terminal modal without hiding chat content
 
 ```
-home runner picker -> codex-tty + grok-tty options
-tty chat + available terminal -> terminal icon -> modal websocket attach
+home runner picker -> codex-tty + grok-tty options (fixture listing only)
+seeded tty chat + fake ptywrap registry -> terminal icon -> modal websocket attach
 modal close -> transcript remains; navigation back -> same terminal attach
 ```
 
 ## Preconditions
 
 - `playwright-debug` is installed for UI leaves.
-- UI API calls stay in frontend API helpers; components consume typed helpers.
+- UI leaves in this subtree use **seeded fixtures + fake ptywrap** only — no live
+  `POST grok-tty` / `fake-codex` agent runs. Live grok mock harness lives in
+  `web/tty-terminal-persistent/frontend-ui/` and `web-cli-subset/frontend-ui/`.
 
 ## Steps
 

@@ -1,6 +1,6 @@
 ---
 label: chromium, slow
-explanation: Live fake-codex run; 8s network monitor window
+explanation: Live grok-tty run; 8s network monitor window
 ---
 
 ## Expected
@@ -14,7 +14,7 @@ explanation: Live fake-codex run; 8s network monitor window
 
 ## Side Effects
 
-- New `fake-codex` session created via API POST.
+- New `grok-tty` session created via API POST (`runner: grok-tty`).
 - Background `agent-run web` serves SSE and session detail endpoints.
 
 ## Exit Code

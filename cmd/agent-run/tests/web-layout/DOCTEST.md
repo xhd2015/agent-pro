@@ -20,6 +20,14 @@ The **test harness** builds `cmd/agent-run`, allocates a free port, starts
 `agent-run web` in the background per leaf token mode, waits for health, then
 runs a **playwright-debug** script from `req.PlaywrightScript`.
 
+**Live agent harness** (Playwright leaves that POST or composer-trigger a real
+run) builds `llm-mock-run-grok`, sets `LLM_MOCK_RUN_GROK_COMMAND` +
+`AGENT_RUN_GROK_TTY_GROK_SESSION_ID`, and starts web with
+`--agent-runner grok-tty --grok-home … --grok-tty-runner-binary …`.
+Playwright scripts POST `{runner: "grok-tty", prompt: "…"}` — never
+`fake-codex` for live sessions. Seeded-only leaves keep static `fake-codex`
+fixture dirs unchanged.
+
 **Session scroll / follow mode** (session detail page):
 
 - `app-shell.session-page` uses `100dvh` with `overflow: hidden` — document must not scroll.
@@ -128,13 +136,13 @@ Parameter ranking (most → least significant):
 | 7 | `mobile-home-runner-visible-long-workspace` | Web `cmd.Dir` = deep path; open `/` (no token); runner-picker in viewport |
 | 8 | `mobile-running-card-absent-when-idle` | Seeded `idle` session; `agent-running-card` not in DOM (negative control) |
 | 9 | `mobile-inline-assistant-loading` | Seeded `running` with user bubble only; inline `message-item-assistant-loading` visible |
-| 10 | `mobile-streaming-assistant-bubble` | Live create-session run; assistant bubble text length increases over poll window |
-| 11 | `mobile-follow-up-no-duplicate-user-messages` | Seeded idle session + 1 user event; composer follow-up; exactly 2 user bubbles after run |
-| 12 | `mobile-streaming-uses-sse-not-poll` | Live `fake-codex` session; 8s network window: SSE used, session-detail GET ≤3 |
+| 10 | `mobile-streaming-assistant-bubble` | Live `grok-tty` create-session run; assistant bubble text length increases over poll window |
+| 11 | `mobile-follow-up-no-duplicate-user-messages` | Seeded idle `grok-tty` session + 1 user event; composer follow-up; exactly 2 user bubbles after run |
+| 12 | `mobile-streaming-uses-sse-not-poll` | Live `grok-tty` session; 8s network window: SSE used, session-detail GET ≤3 |
 | 13 | `mobile-sse-stays-connected-during-run` | Seeded `running` session (no live writer); 8s idle gap: exactly 1 SSE stream, 0 aborts, detail GET ≤3 |
-| 14 | `mobile-no-session-detail-poll-while-running` | Live `fake-codex` session; 15s passive watch: detail GET **=== 1**, SSE **=== 1**, 0 aborts (stricter than ≤3) |
+| 14 | `mobile-no-session-detail-poll-while-running` | Live `grok-tty` session; 15s passive watch: detail GET **=== 1**, SSE **=== 1**, 0 aborts (stricter than ≤3) |
 | 15 | `mobile-session-messages-only-scroll` | Seeded `layout-scroll` (≥15 msgs); no document scroll; only `message-list` overflows; chrome Y stable after list scroll |
-| 16 | `mobile-session-auto-follow-at-bottom` | Live `fake-codex` stream at bottom; `distanceFromBottom <= 80` on each assistant growth tick |
+| 16 | `mobile-session-auto-follow-at-bottom` | Live `grok-tty` stream at bottom; `distanceFromBottom <= 80` on each assistant growth tick |
 | 17 | `mobile-session-detach-on-scroll-up` | Scroll up ≥200px during stream; `scrollTop` frozen (±2px) while assistant text grows |
 | 18 | `mobile-session-jump-to-latest` | Detached + streaming growth → `jump-to-latest` visible; tap → bottom + chip hidden |
 | 19 | `mobile-session-send-no-auto-scroll` | Detached idle overflow session; composer send → `scrollTop` unchanged (±2px) |
@@ -189,6 +197,9 @@ type Request struct {
 	Home       string
 	RepoRoot   string
 	AgentRun   string
+	LLMMockRunGrok      string
+	GrokHome            string
+	GrokTTYRunnerBinary string
 	Port       int
 	Token         string
 	WebTokenMode  string // "omit" | "explicit" | "auto" (default explicit)
@@ -213,7 +224,7 @@ func runPlaywrightScript(t *testing.T, script string) (string, string, int, erro
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "playwright-debug", "run", script)
+	cmd := exec.CommandContext(ctx, "playwright-debug", "-e", script)
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf

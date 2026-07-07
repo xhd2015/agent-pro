@@ -22,6 +22,7 @@ build agent-run → temp AGENT_RUN_HOME → optional background web server → p
 ## Context
 
 - Default `WebTokenMode`: `explicit` with `Token` `test-token` unless a leaf sets `omit` (open API).
+- Live-run leaves set `req.GrokTTYRunnerBinary` via `ensureLayoutGrokMockEnv` before `startWebBackground`.
 - Viewport: **390×844** (set inside each playwright script).
 - Server binds **127.0.0.1** only; tests use `http://127.0.0.1:<port>/`.
 
@@ -43,6 +44,10 @@ import (
 	"testing"
 	"time"
 )
+
+const layoutGrokMockUUID = "a1111111-1111-4111-8111-111111111111"
+const layoutGrokStreamMarker = "WEB_LAYOUT_STREAM_MARKER"
+const layoutGrokAssistantPrefix = "WEB_MOCK_ASSISTANT:"
 
 func Setup(t *testing.T, req *Request) error {
 	req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../.."))
@@ -164,6 +169,13 @@ func startWebBackground(t *testing.T, req *Request) error {
 	}
 
 	args := []string{"web", "--port", strconv.Itoa(req.Port), "--no-open"}
+	if req.GrokTTYRunnerBinary != "" {
+		args = append(args,
+			"--agent-runner", "grok-tty",
+			"--grok-home", req.GrokHome,
+			"--grok-tty-runner-binary", req.GrokTTYRunnerBinary,
+		)
+	}
 	switch layoutWebTokenMode(req) {
 	case "omit":
 		// open API — no --token flag
@@ -826,7 +838,76 @@ func buildFakeCodexIntoPath(t *testing.T, req *Request) error {
 	return nil
 }
 
-func openLiveFakeCodexSession(baseURL, prompt string) string {
+func buildLLMMockRunGrok(t *testing.T, req *Request) error {
+	t.Helper()
+	if req.LLMMockRunGrok == "" {
+		req.LLMMockRunGrok = filepath.Join(req.TempDir, "bin", "llm-mock-run-grok")
+	}
+	if req.GrokHome == "" {
+		req.GrokHome = filepath.Join(req.TempDir, "web-grok-home")
+	}
+	if err := os.MkdirAll(filepath.Dir(req.LLMMockRunGrok), 0755); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(req.GrokHome, 0755); err != nil {
+		return err
+	}
+	build := exec.Command("go", "build", "-o", req.LLMMockRunGrok, "./agent/llm/llm-mock/llm-mock-run-grok")
+	build.Dir = req.RepoRoot
+	if out, err := build.CombinedOutput(); err != nil {
+		return fmt.Errorf("build llm-mock-run-grok: %w\n%s", err, string(out))
+	}
+	req.GrokTTYRunnerBinary = req.LLMMockRunGrok
+	return nil
+}
+
+func llmMockGrokLayoutHook(prompt, sessionUUID, marker string, sleepSec int) string {
+	if sleepSec <= 0 {
+		sleepSec = 2
+	}
+	return fmt.Sprintf(`sh -c '
+printf "GROK_TTY_BANNER\nGrok › "
+read -r line || true
+submitted="${line:-%s}"
+wd=$(pwd)
+enc=$(python3 -c '"'"'import os,sys,urllib.parse
+p=os.path.abspath(sys.argv[1])
+if p.startswith("/private/var/"): p="/var/"+p[len("/private/var/"):]
+elif p.startswith("/private/tmp/"): p="/tmp/"+p[len("/private/tmp/"):]
+print(urllib.parse.quote(p, safe=""))'"'"' "$wd")
+dir="$GROK_HOME/sessions/$enc/%s"
+mkdir -p "$dir"
+now=$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)
+cat > "$dir/summary.json" <<EOF
+{"info":{"cwd":"$wd","sessionId":"%s","openedAt":"$now"},"created_at":"$now"}
+EOF
+cat > "$dir/updates.jsonl" <<EOF
+{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"$submitted"}}
+{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"%s"}}
+EOF
+sleep %d
+exit 0
+'`, prompt, sessionUUID, sessionUUID, marker, sleepSec)
+}
+
+func ensureLayoutGrokMockEnv(t *testing.T, req *Request, prompt, marker string, sleepSec int) error {
+	t.Helper()
+	if err := buildLLMMockRunGrok(t, req); err != nil {
+		return err
+	}
+	hook := llmMockGrokLayoutHook(prompt, layoutGrokMockUUID, marker, sleepSec)
+	req.Env = append(req.Env,
+		"LLM_MOCK_RUN_GROK_COMMAND="+hook,
+		"AGENT_RUN_GROK_TTY_GROK_SESSION_ID="+layoutGrokMockUUID,
+	)
+	return nil
+}
+
+func layoutGrokAssistantMarker(prompt string) string {
+	return layoutGrokAssistantPrefix + prompt
+}
+
+func openLiveGrokTTYSession(baseURL, prompt string) string {
 	escaped := strings.ReplaceAll(prompt, `\`, `\\`)
 	escaped = strings.ReplaceAll(escaped, `'`, `\'`)
 	base := strings.TrimRight(baseURL, "/")
@@ -834,12 +915,13 @@ func openLiveFakeCodexSession(baseURL, prompt string) string {
 const res = await fetch('%s/api/agent-run/sessions', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ runner: 'fake-codex', prompt: '%s' }),
+  body: JSON.stringify({ runner: 'grok-tty', prompt: '%s' }),
 });
 if (!res.ok && res.status !== 202) throw new Error('create session failed: ' + res.status);
 const data = await res.json();
 const sid = data.session.session_id;
 const runner = data.session.runner;
+if (runner !== 'grok-tty') throw new Error('expected grok-tty runner, got ' + runner);
 await page.goto('%s/sessions/' + runner + '/' + sid, { waitUntil: 'domcontentloaded' });
 const chat = page.locator('[data-testid="chat-active"]');
 await chat.waitFor({ state: 'visible', timeout: 15000 });

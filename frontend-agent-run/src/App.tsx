@@ -26,6 +26,7 @@ import {
   getRunner,
   getToken,
   openTerminalWebSocket,
+  readSessionBootstrap,
   sendSessionMessage,
   setRunner,
   setToken,
@@ -718,109 +719,122 @@ function formatMessageTimestamp(ms: number): string {
   })
 }
 
-function coalesceTimeline(events: AgentEvent[]): AgentEvent[] {
-  const out: AgentEvent[] = []
-  const streamIndex = new Map<string, number>()
-  for (const ev of events) {
-    if (ev.type !== 'message') {
-      continue
-    }
-    if (ev.role === 'user' || !ev.phase || !ev.id) {
-      out.push(ev)
-      continue
-    }
-    const merged: AgentEvent = { ...ev, role: 'assistant' }
-    const idx = streamIndex.get(ev.id)
-    if (idx === undefined) {
-      streamIndex.set(ev.id, out.length)
-      out.push(merged)
-    } else {
-      out[idx] = merged
-    }
+function shouldMergeAssistantStream(prev: AgentEvent, next: AgentEvent): boolean {
+  if (prev.id && next.id && prev.id === next.id) {
+    return true
   }
-  if (events.length !== out.length) {
-    debugLog('coalesceTimeline merged stream events', {
-      input: summarizeEvents(events),
-      output: summarizeEvents(out),
-    })
+  const prevText = (prev.text ?? '').trim()
+  const nextText = (next.text ?? '').trim()
+  if (!prevText || !nextText) {
+    return false
+  }
+  return nextText.startsWith(prevText)
+}
+
+function coalesceAssistantStreaming(events: AgentEvent[]): AgentEvent[] {
+  const out: AgentEvent[] = []
+  for (const ev of events) {
+    const last = out[out.length - 1]
+    if (
+      last?.type === 'message' &&
+      last.role === 'assistant' &&
+      ev.type === 'message' &&
+      ev.role === 'assistant' &&
+      shouldMergeAssistantStream(last, ev)
+    ) {
+      out[out.length - 1] = {
+        ...ev,
+        text: ev.text ?? last.text,
+        id: ev.id ?? last.id,
+      }
+      continue
+    }
+    out.push(ev)
   }
   return out
 }
 
-function needsInlineAssistantLoading(events: AgentEvent[], isRunning: boolean): boolean {
-  if (!isRunning) {
-    return false
+function isTimelineEvent(ev: AgentEvent): boolean {
+  switch (ev.type) {
+    case 'message':
+    case 'think':
+    case 'tool_call':
+    case 'error':
+      return true
+    default:
+      return false
   }
-  let lastUserIdx = -1
-  for (let i = 0; i < events.length; i++) {
-    if (events[i].type === 'message' && events[i].role === 'user') {
-      lastUserIdx = i
+}
+
+function buildTimeline(events: AgentEvent[]): AgentEvent[] {
+  const filtered = events.filter(isTimelineEvent)
+  const out: AgentEvent[] = []
+  let messageBatch: AgentEvent[] = []
+
+  const flushMessages = () => {
+    if (messageBatch.length === 0) {
+      return
     }
-  }
-  if (lastUserIdx < 0) {
-    return false
+    out.push(...coalesceAssistantStreaming(messageBatch))
+    messageBatch = []
   }
 
-  const openStreams = new Set<string>()
-  let hasCompletedAssistant = false
-  for (let i = lastUserIdx + 1; i < events.length; i++) {
-    const ev = events[i]
-    if (ev.type !== 'message' || ev.role !== 'assistant') {
+  for (const ev of filtered) {
+    if (ev.type === 'message') {
+      messageBatch.push(ev)
       continue
     }
-    if (!ev.phase) {
-      if ((ev.text ?? '').trim() !== '') {
-        hasCompletedAssistant = true
-      }
-      continue
-    }
-    if (!ev.id) {
-      continue
-    }
-    if (ev.phase === 'start' || ev.phase === 'update') {
-      openStreams.add(ev.id)
-    }
-    if (ev.phase === 'end') {
-      openStreams.delete(ev.id)
-      if ((ev.text ?? '').trim() !== '') {
-        hasCompletedAssistant = true
-      }
-    }
+    flushMessages()
+    out.push(ev)
   }
-  if (openStreams.size > 0) {
-    return false
+  flushMessages()
+  return out
+}
+
+function progressCardText(ev: AgentEvent): string {
+  if (ev.type === 'tool_call') {
+    const parts = [ev.tool?.trim(), ev.text?.trim(), ev.output?.trim()].filter(Boolean)
+    if (parts.length > 0) {
+      return parts.join(': ')
+    }
+    return 'Tool call'
   }
-  return !hasCompletedAssistant
+  return ev.text?.trim() || 'Working…'
 }
 
 function SessionPage() {
   const { runner, sessionId } = useParams()
   const navigate = useNavigate()
   const { needsAuth, ready } = useAuthGate()
-  const [events, setEvents] = useState<AgentEvent[]>([])
-  const [status, setStatus] = useState('')
-  const [workspace, setWorkspace] = useState('')
+  const bootstrap = useMemo(
+    () => readSessionBootstrap(runner, sessionId),
+    [runner, sessionId],
+  )
+  const [events, setEvents] = useState<AgentEvent[]>(bootstrap?.events ?? [])
+  const [status, setStatus] = useState(bootstrap?.session.status ?? '')
+  const [workspace, setWorkspace] = useState(bootstrap?.session.workspace ?? '')
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [terminalAvailable, setTerminalAvailable] = useState(false)
   const [terminalOpen, setTerminalOpen] = useState(false)
   const [sessionUpdatedAt, setSessionUpdatedAt] = useState<string | undefined>()
   const [sessionCreatedAt, setSessionCreatedAt] = useState<string | undefined>()
-  const [streamOffset, setStreamOffset] = useState<number | null>(null)
-  const streamOffsetRef = useRef<number | null>(null)
-  const statusRef = useRef('')
+  const [streamOffset, setStreamOffset] = useState<number | null>(
+    bootstrap?.events_offset ?? null,
+  )
+  const streamOffsetRef = useRef<number | null>(bootstrap?.events_offset ?? null)
+  const statusRef = useRef(bootstrap?.session.status ?? '')
   const eventsRef = useRef<AgentEvent[]>([])
   const runChromeHoldUntilRef = useRef(0)
   const messageListRef = useRef<HTMLDivElement>(null)
-  const showInlineLoading = needsInlineAssistantLoading(events, status === 'running')
-  const timeline = coalesceTimeline(events)
+  const timeline = useMemo(() => buildTimeline(events), [events])
   const {
     followModeRef,
     showJumpToLatest,
     syncFollowFromScroll,
     handleJumpToLatest,
     resetFollow,
-  } = useFollowScroll(messageListRef, [timeline, showInlineLoading])
+  } = useFollowScroll(messageListRef, [timeline])
 
   useEffect(() => {
     eventsRef.current = events
@@ -929,6 +943,7 @@ function SessionPage() {
 
   useEffect(() => {
     if (!ready || needsAuth || !runner || !sessionId) return
+    if (!isTTYRunnerID(runner)) return
     let stopped = false
     const refreshTerminal = async () => {
       const terminal = await fetchTerminalStatus(runner, sessionId)
@@ -945,6 +960,7 @@ function SessionPage() {
 
   useEffect(() => {
     if (!ready || needsAuth || !runner || !sessionId) return
+    if (!isTTYRunnerID(runner)) return
     if (status !== 'running') return
 
     const offset = streamOffset
@@ -980,7 +996,7 @@ function SessionPage() {
             return
           }
           setEvents((prev) => {
-            const next = coalesceTimeline([...prev, ev])
+            const next = [...prev, ev]
             debugLog('sse:event', {
               runner,
               sessionId,
@@ -1149,7 +1165,7 @@ function SessionPage() {
                 </div>
               ) : null}
             </div>
-            {isRunning && !showInlineLoading ? (
+            {isRunning ? (
               <AgentRunningCard updatedAt={sessionUpdatedAt} createdAt={sessionCreatedAt} />
             ) : null}
             <div className="message-list-region">
@@ -1170,9 +1186,43 @@ function SessionPage() {
                 onScroll={syncFollowFromScroll}
               >
               {timeline.map((ev, i) => {
+                const tsText = ev.timestamp != null ? formatMessageTimestamp(ev.timestamp) : ''
+                if (ev.type === 'think' || ev.type === 'tool_call') {
+                  return (
+                    <div
+                      key={`${ev.id ?? ''}-${ev.timestamp ?? i}-${i}`}
+                      className="timeline-row timeline-row-progress"
+                    >
+                      <div className="progress-card" data-testid="progress-card" role="status">
+                        {tsText ? (
+                          <time className="timeline-timestamp" dateTime={String(ev.timestamp)}>
+                            {tsText}
+                          </time>
+                        ) : null}
+                        <div className="progress-card-body">{progressCardText(ev)}</div>
+                      </div>
+                    </div>
+                  )
+                }
+                if (ev.type === 'error') {
+                  return (
+                    <div
+                      key={`${ev.id ?? ''}-${ev.timestamp ?? i}-${i}`}
+                      className="timeline-row timeline-row-error"
+                    >
+                      <div className="error-card" data-testid="error-card" role="alert">
+                        {tsText ? (
+                          <time className="timeline-timestamp" dateTime={String(ev.timestamp)}>
+                            {tsText}
+                          </time>
+                        ) : null}
+                        <div className="error-card-body">{ev.text ?? 'An error occurred'}</div>
+                      </div>
+                    </div>
+                  )
+                }
                 const role = ev.role === 'user' ? 'user' : 'assistant'
                 const roleLabel = role === 'user' ? 'You' : 'Agent'
-                const tsText = ev.timestamp != null ? formatMessageTimestamp(ev.timestamp) : ''
                 return (
                   <div
                     key={`${ev.id ?? ''}-${ev.timestamp ?? i}-${i}`}
@@ -1191,29 +1241,17 @@ function SessionPage() {
                           </time>
                         ) : null}
                       </div>
-                      <div className="message-body">{ev.text ?? (role === 'assistant' ? '…' : ev.type)}</div>
+                      <div
+                        className="message-body"
+                        data-testid={role === 'assistant' ? 'assistant-message' : undefined}
+                      >
+                        {ev.text ?? (role === 'assistant' ? '…' : ev.type)}
+                      </div>
                     </div>
                   </div>
                 )
               })}
-              {showInlineLoading ? (
-                <div className="message-row message-row-assistant" data-testid="message-item">
-                  <div
-                    className="message-item message-item-assistant message-item-assistant-loading"
-                    data-testid="message-item-assistant-loading"
-                  >
-                    <div className="message-meta">
-                      <span className="message-role">Agent</span>
-                    </div>
-                    <div className="message-body assistant-loading-dots" aria-label="Agent is typing">
-                      <span />
-                      <span />
-                      <span />
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-              {timeline.length === 0 && !showInlineLoading && (
+              {timeline.length === 0 && (
                 <div className="message-item message-item-muted" data-testid="message-item">
                   Waiting for agent…
                 </div>

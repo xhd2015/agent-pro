@@ -192,7 +192,7 @@ func runPlaywright(t *testing.T, req *Request) (*Response, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "playwright-debug", "run", req.PlaywrightScript)
+	cmd := exec.CommandContext(ctx, "playwright-debug", "-e", req.PlaywrightScript)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

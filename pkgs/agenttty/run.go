@@ -92,6 +92,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 		BinaryPath:     binaryPath,
 		Command:        argv,
 		Cwd:            opts.Workspace,
+		KeepAlive:      opts.KeepTerminalAlive,
 	})
 	if err != nil {
 		return "", "", err
@@ -179,11 +180,19 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 		tailWG.Add(1)
 		go func() {
 			defer tailWG.Done()
+			_ = opts.Emit(types.AgentEvent{
+				Type:      types.ActionThink,
+				Text:      "Resolve session id...",
+				Timestamp: time.Now().UnixMilli(),
+			})
 			id, updatesPath, discErr := DiscoverSession(tailCtx, grokHome, opts.Workspace, promptText, runStart)
 			if discErr != nil {
-				if tailCtx.Err() == nil {
-					fmt.Fprintf(opts.Stderr, "grok-tty: grok session discovery failed: %v\n", discErr)
-				}
+				_ = opts.Emit(types.AgentEvent{
+					Type:      types.ActionError,
+					Text:      "Cannot resolve session id: " + discErr.Error(),
+					Timestamp: time.Now().UnixMilli(),
+				})
+				fmt.Fprintf(opts.Stderr, "grok-tty: grok session discovery failed: %v\n", discErr)
 				return
 			}
 			if absUpdates, absErr := filepath.Abs(updatesPath); absErr == nil {
@@ -193,7 +202,6 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 			fmt.Fprintf(opts.Stderr, "grok-tty: grok updates %s\n", updatesPath)
 			tailState.Lock()
 			tailState.id = id
-			tailState.streamed = true
 			tailState.Unlock()
 			_ = opts.Emit(types.AgentEvent{
 				Type:      types.ActionThink,
@@ -201,7 +209,12 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 				Timestamp: time.Now().UnixMilli(),
 			})
 			startOffset := updatesTailStartOffset(updatesPath, runStart)
-			_ = TailUpdatesFromOffset(tailCtx, updatesPath, startOffset, opts.Emit)
+			onStreamed := func() {
+				tailState.Lock()
+				tailState.streamed = true
+				tailState.Unlock()
+			}
+			_ = TailUpdatesFromOffset(tailCtx, updatesPath, startOffset, opts.Emit, onStreamed)
 		}()
 	}
 
@@ -267,7 +280,15 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 
 	var waitErr error
 	if opts.KeepTerminalAlive {
-		waitErr = waitForPersistentTurnRemote(ctx, listenAddr, sessionID, promptText, cfg)
+		var extraComplete func() bool
+		if runnerID == "grok-tty" {
+			extraComplete = func() bool {
+				tailState.Lock()
+				defer tailState.Unlock()
+				return tailState.streamed
+			}
+		}
+		waitErr = waitForPersistentTurnRemote(ctx, listenAddr, sessionID, promptText, cfg, extraComplete)
 	} else {
 		waitErr = ttywatch.WaitHeadless(ctx, result, argv)
 		if autoExitCancel != nil {
@@ -291,12 +312,8 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	streamed := tailState.streamed
 	tailState.Unlock()
 
-	if !streamed && opts.Emit != nil {
-		if runnerID == "codex-tty" {
-			fmt.Fprintf(opts.Stderr, "codex-tty: codex transcript not found; falling back to scrollback capture\n")
-		} else if !provider.DisableTail {
-			fmt.Fprintf(opts.Stderr, "grok-tty: grok session not found (updates.jsonl); falling back to scrollback capture\n")
-		}
+	if !streamed && opts.Emit != nil && runnerID == "codex-tty" {
+		fmt.Fprintf(opts.Stderr, "codex-tty: codex transcript not found; falling back to scrollback capture\n")
 		text := strings.TrimSpace(captured)
 		if text != "" {
 			if emitErr := opts.Emit(types.AgentEvent{

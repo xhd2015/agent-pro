@@ -4,7 +4,7 @@
 stream that replays the next user message.
 
 ```
-running codex-tty chat
+running grok-tty chat
   -> open Terminal while the first turn is running
   -> first assistant response arrives while terminal modal is open
   -> close Terminal
@@ -14,14 +14,13 @@ running codex-tty chat
 
 ## Preconditions
 
-- The session is created through the real web API.
-- The fake `codex` command prints a TTY banner, waits, then completes the first
-  response while the terminal modal is open.
-- The browser submits the follow-up through the real chat composer.
+- The session is created through the real web API with grok mock harness.
+- The mock hook sleeps before completing the first response while the terminal
+  modal is open.
 
 ## Steps
 
-1. Create a running `codex-tty` web session.
+1. Create a running `grok-tty` web session.
 2. Wait for the tty registry entry so the Terminal button can attach.
 3. Open the generated chat route in Playwright.
 4. Open the terminal modal and wait for the delayed response text.
@@ -34,7 +33,7 @@ import "testing"
 
 func Setup(t *testing.T, req *Request) error {
 	req.Mode = "ui"
-	createRunningWebCodexTTYSessionThroughAPI(t, req)
+	createRunningWebGrokTTYSessionThroughAPI(t, req)
 	waitForAnyRegistryID(t, req, 3_000_000_000)
 	req.PlaywrightScript = sessionBrowserScript(req, `
 const terminalButton = page.getByRole('button', { name: /terminal/i });

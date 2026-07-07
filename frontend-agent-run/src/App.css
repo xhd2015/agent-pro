@@ -84,6 +84,50 @@ html:has(.home-page) #root {
   color: #9aa0a6;
 }
 
+.timeline-row {
+  display: flex;
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.timeline-row-progress,
+.timeline-row-error {
+  justify-content: center;
+}
+
+.progress-card,
+.error-card {
+  width: min(100%, 560px);
+  padding: 12px 14px;
+  border-radius: 10px;
+  line-height: 1.45;
+}
+
+.progress-card {
+  background: #1a2332;
+  border: 1px solid #2f4a66;
+  color: #c5d7ef;
+}
+
+.error-card {
+  background: #2a1719;
+  border: 1px solid #6b3038;
+  color: #f5c2c7;
+}
+
+.timeline-timestamp {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: #9aa0a6;
+}
+
+.progress-card-body,
+.error-card-body {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .agent-running-card {
   display: flex;
   flex-direction: column;

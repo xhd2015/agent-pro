@@ -3,18 +3,18 @@
 **Feature**: follow mode — detach when user scrolls up during streaming
 
 ```
-seeded overflow session → scroll up to detach → composer follow-up stream → scrollTop frozen
+seeded overflow grok-tty session → scroll up to detach → composer follow-up stream → scrollTop frozen
 ```
 
 ## Preconditions
 
-- `fake-codex` on PATH.
+- Web started with grok mock harness.
 - Open API.
 - Seeded idle session with overflow history so detach scroll-up is meaningful before follow-up stream.
 
 ## Steps
 
-1. Seed `fake-codex/layout-scroll-detach` with ≥15 messages.
+1. Seed `grok-tty/layout-scroll-detach` with ≥15 messages.
 2. Open session route; wait for `message-list` overflow.
 3. Scroll `message-list` up ≥200px from bottom; record `scrollTop`.
 4. Send composer follow-up to start live stream.
@@ -28,20 +28,21 @@ import (
 func Setup(t *testing.T, req *Request) error {
 	requirePlaywright(t)
 
-	if err := buildFakeCodexIntoPath(t, req); err != nil {
-		return err
-	}
-
 	req.Layout = "session-detach-on-scroll-up"
 	req.WebTokenMode = "omit"
-	runner := "fake-codex"
+	runner := "grok-tty"
 	sessionID := "layout-scroll-detach"
+	followUpPrompt := "grow the stream for detach mode"
+	marker := layoutGrokStreamMarker
 
 	if err := seedLayoutScrollSession(t, req.Home, runner, sessionID, 18); err != nil {
 		return err
 	}
 
 	req.Port = findFreePort(t)
+	if err := ensureLayoutGrokMockEnv(t, req, followUpPrompt, marker, 10); err != nil {
+		return err
+	}
 	if err := startWebBackground(t, req); err != nil {
 		return err
 	}
@@ -50,7 +51,7 @@ func Setup(t *testing.T, req *Request) error {
 	body := openSeededSessionPage(req.BaseURL, sessionPath) +
 		waitForMessageListOverflow() + scrollMessageListUpFromBottom(250) +
 		assertMessageListDetached() + recordFrozenScrollTop() +
-		sendComposerMessage("grow the stream for detach mode") +
+		sendComposerMessage(followUpPrompt) +
 		assertScrollTopFrozenDuringStreaming()
 
 	req.PlaywrightScript = mobileViewportScript(body)

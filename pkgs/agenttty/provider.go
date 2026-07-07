@@ -3,6 +3,7 @@ package agenttty
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -144,10 +145,19 @@ func registerStubProvider() {
 }
 
 func ensureStubRegistered() {
-	if os.Getenv("AGENT_RUN_ENABLE_STUB_TTY") != "1" {
+	if IsTTYRunner("stub-tty") {
 		return
 	}
-	if IsTTYRunner("stub-tty") {
+	if os.Getenv("AGENT_RUN_ENABLE_STUB_TTY") == "1" {
+		registerStubProvider()
+		return
+	}
+	home := strings.TrimSpace(os.Getenv("AGENT_RUN_HOME"))
+	if home == "" {
+		return
+	}
+	entries, err := os.ReadDir(filepath.Join(home, "stub-tty-registry"))
+	if err != nil || len(entries) == 0 {
 		return
 	}
 	registerStubProvider()

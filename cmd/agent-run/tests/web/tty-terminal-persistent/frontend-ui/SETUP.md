@@ -1,33 +1,32 @@
 # Scenario
 
-**Bug**: chat UI must show terminal affordance from terminal availability, not turn status
+**Feature**: browser UI for web-created grok-tty sessions and fixture-backed terminal modal
 
 ```
-finished tty chat + terminal status available -> chat top bar terminal button visible
+grok mock web harness -> POST grok-tty -> terminal_session_id + grok-tty-registry
+browser chat -> terminal icon -> modal attaches live GROK_TTY_BANNER PTY
+fixture leaves (modal-renders-*, finished-status-*) keep seeded ptywrap only
 ```
 
 ## Preconditions
 
-- Browser leaf requires `playwright-debug`.
-- Session is `finished`.
-- The mapped PTY is live.
+- `playwright-debug` on PATH for `--label ui-automation` leaves.
+- Web-created session leaves use root `createWebGrokTTYSessionThroughAPI` /
+  `createRunningWebGrokTTYSessionThroughAPI` helpers (no fake `codex` shell binary).
+- `real-codex-terminal-stale-input-follow-up` stays on real `codex-tty` (`label: codex`).
 
 ## Steps
 
-1. Descendant setup writes mapped finished session and live registry.
-2. Browser opens the finished chat route.
-3. Browser waits for terminal button.
-
-## Context
-
-- This is the only UI automation branch in the follow-up tree.
+1. Grouping setup sets `req.Mode = "ui"`.
+2. Leaf setup creates grok-tty web session or writes fixture session/registry.
+3. Leaf setup writes Playwright script.
+4. `Run` executes `playwright-debug run`.
 
 ```go
 import "testing"
 
 func Setup(t *testing.T, req *Request) error {
 	req.Mode = "ui"
-	req.Status = "finished"
 	return nil
 }
 ```
