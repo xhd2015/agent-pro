@@ -22,6 +22,23 @@ func TestDebugWithUserSkillIsRegistered(t *testing.T) {
 	}
 }
 
+func TestVerifyWithPrototypeSkillIsRegistered(t *testing.T) {
+	names := knownSkillNames()
+	if !containsString(names, "verify-with-prototype") {
+		t.Fatalf("knownSkillNames missing verify-with-prototype: %v", names)
+	}
+	sk, ok := knownSkills["verify-with-prototype"]
+	if !ok {
+		t.Fatal("knownSkills missing verify-with-prototype")
+	}
+	if !strings.Contains(sk.Content, "name: verify-with-prototype") {
+		t.Fatalf("skill content missing frontmatter name:\n%s", sk.Content)
+	}
+	if sk.Description == "" {
+		t.Fatal("verify-with-prototype skill missing description")
+	}
+}
+
 func TestInvestigateSkillIsRegistered(t *testing.T) {
 	names := knownSkillNames()
 	if !containsString(names, "investigate") {

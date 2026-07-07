@@ -12,6 +12,7 @@ import (
 	investigate_run "github.com/xhd2015/agent-pro/agents/investigate/run"
 	intentroute_run "github.com/xhd2015/agent-pro/agents/intent-route/run"
 	reproduce_run "github.com/xhd2015/agent-pro/agents/reproduce/run"
+	verifywithprototype_run "github.com/xhd2015/agent-pro/agents/verify-with-prototype/run"
 	"github.com/xhd2015/less-gen/flags"
 	"github.com/xhd2015/skills/install"
 )
@@ -63,6 +64,11 @@ var knownSkills = map[string]skillInfo{
 		Description: extractDescription(reproduce_run.SkillFile),
 		Content:     reproduce_run.SkillFile,
 	},
+	"verify-with-prototype": {
+		Name:        "verify-with-prototype",
+		Description: extractDescription(verifywithprototype_run.SkillFile),
+		Content:     verifywithprototype_run.SkillFile,
+	},
 }
 
 func extractDescription(skillMD string) string {
@@ -108,10 +114,10 @@ func extractDescription(skillMD string) string {
 }
 
 func knownSkillNames() []string {
-	return []string{"brainstorm", "debug-with-user", "explore", "followup", "git-resolve-conflicts", "intent-route", "investigate", "reproduce"}
+	return []string{"brainstorm", "debug-with-user", "explore", "followup", "git-resolve-conflicts", "intent-route", "investigate", "reproduce", "verify-with-prototype"}
 }
 
-const knownSkillNamesText = "brainstorm, debug-with-user, explore, followup, git-resolve-conflicts, intent-route, investigate, reproduce"
+const knownSkillNamesText = "brainstorm, debug-with-user, explore, followup, git-resolve-conflicts, intent-route, investigate, reproduce, verify-with-prototype"
 
 const skillHelp = `
 Usage: agent-pro skill <command> [ARGS]
@@ -121,7 +127,7 @@ Commands:
   <name> show         print the SKILL.md content of a skill
   <name> install      install a skill to a skill directory
 
-Skill names: brainstorm, debug-with-user, explore, followup, git-resolve-conflicts, intent-route, investigate, reproduce
+Skill names: brainstorm, debug-with-user, explore, followup, git-resolve-conflicts, intent-route, investigate, reproduce, verify-with-prototype
 
 Run agent-pro skill <name> <command> --help for command-specific options.
 `
@@ -134,7 +140,7 @@ Commands (without arguments, lists all available skill names):
   <name> show         print the SKILL.md content of a skill
   <name> install      install a skill to a skill directory
 
-Skill names: brainstorm, debug-with-user, explore, followup, git-resolve-conflicts, intent-route, investigate, reproduce
+Skill names: brainstorm, debug-with-user, explore, followup, git-resolve-conflicts, intent-route, investigate, reproduce, verify-with-prototype
 
 Run agent-pro skills <name> <command> --help for command-specific options.
 `
