@@ -23,7 +23,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/xhd2015/agent-pro/pkgs/sudosetup"
+	"github.com/xhd2015/dot-pkgs/go-pkgs/sudosetup"
 )
 
 const (
