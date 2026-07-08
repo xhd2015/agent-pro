@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	brainstorm_run "github.com/xhd2015/agent-pro/agents/brainstorm/run"
+	consolidatecode_run "github.com/xhd2015/agent-pro/agents/consolidate-code/run"
 	debugwithuser_run "github.com/xhd2015/agent-pro/agents/debug-with-user/run"
 	explore_run "github.com/xhd2015/agent-pro/agents/explore/run"
 	followup_run "github.com/xhd2015/agent-pro/agents/followup/run"
@@ -30,6 +31,11 @@ var knownSkills = map[string]skillInfo{
 		Name:        "brainstorm",
 		Description: extractDescription(brainstorm_run.SkillFile),
 		Content:     brainstorm_run.SkillFile,
+	},
+	"consolidate-code": {
+		Name:        "consolidate-code",
+		Description: extractDescription(consolidatecode_run.SkillFile),
+		Content:     consolidatecode_run.SkillFile,
 	},
 	"debug-with-user": {
 		Name:        "debug-with-user",
@@ -126,10 +132,10 @@ func extractDescription(skillMD string) string {
 }
 
 func knownSkillNames() []string {
-	return []string{"brainstorm", "debug-with-user", "explore", "followup", "git-resolve-conflicts", "intent-route", "investigate", "loop-workflow", "reproduce", "sound-fix", "verify-with-prototype"}
+	return []string{"brainstorm", "consolidate-code", "debug-with-user", "explore", "followup", "git-resolve-conflicts", "intent-route", "investigate", "loop-workflow", "reproduce", "sound-fix", "verify-with-prototype"}
 }
 
-const knownSkillNamesText = "brainstorm, debug-with-user, explore, followup, git-resolve-conflicts, intent-route, investigate, loop-workflow, reproduce, sound-fix, verify-with-prototype"
+const knownSkillNamesText = "brainstorm, consolidate-code, debug-with-user, explore, followup, git-resolve-conflicts, intent-route, investigate, loop-workflow, reproduce, sound-fix, verify-with-prototype"
 
 const skillHelp = `
 Usage: agent-pro skill <command> [ARGS]
@@ -139,7 +145,7 @@ Commands:
   <name> show         print the SKILL.md content of a skill
   <name> install      install a skill to a skill directory
 
-Skill names: brainstorm, debug-with-user, explore, followup, git-resolve-conflicts, intent-route, investigate, loop-workflow, reproduce, sound-fix, verify-with-prototype
+Skill names: brainstorm, consolidate-code, debug-with-user, explore, followup, git-resolve-conflicts, intent-route, investigate, loop-workflow, reproduce, sound-fix, verify-with-prototype
 
 Run agent-pro skill <name> <command> --help for command-specific options.
 `
@@ -152,7 +158,7 @@ Commands (without arguments, lists all available skill names):
   <name> show         print the SKILL.md content of a skill
   <name> install      install a skill to a skill directory
 
-Skill names: brainstorm, debug-with-user, explore, followup, git-resolve-conflicts, intent-route, investigate, loop-workflow, reproduce, sound-fix, verify-with-prototype
+Skill names: brainstorm, consolidate-code, debug-with-user, explore, followup, git-resolve-conflicts, intent-route, investigate, loop-workflow, reproduce, sound-fix, verify-with-prototype
 
 Run agent-pro skills <name> <command> --help for command-specific options.
 `
