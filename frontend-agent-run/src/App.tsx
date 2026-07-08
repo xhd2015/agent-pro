@@ -48,6 +48,7 @@ import {
   sortSessionsOldestFirst,
   statusPillClass,
 } from './sessionDisplay'
+import { sessionsPollResult } from './sessionPoll'
 
 function Shell({
   children,
@@ -442,6 +443,34 @@ function RunnerPicker({ runners, value, onChange }: RunnerPickerProps) {
   )
 }
 
+function HomeTopBar({
+  runners,
+  runner,
+  onRunnerChange,
+  workspace,
+}: {
+  runners: string[]
+  runner: string
+  onRunnerChange: (runner: string) => void
+  workspace: string
+}) {
+  return (
+    <header className="top-bar top-bar-home">
+      <div className="top-bar-row top-bar-row-primary">
+        <h1 className="app-title">agent-run</h1>
+        <RunnerPicker runners={runners} value={runner} onChange={onRunnerChange} />
+      </div>
+      {workspace ? (
+        <div className="top-bar-row top-bar-row-workspace">
+          <div className="workspace-display" data-testid="workspace" title={workspace}>
+            {workspace}
+          </div>
+        </div>
+      ) : null}
+    </header>
+  )
+}
+
 function TerminalModal({
   runner,
   sessionId,
@@ -755,6 +784,7 @@ function HomePage() {
   const navigate = useNavigate()
   const { needsAuth, ready } = useAuthGate()
   const [sessions, setSessions] = useState<SessionSummary[]>([])
+  const [sessionsLoaded, setSessionsLoaded] = useState(false)
   const [runners, setRunners] = useState<string[]>(['opencode'])
   const [runner, setRunnerState] = useState(getRunner)
   const [draft, setDraft] = useState('')
@@ -772,7 +802,10 @@ function HomePage() {
 
   const refresh = useCallback(async () => {
     const [list, r, status] = await Promise.all([fetchSessions(), fetchRunners(), fetchStatus()])
-    setSessions(list)
+    if (list != null) {
+      setSessions((current) => sessionsPollResult(list, current))
+      setSessionsLoaded(true)
+    }
     if (r.runners.length > 0) {
       setRunners(r.runners)
     }
@@ -821,62 +854,54 @@ function HomePage() {
   }
 
   if (needsAuth) return <AuthPage />
-  if (!ready) {
-    return (
-      <Shell homePage>
-        <div className="main-panel home-active" data-testid="home-active" />
-        <Composer value="" onChange={() => {}} onSend={() => {}} sending />
-      </Shell>
-    )
-  }
+
+  const homeMain = !ready || !sessionsLoaded ? null : sortedSessions.length > 0 ? (
+    <div className="session-list-region">
+      {showJumpToLatest ? (
+        <button
+          type="button"
+          className="jump-to-latest"
+          data-testid="jump-to-latest"
+          onClick={handleJumpToLatest}
+        >
+          Jump to latest
+        </button>
+      ) : null}
+      <SessionList
+        ref={sessionListRef}
+        sessions={sortedSessions}
+        onScroll={syncFollowFromScroll}
+        onWheel={markUserScrollIntent}
+        onTouchStart={markUserScrollIntent}
+      />
+    </div>
+  ) : (
+    <div className="empty-state" data-testid="empty-state">
+      <div className="empty-state-icon" aria-hidden="true">
+        ◇
+      </div>
+      <h2>Start a session</h2>
+      <p>Choose a runner above, then send a message to kick off your agent.</p>
+    </div>
+  )
 
   return (
     <Shell homePage>
-      <header className="top-bar top-bar-home">
-        <div className="top-bar-row top-bar-row-primary">
-          <h1 className="app-title">agent-run</h1>
-          <RunnerPicker runners={runners} value={runner} onChange={handleRunnerChange} />
-        </div>
-        {workspace ? (
-          <div className="top-bar-row top-bar-row-workspace">
-            <div className="workspace-display" data-testid="workspace" title={workspace}>
-              {workspace}
-            </div>
-          </div>
-        ) : null}
-      </header>
+      <HomeTopBar
+        runners={runners}
+        runner={runner}
+        onRunnerChange={handleRunnerChange}
+        workspace={workspace}
+      />
       <div className="main-panel home-active" data-testid="home-active">
-        {sortedSessions.length > 0 ? (
-          <div className="session-list-region">
-            {showJumpToLatest ? (
-              <button
-                type="button"
-                className="jump-to-latest"
-                data-testid="jump-to-latest"
-                onClick={handleJumpToLatest}
-              >
-                Jump to latest
-              </button>
-            ) : null}
-            <SessionList
-              ref={sessionListRef}
-              sessions={sortedSessions}
-              onScroll={syncFollowFromScroll}
-              onWheel={markUserScrollIntent}
-              onTouchStart={markUserScrollIntent}
-            />
-          </div>
-        ) : (
-          <div className="empty-state" data-testid="empty-state">
-            <div className="empty-state-icon" aria-hidden="true">
-              ◇
-            </div>
-            <h2>Start a session</h2>
-            <p>Choose a runner above, then send a message to kick off your agent.</p>
-          </div>
-        )}
+        {homeMain}
       </div>
-      <Composer value={draft} onChange={setDraft} onSend={() => void handleSend()} sending={sending} />
+      <Composer
+        value={draft}
+        onChange={setDraft}
+        onSend={() => void handleSend()}
+        sending={sending || !ready}
+      />
     </Shell>
   )
 }

@@ -64,13 +64,13 @@ export type SessionSummary = {
   updated_at?: string
 }
 
-export async function fetchSessions(): Promise<SessionSummary[]> {
+export async function fetchSessions(): Promise<SessionSummary[] | null> {
   const res = await apiFetch('/api/agent-run/sessions')
   if (res.status === 401) {
     throw new Error('unauthorized')
   }
   if (!res.ok) {
-    return []
+    return null
   }
   const data = (await res.json()) as { sessions?: SessionSummary[] }
   return data.sessions ?? []

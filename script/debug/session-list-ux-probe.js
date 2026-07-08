@@ -47,6 +47,7 @@ const metrics = await page.evaluate(() => {
     const rect = el.getBoundingClientRect();
     const statusEl = el.querySelector('[data-testid="session-status"]');
     const statusStyle = statusEl ? getComputedStyle(statusEl) : null;
+    const itemStyle = getComputedStyle(el);
     return {
       preview,
       status,
@@ -54,6 +55,8 @@ const metrics = await page.evaluate(() => {
       height: rect.height,
       statusBackground: statusStyle?.backgroundColor || null,
       statusColor: statusStyle?.color || null,
+      borderLeftColor: itemStyle.borderLeftColor || null,
+      itemClass: el.className,
     };
   });
 
@@ -86,6 +89,28 @@ if (metrics.itemCount > 0) {
     if (!row.status) issues.push(`session-item[${i}] missing status pill`);
     if (!row.recency) issues.push(`session-item[${i}] missing recency text`);
     if (row.height < 44) issues.push(`session-item[${i}] tap target too short (${row.height}px)`);
+  }
+  const runningRows = metrics.rows.filter((row) => row.status === 'running');
+  const finishedRows = metrics.rows.filter((row) => row.status === 'finished' || row.status === 'idle');
+  if (runningRows.length === 0) {
+    issues.push('expected at least one running session row for resume-running UX');
+  }
+  if (finishedRows.length === 0) {
+    issues.push('expected at least one finished/idle session row for contrast');
+  }
+  if (runningRows.length > 0 && finishedRows.length > 0) {
+    const running = runningRows[0];
+    const finished = finishedRows[0];
+    const distinctStatus =
+      running.statusBackground !== finished.statusBackground ||
+      running.statusColor !== finished.statusColor;
+    const distinctBorder = running.borderLeftColor !== finished.borderLeftColor;
+    if (!distinctStatus && !distinctBorder) {
+      issues.push('running and finished rows lack visual distinction');
+    }
+    if (!running.itemClass.includes('session-item--running')) {
+      issues.push('running row missing session-item--running class');
+    }
   }
 }
 if (metrics.docOverflowX > 2) {
