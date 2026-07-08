@@ -45,8 +45,10 @@ import {
   filterSessionsByStatus,
   formatSessionRecency,
   formatStatusLabel,
+  getQuickResumeSessions,
   isStaleRunningSession,
   parseRFC3339Ms,
+  sessionListCountLabel,
   sessionRowHasPrompt,
   sessionRowLabel,
   sessionWorkspaceLabel,
@@ -286,7 +288,12 @@ function useFollowScroll<T extends HTMLElement>(
 
   useLayoutEffect(() => {
     const el = scrollRef.current
-    if (!el) return
+    if (!el) {
+      pinnedScrollTopRef.current = null
+      followModeRef.current = 'following'
+      setShowJumpToLatest(false)
+      return
+    }
 
     if (pinnedScrollTopRef.current != null) {
       isProgrammaticScrollRef.current = true
@@ -694,11 +701,13 @@ function sanitizeTerminalTranscript(data: string): string {
 
 function SessionListHeader({
   sessions,
+  visibleCount,
   filter,
   onFilterChange,
   refreshing,
 }: {
   sessions: SessionSummary[]
+  visibleCount: number
   filter: SessionStatusFilter
   onFilterChange: (filter: SessionStatusFilter) => void
   refreshing: boolean
@@ -715,7 +724,7 @@ function SessionListHeader({
     <div className="session-list-header" data-testid="session-list-header">
       <div className="session-list-header-row">
         <span className="session-list-count" data-testid="session-list-count">
-          {sessions.length} session{sessions.length === 1 ? '' : 's'}
+          {sessionListCountLabel(sessions.length, visibleCount, filter)}
         </span>
         {runningCount > 0 ? (
           <button
@@ -747,6 +756,35 @@ function SessionListHeader({
             <span className="session-filter-chip-count">{chip.count}</span>
           </button>
         ))}
+      </div>
+    </div>
+  )
+}
+
+function QuickResumeStrip({ sessions }: { sessions: SessionSummary[] }) {
+  const picks = useMemo(() => getQuickResumeSessions(sessions), [sessions])
+  if (picks.length === 0) return null
+  return (
+    <div className="quick-resume-strip" data-testid="quick-resume-strip">
+      <span className="quick-resume-label">Resume</span>
+      <div className="quick-resume-chips">
+        {picks.map((s) => {
+          const label = sessionRowLabel(s)
+          const recency = formatSessionRecency(s.updated_at, s.created_at)
+          return (
+            <Link
+              key={`${s.runner}/${s.session_id}`}
+              className="quick-resume-chip"
+              data-testid="quick-resume-chip"
+              to={`/sessions/${encodeURIComponent(s.runner)}/${encodeURIComponent(s.session_id)}`}
+              title={label}
+            >
+              <span className="quick-resume-chip-dot" aria-hidden="true" />
+              <span className="quick-resume-chip-text">{label}</span>
+              {recency ? <span className="quick-resume-chip-recency">{recency}</span> : null}
+            </Link>
+          )
+        })}
       </div>
     </div>
   )
@@ -788,9 +826,9 @@ const SessionList = forwardRef<
           >
             <div className="session-item-head">
               <span
-                className={`session-item-label${hasPrompt ? '' : ' session-item-label--untitled'}`}
+                className={`session-item-label${hasPrompt ? '' : ' session-item-label--id'}`}
                 data-testid="session-preview"
-                title={hasPrompt ? label : `Untitled chat · ${s.session_id}`}
+                title={hasPrompt ? label : s.session_id}
               >
                 {label}
               </span>
@@ -831,9 +869,11 @@ const SessionList = forwardRef<
                 </time>
               ) : null}
             </div>
-            <span className="session-item-id" title={s.session_id}>
-              {shortSessionId(s.session_id)}
-            </span>
+            {hasPrompt ? (
+              <span className="session-item-id" title={s.session_id}>
+                {shortSessionId(s.session_id)}
+              </span>
+            ) : null}
           </Link>
         )
       })}
@@ -892,7 +932,16 @@ function HomePage() {
     syncFollowFromScroll,
     markUserScrollIntent,
     handleJumpToLatest,
-  } = useFollowScroll(sessionListRef, [filteredSessions])
+    resetFollow,
+  } = useFollowScroll(sessionListRef, [filteredSessions, statusFilter])
+
+  const handleFilterChange = useCallback(
+    (next: SessionStatusFilter) => {
+      resetFollow()
+      setStatusFilter(next)
+    },
+    [resetFollow],
+  )
 
   const refresh = useCallback(async () => {
     setSessionsRefreshing(true)
@@ -960,11 +1009,13 @@ function HomePage() {
     <div className="session-list-region">
       <SessionListHeader
         sessions={sortedSessions}
+        visibleCount={filteredSessions.length}
         filter={statusFilter}
-        onFilterChange={setStatusFilter}
+        onFilterChange={handleFilterChange}
         refreshing={sessionsRefreshing}
       />
-      {showJumpToLatest ? (
+      {statusFilter === 'all' ? <QuickResumeStrip sessions={sortedSessions} /> : null}
+      {filteredSessions.length > 0 && showJumpToLatest ? (
         <button
           type="button"
           className="jump-to-latest"
@@ -989,7 +1040,7 @@ function HomePage() {
               ? 'No agents are running right now. Start a new chat below or show all sessions.'
               : 'No finished sessions yet. Running chats appear under Running.'}
           </p>
-          <button type="button" className="session-filter-reset" onClick={() => setStatusFilter('all')}>
+          <button type="button" className="session-filter-reset" onClick={() => handleFilterChange('all')}>
             Show all sessions
           </button>
         </div>

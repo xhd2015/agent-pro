@@ -37,7 +37,7 @@ export function sessionWorkspaceLabel(workspace: string | undefined): string {
 export function sessionRowLabel(session: SessionSummary): string {
   const prompt = truncateSessionPreview(session.initial_prompt ?? '')
   if (prompt) return prompt
-  return 'Untitled chat'
+  return shortSessionId(session.session_id)
 }
 
 /** True when the row shows a human prompt instead of the untitled fallback. */
@@ -136,4 +136,35 @@ export function filterSessionsByStatus(
     const status = s.status.trim().toLowerCase()
     return status === 'finished' || status === 'idle'
   })
+}
+
+/** Label for the session-list header count row. */
+export function sessionListCountLabel(
+  total: number,
+  visible: number,
+  filter: SessionStatusFilter,
+): string {
+  const noun = `${visible} session${visible === 1 ? '' : 's'}`
+  if (filter === 'all') return noun
+  if (filter === 'running') return `${noun} running`
+  return `${noun} done`
+}
+
+/** Up to `limit` running sessions to resume quickly (fresh first, then recency). */
+export function getQuickResumeSessions(
+  sessions: SessionSummary[],
+  limit = 3,
+  nowMs = Date.now(),
+): SessionSummary[] {
+  const running = sessions.filter((s) => s.status.trim().toLowerCase() === 'running')
+  return [...running]
+    .sort((a, b) => {
+      const aStale = isStaleRunningSession(a.status, a.updated_at, a.created_at, nowMs) ? 1 : 0
+      const bStale = isStaleRunningSession(b.status, b.updated_at, b.created_at, nowMs) ? 1 : 0
+      if (aStale !== bStale) return aStale - bStale
+      const aMs = parseRFC3339Ms(a.updated_at) ?? parseRFC3339Ms(a.created_at) ?? 0
+      const bMs = parseRFC3339Ms(b.updated_at) ?? parseRFC3339Ms(b.created_at) ?? 0
+      return bMs - aMs
+    })
+    .slice(0, limit)
 }

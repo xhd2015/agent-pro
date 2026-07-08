@@ -5,6 +5,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
 const baseURL = process.argv[3] || process.env.SESSION_LIST_URL || 'http://127.0.0.1:8192';
 const SCRATCH = process.argv[4] || process.env.SCRATCH || path.dirname(__filename);
@@ -166,6 +167,31 @@ flowMetrics.chromeOnLoad = chromeOnLoad;
 
 await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {});
 
+const ensureRunningSession = await page.evaluate(async (url) => {
+  const res = await fetch(`${url}/api/agent-run/sessions`);
+  if (!res.ok) return { ok: false, reason: `sessions status ${res.status}` };
+  const data = await res.json();
+  const statuses = (data.sessions || []).map((s) => s.status);
+  if (statuses.includes('running')) return { ok: true, reseeded: false, statuses };
+  const created = await fetch(`${url}/api/agent-run/sessions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      runner: 'opencode',
+      prompt: 'Probe re-seed running session for UX probe',
+    }),
+  });
+  if (!created.ok) return { ok: false, reason: `create status ${created.status}` };
+  return { ok: true, reseeded: true };
+}, baseURL);
+if (!ensureRunningSession.ok) {
+  issues.push(`ensure running session failed: ${ensureRunningSession.reason}`);
+} else if (ensureRunningSession.reseeded) {
+  await page.waitForTimeout(2000);
+  await page.reload({ waitUntil: 'networkidle', timeout: 30000 });
+}
+flowMetrics.ensureRunningSession = ensureRunningSession;
+
 let metrics = await collectLayoutMetrics();
 validateBaseMetrics(metrics, issues);
 flowMetrics.initial = metrics;
@@ -193,7 +219,13 @@ if (metrics.itemCount > 0 && metrics.sessionFilterChipsVisible) {
   if (runningFilter.itemCount >= allCount) {
     issues.push(`running filter did not reduce visible rows (${runningFilter.itemCount} >= ${allCount})`);
   }
-  flowMetrics.runningFilter = runningFilter;
+  const runningCountText = (
+    await page.locator('[data-testid="session-list-count"]').innerText()
+  ).trim();
+  if (!new RegExp(`^${runningFilter.itemCount} sessions? running$`).test(runningCountText)) {
+    issues.push(`running filter count label mismatch: "${runningCountText}" vs ${runningFilter.itemCount}`);
+  }
+  flowMetrics.runningFilter = { ...runningFilter, countText: runningCountText };
 
   await page.click('[data-testid="session-filter-done"]');
   await page.waitForTimeout(150);
@@ -267,6 +299,40 @@ if (metrics.sessionListVisible && metrics.sessionListOverflow) {
   flowMetrics.detachPoll = { scrollTopBeforePoll, afterPoll };
 
   if (afterPoll.jumpVisible) {
+    await page.click('[data-testid="session-filter-running"]');
+    await page.waitForTimeout(200);
+    const detachFilterChange = await page.evaluate(() => ({
+      jumpVisible: Boolean(document.querySelector('[data-testid="jump-to-latest"]')),
+      filterEmpty: Boolean(document.querySelector('[data-testid="session-filter-empty"]')),
+      countText: (document.querySelector('[data-testid="session-list-count"]')?.textContent || '').trim(),
+      itemCount: document.querySelectorAll('[data-testid="session-item"]').length,
+      listExists: Boolean(document.querySelector('[data-testid="session-list"]')),
+    }));
+    if (detachFilterChange.jumpVisible) {
+      issues.push('jump-to-latest still visible after filter change while detached');
+    }
+    if (detachFilterChange.filterEmpty) {
+      issues.push('filter-empty shown after switching to running while detached');
+    }
+    if (!detachFilterChange.countText.includes('running')) {
+      issues.push(`detached filter change count label missing running: ${detachFilterChange.countText}`);
+    }
+    flowMetrics.detachFilterChange = detachFilterChange;
+
+    await page.click('[data-testid="session-filter-all"]');
+    await page.waitForTimeout(200);
+    await page.evaluate(() => {
+      const list = document.querySelector('[data-testid="session-list"]');
+      if (list) list.scrollTop = Math.max(0, list.scrollHeight - list.clientHeight - 250);
+    });
+    await page.waitForTimeout(3500);
+    const jumpAgain = await page.evaluate(() => ({
+      jumpVisible: Boolean(document.querySelector('[data-testid="jump-to-latest"]')),
+    }));
+    if (!jumpAgain.jumpVisible) {
+      issues.push('jump-to-latest not visible after re-detach on all filter');
+    }
+
     const jumpShotPath = path.join(SCRATCH, `session-list-jump-to-latest-${runNum}.png`);
     await page.locator('[data-testid="jump-to-latest"]').screenshot({ path: jumpShotPath });
     if (!fs.statSync(jumpShotPath).size) {
@@ -324,6 +390,9 @@ async function captureComposerSurface() {
 if (metrics.itemCount > 0) {
   await captureSurface('top-bar', '.top-bar-home');
   await captureSurface('header-filters', '[data-testid="session-list-header"]');
+  if (await page.locator('[data-testid="quick-resume-strip"]').isVisible()) {
+    await captureSurface('quick-resume', '[data-testid="quick-resume-strip"]');
+  }
   await page.evaluate(() => {
     const list = document.querySelector('[data-testid="session-list"]');
     if (list) list.scrollTop = list.scrollHeight;
@@ -366,29 +435,47 @@ if (metrics.sessionListVisible && metrics.sessionListOverflow && !flowMetrics.ju
   issues.push('jump-to-latest screenshot was not captured during detach flow');
 }
 
-await page.unroute('**/api/agent-run/sessions').catch(() => {});
-await page.route('**/api/agent-run/sessions', async (route) => {
-  const response = await route.fetch();
-  const body = await response.json();
-  const runningOnly = (body.sessions || []).filter((s) => s.status === 'running');
-  await route.fulfill({
-    status: response.status(),
-    headers: response.headers(),
-    body: JSON.stringify({ ...body, sessions: runningOnly }),
-  });
-});
+const agentRunHome = process.env.AGENT_RUN_HOME || '';
+if (agentRunHome) {
+  try {
+    execSync(`bash "${path.join(__dirname, 'finish-all-running-sessions.sh')}"`, {
+      env: { ...process.env, AGENT_RUN_HOME: agentRunHome },
+      stdio: 'pipe',
+    });
+    flowMetrics.finishAllRunning = true;
+  } catch (err) {
+    issues.push(`finish-all-running-sessions failed: ${err.stderr?.toString() || err.message}`);
+  }
+} else {
+  issues.push('AGENT_RUN_HOME unset; cannot exercise real filter-empty with poll');
+}
+
 await page.goto(`${baseURL}/`, { waitUntil: 'domcontentloaded', timeout: 30000 });
 await home.first().waitFor({ state: 'visible', timeout: 15000 });
-await page.waitForTimeout(500);
-await page.click('[data-testid="session-filter-done"]');
+await page.waitForTimeout(3500);
+await page.click('[data-testid="session-filter-running"]');
 await page.waitForTimeout(200);
-const filterEmptyVisible = await page.locator('[data-testid="session-filter-empty"]').isVisible();
-if (!filterEmptyVisible) {
-  issues.push('session-filter-empty not visible after done filter with running-only sessions');
-} else {
+const realFilterEmpty = await page.evaluate(() => ({
+  filterEmpty: Boolean(document.querySelector('[data-testid="session-filter-empty"]')),
+  jumpVisible: Boolean(document.querySelector('[data-testid="jump-to-latest"]')),
+  countText: (document.querySelector('[data-testid="session-list-count"]')?.textContent || '').trim(),
+  runningChipCount: Number(
+    document.querySelector('[data-testid="session-filter-running"] .session-filter-chip-count')?.textContent || '0',
+  ),
+}));
+flowMetrics.realFilterEmpty = realFilterEmpty;
+if (!realFilterEmpty.filterEmpty) {
+  issues.push('session-filter-empty not visible after finishing all running sessions');
+}
+if (realFilterEmpty.jumpVisible) {
+  issues.push('jump-to-latest visible on real filter-empty state');
+}
+if (realFilterEmpty.runningChipCount !== 0) {
+  issues.push(`running chip count not zero after finish-all-running: ${realFilterEmpty.runningChipCount}`);
+}
+if (realFilterEmpty.filterEmpty) {
   await captureSurface('filter-empty', '[data-testid="session-filter-empty"]');
 }
-await page.unroute('**/api/agent-run/sessions').catch(() => {});
 
 await page.route('**/api/agent-run/sessions', async (route) => {
   await route.fulfill({

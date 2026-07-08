@@ -6,7 +6,9 @@ import {
   filterSessionsByStatus,
   formatSessionRecency,
   formatStatusLabel,
+  getQuickResumeSessions,
   isStaleRunningSession,
+  sessionListCountLabel,
   sessionRowHasPrompt,
   sessionRowLabel,
   sessionWorkspaceLabel,
@@ -73,8 +75,64 @@ describe('sessionRowLabel', () => {
     expect(label).toBe('How do I refactor the session list UX?')
   })
 
-  it('falls back to untitled label when prompt missing', () => {
-    expect(sessionRowLabel(session({ session_id: 'web_101c73bc7aeacc15ab' }))).toBe('Untitled chat')
+  it('falls back to short session id when prompt missing', () => {
+    expect(sessionRowLabel(session({ session_id: 'web_101c73bc7aeacc15ab' }))).toBe(
+      'web_101c73…eacc15ab',
+    )
+  })
+})
+
+describe('sessionListCountLabel', () => {
+  it('shows total for all filter', () => {
+    expect(sessionListCountLabel(5, 5, 'all')).toBe('5 sessions')
+  })
+
+  it('narrows label for running filter', () => {
+    expect(sessionListCountLabel(10, 3, 'running')).toBe('3 sessions running')
+  })
+
+  it('narrows label for done filter', () => {
+    expect(sessionListCountLabel(10, 7, 'done')).toBe('7 sessions done')
+  })
+})
+
+describe('getQuickResumeSessions', () => {
+  const now = Date.parse('2026-07-08T12:00:00Z')
+
+  it('prefers fresh running over stale', () => {
+    const picks = getQuickResumeSessions(
+      [
+        session({
+          session_id: 'stale',
+          status: 'running',
+          updated_at: '2026-07-01T12:00:00Z',
+          initial_prompt: 'old',
+        }),
+        session({
+          session_id: 'fresh',
+          status: 'running',
+          updated_at: '2026-07-08T11:55:00Z',
+          initial_prompt: 'new',
+        }),
+      ],
+      3,
+      now,
+    )
+    expect(picks.map((s) => s.session_id)).toEqual(['fresh', 'stale'])
+  })
+
+  it('limits to requested count', () => {
+    const picks = getQuickResumeSessions(
+      [
+        session({ session_id: 'a', status: 'running', updated_at: '2026-07-08T11:00:00Z' }),
+        session({ session_id: 'b', status: 'running', updated_at: '2026-07-08T10:00:00Z' }),
+        session({ session_id: 'c', status: 'running', updated_at: '2026-07-08T09:00:00Z' }),
+        session({ session_id: 'd', status: 'running', updated_at: '2026-07-08T08:00:00Z' }),
+      ],
+      2,
+      now,
+    )
+    expect(picks).toHaveLength(2)
   })
 })
 
