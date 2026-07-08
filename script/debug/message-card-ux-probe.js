@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const SCRATCH = process.env.SCRATCH || process.cwd();
+const SCRATCH = process.env.SCRATCH || path.dirname(__filename);
 const runNum = process.env.PROBE_RUN || process.argv.slice(3).find((a) => /^\d+$/.test(a)) || '1';
 const screenshotPath = path.join(SCRATCH, `message-card-ux-${runNum}.png`);
 const reportPath = path.join(SCRATCH, 'message-card-report.json');
