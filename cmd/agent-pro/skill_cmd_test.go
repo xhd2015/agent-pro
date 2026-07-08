@@ -56,6 +56,40 @@ func TestInvestigateSkillIsRegistered(t *testing.T) {
 	}
 }
 
+func TestLoopWorkflowSkillIsRegistered(t *testing.T) {
+	names := knownSkillNames()
+	if !containsString(names, "loop-workflow") {
+		t.Fatalf("knownSkillNames missing loop-workflow: %v", names)
+	}
+	sk, ok := knownSkills["loop-workflow"]
+	if !ok {
+		t.Fatal("knownSkills missing loop-workflow")
+	}
+	if !strings.Contains(sk.Content, "name: loop-workflow") {
+		t.Fatalf("skill content missing frontmatter name:\n%s", sk.Content)
+	}
+	if sk.Description == "" {
+		t.Fatal("loop-workflow skill missing description")
+	}
+}
+
+func TestSoundFixSkillIsRegistered(t *testing.T) {
+	names := knownSkillNames()
+	if !containsString(names, "sound-fix") {
+		t.Fatalf("knownSkillNames missing sound-fix: %v", names)
+	}
+	sk, ok := knownSkills["sound-fix"]
+	if !ok {
+		t.Fatal("knownSkills missing sound-fix")
+	}
+	if !strings.Contains(sk.Content, "name: sound-fix") {
+		t.Fatalf("skill content missing frontmatter name:\n%s", sk.Content)
+	}
+	if sk.Description == "" {
+		t.Fatal("sound-fix skill missing description")
+	}
+}
+
 func TestGitResolveConflictsSkillIsRegistered(t *testing.T) {
 	names := knownSkillNames()
 	if !containsString(names, "git-resolve-conflicts") {

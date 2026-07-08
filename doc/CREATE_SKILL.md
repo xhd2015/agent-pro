@@ -115,4 +115,6 @@ Examples with sub-agent binaries: `followup`, `brainstorm`, `reproduce`.
 | `followup` | Clarify design before coding |
 | `verify-with-prototype` | POC script before full implementation |
 | `brainstorm` | Requirement + test plan approval |
+| `loop-workflow` | Goal-driven iterate-until-done with inspect script |
+| `sound-fix` | Evaluate fix soundness vs workarounds |
 | `doctest-tdd` | Sealed tests → implementation |
