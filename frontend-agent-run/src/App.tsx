@@ -34,6 +34,11 @@ import {
   type AgentEvent,
   type SessionSummary,
 } from './api/client'
+import {
+  compactProgressTimeline,
+  progressCardLabel,
+  progressCardText,
+} from './progressTimeline'
 
 function Shell({
   children,
@@ -957,135 +962,6 @@ function buildTimeline(events: AgentEvent[]): AgentEvent[] {
   return compactProgressTimeline(out)
 }
 
-function sanitizeProgressText(text: string): string {
-  return text
-    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
-    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '')
-    .trim()
-}
-
-function truncateProgressText(text: string, maxLen = 140): string {
-  const clean = sanitizeProgressText(text)
-  if (!clean) {
-    return ''
-  }
-  const lines = clean.split(/\r?\n/).filter((line) => line.trim())
-  if (lines.length > 2) {
-    const preview = lines.slice(0, 2).join('\n')
-    const suffix = ` (+${lines.length - 2} more lines)`
-    const budget = maxLen - suffix.length
-    if (preview.length + suffix.length <= maxLen) {
-      return preview + suffix
-    }
-    return preview.slice(0, Math.max(budget, 24)) + '…' + suffix
-  }
-  if (clean.length <= maxLen) {
-    return clean
-  }
-  return clean.slice(0, maxLen - 1) + '…'
-}
-
-function compactProgressTimeline(events: AgentEvent[]): AgentEvent[] {
-  const out: AgentEvent[] = []
-  for (const ev of events) {
-    if (ev.type === 'message') {
-      out.push(ev)
-      continue
-    }
-    const last = out[out.length - 1]
-    if (ev.type === 'think') {
-      if (last?.type === 'think') {
-        out[out.length - 1] = ev
-        continue
-      }
-      out.push(ev)
-      continue
-    }
-    if (ev.type === 'tool_call') {
-      const toolCallID = ev.tool_call_id?.trim()
-      if (toolCallID) {
-        let existingIdx = -1
-        for (let i = out.length - 1; i >= 0; i--) {
-          if (out[i].type === 'message') {
-            break
-          }
-          if (out[i].type === 'tool_call' && out[i].tool_call_id?.trim() === toolCallID) {
-            existingIdx = i
-            break
-          }
-        }
-        if (existingIdx >= 0) {
-          const prev = out[existingIdx]
-          const merged: AgentEvent = {
-            ...ev,
-            text: ev.text ?? prev.text,
-            output: ev.output ?? prev.output,
-            tool: ev.tool ?? prev.tool,
-          }
-          let hasInterveningDifferentTool = false
-          for (let i = existingIdx + 1; i < out.length; i++) {
-            if (out[i].type !== 'tool_call') {
-              continue
-            }
-            const otherID = out[i].tool_call_id?.trim()
-            if (otherID && otherID !== toolCallID) {
-              hasInterveningDifferentTool = true
-              break
-            }
-          }
-          if (hasInterveningDifferentTool) {
-            out[existingIdx] = merged
-          } else {
-            out.splice(existingIdx, 1)
-            out.push(merged)
-          }
-          continue
-        }
-      }
-      if (last?.type === 'tool_call' && !last.output?.trim() && !ev.output?.trim()) {
-        const lastID = last.tool_call_id?.trim()
-        const evID = ev.tool_call_id?.trim()
-        const sameToolID = Boolean(lastID && evID && lastID === evID)
-        const bothMissingID = !lastID && !evID
-        if (
-          (sameToolID || bothMissingID) &&
-          progressCardText(last) === progressCardText(ev)
-        ) {
-          continue
-        }
-      }
-      out.push(ev)
-      continue
-    }
-    out.push(ev)
-  }
-  return out
-}
-
-function progressCardLabel(ev: AgentEvent): string {
-  if (ev.type === 'think') {
-    return 'Thinking'
-  }
-  if (ev.type === 'tool_call') {
-    return 'Tool'
-  }
-  return 'Working'
-}
-
-function progressCardText(ev: AgentEvent): string {
-  if (ev.type === 'think') {
-    return truncateProgressText(ev.text?.trim() || 'Thinking…')
-  }
-  if (ev.type === 'tool_call') {
-    const parts = [ev.tool?.trim(), ev.text?.trim(), ev.output?.trim()].filter(Boolean)
-    if (parts.length > 0) {
-      return truncateProgressText(parts.join(': '))
-    }
-    return 'Tool call'
-  }
-  return truncateProgressText(ev.text?.trim() || 'Working…')
-}
-
 function SessionPage() {
   const { runner, sessionId } = useParams()
   const navigate = useNavigate()
@@ -1106,6 +982,7 @@ function SessionPage() {
   const [streamOffset, setStreamOffset] = useState<number | null>(
     bootstrap?.events_offset ?? null,
   )
+  const [streamReconnectToken, setStreamReconnectToken] = useState(0)
   const streamOffsetRef = useRef<number | null>(bootstrap?.events_offset ?? null)
   const statusRef = useRef(bootstrap?.session.status ?? '')
   const eventsRef = useRef<AgentEvent[]>([])
@@ -1398,6 +1275,10 @@ function SessionPage() {
             offset,
             statusRef: statusRef.current,
           })
+          if (statusRef.current === 'running') {
+            setStreamReconnectToken((token) => token + 1)
+            return
+          }
           void refresh({ mode: 'full', fromStreamClose: true })
         },
       )
@@ -1425,7 +1306,7 @@ function SessionPage() {
       ac.abort()
       debugLog('sse:cleanup', { runner, sessionId, offset })
     }
-  }, [ready, needsAuth, runner, sessionId, streamOffset, refresh])
+  }, [ready, needsAuth, runner, sessionId, streamOffset, streamReconnectToken, refresh])
 
   const handleSend = async () => {
     const text = draft.trim()
