@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionSummary } from './api/client'
 import {
+  countSessionsByStatus,
+  filterSessionsByStatus,
   formatSessionRecency,
+  formatStatusLabel,
   sessionRowLabel,
   shortSessionId,
   shortWorkspaceLabel,
@@ -79,6 +82,55 @@ describe('formatSessionRecency', () => {
 
   it('falls back to created_at', () => {
     expect(formatSessionRecency(undefined, '2026-07-08T11:59:30Z', now)).toBe('just now')
+  })
+})
+
+describe('formatStatusLabel', () => {
+  it('capitalizes running status', () => {
+    expect(formatStatusLabel('running')).toBe('Running')
+  })
+
+  it('maps finished and idle to Done', () => {
+    expect(formatStatusLabel('finished')).toBe('Done')
+    expect(formatStatusLabel('idle')).toBe('Done')
+  })
+})
+
+describe('countSessionsByStatus', () => {
+  it('counts matching sessions', () => {
+    const sessions = [
+      session({ session_id: 'a', status: 'running' }),
+      session({ session_id: 'b', status: 'finished' }),
+      session({ session_id: 'c', status: 'running' }),
+    ]
+    expect(countSessionsByStatus(sessions, 'running')).toBe(2)
+  })
+})
+
+describe('filterSessionsByStatus', () => {
+  it('returns all sessions for all filter', () => {
+    const sessions = [
+      session({ session_id: 'a', status: 'running' }),
+      session({ session_id: 'b', status: 'finished' }),
+    ]
+    expect(filterSessionsByStatus(sessions, 'all')).toHaveLength(2)
+  })
+
+  it('filters running sessions', () => {
+    const sessions = [
+      session({ session_id: 'a', status: 'running' }),
+      session({ session_id: 'b', status: 'finished' }),
+    ]
+    expect(filterSessionsByStatus(sessions, 'running').map((s) => s.session_id)).toEqual(['a'])
+  })
+
+  it('filters done sessions', () => {
+    const sessions = [
+      session({ session_id: 'a', status: 'running' }),
+      session({ session_id: 'b', status: 'finished' }),
+      session({ session_id: 'c', status: 'idle' }),
+    ]
+    expect(filterSessionsByStatus(sessions, 'done').map((s) => s.session_id)).toEqual(['b', 'c'])
   })
 })
 

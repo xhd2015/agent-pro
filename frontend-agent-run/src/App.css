@@ -337,6 +337,129 @@ html:has(.home-page) #root {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
 
+.session-list-header {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 2px 12px;
+}
+
+.session-list-header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.session-list-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: #c4c7c5;
+}
+
+.session-running-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #81c995;
+  background: rgba(45, 74, 34, 0.65);
+  border: 1px solid rgba(129, 201, 149, 0.35);
+}
+
+.session-list-refreshing {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #8ab4f8;
+  margin-left: auto;
+  animation: session-refresh-pulse 1s ease-in-out infinite;
+}
+
+@keyframes session-refresh-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.session-filter-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.session-filter-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.session-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid #3a4254;
+  background: #151922;
+  color: #9aa0a6;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.session-filter-chip--active {
+  color: #e8eaed;
+  border-color: #8ab4f8;
+  background: rgba(42, 74, 127, 0.45);
+}
+
+.session-filter-chip-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: inherit;
+  opacity: 0.85;
+}
+
+.session-filter-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  color: #9aa0a6;
+  padding: 24px 16px;
+}
+
+.session-filter-empty p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.session-filter-reset {
+  min-height: 36px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid #3a4254;
+  background: #202635;
+  color: #8ab4f8;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .session-list {
   display: flex;
   flex-direction: column;
@@ -372,6 +495,8 @@ html:has(.home-page) #root {
 
 .session-item--running {
   border-left-color: #81c995;
+  background: linear-gradient(135deg, rgba(26, 46, 26, 0.55) 0%, #1a1f2b 55%);
+  box-shadow: 0 0 0 1px rgba(129, 201, 149, 0.12);
 }
 
 .session-item--finished,
@@ -618,12 +743,34 @@ html:has(.home-page) #root {
 
 .status-pill {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   padding: 3px 10px;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 600;
-  text-transform: lowercase;
   letter-spacing: 0.02em;
+}
+
+.status-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: status-pill-dot-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes status-pill-dot-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .status-pill-running {

@@ -40,13 +40,17 @@ import {
   progressCardText,
 } from './progressTimeline'
 import {
+  countSessionsByStatus,
+  filterSessionsByStatus,
   formatSessionRecency,
+  formatStatusLabel,
   parseRFC3339Ms,
   sessionRowLabel,
   shortSessionId,
   shortWorkspaceLabel,
   sortSessionsOldestFirst,
   statusPillClass,
+  type SessionStatusFilter,
 } from './sessionDisplay'
 import { sessionsPollResult } from './sessionPoll'
 
@@ -676,6 +680,60 @@ function sanitizeTerminalTranscript(data: string): string {
     .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '')
 }
 
+function SessionListHeader({
+  sessions,
+  filter,
+  onFilterChange,
+  refreshing,
+}: {
+  sessions: SessionSummary[]
+  filter: SessionStatusFilter
+  onFilterChange: (filter: SessionStatusFilter) => void
+  refreshing: boolean
+}) {
+  const runningCount = countSessionsByStatus(sessions, 'running')
+  const doneCount = sessions.length - runningCount
+  const chips: { id: SessionStatusFilter; label: string; count: number }[] = [
+    { id: 'all', label: 'All', count: sessions.length },
+    { id: 'running', label: 'Running', count: runningCount },
+    { id: 'done', label: 'Done', count: doneCount },
+  ]
+
+  return (
+    <div className="session-list-header" data-testid="session-list-header">
+      <div className="session-list-header-row">
+        <span className="session-list-count" data-testid="session-list-count">
+          {sessions.length} session{sessions.length === 1 ? '' : 's'}
+        </span>
+        {runningCount > 0 ? (
+          <span className="session-running-badge" data-testid="session-running-badge">
+            {runningCount} active
+          </span>
+        ) : null}
+        {refreshing ? (
+          <span className="session-list-refreshing" data-testid="session-list-refreshing" aria-label="Refreshing sessions" />
+        ) : null}
+      </div>
+      <div className="session-filter-chips" data-testid="session-filter-chips" role="tablist" aria-label="Filter sessions">
+        {chips.map((chip) => (
+          <button
+            key={chip.id}
+            type="button"
+            role="tab"
+            aria-selected={filter === chip.id}
+            className={`session-filter-chip${filter === chip.id ? ' session-filter-chip--active' : ''}`}
+            data-testid={`session-filter-${chip.id}`}
+            onClick={() => onFilterChange(chip.id)}
+          >
+            {chip.label}
+            <span className="session-filter-chip-count">{chip.count}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 const SessionList = forwardRef<
   HTMLElement,
   {
@@ -717,8 +775,15 @@ const SessionList = forwardRef<
               >
                 {label}
               </span>
-              <span className={statusPillClass(s.status)} data-testid="session-status">
-                {s.status || 'unknown'}
+              <span
+                className={statusPillClass(s.status)}
+                data-testid="session-status"
+                data-status={s.status || 'unknown'}
+              >
+                {s.status === 'running' ? (
+                  <span className="status-pill-dot" aria-hidden="true" />
+                ) : null}
+                {formatStatusLabel(s.status || 'unknown')}
               </span>
             </div>
             <div className="session-item-subhead">
@@ -785,6 +850,8 @@ function HomePage() {
   const { needsAuth, ready } = useAuthGate()
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [sessionsLoaded, setSessionsLoaded] = useState(false)
+  const [sessionsRefreshing, setSessionsRefreshing] = useState(false)
+  const [statusFilter, setStatusFilter] = useState<SessionStatusFilter>('all')
   const [runners, setRunners] = useState<string[]>(['opencode'])
   const [runner, setRunnerState] = useState(getRunner)
   const [draft, setDraft] = useState('')
@@ -792,25 +859,34 @@ function HomePage() {
   const [workspace, setWorkspace] = useState('')
   const sessionListRef = useRef<HTMLElement>(null)
   const sortedSessions = useMemo(() => sortSessionsOldestFirst(sessions), [sessions])
+  const filteredSessions = useMemo(
+    () => filterSessionsByStatus(sortedSessions, statusFilter),
+    [sortedSessions, statusFilter],
+  )
   const {
     followModeRef,
     showJumpToLatest,
     syncFollowFromScroll,
     markUserScrollIntent,
     handleJumpToLatest,
-  } = useFollowScroll(sessionListRef, [sortedSessions])
+  } = useFollowScroll(sessionListRef, [filteredSessions])
 
   const refresh = useCallback(async () => {
-    const [list, r, status] = await Promise.all([fetchSessions(), fetchRunners(), fetchStatus()])
-    if (list != null) {
-      setSessions((current) => sessionsPollResult(list, current))
-      setSessionsLoaded(true)
-    }
-    if (r.runners.length > 0) {
-      setRunners(r.runners)
-    }
-    if (status?.workspace) {
-      setWorkspace(status.workspace)
+    setSessionsRefreshing(true)
+    try {
+      const [list, r, status] = await Promise.all([fetchSessions(), fetchRunners(), fetchStatus()])
+      if (list != null) {
+        setSessions((current) => sessionsPollResult(list, current))
+        setSessionsLoaded(true)
+      }
+      if (r.runners.length > 0) {
+        setRunners(r.runners)
+      }
+      if (status?.workspace) {
+        setWorkspace(status.workspace)
+      }
+    } finally {
+      setSessionsRefreshing(false)
     }
   }, [])
 
@@ -857,6 +933,12 @@ function HomePage() {
 
   const homeMain = !ready || !sessionsLoaded ? null : sortedSessions.length > 0 ? (
     <div className="session-list-region">
+      <SessionListHeader
+        sessions={sortedSessions}
+        filter={statusFilter}
+        onFilterChange={setStatusFilter}
+        refreshing={sessionsRefreshing}
+      />
       {showJumpToLatest ? (
         <button
           type="button"
@@ -867,13 +949,22 @@ function HomePage() {
           Jump to latest
         </button>
       ) : null}
-      <SessionList
-        ref={sessionListRef}
-        sessions={sortedSessions}
-        onScroll={syncFollowFromScroll}
-        onWheel={markUserScrollIntent}
-        onTouchStart={markUserScrollIntent}
-      />
+      {filteredSessions.length > 0 ? (
+        <SessionList
+          ref={sessionListRef}
+          sessions={filteredSessions}
+          onScroll={syncFollowFromScroll}
+          onWheel={markUserScrollIntent}
+          onTouchStart={markUserScrollIntent}
+        />
+      ) : (
+        <div className="session-filter-empty" data-testid="session-filter-empty">
+          <p>No {statusFilter === 'running' ? 'running' : 'finished'} sessions match this filter.</p>
+          <button type="button" className="session-filter-reset" onClick={() => setStatusFilter('all')}>
+            Show all
+          </button>
+        </div>
+      )}
     </div>
   ) : (
     <div className="empty-state" data-testid="empty-state">

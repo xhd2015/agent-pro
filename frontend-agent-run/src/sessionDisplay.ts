@@ -79,3 +79,31 @@ export function statusPillClass(status: string): string {
       return 'status-pill'
   }
 }
+
+export function formatStatusLabel(status: string): string {
+  const normalized = status.trim().toLowerCase()
+  if (!normalized || normalized === 'unknown') return 'Unknown'
+  if (normalized === 'idle' || normalized === 'finished') return 'Done'
+  return `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}`
+}
+
+export type SessionStatusFilter = 'all' | 'running' | 'done'
+
+export function countSessionsByStatus(sessions: SessionSummary[], status: string): number {
+  const target = status.trim().toLowerCase()
+  return sessions.filter((s) => s.status.trim().toLowerCase() === target).length
+}
+
+export function filterSessionsByStatus(
+  sessions: SessionSummary[],
+  filter: SessionStatusFilter,
+): SessionSummary[] {
+  if (filter === 'all') return sessions
+  if (filter === 'running') {
+    return sessions.filter((s) => s.status.trim().toLowerCase() === 'running')
+  }
+  return sessions.filter((s) => {
+    const status = s.status.trim().toLowerCase()
+    return status === 'finished' || status === 'idle'
+  })
+}
