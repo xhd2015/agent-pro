@@ -1277,9 +1277,7 @@ function SessionPage() {
           })
           if (statusRef.current === 'running') {
             setStreamReconnectToken((token) => token + 1)
-            return
           }
-          void refresh({ mode: 'full', fromStreamClose: true })
         },
       )
     }

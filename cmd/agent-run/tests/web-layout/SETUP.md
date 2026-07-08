@@ -390,7 +390,20 @@ func seedGrokTTYMessageCardSession(t *testing.T, home, sessionID, workspace stri
 		`{"type":"message","role":"assistant","timestamp":1783493458483,"text":"You said: run ls and pwd, then what did I say.","extensions":{"grok_session":{"turn_index":1}}}`,
 		`{"type":"done","timestamp":1783493458573,"extensions":{"grok_session":{"turn_index":1}}}`,
 	}, "\n") + "\n"
-	return os.WriteFile(filepath.Join(sessDir, "events.jsonl"), []byte(eventsNDJSON), 0644)
+	if err := os.WriteFile(filepath.Join(sessDir, "events.jsonl"), []byte(eventsNDJSON), 0644); err != nil {
+		return err
+	}
+	syncCheckpoint := map[string]any{
+		"grok_session_id": "",
+		"updates_path":    "",
+		"updates_offset":  999999,
+		"turn_index":      2,
+	}
+	syncBytes, err := json.Marshal(syncCheckpoint)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(sessDir, "grok-sync.json"), syncBytes, 0644)
 }
 
 func seedRoleTimelineSession(t *testing.T, home, runner, sessionID, workspace string, userTS, assistantTS int64) error {

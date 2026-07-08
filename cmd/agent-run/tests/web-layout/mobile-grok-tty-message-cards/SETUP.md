@@ -37,6 +37,11 @@ func Setup(t *testing.T, req *Request) error {
 		return err
 	}
 
+	req.Env = append(req.Env,
+		"AGENT_RUN_GROK_TTY_GROK_SESSION_ID=",
+		"LLM_MOCK_RUN_GROK_COMMAND=",
+	)
+
 	req.Port = findFreePort(t)
 	if err := startWebBackground(t, req); err != nil {
 		return err
