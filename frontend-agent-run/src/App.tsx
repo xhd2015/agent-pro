@@ -46,6 +46,7 @@ import {
   formatStatusLabel,
   parseRFC3339Ms,
   sessionRowLabel,
+  sessionWorkspaceLabel,
   shortSessionId,
   shortWorkspaceLabel,
   sortSessionsOldestFirst,
@@ -759,7 +760,7 @@ const SessionList = forwardRef<
         const label = sessionRowLabel(s)
         const hasPrompt = Boolean(s.initial_prompt?.trim())
         const recency = formatSessionRecency(s.updated_at, s.created_at)
-        const workspaceLabel = s.workspace ? shortWorkspaceLabel(s.workspace) : ''
+        const workspaceLabel = sessionWorkspaceLabel(s.workspace)
         return (
           <Link
             key={`${s.runner}/${s.session_id}`}
@@ -791,16 +792,16 @@ const SessionList = forwardRef<
                 <span className="session-item-runner" data-testid="session-runner">
                   {s.runner}
                 </span>
-                {workspaceLabel ? (
-                  <>
-                    <span className="session-item-sep" aria-hidden="true">
-                      ·
-                    </span>
-                    <span className="session-item-workspace" data-testid="session-workspace" title={s.workspace}>
-                      {workspaceLabel}
-                    </span>
-                  </>
-                ) : null}
+                <span className="session-item-sep" aria-hidden="true">
+                  ·
+                </span>
+                <span
+                  className="session-item-workspace"
+                  data-testid="session-workspace"
+                  title={s.workspace || undefined}
+                >
+                  {workspaceLabel}
+                </span>
               </span>
               {recency ? (
                 <time className="session-item-recency" data-testid="session-recency" dateTime={s.updated_at ?? s.created_at}>
@@ -933,12 +934,9 @@ function HomePage() {
 
   if (needsAuth) return <AuthPage />
 
-  const homeMain = !ready ? null : !sessionsLoaded && sortedSessions.length === 0 ? (
-    <div className="home-loading" data-testid="home-loading">
-      <span className="home-loading-indicator" aria-hidden="true" />
-      Loading sessions…
-    </div>
-  ) : sortedSessions.length > 0 ? (
+  const showSubtleLoading = !ready || (!sessionsLoaded && sortedSessions.length === 0)
+
+  const homeMain = sortedSessions.length > 0 ? (
     <div className="session-list-region">
       <SessionListHeader
         sessions={sortedSessions}
@@ -975,6 +973,11 @@ function HomePage() {
     </div>
   ) : (
     <div className="empty-state" data-testid="empty-state">
+      {showSubtleLoading ? (
+        <div className="home-loading-subtle" data-testid="home-loading" aria-label="Loading sessions">
+          <span className="home-loading-indicator" aria-hidden="true" />
+        </div>
+      ) : null}
       <div className="empty-state-icon" aria-hidden="true">
         ◇
       </div>

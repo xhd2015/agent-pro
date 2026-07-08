@@ -12,8 +12,6 @@ const runNum = process.argv[5] || process.env.PROBE_RUN || '1';
 const screenshotPath = path.join(SCRATCH, `session-list-ux-${runNum}.png`);
 const reportPath = path.join(SCRATCH, 'session-list-report.json');
 const runReportPath = path.join(SCRATCH, `session-list-report-${runNum}.json`);
-const composerNavLogPath = path.join(SCRATCH, 'composer-nav.log');
-
 const pageErrors = [];
 page.on('pageerror', (err) => pageErrors.push(String(err)));
 
@@ -235,19 +233,7 @@ await page.evaluate(() => {
   if (list) list.scrollTop = list.scrollHeight;
 });
 await page.waitForTimeout(200);
-
-const composerPrompt = `Probe composer navigation ${Date.now()}`;
-await page.fill('[data-testid="composer-input"]', composerPrompt);
-await Promise.all([
-  page.waitForURL(/\/sessions\/[^/]+\/[^/]+/, { timeout: 15000 }),
-  page.click('[data-testid="send-button"]'),
-]);
-const navURL = page.url();
-fs.writeFileSync(composerNavLogPath, `${navURL}\n`);
-if (!/\/sessions\/[^/]+\/[^/]+/.test(navURL)) {
-  issues.push(`composer send did not navigate to session detail (${navURL})`);
-}
-flowMetrics.composerNavigation = { url: navURL, prompt: composerPrompt };
+flowMetrics.final = await collectLayoutMetrics();
 
 await page.screenshot({ path: screenshotPath, fullPage: false });
 

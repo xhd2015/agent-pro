@@ -648,17 +648,14 @@ html:has(.home-page) #root {
   padding: 16px;
 }
 
-.home-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  flex: 1;
-  color: #9aa0a6;
-  font-size: 14px;
+.home-loading-subtle {
+  position: absolute;
+  top: 12px;
+  right: 14px;
 }
 
 .home-loading-indicator {
+  display: inline-block;
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -667,6 +664,7 @@ html:has(.home-page) #root {
 }
 
 .empty-state {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;

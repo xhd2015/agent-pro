@@ -6,6 +6,7 @@ import {
   formatSessionRecency,
   formatStatusLabel,
   sessionRowLabel,
+  sessionWorkspaceLabel,
   shortSessionId,
   shortWorkspaceLabel,
   sortSessionsOldestFirst,
@@ -44,6 +45,17 @@ describe('shortSessionId', () => {
 describe('shortWorkspaceLabel', () => {
   it('shows last two path segments for deep paths', () => {
     expect(shortWorkspaceLabel('/Users/me/projects/agent-pro/src')).toBe('…/agent-pro/src')
+  })
+})
+
+describe('sessionWorkspaceLabel', () => {
+  it('returns em dash when workspace is missing', () => {
+    expect(sessionWorkspaceLabel(undefined)).toBe('—')
+    expect(sessionWorkspaceLabel('')).toBe('—')
+  })
+
+  it('shortens present workspace paths', () => {
+    expect(sessionWorkspaceLabel('/Users/me/projects/agent-pro/src')).toBe('…/agent-pro/src')
   })
 })
 

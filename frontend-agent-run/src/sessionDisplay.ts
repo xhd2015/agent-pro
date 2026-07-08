@@ -28,6 +28,12 @@ export function shortWorkspaceLabel(workspace: string): string {
   return `…/${parts.slice(-2).join('/')}`
 }
 
+/** Display label for session row workspace; em dash when absent. */
+export function sessionWorkspaceLabel(workspace: string | undefined): string {
+  const short = shortWorkspaceLabel(workspace ?? '')
+  return short || '—'
+}
+
 export function sessionRowLabel(session: SessionSummary): string {
   const prompt = truncateSessionPreview(session.initial_prompt ?? '')
   if (prompt) return prompt
