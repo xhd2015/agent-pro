@@ -11,6 +11,7 @@ const SCRATCH = process.env.SCRATCH || process.cwd();
 const runNum = process.env.PROBE_RUN || process.argv.slice(3).find((a) => /^\d+$/.test(a)) || '1';
 const screenshotPath = path.join(SCRATCH, `message-card-ux-${runNum}.png`);
 const reportPath = path.join(SCRATCH, 'message-card-report.json');
+const runReportPath = path.join(SCRATCH, `message-card-report-${runNum}.json`);
 
 const url =
   process.env.MESSAGE_CARD_URL ||
@@ -147,7 +148,23 @@ if (metrics.progressCount > 0) {
 await page.screenshot({ path: screenshotPath, fullPage: false });
 
 const report = { run: runNum, url, issues, metrics, pass: issues.length === 0, screenshot: screenshotPath };
-fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
+const runJson = JSON.stringify(report, null, 2);
+fs.writeFileSync(runReportPath, runJson);
+
+let combined = { url, runs: [report], pass: report.pass };
+try {
+  if (fs.existsSync(reportPath)) {
+    const prev = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+    if (Array.isArray(prev.runs)) {
+      const withoutDup = prev.runs.filter((r) => String(r.run) !== String(runNum));
+      combined.runs = [...withoutDup, report];
+      combined.pass = combined.runs.every((r) => r.pass);
+    }
+  }
+} catch {
+  combined = { url, runs: [report], pass: report.pass };
+}
+fs.writeFileSync(reportPath, JSON.stringify(combined, null, 2));
 
 if (issues.length > 0) {
   console.error('UX issues:', issues);

@@ -1016,23 +1016,43 @@ function compactProgressTimeline(events: AgentEvent[]): AgentEvent[] {
         }
         if (existingIdx >= 0) {
           const prev = out[existingIdx]
-          out.splice(existingIdx, 1)
-          out.push({
+          const merged: AgentEvent = {
             ...ev,
             text: ev.text ?? prev.text,
             output: ev.output ?? prev.output,
             tool: ev.tool ?? prev.tool,
-          })
+          }
+          let hasInterveningDifferentTool = false
+          for (let i = existingIdx + 1; i < out.length; i++) {
+            if (out[i].type !== 'tool_call') {
+              continue
+            }
+            const otherID = out[i].tool_call_id?.trim()
+            if (otherID && otherID !== toolCallID) {
+              hasInterveningDifferentTool = true
+              break
+            }
+          }
+          if (hasInterveningDifferentTool) {
+            out[existingIdx] = merged
+          } else {
+            out.splice(existingIdx, 1)
+            out.push(merged)
+          }
           continue
         }
       }
-      if (
-        last?.type === 'tool_call' &&
-        !last.output?.trim() &&
-        !ev.output?.trim() &&
-        progressCardText(last) === progressCardText(ev)
-      ) {
-        continue
+      if (last?.type === 'tool_call' && !last.output?.trim() && !ev.output?.trim()) {
+        const lastID = last.tool_call_id?.trim()
+        const evID = ev.tool_call_id?.trim()
+        const sameToolID = Boolean(lastID && evID && lastID === evID)
+        const bothMissingID = !lastID && !evID
+        if (
+          (sameToolID || bothMissingID) &&
+          progressCardText(last) === progressCardText(ev)
+        ) {
+          continue
+        }
       }
       out.push(ev)
       continue

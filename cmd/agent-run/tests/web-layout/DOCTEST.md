@@ -92,6 +92,9 @@ cmd/agent-run/tests/web-layout/
 ├── mobile-chat-active/                # explicit --token + seeded session → chat-active
 ├── mobile-session-shows-workspace/    # seeded workspace + user/assistant roles in transcript
 ├── mobile-message-roles-and-timestamps/  # distinct bubble styles + timestamp testids
+├── mobile-progress-card-compaction/      # duplicate think/tool rows compact; progress distinct from bubbles
+├── mobile-progress-multi-tool-ordering/  # different tool_call_id interleave preserves start order
+├── mobile-grok-tty-message-cards/        # grok-tty web_a1e886dbcebb3e2b-shaped message-card UX
 ├── mobile-running-status-card/        # session status=running → running card + duration
 ├── mobile-running-card-absent-when-idle/  # session status≠running → no running card
 ├── mobile-inline-assistant-loading/       # running + user only → inline loading bubble in list
@@ -132,6 +135,9 @@ Parameter ranking (most → least significant):
 | 3 | `mobile-chat-active` | `--token test-token` + seeded session; chat-active; composer pinned |
 | 4 | `mobile-session-shows-workspace` | Session header workspace + distinct user message bubble |
 | 5 | `mobile-message-roles-and-timestamps` | User vs assistant bubble styles differ; each message shows `message-timestamp` |
+| 5a | `mobile-progress-card-compaction` | Duplicate think/tool rows compact; progress cards distinct from chat bubbles |
+| 5b | `mobile-progress-multi-tool-ordering` | Interleaved tool_call_ids keep chronological card order on compaction |
+| 5c | `mobile-grok-tty-message-cards` | Seeded `grok-tty/web_a1e886dbcebb3e2b` shape; role labels, bodies, progress separation |
 | 6 | `mobile-running-status-card` | Seeded `running` session ~30s ago; `agent-running-card` + duration with digits |
 | 7 | `mobile-home-runner-visible-long-workspace` | Web `cmd.Dir` = deep path; open `/` (no token); runner-picker in viewport |
 | 8 | `mobile-running-card-absent-when-idle` | Seeded `idle` session; `agent-running-card` not in DOM (negative control) |

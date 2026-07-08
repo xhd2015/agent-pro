@@ -319,6 +319,80 @@ func seedProgressCompactionSession(t *testing.T, home, runner, sessionID, worksp
 	return os.WriteFile(filepath.Join(sessDir, "events.jsonl"), []byte(eventsNDJSON), 0644)
 }
 
+func seedProgressMultiToolOrderingSession(t *testing.T, home, runner, sessionID, workspace string) error {
+	t.Helper()
+	sessDir := filepath.Join(home, "sessions", runner, sessionID)
+	if err := os.MkdirAll(sessDir, 0755); err != nil {
+		return err
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	meta := map[string]any{
+		"runner":     runner,
+		"session_id": sessionID,
+		"status":     "idle",
+		"workspace":  workspace,
+		"created_at": now,
+		"updated_at": now,
+	}
+	metaBytes, err := json.Marshal(meta)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(sessDir, "meta.json"), metaBytes, 0644); err != nil {
+		return err
+	}
+	toolA := "call-order-alpha"
+	toolB := "call-order-beta"
+	eventsNDJSON := strings.Join([]string{
+		`{"type":"message","role":"user","text":"run two tools","timestamp":1719691200000}`,
+		fmt.Sprintf(`{"type":"tool_call","timestamp":1719691201000,"text":"Shell","tool":"tool","tool_call_id":%q}`, toolA),
+		fmt.Sprintf(`{"type":"tool_call","timestamp":1719691202000,"text":"Shell","tool":"tool","tool_call_id":%q}`, toolB),
+		fmt.Sprintf(`{"type":"tool_call","timestamp":1719691203000,"text":"Shell","tool":"tool","tool_call_id":%q,"output":"alpha done"}`, toolA),
+		`{"type":"message","role":"assistant","text":"Both tools finished","timestamp":1719691234567}`,
+	}, "\n") + "\n"
+	return os.WriteFile(filepath.Join(sessDir, "events.jsonl"), []byte(eventsNDJSON), 0644)
+}
+
+func seedGrokTTYMessageCardSession(t *testing.T, home, sessionID, workspace string) error {
+	t.Helper()
+	runner := "grok-tty"
+	sessDir := filepath.Join(home, "sessions", runner, sessionID)
+	if err := os.MkdirAll(sessDir, 0755); err != nil {
+		return err
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	meta := map[string]any{
+		"runner":     runner,
+		"session_id": sessionID,
+		"status":     "idle",
+		"workspace":  workspace,
+		"created_at": now,
+		"updated_at": now,
+	}
+	metaBytes, err := json.Marshal(meta)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(sessDir, "meta.json"), metaBytes, 0644); err != nil {
+		return err
+	}
+	toolID := "call-grok-demo"
+	eventsNDJSON := strings.Join([]string{
+		`{"type":"message","role":"user","timestamp":1783493436429,"text":"run ls and pwd","extensions":{"grok_session":{}}}`,
+		`{"type":"think","timestamp":1783493436887,"text":"Run ls and pwd in workspace.","extensions":{"grok_session":{}}}`,
+		fmt.Sprintf(`{"type":"tool_call","timestamp":1783493436889,"text":"Shell","tool":"tool","tool_call_id":%q,"extensions":{"grok_session":{"status":"pending"}}}`, toolID),
+		fmt.Sprintf(`{"type":"tool_call","timestamp":1783493437572,"text":"Shell","tool":"tool","tool_call_id":%q,"output":"pwd and ls output","extensions":{"grok_session":{"status":"completed"}}}`, toolID),
+		`{"type":"think","timestamp":1783493440380,"text":"Summarize results for user.","extensions":{"grok_session":{}}}`,
+		`{"type":"message","role":"assistant","timestamp":1783493442157,"text":"**pwd:** /tmp/workspace\n\n**ls:** agent cmd frontend","extensions":{"grok_session":{}}}`,
+		`{"type":"done","timestamp":1783493442160,"extensions":{"grok_session":{}}}`,
+		`{"type":"message","role":"user","timestamp":1783493456134,"text":"what did I say","extensions":{"grok_session":{"turn_index":1}}}`,
+		`{"type":"think","timestamp":1783493456847,"text":"Recall prior user messages.","extensions":{"grok_session":{"turn_index":1}}}`,
+		`{"type":"message","role":"assistant","timestamp":1783493458483,"text":"You said: run ls and pwd, then what did I say.","extensions":{"grok_session":{"turn_index":1}}}`,
+		`{"type":"done","timestamp":1783493458573,"extensions":{"grok_session":{"turn_index":1}}}`,
+	}, "\n") + "\n"
+	return os.WriteFile(filepath.Join(sessDir, "events.jsonl"), []byte(eventsNDJSON), 0644)
+}
+
 func seedRoleTimelineSession(t *testing.T, home, runner, sessionID, workspace string, userTS, assistantTS int64) error {
 	t.Helper()
 	sessDir := filepath.Join(home, "sessions", runner, sessionID)
