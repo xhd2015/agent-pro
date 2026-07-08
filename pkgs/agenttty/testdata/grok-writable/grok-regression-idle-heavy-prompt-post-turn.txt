@@ -1,0 +1,4 @@
+     ❯ one word of France captial
+     Turn completed in 1.6s.
+  │ ❯                                                        │
+  Mock Model · always-approve

@@ -6,12 +6,19 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/xhd2015/agent-pro/agent/event/print"
 	"github.com/xhd2015/agent-pro/pkgs/agentevents"
 	"github.com/xhd2015/agent-pro/agent/subagent"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
+)
+
+const (
+	sessionsPrintStatusPollInterval = 500 * time.Millisecond
+	sessionsPrintIdleAfterLine      = 500 * time.Millisecond
+	sessionsPrintMaxGraceFinished   = 3 * time.Second
 )
 
 func parseSessionRef(ref string) (runner, sessionID string, err error) {
@@ -132,6 +139,10 @@ func runSessionsPrint(store agentstorage.Store, runner, sessionID string) error 
 	eventCount := len(eventLines)
 
 	startRunning := sess.Meta.Status == "running"
+	recentlyFinished := sess.Meta.Status == "finished" &&
+		sessionMetaUpdatedWithin(sess.Meta, 30*time.Second) &&
+		sess.Meta.UpdatedAt != "" && sess.Meta.UpdatedAt != sess.Meta.CreatedAt
+	wantFollow := startRunning || recentlyFinished
 	replayFollow := !startRunning && sess.Meta.Status == "finished" && eventCount >= 2 &&
 		sessionMetaUpdatedWithin(sess.Meta, 3*time.Second) &&
 		sess.Meta.UpdatedAt != "" && sess.Meta.UpdatedAt != sess.Meta.CreatedAt
@@ -153,7 +164,7 @@ func runSessionsPrint(store agentstorage.Store, runner, sessionID string) error 
 		printFormattedEvents(data)
 	}
 
-	if !startRunning {
+	if !wantFollow {
 		printSessionsTraceFooterDone()
 		return nil
 	}
@@ -173,8 +184,32 @@ func runSessionsPrint(store agentstorage.Store, runner, sessionID string) error 
 		}
 	}
 
+	var (
+		lastLineMu   sync.Mutex
+		lastLineAt   time.Time
+		recordLineAt = func() {
+			lastLineMu.Lock()
+			lastLineAt = time.Now()
+			lastLineMu.Unlock()
+		}
+		idleSinceLastLine = func() time.Duration {
+			lastLineMu.Lock()
+			defer lastLineMu.Unlock()
+			if lastLineAt.IsZero() {
+				return 0
+			}
+			return time.Since(lastLineAt)
+		}
+	)
+
+	go pollSessionsPrintFollowExit(ctx, cancel, store, runner, sessionID, idleSinceLastLine)
+
 	var watchState print.FormatState
 	watchErr := agentevents.WatchEvents(ctx, store, runner, sessionID, tailOffset, func(line string) error {
+		recordLineAt()
+		if isDoneEventLine(line) {
+			cancel()
+		}
 		header, body, isMsg := watchState.FormatLine(line)
 		if header == "" && body == "" && !isMsg {
 			return nil
@@ -201,6 +236,49 @@ func runSessionsPrint(store agentstorage.Store, runner, sessionID string) error 
 
 	printSessionsTraceFooterRunningDone()
 	return nil
+}
+
+func isDoneEventLine(line string) bool {
+	line = strings.TrimSpace(line)
+	return strings.Contains(line, `"type":"done"`) || strings.Contains(line, `"type": "done"`)
+}
+
+// pollSessionsPrintFollowExit cancels CLI follow once the session is no longer running
+// and tailing has gone idle, so --print exits instead of blocking forever.
+func pollSessionsPrintFollowExit(ctx context.Context, cancel context.CancelFunc, store agentstorage.Store, runner, sessionID string, idleSinceLastLine func() time.Duration) {
+	ticker := time.NewTicker(sessionsPrintStatusPollInterval)
+	defer ticker.Stop()
+
+	var sessionFinishedAt time.Time
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			meta, err := store.GetSession(runner, sessionID)
+			if err != nil {
+				cancel()
+				return
+			}
+			if meta.Meta.Status == "running" {
+				sessionFinishedAt = time.Time{}
+				continue
+			}
+			if sessionFinishedAt.IsZero() {
+				sessionFinishedAt = time.Now()
+			}
+
+			if idle := idleSinceLastLine(); idle >= sessionsPrintIdleAfterLine {
+				cancel()
+				return
+			}
+			if time.Since(sessionFinishedAt) >= sessionsPrintMaxGraceFinished {
+				cancel()
+				return
+			}
+		}
+	}
 }
 
 func printSessionsTraceFooterDone() {

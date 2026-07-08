@@ -30,6 +30,16 @@ func NewConverter() *Converter {
 	}
 }
 
+// SetTurnIndex restores the converter turn counter from a grok-sync checkpoint.
+func (c *Converter) SetTurnIndex(idx int) {
+	c.turnIndex = idx
+}
+
+// TurnIndex returns the current grok turn index stamped on emitted events.
+func (c *Converter) TurnIndex() int {
+	return c.turnIndex
+}
+
 // ProcessLine parses one updates.jsonl line and returns AgentEvents to emit.
 func (c *Converter) ProcessLine(line string) []types.AgentEvent {
 	line = strings.TrimSpace(line)

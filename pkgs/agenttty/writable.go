@@ -52,6 +52,40 @@ func hasPromptMarker(plain string) bool {
 		strings.Contains(plain, "Grok >") || strings.Contains(plain, "> ")
 }
 
+func grokPromptRegion(full string) string {
+	markers := []string{"Enter:send", "Shift+Tab:mode", "Ctrl+.:shortcuts", "╭---"}
+	best := 0
+	for _, m := range markers {
+		if i := strings.LastIndex(full, m); i > best {
+			best = i
+		}
+	}
+	if best > 0 {
+		start := best
+		if start > 400 {
+			start -= 400
+		} else {
+			start = 0
+		}
+		return full[start:]
+	}
+	return grokTailLines(full, 16)
+}
+
+func grokTailLines(text string, n int) string {
+	lines := strings.Split(text, "\n")
+	if len(lines) <= n {
+		return text
+	}
+	return strings.Join(lines[len(lines)-n:], "\n")
+}
+
+func grokBusyInPromptRegion(plain string) bool {
+	region := strings.ToLower(grokPromptRegion(plain))
+	region = strings.ReplaceAll(region, "working tree", "wt_scrubbed")
+	return strings.Contains(region, "working") || strings.Contains(region, "thinking")
+}
+
 func checkGrokWritable(scrollback []byte) WritableStatus {
 	plain := stripPlain(scrollback)
 	if len(plain) == 0 {
@@ -63,7 +97,7 @@ func checkGrokWritable(scrollback []byte) WritableStatus {
 	}
 	if strings.Contains(plain, "Grok \u203a") || strings.Contains(plain, "Grok ›") ||
 		strings.Contains(plain, "Grok >") || hasPromptMarker(plain) {
-		if strings.Contains(lower, "working") || strings.Contains(lower, "thinking") {
+		if grokBusyInPromptRegion(plain) {
 			return WritableStatus{Reason: "agent still responding", State: "busy"}
 		}
 		return WritableStatus{Ready: true, State: "idle"}

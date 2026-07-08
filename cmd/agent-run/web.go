@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -9,8 +10,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/xhd2015/agent-pro/pkgs/agentsync"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
+	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 	"github.com/xhd2015/less-gen/flags"
 )
 
@@ -119,6 +123,16 @@ func runWeb(args []string, defaultRunner string) error {
 	if err := registerStatic(mux, store); err != nil {
 		return err
 	}
+
+	reconcileGrokHome := runCfg.GrokHome
+	if reconcileGrokHome == "" {
+		reconcileGrokHome = agenttty.GrokHome()
+	}
+	agentsync.StartReconciler(context.Background(), 5*time.Minute, agentsync.ReconcileOptions{
+		Home:     store.Home(),
+		GrokHome: reconcileGrokHome,
+		Runner:   "grok-tty",
+	})
 
 	srv := &http.Server{Handler: mux}
 	return srv.Serve(ln)

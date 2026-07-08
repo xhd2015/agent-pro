@@ -1,0 +1,11 @@
+ ⎇ master-2026-07-06-agent-run-web-use-same-tty-watch-attach worktree ~/.wrk/w…
+               New worktree                                 ctrl+w
+               Resume session                               ctrl+s
+               Changelog
+               Quit                                         ctrl+q
+               Composer 2.5 is here!
+               Cursor's latest model is now available. Try it outin the /model picker.
+╭------------------------------------------------------------------------------╮
+│ ❯                                                                            │
+╰---------------------------------------------- Composer 2.5 · always-approve -╯
+                                                        Grok Build  0.2.87 Beta

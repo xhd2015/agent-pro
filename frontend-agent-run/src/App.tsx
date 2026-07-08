@@ -54,6 +54,7 @@ function Shell({
 
 const BOTTOM_THRESHOLD_PX = 80
 const DEBUG_PREFIX = '[agent-run-debug]'
+const TERMINAL_DISCOVERY_POLL_MS = 3000
 
 function debugLog(label: string, data?: unknown) {
   if (data === undefined) {
@@ -61,6 +62,71 @@ function debugLog(label: string, data?: unknown) {
     return
   }
   console.info(DEBUG_PREFIX, label, data)
+}
+
+function normalizeUserPromptText(text: string): string {
+  return text.trim().replace(/\s+/g, ' ')
+}
+
+function shouldSkipDuplicateUserEvent(prev: AgentEvent[], ev: AgentEvent): boolean {
+  if (ev.type !== 'message' || ev.role !== 'user') {
+    return false
+  }
+  const text = normalizeUserPromptText(ev.text ?? '')
+  if (!text) {
+    return false
+  }
+  return prev.some(
+    (existing) =>
+      existing.type === 'message' &&
+      existing.role === 'user' &&
+      normalizeUserPromptText(existing.text ?? '') === text,
+  )
+}
+
+function dedupeUserMessagesByText(events: AgentEvent[]): AgentEvent[] {
+  const seen = new Set<string>()
+  return events.filter((ev) => {
+    if (ev.type !== 'message' || ev.role !== 'user') {
+      return true
+    }
+    const text = normalizeUserPromptText(ev.text ?? '')
+    if (!text) {
+      return true
+    }
+    if (seen.has(text)) {
+      return false
+    }
+    seen.add(text)
+    return true
+  })
+}
+
+function appendTimelineEvent(prev: AgentEvent[], ev: AgentEvent): AgentEvent[] {
+  if (shouldSkipDuplicateUserEvent(prev, ev)) {
+    return prev
+  }
+  return dedupeUserMessagesByText([...prev, ev])
+}
+
+function mergeSessionEvents(
+  prev: AgentEvent[],
+  serverEvents: AgentEvent[],
+  keepOptimisticUsers: boolean,
+): AgentEvent[] {
+  const server = dedupeUserMessagesByText(serverEvents)
+  if (!keepOptimisticUsers) {
+    return server
+  }
+  const merged = [...server]
+  for (const ev of prev) {
+    if (ev.type === 'message' && ev.role === 'user') {
+      if (!shouldSkipDuplicateUserEvent(merged, ev)) {
+        merged.push(ev)
+      }
+    }
+  }
+  return dedupeUserMessagesByText(merged)
 }
 
 function summarizeEvents(events: AgentEvent[]) {
@@ -98,21 +164,42 @@ function useFollowScroll<T extends HTMLElement>(
   contentDeps: unknown[],
 ) {
   const followModeRef = useRef<'following' | 'detached'>('following')
+  const pinnedScrollTopRef = useRef<number | null>(null)
   const isProgrammaticScrollRef = useRef(false)
+  const userScrollIntentRef = useRef(false)
+  const lastScrollTopRef = useRef(0)
   const initialScrollDoneRef = useRef(false)
   const [followMode, setFollowMode] = useState<'following' | 'detached'>('following')
   const [showJumpToLatest, setShowJumpToLatest] = useState(false)
 
-  useEffect(() => {
-    followModeRef.current = followMode
-  }, [followMode])
+  const markUserScrollIntent = useCallback(() => {
+    userScrollIntentRef.current = true
+  }, [])
+
+  const applyFollowMode = useCallback((mode: 'following' | 'detached') => {
+    followModeRef.current = mode
+    setFollowMode(mode)
+    if (mode === 'following') {
+      pinnedScrollTopRef.current = null
+      setShowJumpToLatest(false)
+    } else {
+      setShowJumpToLatest(true)
+    }
+  }, [])
 
   const resetFollow = useCallback(() => {
     initialScrollDoneRef.current = false
-    followModeRef.current = 'following'
-    setFollowMode('following')
-    setShowJumpToLatest(false)
-  }, [])
+    pinnedScrollTopRef.current = null
+    applyFollowMode('following')
+  }, [applyFollowMode])
+
+  const restorePinnedScroll = useCallback(() => {
+    const el = scrollRef.current
+    if (!el || pinnedScrollTopRef.current == null) return
+    isProgrammaticScrollRef.current = true
+    el.scrollTop = pinnedScrollTopRef.current
+    lastScrollTopRef.current = el.scrollTop
+  }, [scrollRef])
 
   const syncFollowFromScroll = useCallback(() => {
     const el = scrollRef.current
@@ -120,55 +207,88 @@ function useFollowScroll<T extends HTMLElement>(
       isProgrammaticScrollRef.current = false
       return
     }
+    const prevScrollTop = lastScrollTopRef.current
+    lastScrollTopRef.current = el.scrollTop
+    const scrollingUp = el.scrollTop < prevScrollTop - 1
     const distance = distanceFromBottom(el)
-    if (distance <= BOTTOM_THRESHOLD_PX) {
-      followModeRef.current = 'following'
-      setFollowMode('following')
-      setShowJumpToLatest(false)
-    } else {
-      followModeRef.current = 'detached'
-      setFollowMode('detached')
-      setShowJumpToLatest(true)
+    const atBottom = distance <= BOTTOM_THRESHOLD_PX
+
+    if (atBottom) {
+      if (userScrollIntentRef.current) {
+        userScrollIntentRef.current = false
+        applyFollowMode('following')
+        return
+      }
+      if (followModeRef.current === 'detached' && pinnedScrollTopRef.current != null) {
+        restorePinnedScroll()
+        return
+      }
+      applyFollowMode('following')
+      return
     }
-  }, [scrollRef])
+
+    if (userScrollIntentRef.current) {
+      userScrollIntentRef.current = false
+      pinnedScrollTopRef.current = el.scrollTop
+      applyFollowMode('detached')
+      return
+    }
+
+    if (followModeRef.current === 'detached' && pinnedScrollTopRef.current != null) {
+      restorePinnedScroll()
+      return
+    }
+
+    if (followModeRef.current === 'following' && !scrollingUp) {
+      return
+    }
+
+    pinnedScrollTopRef.current = el.scrollTop
+    applyFollowMode('detached')
+  }, [scrollRef, applyFollowMode, restorePinnedScroll])
 
   const handleJumpToLatest = useCallback(() => {
     const el = scrollRef.current
     if (!el) return
     isProgrammaticScrollRef.current = true
     el.scrollTop = el.scrollHeight
-    followModeRef.current = 'following'
-    setFollowMode('following')
-    setShowJumpToLatest(false)
-  }, [scrollRef])
+    lastScrollTopRef.current = el.scrollTop
+    initialScrollDoneRef.current = true
+    applyFollowMode('following')
+  }, [scrollRef, applyFollowMode])
+
+  const pinDetachedScroll = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    if (pinnedScrollTopRef.current == null) {
+      pinnedScrollTopRef.current = el.scrollTop
+    } else {
+      isProgrammaticScrollRef.current = true
+      el.scrollTop = pinnedScrollTopRef.current
+    }
+    lastScrollTopRef.current = el.scrollTop
+    applyFollowMode('detached')
+  }, [scrollRef, applyFollowMode])
 
   useLayoutEffect(() => {
     const el = scrollRef.current
     if (!el) return
 
-    const distance = distanceFromBottom(el)
-
-    if (!isProgrammaticScrollRef.current && initialScrollDoneRef.current) {
-      if (distance <= BOTTOM_THRESHOLD_PX) {
-        followModeRef.current = 'following'
-        setFollowMode('following')
-        setShowJumpToLatest(false)
-      } else {
-        followModeRef.current = 'detached'
-        setFollowMode('detached')
-        setShowJumpToLatest(true)
-      }
+    if (pinnedScrollTopRef.current != null) {
+      isProgrammaticScrollRef.current = true
+      el.scrollTop = pinnedScrollTopRef.current
+      lastScrollTopRef.current = el.scrollTop
+      const distance = distanceFromBottom(el)
+      setShowJumpToLatest(distance > BOTTOM_THRESHOLD_PX)
+      return
     }
 
+    const distance = distanceFromBottom(el)
     if (followModeRef.current === 'following') {
-      if (initialScrollDoneRef.current && distance > BOTTOM_THRESHOLD_PX) {
-        return
-      }
-      if (!initialScrollDoneRef.current || distance <= BOTTOM_THRESHOLD_PX) {
-        isProgrammaticScrollRef.current = true
-        el.scrollTop = el.scrollHeight
-        initialScrollDoneRef.current = true
-      }
+      isProgrammaticScrollRef.current = true
+      el.scrollTop = el.scrollHeight
+      lastScrollTopRef.current = el.scrollTop
+      initialScrollDoneRef.current = true
       setShowJumpToLatest(false)
       return
     }
@@ -181,8 +301,11 @@ function useFollowScroll<T extends HTMLElement>(
     followModeRef,
     showJumpToLatest,
     syncFollowFromScroll,
+    markUserScrollIntent,
     handleJumpToLatest,
     resetFollow,
+    pinDetachedScroll,
+    restorePinnedScroll,
   }
 }
 
@@ -527,8 +650,13 @@ function sanitizeTerminalTranscript(data: string): string {
 
 const SessionList = forwardRef<
   HTMLElement,
-  { sessions: SessionSummary[]; onScroll?: () => void }
->(function SessionList({ sessions, onScroll }, ref) {
+  {
+    sessions: SessionSummary[]
+    onScroll?: () => void
+    onWheel?: () => void
+    onTouchStart?: () => void
+  }
+>(function SessionList({ sessions, onScroll, onWheel, onTouchStart }, ref) {
   if (sessions.length === 0) {
     return null
   }
@@ -538,20 +666,25 @@ const SessionList = forwardRef<
       className="session-list"
       data-testid="session-list"
       onScroll={onScroll}
+      onWheel={onWheel}
+      onTouchStart={onTouchStart}
     >
       {sessions.map((s) => (
         <Link
           key={`${s.runner}/${s.session_id}`}
-          className="session-item"
+          className={`session-item session-item--${s.status || 'unknown'}`}
           data-testid="session-item"
           to={`/sessions/${encodeURIComponent(s.runner)}/${encodeURIComponent(s.session_id)}`}
         >
-          <span className="session-item-id">{s.session_id}</span>
-          <span className="session-item-meta">
-            {s.runner} · {s.status}
-          </span>
+          <div className="session-item-head">
+            <span className="session-item-id" title={s.session_id}>
+              {shortSessionId(s.session_id)}
+            </span>
+            <span className={statusPillClass(s.status)}>{s.status || 'unknown'}</span>
+          </div>
+          <span className="session-item-meta">{s.runner}</span>
           {s.workspace ? (
-            <span className="session-item-workspace" data-testid="session-workspace">
+            <span className="session-item-workspace" data-testid="session-workspace" title={s.workspace}>
               {s.workspace}
             </span>
           ) : null}
@@ -599,8 +732,13 @@ function HomePage() {
   const [workspace, setWorkspace] = useState('')
   const sessionListRef = useRef<HTMLElement>(null)
   const sortedSessions = useMemo(() => sortSessionsOldestFirst(sessions), [sessions])
-  const { followModeRef, showJumpToLatest, syncFollowFromScroll, handleJumpToLatest } =
-    useFollowScroll(sessionListRef, [sortedSessions])
+  const {
+    followModeRef,
+    showJumpToLatest,
+    syncFollowFromScroll,
+    markUserScrollIntent,
+    handleJumpToLatest,
+  } = useFollowScroll(sessionListRef, [sortedSessions])
 
   const refresh = useCallback(async () => {
     const [list, r, status] = await Promise.all([fetchSessions(), fetchRunners(), fetchStatus()])
@@ -630,9 +768,8 @@ function HomePage() {
     if (!text || sending) return
     const listEl = sessionListRef.current
     const detached =
-      listEl != null
-        ? distanceFromBottom(listEl) > BOTTOM_THRESHOLD_PX
-        : followModeRef.current === 'detached'
+      followModeRef.current === 'detached' ||
+      (listEl != null && distanceFromBottom(listEl) > BOTTOM_THRESHOLD_PX)
     setSending(true)
     try {
       const session = await createSession(runner, text)
@@ -695,18 +832,43 @@ function HomePage() {
               ref={sessionListRef}
               sessions={sortedSessions}
               onScroll={syncFollowFromScroll}
+              onWheel={markUserScrollIntent}
+              onTouchStart={markUserScrollIntent}
             />
           </div>
         ) : (
           <div className="empty-state" data-testid="empty-state">
-            <h2>No sessions yet</h2>
-            <p>Pick a runner and send a message below to start.</p>
+            <div className="empty-state-icon" aria-hidden="true">
+              ◇
+            </div>
+            <h2>Start a session</h2>
+            <p>Choose a runner above, then send a message to kick off your agent.</p>
           </div>
         )}
       </div>
       <Composer value={draft} onChange={setDraft} onSend={() => void handleSend()} sending={sending} />
     </Shell>
   )
+}
+
+function statusPillClass(status: string): string {
+  switch (status.trim().toLowerCase()) {
+    case 'running':
+      return 'status-pill status-pill-running'
+    case 'error':
+      return 'status-pill status-pill-error'
+    case 'finished':
+    case 'idle':
+      return 'status-pill status-pill-idle'
+    default:
+      return 'status-pill'
+  }
+}
+
+function shortSessionId(sessionId: string): string {
+  const id = sessionId.trim()
+  if (id.length <= 20) return id
+  return `${id.slice(0, 10)}…${id.slice(-8)}`
 }
 
 function formatMessageTimestamp(ms: number): string {
@@ -757,6 +919,10 @@ function coalesceAssistantStreaming(events: AgentEvent[]): AgentEvent[] {
 function isTimelineEvent(ev: AgentEvent): boolean {
   switch (ev.type) {
     case 'message':
+      if (ev.role === 'user' && !(ev.text?.trim())) {
+        return false
+      }
+      return true
     case 'think':
     case 'tool_call':
     case 'error':
@@ -767,7 +933,7 @@ function isTimelineEvent(ev: AgentEvent): boolean {
 }
 
 function buildTimeline(events: AgentEvent[]): AgentEvent[] {
-  const filtered = events.filter(isTimelineEvent)
+  const filtered = dedupeUserMessagesByText(events.filter(isTimelineEvent))
   const out: AgentEvent[] = []
   let messageBatch: AgentEvent[] = []
 
@@ -825,15 +991,21 @@ function SessionPage() {
   const streamOffsetRef = useRef<number | null>(bootstrap?.events_offset ?? null)
   const statusRef = useRef(bootstrap?.session.status ?? '')
   const eventsRef = useRef<AgentEvent[]>([])
+  const lastSentUserPromptRef = useRef<string | null>(null)
   const runChromeHoldUntilRef = useRef(0)
+  const terminalAvailableRef = useRef(false)
+  const terminalSessionIdRef = useRef<string | undefined>(undefined)
   const messageListRef = useRef<HTMLDivElement>(null)
   const timeline = useMemo(() => buildTimeline(events), [events])
   const {
     followModeRef,
     showJumpToLatest,
     syncFollowFromScroll,
+    markUserScrollIntent,
     handleJumpToLatest,
     resetFollow,
+    pinDetachedScroll,
+    restorePinnedScroll,
   } = useFollowScroll(messageListRef, [timeline])
 
   useEffect(() => {
@@ -856,16 +1028,6 @@ function SessionPage() {
         statusRef: statusRef.current,
         streamOffset: streamOffsetRef.current,
       })
-      if (options?.fromStreamClose && statusRef.current === 'running') {
-        statusRef.current = 'finished'
-        setStatus('finished')
-        debugLog('refresh:stream-close-fast-finish', {
-          runner,
-          sessionId,
-          elapsedMs: Date.now() - refreshStartedAt,
-        })
-        return
-      }
       const detail = await fetchSessionDetail(runner, sessionId)
       if (!detail) {
         debugLog('refresh:no-detail', {
@@ -887,11 +1049,20 @@ function SessionPage() {
         setWorkspace(detail.session.workspace)
       }
       if (detail.session.terminal_session_id) {
+        terminalSessionIdRef.current = detail.session.terminal_session_id
+        terminalAvailableRef.current = true
         setTerminalAvailable(true)
       }
 
       if (mode === 'full' || runCompleted) {
-        setEvents(detail.events)
+        let serverEvents = detail.events
+        if (runner === 'grok-tty' && lastSentUserPromptRef.current != null) {
+          // Prefer the optimistic composer bubble until grok sync confirms the prompt.
+          serverEvents = detail.events.filter(
+            (ev) => !(ev.type === 'message' && ev.role === 'user'),
+          )
+        }
+        setEvents((prev) => mergeSessionEvents(prev, serverEvents, true))
         if (detail.events_offset != null && detail.events_offset >= 0) {
           updateStreamOffset(detail.events_offset)
         }
@@ -910,6 +1081,7 @@ function SessionPage() {
       }
 
       const holdRunningChrome =
+        !options?.fromStreamClose &&
         Date.now() < runChromeHoldUntilRef.current &&
         nextStatus !== 'running' &&
         (nextStatus === 'finished' || nextStatus === 'idle' || nextStatus === 'error')
@@ -930,38 +1102,100 @@ function SessionPage() {
     [runner, sessionId, updateStreamOffset],
   )
 
+  const hydratedSessionRef = useRef<string | null>(null)
+
   useEffect(() => {
     updateStreamOffset(null)
+    lastSentUserPromptRef.current = null
+    terminalAvailableRef.current = false
+    terminalSessionIdRef.current = undefined
+    setTerminalAvailable(false)
+    setSessionUpdatedAt(undefined)
+    setSessionCreatedAt(undefined)
+    hydratedSessionRef.current = null
     debugLog('session:reset', { runner, sessionId })
     resetFollow()
   }, [runner, sessionId, resetFollow, updateStreamOffset])
-
   useEffect(() => {
     if (!ready || needsAuth || !runner || !sessionId) return
+    const sessionKey = `${runner}/${sessionId}`
+    if (hydratedSessionRef.current === sessionKey) return
+    hydratedSessionRef.current = sessionKey
     void refresh({ mode: 'full' })
   }, [ready, needsAuth, runner, sessionId, refresh])
 
+  const finishedRefreshDoneRef = useRef(false)
+  useEffect(() => {
+    if (status === 'running') {
+      finishedRefreshDoneRef.current = false
+    }
+  }, [status])
+
   useEffect(() => {
     if (!ready || needsAuth || !runner || !sessionId) return
-    if (!isTTYRunnerID(runner)) return
-    let stopped = false
-    const refreshTerminal = async () => {
-      const terminal = await fetchTerminalStatus(runner, sessionId)
-      if (!stopped) setTerminalAvailable(terminal.available)
+    if (status !== 'finished' || finishedRefreshDoneRef.current) return
+    finishedRefreshDoneRef.current = true
+    if (lastSentUserPromptRef.current == null) {
+      return
     }
-    void refreshTerminal()
-    const intervalMs = terminalAvailable && status !== 'running' ? 5000 : 500
-    const timer = window.setInterval(refreshTerminal, intervalMs)
-    return () => {
-      stopped = true
-      window.clearInterval(timer)
-    }
-  }, [ready, needsAuth, runner, sessionId, status, terminalAvailable])
+    void (async () => {
+      // grok-tty follow-up sync may land the user event slightly after status=finished.
+      for (let i = 0; i < 24; i++) {
+        await refresh({ mode: 'full' })
+        if (lastSentUserPromptRef.current == null) {
+          break
+        }
+        const userCount = eventsRef.current.filter(
+          (ev) => ev.type === 'message' && ev.role === 'user',
+        ).length
+        if (userCount >= 2) {
+          lastSentUserPromptRef.current = null
+          break
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 250))
+      }
+    })()
+  }, [ready, needsAuth, runner, sessionId, status, refresh])
 
   useEffect(() => {
     if (!ready || needsAuth || !runner || !sessionId) return
     if (!isTTYRunnerID(runner)) return
-    if (status !== 'running') return
+    if (!sessionUpdatedAt) return
+    if (terminalSessionIdRef.current) return
+    if (terminalAvailableRef.current) return
+
+    let stopped = false
+    let timer = 0
+
+    const stopPolling = () => {
+      if (timer) {
+        window.clearInterval(timer)
+        timer = 0
+      }
+    }
+
+    const refreshTerminal = async () => {
+      if (stopped || terminalAvailableRef.current) return
+      const terminal = await fetchTerminalStatus(runner, sessionId)
+      if (stopped) return
+      if (terminal.available) {
+        terminalAvailableRef.current = true
+        setTerminalAvailable(true)
+        stopPolling()
+      }
+    }
+
+    void refreshTerminal()
+    timer = window.setInterval(() => void refreshTerminal(), TERMINAL_DISCOVERY_POLL_MS)
+
+    return () => {
+      stopped = true
+      stopPolling()
+    }
+  }, [ready, needsAuth, runner, sessionId, sessionUpdatedAt])
+
+  useEffect(() => {
+    if (!ready || needsAuth || !runner || !sessionId) return
 
     const offset = streamOffset
     if (offset == null) return
@@ -985,18 +1219,38 @@ function SessionPage() {
         sessionId,
         offset,
         (ev) => {
-          if (streamOffsetRef.current !== offset) {
-            debugLog('sse:stale-event-ignored', {
-              runner,
-              sessionId,
-              offset,
-              currentOffset: streamOffsetRef.current,
-              event: ev,
-            })
-            return
+          if (ev.type === 'done' && statusRef.current === 'running') {
+            statusRef.current = 'finished'
+            setStatus('finished')
           }
           setEvents((prev) => {
-            const next = [...prev, ev]
+            if (
+              runner === 'grok-tty' &&
+              ev.type === 'message' &&
+              ev.role === 'user' &&
+              lastSentUserPromptRef.current != null
+            ) {
+              if (normalizeUserPromptText(ev.text ?? '') === lastSentUserPromptRef.current) {
+                lastSentUserPromptRef.current = null
+              }
+              debugLog('sse:grok-user-deferred', {
+                runner,
+                sessionId,
+                event: ev,
+                pending: lastSentUserPromptRef.current,
+              })
+              return prev
+            }
+            if (shouldSkipDuplicateUserEvent(prev, ev)) {
+              debugLog('sse:duplicate-user-skipped', {
+                runner,
+                sessionId,
+                offset,
+                event: ev,
+              })
+              return prev
+            }
+            const next = appendTimelineEvent(prev, ev)
             debugLog('sse:event', {
               runner,
               sessionId,
@@ -1053,7 +1307,7 @@ function SessionPage() {
       ac.abort()
       debugLog('sse:cleanup', { runner, sessionId, offset })
     }
-  }, [ready, needsAuth, runner, sessionId, status, streamOffset, refresh])
+  }, [ready, needsAuth, runner, sessionId, streamOffset, refresh])
 
   const handleSend = async () => {
     const text = draft.trim()
@@ -1061,9 +1315,8 @@ function SessionPage() {
     const sendStartedAt = Date.now()
     const listEl = messageListRef.current
     const detached =
-      listEl != null
-        ? distanceFromBottom(listEl) > BOTTOM_THRESHOLD_PX
-        : followModeRef.current === 'detached'
+      followModeRef.current === 'detached' ||
+      (listEl != null && distanceFromBottom(listEl) > BOTTOM_THRESHOLD_PX)
     debugLog('send:start', {
       runner,
       sessionId,
@@ -1074,7 +1327,7 @@ function SessionPage() {
       events: summarizeEvents(events),
     })
     if (detached) {
-      followModeRef.current = 'detached'
+      pinDetachedScroll()
     }
     setSending(true)
     try {
@@ -1088,8 +1341,26 @@ function SessionPage() {
       })
       if (ok) {
         setDraft('')
+        if (runner === 'grok-tty') {
+          lastSentUserPromptRef.current = normalizeUserPromptText(text)
+        }
         // Refresh first so streamOffsetRef is current before SSE starts on running.
         await refresh({ mode: 'full' })
+        if (isTTYRunnerID(runner)) {
+          setEvents((prev) => {
+            const optimistic: AgentEvent = {
+              type: 'message',
+              role: 'user',
+              text,
+              timestamp: Date.now(),
+            }
+            return appendTimelineEvent(prev, optimistic)
+          })
+        }
+        if (statusRef.current !== 'running') {
+          statusRef.current = 'running'
+          setStatus('running')
+        }
         debugLog('send:refresh-after-post-done', {
           runner,
           sessionId,
@@ -1120,6 +1391,23 @@ function SessionPage() {
     }
   }
 
+  const isRunning = status === 'running'
+  const showTerminalButton = terminalAvailable || isTTYRunnerID(runner)
+  const showInlineAssistantLoading = useMemo(() => {
+    if (sending) return true
+    if (!isRunning) return false
+    const messages = timeline.filter((ev) => ev.type === 'message')
+    if (messages.length === 0) return true
+    const last = messages[messages.length - 1]
+    if (last?.role === 'user') return true
+    const text = last?.text?.trim() ?? ''
+    return last?.role === 'assistant' && (text === '' || text === '…')
+  }, [isRunning, sending, timeline])
+
+  useLayoutEffect(() => {
+    restorePinnedScroll()
+  }, [showInlineAssistantLoading, restorePinnedScroll])
+
   if (needsAuth) return <AuthPage />
   if (!ready || !runner || !sessionId) {
     return (
@@ -1129,9 +1417,6 @@ function SessionPage() {
       </Shell>
     )
   }
-
-  const isRunning = status === 'running'
-  const showTerminalButton = terminalAvailable || isTTYRunnerID(runner)
 
   return (
     <Shell sessionPage>
@@ -1157,10 +1442,14 @@ function SessionPage() {
           </header>
           <div className="main-panel chat-active" data-testid="chat-active">
             <div className="session-header">
-              <code>{sessionId}</code>
-              {status ? <span className="status-pill">{status}</span> : null}
+              <div className="session-header-row">
+                <span className="session-id" title={sessionId}>
+                  {shortSessionId(sessionId)}
+                </span>
+                {status ? <span className={statusPillClass(status)}>{status}</span> : null}
+              </div>
               {workspace ? (
-                <div className="workspace-display" data-testid="workspace">
+                <div className="workspace-display" data-testid="workspace" title={workspace}>
                   {workspace}
                 </div>
               ) : null}
@@ -1184,6 +1473,8 @@ function SessionPage() {
                 data-testid="message-list"
                 ref={messageListRef}
                 onScroll={syncFollowFromScroll}
+                onWheel={markUserScrollIntent}
+                onTouchStart={markUserScrollIntent}
               >
               {timeline.map((ev, i) => {
                 const tsText = ev.timestamp != null ? formatMessageTimestamp(ev.timestamp) : ''
@@ -1251,11 +1542,27 @@ function SessionPage() {
                   </div>
                 )
               })}
-              {timeline.length === 0 && (
+              {showInlineAssistantLoading ? (
+                <div className="message-row message-row-assistant">
+                  <div
+                    className="message-item message-item-assistant message-item-assistant-loading"
+                    data-testid="message-item-assistant-loading"
+                    role="status"
+                    aria-label="Agent composing reply"
+                  >
+                    <div className="assistant-loading-dots" aria-hidden="true">
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+              {timeline.length === 0 && !showInlineAssistantLoading ? (
                 <div className="message-item message-item-muted" data-testid="message-item">
                   Waiting for agent…
                 </div>
-              )}
+              ) : null}
               </div>
             </div>
           </div>

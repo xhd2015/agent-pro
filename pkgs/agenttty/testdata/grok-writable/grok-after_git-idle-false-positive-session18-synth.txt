@@ -1,0 +1,18 @@
+Shell: git working tree status
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   pkgs/agenttty/writable.go
+
+no changes added to commit (use "git add" and/or "git commit -a")
+
+Turn completed in 4.2s.
+
+ ⎇ master-2026-07-06-agent-run-web-use-same-tty-watch-attach workt… 3.8K / 200K
+ ╭----------------------------------------------------------------------------╮
+ │ ❯ run ls and pwdwhat did I say?                                            │
+ ╰-------------------------------------------- Composer 2.5 · always-approve -╯
+ Enter:send  │  Shift+Tab:mode  │  Ctrl+.:shortcuts

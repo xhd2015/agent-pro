@@ -28,6 +28,7 @@ type RunOptions struct {
 	AgentRunnerConfigHome string
 	BinaryPath            string
 	KeepTerminalAlive     bool
+	GrokSyncOwnsEvents    bool
 	Stderr                io.Writer
 	Emit                  func(types.AgentEvent) error
 	OnTerminalSessionID   func(string)
@@ -154,6 +155,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	}
 	var tailCancel context.CancelFunc
 	var tailWG sync.WaitGroup
+	var turnCompleted chan struct{}
 
 	if opts.Emit != nil && provider.StartEventTail != nil && runnerID == "stub-tty" {
 		_, cancel := context.WithCancel(ctx)
@@ -173,10 +175,13 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 		}()
 	}
 
-	if opts.Emit != nil && !provider.DisableTail && runnerID == "grok-tty" {
+	if opts.Emit != nil && !provider.DisableTail && runnerID == "grok-tty" && !opts.GrokSyncOwnsEvents {
 		grokHome := GrokHomeForRunner(configHome)
 		tailCtx, cancel := context.WithCancel(ctx)
 		tailCancel = cancel
+		if opts.KeepTerminalAlive {
+			turnCompleted = make(chan struct{})
+		}
 		tailWG.Add(1)
 		go func() {
 			defer tailWG.Done()
@@ -214,7 +219,21 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 				tailState.streamed = true
 				tailState.Unlock()
 			}
-			_ = TailUpdatesFromOffset(tailCtx, updatesPath, startOffset, opts.Emit, onStreamed)
+			emit := opts.Emit
+			if turnCompleted != nil {
+				var turnDone bool
+				emit = func(ev types.AgentEvent) error {
+					if err := opts.Emit(ev); err != nil {
+						return err
+					}
+					if !turnDone && ev.Type == types.ActionDone {
+						turnDone = true
+						close(turnCompleted)
+					}
+					return nil
+				}
+			}
+			_ = TailUpdatesFromOffset(tailCtx, updatesPath, startOffset, emit, onStreamed)
 		}()
 	}
 
@@ -281,7 +300,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	var waitErr error
 	if opts.KeepTerminalAlive {
 		var extraComplete func() bool
-		if runnerID == "grok-tty" {
+		if runnerID == "grok-tty" && !opts.GrokSyncOwnsEvents {
 			extraComplete = func() bool {
 				tailState.Lock()
 				defer tailState.Unlock()
@@ -293,6 +312,13 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 		waitErr = ttywatch.WaitHeadless(ctx, result, argv)
 		if autoExitCancel != nil {
 			autoExitCancel()
+		}
+	}
+
+	if runnerID == "grok-tty" && opts.KeepTerminalAlive && turnCompleted != nil {
+		select {
+		case <-turnCompleted:
+		case <-ctx.Done():
 		}
 	}
 

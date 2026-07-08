@@ -865,6 +865,7 @@ func llmMockGrokLayoutHook(prompt, sessionUUID, marker string, sleepSec int) str
 	if sleepSec <= 0 {
 		sleepSec = 2
 	}
+	streamPart1, streamPart2, streamPart3 := layoutGrokStreamParts(marker)
 	return fmt.Sprintf(`sh -c '
 printf "GROK_TTY_BANNER\nGrok › "
 read -r line || true
@@ -881,13 +882,42 @@ now=$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)
 cat > "$dir/summary.json" <<EOF
 {"info":{"cwd":"$wd","sessionId":"%s","openedAt":"$now"},"created_at":"$now"}
 EOF
-cat > "$dir/updates.jsonl" <<EOF
-{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"$submitted"}}
-{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"%s"}}
-EOF
+updates="$dir/updates.jsonl"
+printf %%s\\n "{\"sessionUpdate\":\"user_message_chunk\",\"content\":{\"type\":\"text\",\"text\":\"$submitted\"}}" > "$updates"
+stream_chunk() { printf %%s\\n "$1" >> "$updates"; }
+stream_chunk "{\"sessionUpdate\":\"agent_message_chunk\",\"content\":{\"type\":\"text\",\"text\":\"%s\"}}"
+sleep 0.55
+stream_chunk "{\"sessionUpdate\":\"agent_message_chunk\",\"content\":{\"type\":\"text\",\"text\":\"%s\"}}"
+sleep 0.55
+stream_chunk "{\"sessionUpdate\":\"agent_message_chunk\",\"content\":{\"type\":\"text\",\"text\":\"%s\"}}"
+sleep 0.55
+stream_chunk "{\"sessionUpdate\":\"turn_completed\"}"
 sleep %d
 exit 0
-'`, prompt, sessionUUID, sessionUUID, marker, sleepSec)
+'`, prompt, sessionUUID, sessionUUID, streamPart1, streamPart2, streamPart3, sleepSec)
+}
+
+func layoutGrokStreamParts(marker string) (string, string, string) {
+	marker = strings.TrimSpace(marker)
+	if marker == "" {
+		marker = layoutGrokStreamMarker
+	}
+	n := len(marker)
+	if n < 3 {
+		return marker, marker, marker
+	}
+	third := n / 3
+	twoThird := (2 * n) / 3
+	if third < 1 {
+		third = 1
+	}
+	if twoThird <= third {
+		twoThird = third + 1
+	}
+	if twoThird >= n {
+		twoThird = n - 1
+	}
+	return marker[:third], marker[:twoThird], marker
 }
 
 func ensureLayoutGrokMockEnv(t *testing.T, req *Request, prompt, marker string, sleepSec int) error {

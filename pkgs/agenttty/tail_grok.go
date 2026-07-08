@@ -47,10 +47,14 @@ func updatesTailStartOffset(path string, runStart time.Time) int64 {
 
 // TailUpdatesFromOffset tails updates.jsonl starting at the given byte offset.
 // onInitialSynced, when non-nil, is invoked after the first batch of updates is emitted.
-func TailUpdatesFromOffset(ctx context.Context, updatesPath string, startOffset int64, emit func(types.AgentEvent) error, onInitialSynced func()) error {
+func TailUpdatesFromOffset(ctx context.Context, updatesPath string, startOffset int64, emit func(types.AgentEvent) error, onInitialSynced ...func()) error {
 	converter := grok_session.NewConverter()
 	emitEvent := func(ev types.AgentEvent) error {
 		return emit(trimACPAgentEventNewlines(ev))
+	}
+	var synced func()
+	if len(onInitialSynced) > 0 {
+		synced = onInitialSynced[0]
 	}
 
 	if _, err := readNewACPUpdates(updatesPath, startOffset, converter, emitEvent); err != nil {
@@ -61,8 +65,8 @@ func TailUpdatesFromOffset(ctx context.Context, updatesPath string, startOffset 
 			return err
 		}
 	}
-	if onInitialSynced != nil {
-		onInitialSynced()
+	if synced != nil {
+		synced()
 	}
 
 	watchErr := logs.WatchLine(ctx, updatesPath, logs.WatchLineOptions{DisableDebounce: true}, func(line string) error {
@@ -164,6 +168,11 @@ func sessionDir(grokHome, workspace, sessionID string) (string, error) {
 	return filepath.Join(root, sessionID), nil
 }
 
+// FindUpdatesBySessionID locates updates.jsonl for an existing grok session id.
+func FindUpdatesBySessionID(grokHome, workspace, sessionID string) (string, bool) {
+	return findUpdatesBySessionID(grokHome, workspace, sessionID)
+}
+
 func findUpdatesBySessionID(grokHome, workspace, sessionID string) (string, bool) {
 	for _, ws := range workspacePathVariants(workspace) {
 		path, err := updatesJSONLPath(grokHome, ws, sessionID)
@@ -241,7 +250,8 @@ func TailGrokSessionFromOffset(ctx context.Context, grokHome, workspace, grokSes
 
 // DiscoverSession locates the grok on-disk session matching workspace cwd and prompt.
 func DiscoverSession(ctx context.Context, grokHome, workspace, prompt string, runStart time.Time) (sessionID string, updatesPath string, err error) {
-	if hook := strings.TrimSpace(os.Getenv(envGrokTTYGrokSessionID)); hook != "" {
+	hook := strings.TrimSpace(os.Getenv(envGrokTTYGrokSessionID))
+	if hook != "" {
 		if path, ok := findUpdatesBySessionID(grokHome, workspace, hook); ok {
 			return hook, path, nil
 		}
@@ -257,6 +267,13 @@ func DiscoverSession(ctx context.Context, grokHome, workspace, prompt string, ru
 		case <-ctx.Done():
 			return "", "", ctx.Err()
 		default:
+		}
+
+		// Re-check a pinned grok session id each poll — updates.jsonl may appear after the worker starts.
+		if hook != "" {
+			if path, ok := findUpdatesBySessionID(grokHome, workspace, hook); ok {
+				return hook, path, nil
+			}
 		}
 
 		if id, path, ok := discoverFromActiveSessions(grokHome, workspace, prompt, runStart); ok {

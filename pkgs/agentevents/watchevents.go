@@ -16,20 +16,12 @@ import (
 )
 
 // WatchEvents tails events.jsonl from a byte offset and calls onLine for each new NDJSON row.
-// Tailing stops when the session meta status is no longer "running".
+// Tailing continues until ctx is cancelled; session meta status is not consulted.
 func WatchEvents(ctx context.Context, store agentstorage.Store, runner, sessionID string, afterOffset int64, onLine func(line string) error) error {
 	path := eventsPath(store, runner, sessionID)
 
 	if _, err := emitLinesFromOffset(path, afterOffset, onLine); err != nil {
 		return err
-	}
-
-	meta, err := store.GetSession(runner, sessionID)
-	if err != nil {
-		return err
-	}
-	if meta.Meta.Status != "running" {
-		return nil
 	}
 
 	watchCtx, cancel := context.WithCancel(ctx)
@@ -43,29 +35,17 @@ func WatchEvents(ctx context.Context, store agentstorage.Store, runner, sessionI
 		watchErr = logs.WatchLine(watchCtx, path, logs.WatchLineOptions{}, onLine)
 	}()
 
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
+	<-ctx.Done()
+	cancel()
+	wg.Wait()
 
-	for {
-		select {
-		case <-ctx.Done():
-			cancel()
-			wg.Wait()
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-		case <-ticker.C:
-			meta, err := store.GetSession(runner, sessionID)
-			if err != nil || meta.Meta.Status != "running" {
-				cancel()
-				wg.Wait()
-				if watchErr != nil && watchErr != context.Canceled {
-					return watchErr
-				}
-				return nil
-			}
-		}
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
+	if watchErr != nil && watchErr != context.Canceled {
+		return watchErr
+	}
+	return nil
 }
 
 func eventsPath(store agentstorage.Store, runner, sessionID string) string {

@@ -19,6 +19,7 @@ type Config struct {
 type SessionMeta struct {
 	Runner            string `json:"runner"`
 	SessionID         string `json:"session_id"`
+	InitialPrompt     string `json:"initial_prompt,omitempty"`
 	RunnerSessionID   string `json:"runner_session_id,omitempty"`
 	TerminalSessionID string `json:"terminal_session_id,omitempty"`
 	Status            string `json:"status"`

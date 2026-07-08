@@ -19,6 +19,7 @@ import (
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	"github.com/xhd2015/agent-pro/pkgs/agentevents"
 	"github.com/xhd2015/agent-pro/pkgs/agentsend"
+	"github.com/xhd2015/agent-pro/pkgs/agentsync"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 	"github.com/xhd2015/agent-pro/pkgs/agentui"
@@ -124,6 +125,17 @@ func appendUserPromptEvent(store agentstorage.Store, runner, sessionID, text str
 	})
 }
 
+func grokTTYUserMessageFromTail(runner string) bool {
+	return runner == string(registry.AgentRunnerGrokTTY)
+}
+
+func maybeAppendUserPromptEvent(store agentstorage.Store, runner, sessionID, text string) error {
+	if grokTTYUserMessageFromTail(runner) {
+		return nil
+	}
+	return appendUserPromptEvent(store, runner, sessionID, text)
+}
+
 func waitForLiveTerminal(store agentstorage.Store, runner, sessionID string, timeout time.Duration) {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -157,12 +169,30 @@ func enqueueLiveTerminalMessage(store agentstorage.Store, runCfg webRunConfig, r
 	}
 	go agentsend.StartDrainer(store.Home(), sess, provider)
 	if runner == "grok-tty" {
-		startGrokFollowUpEventTail(store, runCfg, runner, sessionID)
+		ensureWebGrokSync(runner, sessionID, store, runCfg)
 	}
 	return true
 }
 
-func startGrokFollowUpEventTail(store agentstorage.Store, runCfg webRunConfig, runner, sessionID string) {
+func waitForGrokUpdatesPath(grokHome, workspace, grokSessionID string, timeout time.Duration) string {
+	grokSessionID = strings.TrimSpace(grokSessionID)
+	if grokSessionID == "" {
+		return ""
+	}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if path, ok := agenttty.FindUpdatesBySessionID(grokHome, workspace, grokSessionID); ok {
+			if abs, err := filepath.Abs(path); err == nil {
+				return abs
+			}
+			return path
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return ""
+}
+
+func ensureWebGrokSync(runner, sessionID string, store agentstorage.Store, runCfg webRunConfig, promptHint ...string) {
 	meta, err := store.GetSession(runner, sessionID)
 	if err != nil {
 		return
@@ -171,32 +201,44 @@ func startGrokFollowUpEventTail(store agentstorage.Store, runCfg webRunConfig, r
 	if grokSessionID == "" {
 		grokSessionID = strings.TrimSpace(os.Getenv("AGENT_RUN_GROK_TTY_GROK_SESSION_ID"))
 	}
-	if grokSessionID == "" {
-		return
-	}
 	workspace, err := sessionWorkspace(store, runner, sessionID)
 	if err != nil {
 		return
 	}
 	grokHome := agenttty.GrokHomeForRunner(runCfg.GrokHome)
-	startOffset := agenttty.UpdatesTailOffset(grokHome, workspace, grokSessionID)
-
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-		defer cancel()
-		emit := func(ev types.AgentEvent) error {
-			if ev.Type == types.ActionMessage && strings.TrimSpace(ev.Role) == "" {
-				ev.Role = "assistant"
+	updatesPath := ""
+	if grokSessionID != "" {
+		if path, ok := agenttty.FindUpdatesBySessionID(grokHome, workspace, grokSessionID); ok {
+			updatesPath = path
+			if abs, absErr := filepath.Abs(updatesPath); absErr == nil {
+				updatesPath = abs
 			}
-			if ev.Type == types.ActionMessage && ev.Timestamp == 0 {
-				ev.Timestamp = time.Now().UnixMilli()
-			}
-			return store.AppendEvent(runner, sessionID, ev)
+		} else if len(promptHint) > 0 {
+			updatesPath = waitForGrokUpdatesPath(grokHome, workspace, grokSessionID, 12*time.Second)
 		}
-		_ = agenttty.TailGrokSessionFromOffset(ctx, grokHome, workspace, grokSessionID, startOffset, emit)
-		_ = emit(types.AgentEvent{Type: types.ActionDone})
-		_ = store.UpdateSessionStatus(runner, sessionID, "finished")
-	}()
+	}
+	initialPrompt := strings.TrimSpace(meta.Meta.InitialPrompt)
+	if initialPrompt == "" && len(promptHint) > 0 {
+		initialPrompt = strings.TrimSpace(promptHint[0])
+	}
+	sink := agentsync.NewStoreGrokSyncSink(store, runner, sessionID, grokSessionID, updatesPath)
+	createdAt := time.Now().Add(-2 * time.Second)
+	if t, parseErr := time.Parse(time.RFC3339Nano, strings.TrimSpace(meta.Meta.CreatedAt)); parseErr == nil {
+		createdAt = t
+	} else if t, parseErr := time.Parse(time.RFC3339, strings.TrimSpace(meta.Meta.CreatedAt)); parseErr == nil {
+		createdAt = t
+	}
+	_ = agentsync.EnsureGrokSync(context.Background(), agentsync.GrokSyncOptions{
+		Runner:           runner,
+		SessionID:        sessionID,
+		GrokSessionID:    grokSessionID,
+		UpdatesPath:      updatesPath,
+		Workspace:        workspace,
+		GrokHome:         grokHome,
+		InitialPrompt:    initialPrompt,
+		SessionCreatedAt: createdAt,
+		Sink:             sink,
+	})
 }
 
 func startAgentRun(store agentstorage.Store, runCfg webRunConfig, runner, sessionID, prompt string) {
@@ -211,15 +253,16 @@ func startAgentRun(store agentstorage.Store, runCfg webRunConfig, runner, sessio
 			return
 		}
 		runOpts := agentui.RunOptions{
-			Prompt:            prompt,
-			Runner:            runner,
-			SessionID:         sessionID,
-			Workspace:         workspace,
-			Store:             store,
-			Stdout:            io.Discard,
-			Stderr:            io.Discard,
-			StreamPhases:      false,
-			KeepTerminalAlive: agenttty.IsTTYRunner(runner),
+			Prompt:             prompt,
+			Runner:             runner,
+			SessionID:          sessionID,
+			Workspace:          workspace,
+			Store:              store,
+			Stdout:             io.Discard,
+			Stderr:             io.Discard,
+			StreamPhases:       false,
+			KeepTerminalAlive:  agenttty.IsTTYRunner(runner),
+			WebManagedGrokSync: runner == "grok-tty",
 		}
 		applyWebGrokRunOptions(runner, runCfg, &runOpts)
 		_ = agentui.Run(context.Background(), runOpts)
@@ -293,10 +336,11 @@ func handleSessionsCollection(store agentstorage.Store, runCfg webRunConfig) htt
 			}
 			if _, err := store.GetSession(runner, sessionID); err != nil {
 				if err := store.CreateSession(runner, sessionID, agentstorage.SessionMeta{
-					Runner:    runner,
-					SessionID: sessionID,
-					Status:    "running",
-					Workspace: workspace,
+					Runner:        runner,
+					SessionID:     sessionID,
+					Status:        "running",
+					Workspace:     workspace,
+					InitialPrompt: prompt,
 				}); err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
@@ -304,13 +348,16 @@ func handleSessionsCollection(store agentstorage.Store, runCfg webRunConfig) htt
 			} else {
 				_ = store.UpdateSessionStatus(runner, sessionID, "running")
 			}
-			if err := appendUserPromptEvent(store, runner, sessionID, prompt); err != nil {
+			if err := maybeAppendUserPromptEvent(store, runner, sessionID, prompt); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 			startAgentRun(store, runCfg, runner, sessionID, prompt)
 			if agenttty.IsTTYRunner(runner) {
 				waitForLiveTerminal(store, runner, sessionID, 15*time.Second)
+			}
+			if runner == "grok-tty" {
+				ensureWebGrokSync(runner, sessionID, store, runCfg)
 			}
 			writeJSON(w, http.StatusAccepted, map[string]any{
 				"session": agentstorage.SessionMeta{
@@ -364,7 +411,7 @@ func handleSessionResource(store agentstorage.Store, runCfg webRunConfig) http.H
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 				return
 			}
-			handleSessionEventsStream(store, runner, sessionID)(w, r)
+			handleSessionEventsStream(store, runCfg, runner, sessionID)(w, r)
 			return
 		}
 
@@ -391,15 +438,28 @@ func handleSessionResource(store agentstorage.Store, runCfg webRunConfig) http.H
 				return
 			}
 			_ = store.UpdateSessionStatus(runner, sessionID, "running")
-			if err := appendUserPromptEvent(store, runner, sessionID, text); err != nil {
+			if err := maybeAppendUserPromptEvent(store, runner, sessionID, text); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 			if sent := enqueueLiveTerminalMessage(store, runCfg, runner, sessionID, text); sent {
+				if runner == "grok-tty" {
+					_ = agentsync.StopGrokSync(runner, sessionID)
+					ensureWebGrokSync(runner, sessionID, store, runCfg, text)
+				}
 				writeJSON(w, http.StatusAccepted, map[string]any{"ok": true})
 				return
 			}
+			if runner == "grok-tty" {
+				_ = agentsync.StopGrokSync(runner, sessionID)
+			}
 			startAgentRun(store, runCfg, runner, sessionID, text)
+			if agenttty.IsTTYRunner(runner) {
+				waitForLiveTerminal(store, runner, sessionID, 15*time.Second)
+			}
+			if runner == "grok-tty" {
+				ensureWebGrokSync(runner, sessionID, store, runCfg, text)
+			}
 			writeJSON(w, http.StatusAccepted, map[string]any{"ok": true})
 			return
 		}
@@ -417,6 +477,9 @@ func handleSessionResource(store agentstorage.Store, runCfg webRunConfig) http.H
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
+		if runner == "grok-tty" {
+			ensureWebGrokSync(runner, sessionID, store, runCfg)
+		}
 		events, eventsOffset, err := store.ReadEvents(runner, sessionID, 0)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -433,11 +496,14 @@ func handleSessionResource(store agentstorage.Store, runCfg webRunConfig) http.H
 	}
 }
 
-func handleSessionEventsStream(store agentstorage.Store, runner, sessionID string) http.HandlerFunc {
+func handleSessionEventsStream(store agentstorage.Store, runCfg webRunConfig, runner, sessionID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if _, err := store.GetSession(runner, sessionID); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
+		}
+		if runner == "grok-tty" {
+			ensureWebGrokSync(runner, sessionID, store, runCfg)
 		}
 
 		flusher, ok := w.(http.Flusher)
@@ -461,12 +527,67 @@ func handleSessionEventsStream(store agentstorage.Store, runner, sessionID strin
 		w.Header().Set("Connection", "keep-alive")
 		w.Header().Set("X-Accel-Buffering", "no")
 
-		_ = agentevents.WatchEvents(r.Context(), store, runner, sessionID, after, func(line string) error {
+		ctx, cancel := context.WithCancel(r.Context())
+		defer cancel()
+
+		eventsPath := filepath.Join(store.Home(), "sessions", runner, sessionID, "events.jsonl")
+		tailFromEOF := false
+		if info, err := os.Stat(eventsPath); err == nil && after >= info.Size() {
+			tailFromEOF = true
+		}
+
+		var (
+			lastLineMu sync.Mutex
+			lastLineAt time.Time
+		)
+		recordTailLine := func() {
+			lastLineMu.Lock()
+			lastLineAt = time.Now()
+			lastLineMu.Unlock()
+		}
+		idleSinceLastTailLine := func() time.Duration {
+			lastLineMu.Lock()
+			defer lastLineMu.Unlock()
+			if lastLineAt.IsZero() {
+				return 0
+			}
+			return time.Since(lastLineAt)
+		}
+
+		if tailFromEOF {
+			go pollWebSSEFinishedEOFExit(ctx, cancel, store, runner, sessionID, idleSinceLastTailLine)
+		}
+
+		_ = agentevents.WatchEvents(ctx, store, runner, sessionID, after, func(line string) error {
+			recordTailLine()
 			if _, err := fmt.Fprintf(w, "data: %s\n\n", line); err != nil {
 				return err
 			}
 			flusher.Flush()
 			return nil
 		})
+	}
+}
+
+// pollWebSSEFinishedEOFExit closes SSE when tailing from EOF on a finished session
+// with no new lines, so clients do not block until their own timeout.
+func pollWebSSEFinishedEOFExit(ctx context.Context, cancel context.CancelFunc, store agentstorage.Store, runner, sessionID string, idleSinceLastLine func() time.Duration) {
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			meta, err := store.GetSession(runner, sessionID)
+			if err != nil || meta.Meta.Status == "running" {
+				continue
+			}
+			if idle := idleSinceLastLine(); idle == 0 || idle >= sessionsPrintIdleAfterLine {
+				cancel()
+				return
+			}
+		}
 	}
 }

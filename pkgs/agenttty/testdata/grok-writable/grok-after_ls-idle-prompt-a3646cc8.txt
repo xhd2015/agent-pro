@@ -1,0 +1,6 @@
+ ⎇ master-2026-07-06-agent-run-web-use-same-tty-watch-attach worktree ~/.wrk/w…
+   ⠧ Starting session… 2.1s
+ ╭----------------------------------------------------------------------------╮
+ │ ❯ run ls and pwd                                                           │
+ ╰-------------------------------------------- Composer 2.5 · always-approve -╯
+ Enter:send  │  Shift+Tab:mode  │  Ctrl+.:shortcuts
