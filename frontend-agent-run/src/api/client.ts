@@ -55,6 +55,7 @@ export async function fetchStatus(): Promise<AgentRunStatus | null> {
 export type SessionSummary = {
   runner: string
   session_id: string
+  initial_prompt?: string
   status: string
   terminal_session_id?: string
   workspace?: string

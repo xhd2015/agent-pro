@@ -39,6 +39,15 @@ import {
   progressCardLabel,
   progressCardText,
 } from './progressTimeline'
+import {
+  formatSessionRecency,
+  parseRFC3339Ms,
+  sessionRowLabel,
+  shortSessionId,
+  shortWorkspaceLabel,
+  sortSessionsOldestFirst,
+  statusPillClass,
+} from './sessionDisplay'
 
 function Shell({
   children,
@@ -149,15 +158,6 @@ function summarizeEvents(events: AgentEvent[]) {
 
 function distanceFromBottom(el: HTMLElement): number {
   return el.scrollHeight - el.scrollTop - el.clientHeight
-}
-
-function sortSessionsOldestFirst(sessions: SessionSummary[]): SessionSummary[] {
-  return [...sessions].sort((a, b) => {
-    const aMs = parseRFC3339Ms(a.updated_at) ?? parseRFC3339Ms(a.created_at) ?? 0
-    const bMs = parseRFC3339Ms(b.updated_at) ?? parseRFC3339Ms(b.created_at) ?? 0
-    if (aMs !== bMs) return aMs - bMs
-    return a.session_id.localeCompare(b.session_id)
-  })
 }
 
 function isTTYRunnerID(runner: string | undefined): boolean {
@@ -380,12 +380,6 @@ type RunnerPickerProps = {
   runners: string[]
   value: string
   onChange: (runner: string) => void
-}
-
-function parseRFC3339Ms(iso: string | undefined): number | null {
-  if (!iso?.trim()) return null
-  const ms = Date.parse(iso)
-  return Number.isFinite(ms) ? ms : null
 }
 
 function formatRunningDuration(elapsedMs: number): string {
@@ -674,27 +668,58 @@ const SessionList = forwardRef<
       onWheel={onWheel}
       onTouchStart={onTouchStart}
     >
-      {sessions.map((s) => (
-        <Link
-          key={`${s.runner}/${s.session_id}`}
-          className={`session-item session-item--${s.status || 'unknown'}`}
-          data-testid="session-item"
-          to={`/sessions/${encodeURIComponent(s.runner)}/${encodeURIComponent(s.session_id)}`}
-        >
-          <div className="session-item-head">
-            <span className="session-item-id" title={s.session_id}>
-              {shortSessionId(s.session_id)}
-            </span>
-            <span className={statusPillClass(s.status)}>{s.status || 'unknown'}</span>
-          </div>
-          <span className="session-item-meta">{s.runner}</span>
-          {s.workspace ? (
-            <span className="session-item-workspace" data-testid="session-workspace" title={s.workspace}>
-              {s.workspace}
-            </span>
-          ) : null}
-        </Link>
-      ))}
+      {sessions.map((s) => {
+        const label = sessionRowLabel(s)
+        const hasPrompt = Boolean(s.initial_prompt?.trim())
+        const recency = formatSessionRecency(s.updated_at, s.created_at)
+        const workspaceLabel = s.workspace ? shortWorkspaceLabel(s.workspace) : ''
+        return (
+          <Link
+            key={`${s.runner}/${s.session_id}`}
+            className={`session-item session-item--${s.status || 'unknown'}`}
+            data-testid="session-item"
+            to={`/sessions/${encodeURIComponent(s.runner)}/${encodeURIComponent(s.session_id)}`}
+          >
+            <div className="session-item-head">
+              <span
+                className={`session-item-label${hasPrompt ? '' : ' session-item-label--id'}`}
+                data-testid="session-preview"
+                title={hasPrompt ? label : s.session_id}
+              >
+                {label}
+              </span>
+              <span className={statusPillClass(s.status)} data-testid="session-status">
+                {s.status || 'unknown'}
+              </span>
+            </div>
+            <div className="session-item-subhead">
+              <span className="session-item-meta">
+                {s.runner}
+                {workspaceLabel ? (
+                  <>
+                    <span className="session-item-sep" aria-hidden="true">
+                      ·
+                    </span>
+                    <span className="session-item-workspace" data-testid="session-workspace" title={s.workspace}>
+                      {workspaceLabel}
+                    </span>
+                  </>
+                ) : null}
+              </span>
+              {recency ? (
+                <time className="session-item-recency" data-testid="session-recency" dateTime={s.updated_at ?? s.created_at}>
+                  {recency}
+                </time>
+              ) : null}
+            </div>
+            {hasPrompt ? (
+              <span className="session-item-id" title={s.session_id}>
+                {shortSessionId(s.session_id)}
+              </span>
+            ) : null}
+          </Link>
+        )
+      })}
     </nav>
   )
 })
@@ -854,26 +879,6 @@ function HomePage() {
       <Composer value={draft} onChange={setDraft} onSend={() => void handleSend()} sending={sending} />
     </Shell>
   )
-}
-
-function statusPillClass(status: string): string {
-  switch (status.trim().toLowerCase()) {
-    case 'running':
-      return 'status-pill status-pill-running'
-    case 'error':
-      return 'status-pill status-pill-error'
-    case 'finished':
-    case 'idle':
-      return 'status-pill status-pill-idle'
-    default:
-      return 'status-pill'
-  }
-}
-
-function shortSessionId(sessionId: string): string {
-  const id = sessionId.trim()
-  if (id.length <= 20) return id
-  return `${id.slice(0, 10)}…${id.slice(-8)}`
 }
 
 function formatMessageTimestamp(ms: number): string {

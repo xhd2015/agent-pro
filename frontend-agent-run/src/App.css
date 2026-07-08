@@ -354,7 +354,7 @@ html:has(.home-page) #root {
 .session-item {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   padding: 14px 14px 14px 16px;
   border-radius: 14px;
   background: #1a1f2b;
@@ -362,7 +362,7 @@ html:has(.home-page) #root {
   border-left: 3px solid #3a4254;
   text-decoration: none;
   color: inherit;
-  min-height: 44px;
+  min-height: 72px;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
@@ -385,16 +385,43 @@ html:has(.home-page) #root {
 
 .session-item-head {
   display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.session-item-label {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1.35;
+  color: #e8eaed;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.session-item-label--id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  -webkit-line-clamp: 1;
+}
+
+.session-item-subhead {
+  display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
 }
 
 .session-item-id {
-  font-weight: 600;
-  font-size: 14px;
+  font-size: 11px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #80868b;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -402,17 +429,34 @@ html:has(.home-page) #root {
 }
 
 .session-item-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 12px;
   color: #9aa0a6;
   text-transform: lowercase;
+  overflow: hidden;
+}
+
+.session-item-sep {
+  color: #5f6368;
+  flex-shrink: 0;
 }
 
 .session-item-workspace {
-  font-size: 11px;
-  color: #80868b;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+}
+
+.session-item-recency {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #9aa0a6;
+  font-variant-numeric: tabular-nums;
 }
 
 .composer {
