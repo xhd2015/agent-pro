@@ -4,6 +4,17 @@ This document describes how to add a new skill to **agent-pro**. The default
 and preferred shape is **skill-only** — an embedded `SKILL.md` prompt that
 agents load via `agent-pro skill <name> show` or `agent-pro skill <name> install`.
 
+## Scope
+
+Skills created through this document are **always agent-pro skills**: embedded
+under `agents/<name>/`, registered in `cmd/agent-pro/skill_cmd.go`, and
+installed via `agent-pro skill <name> install` (typically to `.agents/skills/`).
+
+Do **not** use Grok's `~/.grok/skills/` or project `.grok/skills/` for
+agent-pro workflow skills unless the user explicitly asks for a Grok-only skill.
+Grok's `create-skill` flow is a separate path; agent-pro skill work follows
+this document.
+
 Use a **sub-agent CLI** (separate binary with its own LLM runner) only when the
 skill needs persistent sessions, model calls, or a standalone executable.
 
@@ -116,6 +127,7 @@ Examples with sub-agent binaries: `followup`, `brainstorm`, `reproduce`.
 | `verify-with-prototype` | POC script before full implementation |
 | `brainstorm` | Requirement + test plan approval |
 | `consolidate-code` | Map duplication → PR stack → shared packages |
+| `establish-a-loop` | Document and dry-run a build/deploy/run/inspect/fix loop (`LOOP_<date>_<slug>.md`) |
 | `loop-workflow` | Goal-driven iterate-until-done with inspect script |
 | `sound-fix` | Evaluate fix soundness vs workarounds |
 | `doctest-tdd` | Sealed tests → implementation |

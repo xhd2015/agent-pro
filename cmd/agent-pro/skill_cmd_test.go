@@ -76,6 +76,26 @@ func TestInvestigateSkillIsRegistered(t *testing.T) {
 	}
 }
 
+func TestEstablishALoopSkillIsRegistered(t *testing.T) {
+	names := knownSkillNames()
+	if !containsString(names, "establish-a-loop") {
+		t.Fatalf("knownSkillNames missing establish-a-loop: %v", names)
+	}
+	sk, ok := knownSkills["establish-a-loop"]
+	if !ok {
+		t.Fatal("knownSkills missing establish-a-loop")
+	}
+	if !strings.Contains(sk.Content, "name: establish-a-loop") {
+		t.Fatalf("skill content missing frontmatter name:\n%s", sk.Content)
+	}
+	if sk.Description == "" {
+		t.Fatal("establish-a-loop skill missing description")
+	}
+	if !strings.Contains(sk.Content, "LOOP_<YYYY-MM-DD>_<slug>.md") {
+		t.Fatalf("skill content missing LOOP filename convention:\n%s", sk.Content)
+	}
+}
+
 func TestLoopWorkflowSkillIsRegistered(t *testing.T) {
 	names := knownSkillNames()
 	if !containsString(names, "loop-workflow") {
