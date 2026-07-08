@@ -173,6 +173,7 @@ EOF
 cat > "$dir/updates.jsonl" <<EOF
 {"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"$submitted"}}
 {"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"%s"}}
+{"sessionUpdate":"turn_completed"}
 EOF
 exit 0
 '`, prompt, sessionUUID, sessionUUID, marker)

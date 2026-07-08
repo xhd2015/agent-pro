@@ -34,10 +34,47 @@ func runGrokSyncWorker(ctx context.Context, opts GrokSyncOptions) error {
 		}
 	}
 
+	converter := grok_session.NewConverter()
+	converter.SetTurnIndex(turnIndex)
+
+	emitEvent := func(ev types.AgentEvent) error {
+		if ev.Type == types.ActionMessage && strings.TrimSpace(ev.Role) == "" {
+			ev.Role = "assistant"
+		}
+		if ev.Type == types.ActionMessage && ev.Timestamp == 0 {
+			ev.Timestamp = time.Now().UnixMilli()
+		}
+		return opts.Sink.AppendEvent(trimACPAgentEventNewlines(ev))
+	}
+
 	if updatesPath == "" {
+		if err := emitEvent(types.AgentEvent{
+			Type:      types.ActionThink,
+			Text:      "Resolve session id...",
+			Timestamp: time.Now().UnixMilli(),
+		}); err != nil {
+			return err
+		}
 		id, path, discErr := bootstrapGrokSession(ctx, opts, grokSessionID)
 		if discErr != nil {
-			return discErr
+			if prompt := strings.TrimSpace(opts.InitialPrompt); prompt != "" {
+				if err := emitEvent(types.AgentEvent{
+					Type:      types.ActionMessage,
+					Role:      "user",
+					Text:      prompt,
+					Timestamp: time.Now().UnixMilli(),
+				}); err != nil {
+					return err
+				}
+			}
+			if err := emitEvent(types.AgentEvent{
+				Type:      types.ActionError,
+				Text:      "Cannot resolve session id: " + discErr.Error(),
+				Timestamp: time.Now().UnixMilli(),
+			}); err != nil {
+				return err
+			}
+			return opts.Sink.OnTurnCompleted()
 		}
 		if id != "" {
 			grokSessionID = id
@@ -54,19 +91,6 @@ func runGrokSyncWorker(ctx context.Context, opts GrokSyncOptions) error {
 	}
 	if size, statErr := updatesFileSize(updatesPath); statErr == nil && offset > size {
 		offset = 0
-	}
-
-	converter := grok_session.NewConverter()
-	converter.SetTurnIndex(turnIndex)
-
-	emitEvent := func(ev types.AgentEvent) error {
-		if ev.Type == types.ActionMessage && strings.TrimSpace(ev.Role) == "" {
-			ev.Role = "assistant"
-		}
-		if ev.Type == types.ActionMessage && ev.Timestamp == 0 {
-			ev.Timestamp = time.Now().UnixMilli()
-		}
-		return opts.Sink.AppendEvent(trimACPAgentEventNewlines(ev))
 	}
 
 	saveCheckpoint := func(newOffset int64) error {

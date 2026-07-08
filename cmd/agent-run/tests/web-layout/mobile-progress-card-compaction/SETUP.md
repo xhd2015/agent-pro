@@ -71,6 +71,17 @@ const bodyMaxHeight = await progressCard.locator('.progress-card-body').evaluate
 if (!bodyMaxHeight || bodyMaxHeight === 'none') {
   throw new Error('progress-card-body missing max-height clamp');
 }
+const progressBoxes = await progress.all();
+if (progressBoxes.length < 2) throw new Error('expected at least 2 progress cards for ordering check');
+const lastProgressLabel = await progressBoxes[progressBoxes.length - 1].locator('.progress-card-label').innerText();
+if (!/tool/i.test(lastProgressLabel)) {
+  throw new Error('expected merged tool card after intervening think, got label: ' + lastProgressLabel);
+}
+const thinkIdx = labels.findIndex(t => /thinking/i.test(t));
+const toolIdx = labels.findIndex(t => /tool/i.test(t));
+if (thinkIdx < 0 || toolIdx < 0 || thinkIdx > toolIdx) {
+  throw new Error('expected Thinking card before Tool card, labels=' + JSON.stringify(labels));
+}
 ` + assertComposerPinnedBottom()
 
 	req.PlaywrightScript = mobileViewportScript(body)

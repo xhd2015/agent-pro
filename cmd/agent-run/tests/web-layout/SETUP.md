@@ -312,6 +312,7 @@ func seedProgressCompactionSession(t *testing.T, home, runner, sessionID, worksp
 		`{"type":"think","timestamp":1719691202000,"text":"Second think pass should replace first"}`,
 		fmt.Sprintf(`{"type":"tool_call","timestamp":1719691203000,"text":"Shell","tool":"tool","tool_call_id":%q}`, toolID),
 		fmt.Sprintf(`{"type":"tool_call","timestamp":1719691204000,"text":"Shell","tool":"tool","tool_call_id":%q}`, toolID),
+		`{"type":"think","timestamp":1719691204500,"text":"Think between duplicate tool updates"}`,
 		fmt.Sprintf(`{"type":"tool_call","timestamp":1719691205000,"text":"Shell","tool":"tool","tool_call_id":%q,"output":%q}`, toolID, longOutput),
 		`{"type":"message","role":"assistant","text":"Done","timestamp":1719691234567}`,
 	}, "\n") + "\n"

@@ -40,6 +40,9 @@ const metrics = await page.evaluate(() => {
 
   const userCards = Array.from(document.querySelectorAll('[data-testid="message-item-user"]'));
   const assistantCards = Array.from(document.querySelectorAll('[data-testid="message-item-assistant"]'));
+  const progressCards = Array.from(document.querySelectorAll('[data-testid="progress-card"]'));
+  const errorCards = Array.from(document.querySelectorAll('[data-testid="error-card"]'));
+  const loadingCards = Array.from(document.querySelectorAll('[data-testid="message-item-assistant-loading"]'));
 
   const cardStyle = (el) => {
     const s = getComputedStyle(el);
@@ -51,26 +54,40 @@ const metrics = await page.evaluate(() => {
       left: r.left,
       right: window.innerWidth - r.right,
       width: r.width,
+      overflowX: s.overflowX,
     };
   };
 
   const bodyText = (el) => (el.querySelector('.message-body')?.textContent || '').trim();
+
+  const messageList = document.querySelector('[data-testid="message-list"]');
   const composer = document.querySelector('[data-testid="composer"]');
   const composerRect = composer?.getBoundingClientRect();
   const composerBottomGap = composerRect ? window.innerHeight - composerRect.bottom : null;
+
+  const messageListScrollable = messageList
+    ? messageList.scrollHeight > messageList.clientHeight + 2
+    : false;
 
   return {
     docScroll,
     docOverflowX,
     userCount: userCards.length,
     assistantCount: assistantCards.length,
-    progressCount: document.querySelectorAll('[data-testid="progress-card"]').length,
+    progressCount: progressCards.length,
+    errorCount: errorCards.length,
+    loadingCount: loadingCards.length,
     userBodies: userCards.map(bodyText).filter(Boolean),
     assistantBodies: assistantCards.map(bodyText).filter(Boolean),
     userStyles: userCards.map(cardStyle),
     assistantStyles: assistantCards.map(cardStyle),
+    messageListScrollable,
     composerBottomGap,
+    viewportHeight: window.innerHeight,
     roleLabels: Array.from(document.querySelectorAll('.message-role')).map((el) => el.textContent?.trim()),
+    timestamps: Array.from(document.querySelectorAll('[data-testid="message-timestamp"]'))
+      .map((el) => el.textContent?.trim())
+      .filter(Boolean),
   };
 });
 

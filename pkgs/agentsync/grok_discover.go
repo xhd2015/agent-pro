@@ -3,6 +3,7 @@ package agentsync
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +12,10 @@ import (
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 )
 
-const sessionDiscoveryGrace = 2 * time.Second
+const (
+	sessionDiscoveryGrace = 2 * time.Second
+	discoveryBindTimeout  = 20 * time.Second
+)
 
 func waitFindUpdatesBySessionID(ctx context.Context, grokHome, workspace, sessionID string) (string, bool) {
 	sessionID = strings.TrimSpace(sessionID)
@@ -57,6 +61,9 @@ func bootstrapGrokSession(ctx context.Context, opts GrokSyncOptions, knownGrokSe
 		prompt = readInitialPromptFromMeta(opts.Sink.SessionDir())
 	}
 
+	discCtx, discCancel := context.WithTimeout(ctx, discoveryBindTimeout)
+	defer discCancel()
+
 	grokSessionID = strings.TrimSpace(knownGrokSessionID)
 	if grokSessionID != "" {
 		if path, ok := agenttty.FindUpdatesBySessionID(grokHome, workspace, grokSessionID); ok {
@@ -69,13 +76,14 @@ func bootstrapGrokSession(ctx context.Context, opts GrokSyncOptions, knownGrokSe
 		// Only block-wait when a prompt implies a grok run is starting (e.g. composer follow-up).
 		// Opening an idle seeded session must not hold grok-sync.lock waiting for updates.jsonl.
 		if prompt != "" {
-			if path, ok := waitFindUpdatesBySessionID(ctx, grokHome, workspace, grokSessionID); ok {
+			if path, ok := waitFindUpdatesBySessionID(discCtx, grokHome, workspace, grokSessionID); ok {
 				updatesPath = path
 				if abs, absErr := filepath.Abs(updatesPath); absErr == nil {
 					updatesPath = abs
 				}
 				return grokSessionID, updatesPath, nil
 			}
+			return "", "", fmt.Errorf("grok updates not found for session %s", grokSessionID)
 		}
 	}
 
@@ -84,7 +92,7 @@ func bootstrapGrokSession(ctx context.Context, opts GrokSyncOptions, knownGrokSe
 	}
 
 	runStart := discoveryRunStart(opts)
-	id, path, discErr := agenttty.DiscoverSession(ctx, grokHome, workspace, prompt, runStart)
+	id, path, discErr := agenttty.DiscoverSession(discCtx, grokHome, workspace, prompt, runStart)
 	if discErr != nil {
 		return "", "", discErr
 	}

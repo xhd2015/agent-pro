@@ -1004,24 +1004,25 @@ function compactProgressTimeline(events: AgentEvent[]): AgentEvent[] {
     if (ev.type === 'tool_call') {
       const toolCallID = ev.tool_call_id?.trim()
       if (toolCallID) {
-        let replaced = false
+        let existingIdx = -1
         for (let i = out.length - 1; i >= 0; i--) {
           if (out[i].type === 'message') {
             break
           }
           if (out[i].type === 'tool_call' && out[i].tool_call_id?.trim() === toolCallID) {
-            const prev = out[i]
-            out[i] = {
-              ...ev,
-              text: ev.text ?? prev.text,
-              output: ev.output ?? prev.output,
-              tool: ev.tool ?? prev.tool,
-            }
-            replaced = true
+            existingIdx = i
             break
           }
         }
-        if (replaced) {
+        if (existingIdx >= 0) {
+          const prev = out[existingIdx]
+          out.splice(existingIdx, 1)
+          out.push({
+            ...ev,
+            text: ev.text ?? prev.text,
+            output: ev.output ?? prev.output,
+            tool: ev.tool ?? prev.tool,
+          })
           continue
         }
       }

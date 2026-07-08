@@ -496,6 +496,16 @@ func handleSessionResource(store agentstorage.Store, runCfg webRunConfig) http.H
 	}
 }
 
+func safeSSEFlush(flusher http.Flusher) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("sse flush: %v", r)
+		}
+	}()
+	flusher.Flush()
+	return nil
+}
+
 func handleSessionEventsStream(store agentstorage.Store, runCfg webRunConfig, runner, sessionID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if _, err := store.GetSession(runner, sessionID); err != nil {
@@ -559,12 +569,14 @@ func handleSessionEventsStream(store agentstorage.Store, runCfg webRunConfig, ru
 		}
 
 		_ = agentevents.WatchEvents(ctx, store, runner, sessionID, after, func(line string) error {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			recordTailLine()
 			if _, err := fmt.Fprintf(w, "data: %s\n\n", line); err != nil {
 				return err
 			}
-			flusher.Flush()
-			return nil
+			return safeSSEFlush(flusher)
 		})
 	}
 }
