@@ -44,6 +44,8 @@ async function collectLayoutMetrics() {
       const statusEl = el.querySelector('[data-testid="session-status"]');
       const status = (statusEl?.getAttribute('data-status') || statusEl?.textContent || '').trim();
       const recency = (el.querySelector('[data-testid="session-recency"]')?.textContent || '').trim();
+      const runner = (el.querySelector('[data-testid="session-runner"]')?.textContent || '').trim();
+      const workspace = (el.querySelector('[data-testid="session-workspace"]')?.textContent || '').trim();
       const rect = el.getBoundingClientRect();
       const statusStyle = statusEl ? getComputedStyle(statusEl) : null;
       const itemStyle = getComputedStyle(el);
@@ -51,6 +53,8 @@ async function collectLayoutMetrics() {
         preview,
         status,
         recency,
+        runner,
+        workspace,
         height: rect.height,
         statusBackground: statusStyle?.backgroundColor || null,
         statusColor: statusStyle?.color || null,
@@ -73,6 +77,7 @@ async function collectLayoutMetrics() {
       composerY: composer?.getBoundingClientRect().top ?? null,
       viewportHeight: window.innerHeight,
       emptyStateVisible: Boolean(document.querySelector('[data-testid="empty-state"]')),
+      homeLoadingVisible: Boolean(document.querySelector('[data-testid="home-loading"]')),
       homeActiveVisible: Boolean(document.querySelector('[data-testid="home-active"]')),
       sessionListHeaderVisible: Boolean(document.querySelector('[data-testid="session-list-header"]')),
       sessionFilterChipsVisible: Boolean(document.querySelector('[data-testid="session-filter-chips"]')),
@@ -82,8 +87,11 @@ async function collectLayoutMetrics() {
 }
 
 function validateBaseMetrics(metrics, issues) {
-  if (!metrics.homeActiveVisible && !metrics.emptyStateVisible) {
-    issues.push('neither home-active nor empty-state visible');
+  if (!metrics.homeActiveVisible && !metrics.emptyStateVisible && !metrics.homeLoadingVisible) {
+    issues.push('neither home-active, empty-state, nor home-loading visible');
+  }
+  if (metrics.homeLoadingVisible && metrics.itemCount > 0) {
+    issues.push('home-loading visible while session rows are rendered');
   }
   if (metrics.itemCount > 0) {
     if (!metrics.sessionListVisible) {
@@ -99,6 +107,8 @@ function validateBaseMetrics(metrics, issues) {
       if (!row.preview) issues.push(`session-item[${i}] missing preview/label text`);
       if (!row.status) issues.push(`session-item[${i}] missing status pill`);
       if (!row.recency) issues.push(`session-item[${i}] missing recency text`);
+      if (!row.runner) issues.push(`session-item[${i}] missing runner label`);
+      if (!row.workspace) issues.push(`session-item[${i}] missing workspace label`);
       if (row.height < 44) issues.push(`session-item[${i}] tap target too short (${row.height}px)`);
     }
     const runningRows = metrics.rows.filter((row) => row.status === 'running');

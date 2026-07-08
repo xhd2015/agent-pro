@@ -5,7 +5,13 @@ set -euo pipefail
 BASE_URL="${1:-http://127.0.0.1:8192}"
 AGENT_RUN_HOME="${AGENT_RUN_HOME:-}"
 
+if [[ -z "${AGENT_RUN_HOME}" ]]; then
+  echo "AGENT_RUN_HOME must be set to the server's home directory" >&2
+  exit 1
+fi
+
 echo "Seeding session-list probe fixtures against ${BASE_URL}"
+echo "AGENT_RUN_HOME=${AGENT_RUN_HOME}"
 
 # Ensure at least one finished session with a readable prompt preview.
 ensure_finished_session() {

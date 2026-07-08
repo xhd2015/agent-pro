@@ -648,6 +648,24 @@ html:has(.home-page) #root {
   padding: 16px;
 }
 
+.home-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex: 1;
+  color: #9aa0a6;
+  font-size: 14px;
+}
+
+.home-loading-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #8ab4f8;
+  animation: session-refresh-pulse 1s ease-in-out infinite;
+}
+
 .empty-state {
   display: flex;
   flex-direction: column;

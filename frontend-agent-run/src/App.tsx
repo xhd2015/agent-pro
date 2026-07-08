@@ -788,7 +788,9 @@ const SessionList = forwardRef<
             </div>
             <div className="session-item-subhead">
               <span className="session-item-meta">
-                {s.runner}
+                <span className="session-item-runner" data-testid="session-runner">
+                  {s.runner}
+                </span>
                 {workspaceLabel ? (
                   <>
                     <span className="session-item-sep" aria-hidden="true">
@@ -931,7 +933,12 @@ function HomePage() {
 
   if (needsAuth) return <AuthPage />
 
-  const homeMain = !ready || !sessionsLoaded ? null : sortedSessions.length > 0 ? (
+  const homeMain = !ready ? null : !sessionsLoaded && sortedSessions.length === 0 ? (
+    <div className="home-loading" data-testid="home-loading">
+      <span className="home-loading-indicator" aria-hidden="true" />
+      Loading sessions…
+    </div>
+  ) : sortedSessions.length > 0 ? (
     <div className="session-list-region">
       <SessionListHeader
         sessions={sortedSessions}
