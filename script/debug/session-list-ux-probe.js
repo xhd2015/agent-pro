@@ -195,6 +195,26 @@ if (metrics.itemCount > 0 && metrics.sessionFilterChipsVisible) {
   }
   flowMetrics.runningFilter = runningFilter;
 
+  await page.click('[data-testid="session-filter-done"]');
+  await page.waitForTimeout(150);
+  const doneFilter = await page.evaluate(() => {
+    const chipCount = Number(
+      document.querySelector('[data-testid="session-filter-done"] .session-filter-chip-count')?.textContent || '0',
+    );
+    const items = Array.from(document.querySelectorAll('[data-testid="session-item"]'));
+    const statuses = items.map(
+      (el) => el.querySelector('[data-testid="session-status"]')?.getAttribute('data-status') || '',
+    );
+    return { chipCount, itemCount: items.length, statuses };
+  });
+  if (doneFilter.chipCount !== doneFilter.itemCount) {
+    issues.push(`done chip count ${doneFilter.chipCount} != visible rows ${doneFilter.itemCount}`);
+  }
+  if (doneFilter.statuses.some((s) => s !== 'finished' && s !== 'idle')) {
+    issues.push(`done filter includes non-done statuses: ${doneFilter.statuses.join(',')}`);
+  }
+  flowMetrics.doneFilter = doneFilter;
+
   await page.click('[data-testid="session-filter-all"]');
   await page.waitForTimeout(150);
   const allFilter = await collectLayoutMetrics();

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionSummary } from './api/client'
 import {
+  countDoneSessions,
   countSessionsByStatus,
   filterSessionsByStatus,
   formatSessionRecency,
@@ -116,6 +117,19 @@ describe('countSessionsByStatus', () => {
       session({ session_id: 'c', status: 'running' }),
     ]
     expect(countSessionsByStatus(sessions, 'running')).toBe(2)
+  })
+})
+
+describe('countDoneSessions', () => {
+  it('counts only finished and idle, excluding running and error', () => {
+    const sessions = [
+      session({ session_id: 'a', status: 'running' }),
+      session({ session_id: 'b', status: 'finished' }),
+      session({ session_id: 'c', status: 'idle' }),
+      session({ session_id: 'd', status: 'error' }),
+    ]
+    expect(countDoneSessions(sessions)).toBe(2)
+    expect(countDoneSessions(sessions)).toBe(filterSessionsByStatus(sessions, 'done').length)
   })
 })
 

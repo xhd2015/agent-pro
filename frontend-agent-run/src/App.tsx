@@ -40,6 +40,7 @@ import {
   progressCardText,
 } from './progressTimeline'
 import {
+  countDoneSessions,
   countSessionsByStatus,
   filterSessionsByStatus,
   formatSessionRecency,
@@ -693,7 +694,7 @@ function SessionListHeader({
   refreshing: boolean
 }) {
   const runningCount = countSessionsByStatus(sessions, 'running')
-  const doneCount = sessions.length - runningCount
+  const doneCount = countDoneSessions(sessions)
   const chips: { id: SessionStatusFilter; label: string; count: number }[] = [
     { id: 'all', label: 'All', count: sessions.length },
     { id: 'running', label: 'Running', count: runningCount },

@@ -100,6 +100,11 @@ export function countSessionsByStatus(sessions: SessionSummary[], status: string
   return sessions.filter((s) => s.status.trim().toLowerCase() === target).length
 }
 
+/** Count sessions matching the Done filter chip (finished + idle only). */
+export function countDoneSessions(sessions: SessionSummary[]): number {
+  return filterSessionsByStatus(sessions, 'done').length
+}
+
 export function filterSessionsByStatus(
   sessions: SessionSummary[],
   filter: SessionStatusFilter,
