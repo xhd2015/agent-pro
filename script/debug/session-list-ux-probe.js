@@ -147,7 +147,7 @@ function validateBaseMetrics(metrics, issues) {
 }
 
 await page.setViewportSize({ width: 390, height: 844 });
-await page.goto(`${baseURL}/`, { waitUntil: 'networkidle', timeout: 30000 });
+await page.goto(`${baseURL}/`, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
 const home = page.locator('[data-testid="home-active"], [data-testid="empty-state"]');
 await home.first().waitFor({ state: 'visible', timeout: 15000 });
@@ -155,9 +155,54 @@ await home.first().waitFor({ state: 'visible', timeout: 15000 });
 const issues = [];
 const flowMetrics = {};
 
+const chromeOnLoad = await page.evaluate(() => ({
+  topBarVisible: Boolean(document.querySelector('.top-bar-home')),
+  composerVisible: Boolean(document.querySelector('[data-testid="composer"]')),
+  mainPanelChildCount: document.querySelector('[data-testid="home-active"]')?.childElementCount ?? 0,
+}));
+if (!chromeOnLoad.topBarVisible) issues.push('top bar not visible on initial load');
+if (!chromeOnLoad.composerVisible) issues.push('composer not visible on initial load');
+flowMetrics.chromeOnLoad = chromeOnLoad;
+
+await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {});
+
 let metrics = await collectLayoutMetrics();
 validateBaseMetrics(metrics, issues);
 flowMetrics.initial = metrics;
+
+if (metrics.itemCount > 0 && metrics.sessionFilterChipsVisible) {
+  const allCount = metrics.itemCount;
+  await page.click('[data-testid="session-filter-running"]');
+  await page.waitForTimeout(150);
+  const runningFilter = await page.evaluate(() => {
+    const items = Array.from(document.querySelectorAll('[data-testid="session-item"]'));
+    const statuses = items.map(
+      (el) => el.querySelector('[data-testid="session-status"]')?.getAttribute('data-status') || '',
+    );
+    return { itemCount: items.length, statuses, active: document.querySelector('[data-testid="session-filter-running"]')?.className || '' };
+  });
+  if (!runningFilter.active.includes('session-filter-chip--active')) {
+    issues.push('running filter chip not active after click');
+  }
+  if (runningFilter.itemCount === 0) {
+    issues.push('running filter shows zero rows despite seeded running session');
+  }
+  if (runningFilter.statuses.some((s) => s !== 'running')) {
+    issues.push(`running filter includes non-running statuses: ${runningFilter.statuses.join(',')}`);
+  }
+  if (runningFilter.itemCount >= allCount) {
+    issues.push(`running filter did not reduce visible rows (${runningFilter.itemCount} >= ${allCount})`);
+  }
+  flowMetrics.runningFilter = runningFilter;
+
+  await page.click('[data-testid="session-filter-all"]');
+  await page.waitForTimeout(150);
+  const allFilter = await collectLayoutMetrics();
+  if (allFilter.itemCount !== allCount) {
+    issues.push(`all filter itemCount mismatch (${allFilter.itemCount} vs ${allCount})`);
+  }
+  flowMetrics.allFilterRestore = { itemCount: allFilter.itemCount };
+}
 
 if (metrics.sessionListVisible && metrics.sessionListOverflow) {
   const beforeScroll = await collectLayoutMetrics();
