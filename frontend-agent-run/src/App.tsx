@@ -954,18 +954,115 @@ function buildTimeline(events: AgentEvent[]): AgentEvent[] {
     out.push(ev)
   }
   flushMessages()
+  return compactProgressTimeline(out)
+}
+
+function sanitizeProgressText(text: string): string {
+  return text
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '')
+    .trim()
+}
+
+function truncateProgressText(text: string, maxLen = 140): string {
+  const clean = sanitizeProgressText(text)
+  if (!clean) {
+    return ''
+  }
+  const lines = clean.split(/\r?\n/).filter((line) => line.trim())
+  if (lines.length > 2) {
+    const preview = lines.slice(0, 2).join('\n')
+    const suffix = ` (+${lines.length - 2} more lines)`
+    const budget = maxLen - suffix.length
+    if (preview.length + suffix.length <= maxLen) {
+      return preview + suffix
+    }
+    return preview.slice(0, Math.max(budget, 24)) + '…' + suffix
+  }
+  if (clean.length <= maxLen) {
+    return clean
+  }
+  return clean.slice(0, maxLen - 1) + '…'
+}
+
+function compactProgressTimeline(events: AgentEvent[]): AgentEvent[] {
+  const out: AgentEvent[] = []
+  for (const ev of events) {
+    if (ev.type === 'message') {
+      out.push(ev)
+      continue
+    }
+    const last = out[out.length - 1]
+    if (ev.type === 'think') {
+      if (last?.type === 'think') {
+        out[out.length - 1] = ev
+        continue
+      }
+      out.push(ev)
+      continue
+    }
+    if (ev.type === 'tool_call') {
+      const toolCallID = ev.tool_call_id?.trim()
+      if (toolCallID) {
+        let replaced = false
+        for (let i = out.length - 1; i >= 0; i--) {
+          if (out[i].type === 'message') {
+            break
+          }
+          if (out[i].type === 'tool_call' && out[i].tool_call_id?.trim() === toolCallID) {
+            const prev = out[i]
+            out[i] = {
+              ...ev,
+              text: ev.text ?? prev.text,
+              output: ev.output ?? prev.output,
+              tool: ev.tool ?? prev.tool,
+            }
+            replaced = true
+            break
+          }
+        }
+        if (replaced) {
+          continue
+        }
+      }
+      if (
+        last?.type === 'tool_call' &&
+        !last.output?.trim() &&
+        !ev.output?.trim() &&
+        progressCardText(last) === progressCardText(ev)
+      ) {
+        continue
+      }
+      out.push(ev)
+      continue
+    }
+    out.push(ev)
+  }
   return out
 }
 
+function progressCardLabel(ev: AgentEvent): string {
+  if (ev.type === 'think') {
+    return 'Thinking'
+  }
+  if (ev.type === 'tool_call') {
+    return 'Tool'
+  }
+  return 'Working'
+}
+
 function progressCardText(ev: AgentEvent): string {
+  if (ev.type === 'think') {
+    return truncateProgressText(ev.text?.trim() || 'Thinking…')
+  }
   if (ev.type === 'tool_call') {
     const parts = [ev.tool?.trim(), ev.text?.trim(), ev.output?.trim()].filter(Boolean)
     if (parts.length > 0) {
-      return parts.join(': ')
+      return truncateProgressText(parts.join(': '))
     }
     return 'Tool call'
   }
-  return ev.text?.trim() || 'Working…'
+  return truncateProgressText(ev.text?.trim() || 'Working…')
 }
 
 function SessionPage() {
@@ -1485,11 +1582,14 @@ function SessionPage() {
                       className="timeline-row timeline-row-progress"
                     >
                       <div className="progress-card" data-testid="progress-card" role="status">
-                        {tsText ? (
-                          <time className="timeline-timestamp" dateTime={String(ev.timestamp)}>
-                            {tsText}
-                          </time>
-                        ) : null}
+                        <div className="progress-card-meta">
+                          <span className="progress-card-label">{progressCardLabel(ev)}</span>
+                          {tsText ? (
+                            <time className="timeline-timestamp" dateTime={String(ev.timestamp)}>
+                              {tsText}
+                            </time>
+                          ) : null}
+                        </div>
                         <div className="progress-card-body">{progressCardText(ev)}</div>
                       </div>
                     </div>

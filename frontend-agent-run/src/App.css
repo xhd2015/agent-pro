@@ -103,16 +103,35 @@ html:has(.home-page) #root {
 
 .progress-card,
 .error-card {
-  width: min(100%, 560px);
-  padding: 12px 14px;
-  border-radius: 12px;
-  line-height: 1.45;
+  width: min(100%, 480px);
+  max-width: 92%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  line-height: 1.4;
 }
 
 .progress-card {
-  background: #1a2332;
-  border: 1px solid #2f4a66;
-  color: #c5d7ef;
+  background: rgba(22, 30, 44, 0.88);
+  border: 1px dashed rgba(79, 132, 196, 0.45);
+  color: #a8bdd6;
+  font-size: 12px;
+  box-shadow: none;
+}
+
+.progress-card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.progress-card-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #7eb8e8;
 }
 
 .error-card {
@@ -123,15 +142,25 @@ html:has(.home-page) #root {
 
 .timeline-timestamp {
   display: block;
-  margin-bottom: 6px;
-  font-size: 11px;
-  color: #9aa0a6;
+  margin-bottom: 0;
+  font-size: 10px;
+  color: #80868b;
+}
+
+.progress-card .timeline-timestamp {
+  margin-left: auto;
 }
 
 .progress-card-body,
 .error-card-body {
   white-space: pre-wrap;
   word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.progress-card-body {
+  max-height: 4.6em;
+  overflow: hidden;
 }
 
 .agent-running-card {
@@ -498,8 +527,8 @@ html:has(.home-page) #root {
 .chat-active .message-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding-bottom: 4px;
+  gap: 16px;
+  padding-bottom: 8px;
 }
 
 .message-row {
@@ -573,23 +602,25 @@ html:has(.home-page) #root {
 
 .message-item {
   max-width: min(88%, 520px);
-  padding: 10px 14px;
-  border-radius: 16px;
-  line-height: 1.5;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  padding: 12px 14px;
+  border-radius: 18px;
+  line-height: 1.55;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
 }
 
 .message-item-user {
-  background: linear-gradient(180deg, #315a9e 0%, #2a3f6b 100%);
-  border: 1px solid rgba(61, 90, 138, 0.6);
+  background-color: #2a4a7f;
+  background-image: linear-gradient(180deg, #3d6cb5 0%, #2a4a7f 100%);
+  border: 1px solid rgba(100, 149, 237, 0.45);
   border-bottom-right-radius: 6px;
   text-align: left;
   align-self: flex-end;
 }
 
 .message-item-assistant {
-  background: #1c2230;
+  background: #1a2030;
   border: 1px solid #2f3645;
+  border-left: 3px solid rgba(129, 201, 149, 0.55);
   border-bottom-left-radius: 6px;
   text-align: left;
   align-self: flex-start;
@@ -599,8 +630,8 @@ html:has(.home-page) #root {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
-  font-size: 10px;
+  margin-bottom: 8px;
+  font-size: 11px;
   color: #9aa0a6;
 }
 
@@ -612,17 +643,28 @@ html:has(.home-page) #root {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  font-size: 10px;
+  font-size: 11px;
+}
+
+.message-row-user .message-role {
+  color: #b8d4ff;
+}
+
+.message-row-assistant .message-role {
+  color: #9dd9b0;
 }
 
 .message-timestamp {
   font-variant-numeric: tabular-nums;
+  opacity: 0.85;
 }
 
 .message-body {
   white-space: pre-wrap;
   word-break: break-word;
+  overflow-wrap: anywhere;
   font-size: 15px;
+  color: #e8eaed;
 }
 
 .message-item-muted {
@@ -634,6 +676,8 @@ html:has(.home-page) #root {
 .message-item-assistant-loading {
   min-width: 72px;
   box-shadow: none;
+  border-left: 3px solid rgba(129, 201, 149, 0.35);
+  background: rgba(26, 32, 48, 0.75);
 }
 
 .terminal-modal-backdrop {

@@ -282,6 +282,42 @@ if (bottomGap > 80) {
 `
 }
 
+func seedProgressCompactionSession(t *testing.T, home, runner, sessionID, workspace string) error {
+	t.Helper()
+	sessDir := filepath.Join(home, "sessions", runner, sessionID)
+	if err := os.MkdirAll(sessDir, 0755); err != nil {
+		return err
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	meta := map[string]any{
+		"runner":     runner,
+		"session_id": sessionID,
+		"status":     "idle",
+		"workspace":  workspace,
+		"created_at": now,
+		"updated_at": now,
+	}
+	metaBytes, err := json.Marshal(meta)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(sessDir, "meta.json"), metaBytes, 0644); err != nil {
+		return err
+	}
+	toolID := "call-compact-demo"
+	longOutput := strings.Repeat("line-output\n", 40)
+	eventsNDJSON := strings.Join([]string{
+		`{"type":"message","role":"user","text":"run tools","timestamp":1719691200000}`,
+		`{"type":"think","timestamp":1719691201000,"text":"First think pass"}`,
+		`{"type":"think","timestamp":1719691202000,"text":"Second think pass should replace first"}`,
+		fmt.Sprintf(`{"type":"tool_call","timestamp":1719691203000,"text":"Shell","tool":"tool","tool_call_id":%q}`, toolID),
+		fmt.Sprintf(`{"type":"tool_call","timestamp":1719691204000,"text":"Shell","tool":"tool","tool_call_id":%q}`, toolID),
+		fmt.Sprintf(`{"type":"tool_call","timestamp":1719691205000,"text":"Shell","tool":"tool","tool_call_id":%q,"output":%q}`, toolID, longOutput),
+		`{"type":"message","role":"assistant","text":"Done","timestamp":1719691234567}`,
+	}, "\n") + "\n"
+	return os.WriteFile(filepath.Join(sessDir, "events.jsonl"), []byte(eventsNDJSON), 0644)
+}
+
 func seedRoleTimelineSession(t *testing.T, home, runner, sessionID, workspace string, userTS, assistantTS int64) error {
 	t.Helper()
 	sessDir := filepath.Join(home, "sessions", runner, sessionID)
