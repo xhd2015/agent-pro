@@ -37,7 +37,12 @@ export function sessionWorkspaceLabel(workspace: string | undefined): string {
 export function sessionRowLabel(session: SessionSummary): string {
   const prompt = truncateSessionPreview(session.initial_prompt ?? '')
   if (prompt) return prompt
-  return shortSessionId(session.session_id)
+  return 'Untitled chat'
+}
+
+/** True when the row shows a human prompt instead of the untitled fallback. */
+export function sessionRowHasPrompt(session: SessionSummary): boolean {
+  return Boolean(truncateSessionPreview(session.initial_prompt ?? ''))
 }
 
 export function formatSessionRecency(
@@ -61,6 +66,20 @@ export function formatSessionRecency(
     month: 'short',
     day: 'numeric',
   })
+}
+
+/** Running sessions untouched for a long time may be stale; used for recency emphasis. */
+export function isStaleRunningSession(
+  status: string,
+  updatedAt: string | undefined,
+  createdAt: string | undefined,
+  nowMs = Date.now(),
+  staleAfterMs = 24 * 60 * 60 * 1000,
+): boolean {
+  if (status.trim().toLowerCase() !== 'running') return false
+  const ms = parseRFC3339Ms(updatedAt) ?? parseRFC3339Ms(createdAt)
+  if (ms == null) return false
+  return nowMs - ms >= staleAfterMs
 }
 
 export function sortSessionsOldestFirst(sessions: SessionSummary[]): SessionSummary[] {

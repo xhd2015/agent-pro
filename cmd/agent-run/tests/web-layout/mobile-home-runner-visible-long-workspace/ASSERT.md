@@ -7,7 +7,7 @@ explanation: playwright mobile home header runner visibility
 
 - `playwright-debug` exits 0.
 - Viewport 390×844; `documentElement.scrollWidth <= clientWidth` (no horizontal scroll).
-- `[data-testid="workspace"]` shows a long server cwd string (may truncate visually).
+- `[data-testid="workspace"]` shows a shortened label (`…/`) with the full server cwd in `title`.
 - `[data-testid="runner-picker"]` bounding box lies within viewport width (right edge ≤ 390px).
 - `[data-testid="runner-select"]` visible.
 - `[data-testid="empty-state"]` and `[data-testid="composer"]` still present.

@@ -267,6 +267,12 @@ if (metrics.sessionListVisible && metrics.sessionListOverflow) {
   flowMetrics.detachPoll = { scrollTopBeforePoll, afterPoll };
 
   if (afterPoll.jumpVisible) {
+    const jumpShotPath = path.join(SCRATCH, `session-list-jump-to-latest-${runNum}.png`);
+    await page.locator('[data-testid="jump-to-latest"]').screenshot({ path: jumpShotPath });
+    if (!fs.statSync(jumpShotPath).size) {
+      issues.push('screenshot jump-to-latest is empty');
+    }
+    flowMetrics.jumpScreenshot = jumpShotPath;
     await page.click('[data-testid="jump-to-latest"]');
     await page.waitForTimeout(200);
     const afterJump = await page.evaluate(() => {
@@ -291,6 +297,113 @@ if (metrics.sessionListVisible && metrics.sessionListOverflow) {
   issues.push('session-list does not overflow; cannot verify scroll-only and jump-to-latest flows');
 }
 
+const surfaceScreenshots = {};
+
+async function captureSurface(name, selector) {
+  const outPath = path.join(SCRATCH, `session-list-${name}-${runNum}.png`);
+  const locator = page.locator(selector).first();
+  await locator.waitFor({ state: 'visible', timeout: 10000 });
+  await locator.screenshot({ path: outPath });
+  const stat = fs.statSync(outPath);
+  if (!stat.size) {
+    issues.push(`screenshot ${name} is empty`);
+  }
+  surfaceScreenshots[name] = outPath;
+  return outPath;
+}
+
+async function captureComposerSurface() {
+  const outPath = path.join(SCRATCH, `session-list-composer-${runNum}.png`);
+  await page.locator('[data-testid="composer"]').screenshot({ path: outPath });
+  const stat = fs.statSync(outPath);
+  if (!stat.size) issues.push('screenshot composer is empty');
+  surfaceScreenshots.composer = outPath;
+  return outPath;
+}
+
+if (metrics.itemCount > 0) {
+  await captureSurface('top-bar', '.top-bar-home');
+  await captureSurface('header-filters', '[data-testid="session-list-header"]');
+  await page.evaluate(() => {
+    const list = document.querySelector('[data-testid="session-list"]');
+    if (list) list.scrollTop = list.scrollHeight;
+  });
+  await page.waitForTimeout(200);
+  await captureSurface('session-rows', '[data-testid="session-list"]');
+  await captureComposerSurface();
+
+  const activeBadge = await page.evaluate(() => {
+    const badge = document.querySelector('[data-testid="session-running-badge"]');
+    return {
+      tag: badge?.tagName?.toLowerCase() ?? null,
+      activeFilter: document.querySelector('[data-testid="session-filter-running"]')?.className ?? '',
+    };
+  });
+  if (activeBadge.tag !== 'button') {
+    issues.push('session-running-badge is not a button');
+  }
+  await page.click('[data-testid="session-running-badge"]');
+  await page.waitForTimeout(150);
+  const afterBadge = await page.evaluate(() => ({
+    activeFilter: document.querySelector('[data-testid="session-filter-running"]')?.className ?? '',
+    itemCount: document.querySelectorAll('[data-testid="session-item"]').length,
+    statuses: Array.from(document.querySelectorAll('[data-testid="session-status"]')).map(
+      (el) => el.getAttribute('data-status') || '',
+    ),
+  }));
+  if (!afterBadge.activeFilter.includes('session-filter-chip--active')) {
+    issues.push('active badge click did not activate running filter');
+  }
+  if (afterBadge.statuses.some((s) => s !== 'running')) {
+    issues.push(`active badge filter includes non-running: ${afterBadge.statuses.join(',')}`);
+  }
+  flowMetrics.activeBadgeFilter = afterBadge;
+  await page.click('[data-testid="session-filter-all"]');
+  await page.waitForTimeout(150);
+}
+
+if (metrics.sessionListVisible && metrics.sessionListOverflow && !flowMetrics.jumpScreenshot) {
+  issues.push('jump-to-latest screenshot was not captured during detach flow');
+}
+
+await page.unroute('**/api/agent-run/sessions').catch(() => {});
+await page.route('**/api/agent-run/sessions', async (route) => {
+  const response = await route.fetch();
+  const body = await response.json();
+  const runningOnly = (body.sessions || []).filter((s) => s.status === 'running');
+  await route.fulfill({
+    status: response.status(),
+    headers: response.headers(),
+    body: JSON.stringify({ ...body, sessions: runningOnly }),
+  });
+});
+await page.goto(`${baseURL}/`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+await home.first().waitFor({ state: 'visible', timeout: 15000 });
+await page.waitForTimeout(500);
+await page.click('[data-testid="session-filter-done"]');
+await page.waitForTimeout(200);
+const filterEmptyVisible = await page.locator('[data-testid="session-filter-empty"]').isVisible();
+if (!filterEmptyVisible) {
+  issues.push('session-filter-empty not visible after done filter with running-only sessions');
+} else {
+  await captureSurface('filter-empty', '[data-testid="session-filter-empty"]');
+}
+await page.unroute('**/api/agent-run/sessions').catch(() => {});
+
+await page.route('**/api/agent-run/sessions', async (route) => {
+  await route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ sessions: [] }),
+  });
+});
+await page.goto(`${baseURL}/`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+await page.waitForSelector('[data-testid="empty-state"]', { timeout: 15000 });
+await page.waitForTimeout(300);
+await captureSurface('empty-state', '[data-testid="empty-state"]');
+await captureComposerSurface();
+await page.unroute('**/api/agent-run/sessions').catch(() => {});
+
 await page.goto(`${baseURL}/`, { waitUntil: 'networkidle', timeout: 30000 });
 await home.first().waitFor({ state: 'visible', timeout: 15000 });
 await page.evaluate(() => {
@@ -301,6 +414,10 @@ await page.waitForTimeout(200);
 flowMetrics.final = await collectLayoutMetrics();
 
 await page.screenshot({ path: screenshotPath, fullPage: false });
+if (flowMetrics.jumpScreenshot) {
+  surfaceScreenshots['jump-to-latest'] = flowMetrics.jumpScreenshot;
+}
+flowMetrics.surfaceScreenshots = surfaceScreenshots;
 
 if (pageErrors.length > 0) {
   issues.push(`page errors: ${pageErrors.join('; ')}`);

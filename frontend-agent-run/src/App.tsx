@@ -45,7 +45,9 @@ import {
   filterSessionsByStatus,
   formatSessionRecency,
   formatStatusLabel,
+  isStaleRunningSession,
   parseRFC3339Ms,
+  sessionRowHasPrompt,
   sessionRowLabel,
   sessionWorkspaceLabel,
   shortSessionId,
@@ -355,9 +357,17 @@ type ComposerProps = {
   onSend: () => void
   sending: boolean
   hidden?: boolean
+  placeholder?: string
 }
 
-function Composer({ value, onChange, onSend, sending, hidden = false }: ComposerProps) {
+function Composer({
+  value,
+  onChange,
+  onSend,
+  sending,
+  hidden = false,
+  placeholder = 'Message the agent…',
+}: ComposerProps) {
   return (
     <div className={`composer${hidden ? ' modal-background-hidden' : ''}`} data-testid="composer">
       <form
@@ -369,7 +379,7 @@ function Composer({ value, onChange, onSend, sending, hidden = false }: Composer
       >
         <input
           data-testid="composer-input"
-          placeholder="Message the agent…"
+          placeholder={placeholder}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           disabled={sending}
@@ -469,7 +479,7 @@ function HomeTopBar({
       {workspace ? (
         <div className="top-bar-row top-bar-row-workspace">
           <div className="workspace-display" data-testid="workspace" title={workspace}>
-            {workspace}
+            {shortWorkspaceLabel(workspace)}
           </div>
         </div>
       ) : null}
@@ -708,9 +718,15 @@ function SessionListHeader({
           {sessions.length} session{sessions.length === 1 ? '' : 's'}
         </span>
         {runningCount > 0 ? (
-          <span className="session-running-badge" data-testid="session-running-badge">
+          <button
+            type="button"
+            className="session-running-badge"
+            data-testid="session-running-badge"
+            aria-label={`Show ${runningCount} running sessions`}
+            onClick={() => onFilterChange('running')}
+          >
             {runningCount} active
-          </span>
+          </button>
         ) : null}
         {refreshing ? (
           <span className="session-list-refreshing" data-testid="session-list-refreshing" aria-label="Refreshing sessions" />
@@ -759,21 +775,22 @@ const SessionList = forwardRef<
     >
       {sessions.map((s) => {
         const label = sessionRowLabel(s)
-        const hasPrompt = Boolean(s.initial_prompt?.trim())
+        const hasPrompt = sessionRowHasPrompt(s)
         const recency = formatSessionRecency(s.updated_at, s.created_at)
+        const staleRunning = isStaleRunningSession(s.status, s.updated_at, s.created_at)
         const workspaceLabel = sessionWorkspaceLabel(s.workspace)
         return (
           <Link
             key={`${s.runner}/${s.session_id}`}
-            className={`session-item session-item--${s.status || 'unknown'}`}
+            className={`session-item session-item--${s.status || 'unknown'}${staleRunning ? ' session-item--stale-running' : ''}`}
             data-testid="session-item"
             to={`/sessions/${encodeURIComponent(s.runner)}/${encodeURIComponent(s.session_id)}`}
           >
             <div className="session-item-head">
               <span
-                className={`session-item-label${hasPrompt ? '' : ' session-item-label--id'}`}
+                className={`session-item-label${hasPrompt ? '' : ' session-item-label--untitled'}`}
                 data-testid="session-preview"
-                title={hasPrompt ? label : s.session_id}
+                title={hasPrompt ? label : `Untitled chat · ${s.session_id}`}
               >
                 {label}
               </span>
@@ -805,16 +822,18 @@ const SessionList = forwardRef<
                 </span>
               </span>
               {recency ? (
-                <time className="session-item-recency" data-testid="session-recency" dateTime={s.updated_at ?? s.created_at}>
+                <time
+                  className={`session-item-recency${staleRunning ? ' session-item-recency--stale' : ''}`}
+                  data-testid="session-recency"
+                  dateTime={s.updated_at ?? s.created_at}
+                >
                   {recency}
                 </time>
               ) : null}
             </div>
-            {hasPrompt ? (
-              <span className="session-item-id" title={s.session_id}>
-                {shortSessionId(s.session_id)}
-              </span>
-            ) : null}
+            <span className="session-item-id" title={s.session_id}>
+              {shortSessionId(s.session_id)}
+            </span>
           </Link>
         )
       })}
@@ -965,9 +984,13 @@ function HomePage() {
         />
       ) : (
         <div className="session-filter-empty" data-testid="session-filter-empty">
-          <p>No {statusFilter === 'running' ? 'running' : 'finished'} sessions match this filter.</p>
+          <p>
+            {statusFilter === 'running'
+              ? 'No agents are running right now. Start a new chat below or show all sessions.'
+              : 'No finished sessions yet. Running chats appear under Running.'}
+          </p>
           <button type="button" className="session-filter-reset" onClick={() => setStatusFilter('all')}>
-            Show all
+            Show all sessions
           </button>
         </div>
       )}
@@ -1003,6 +1026,7 @@ function HomePage() {
         onChange={setDraft}
         onSend={() => void handleSend()}
         sending={sending || !ready}
+        placeholder={`New chat with ${runner}…`}
       />
     </Shell>
   )

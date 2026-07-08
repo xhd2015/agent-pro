@@ -42,9 +42,18 @@ await page.addInitScript(() => {
 await page.goto('` + req.BaseURL + `/', { waitUntil: 'networkidle' });
 const workspace = page.locator('[data-testid="workspace"]');
 await workspace.waitFor({ state: 'visible', timeout: 15000 });
-const wsText = await workspace.innerText();
-if (!wsText || wsText.length < 40) {
-  throw new Error('expected long workspace path text, got: ' + wsText);
+const wsMeta = await workspace.evaluate((el) => ({
+  text: (el.textContent || '').trim(),
+  title: (el.getAttribute('title') || '').trim(),
+}));
+if (!wsMeta.text) {
+  throw new Error('expected workspace label text, got empty');
+}
+if (!wsMeta.title || wsMeta.title.length < 40) {
+  throw new Error('expected full workspace path in title, got: ' + wsMeta.title);
+}
+if (!wsMeta.text.startsWith('…/')) {
+  throw new Error('expected shortened workspace label with ellipsis, got: ' + wsMeta.text);
 }
 const empty = page.locator('[data-testid="empty-state"]');
 await empty.waitFor({ state: 'visible', timeout: 15000 });

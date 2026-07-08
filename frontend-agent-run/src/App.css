@@ -366,6 +366,14 @@ html:has(.home-page) #root {
   color: #81c995;
   background: rgba(45, 74, 34, 0.65);
   border: 1px solid rgba(129, 201, 149, 0.35);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.session-running-badge:hover,
+.session-running-badge:active {
+  background: rgba(45, 74, 34, 0.85);
+  border-color: rgba(129, 201, 149, 0.55);
 }
 
 .session-list-refreshing {
@@ -499,6 +507,12 @@ html:has(.home-page) #root {
   box-shadow: 0 0 0 1px rgba(129, 201, 149, 0.12);
 }
 
+.session-item--stale-running {
+  border-left-color: #fdd663;
+  background: linear-gradient(135deg, rgba(46, 40, 20, 0.55) 0%, #1a1f2b 55%);
+  box-shadow: 0 0 0 1px rgba(253, 214, 99, 0.15);
+}
+
 .session-item--finished,
 .session-item--idle {
   border-left-color: #5f6368;
@@ -529,10 +543,14 @@ html:has(.home-page) #root {
   overflow: hidden;
 }
 
-.session-item-label--id {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 14px;
+.session-item-label--untitled {
+  font-style: italic;
+  color: #c4c7c5;
   -webkit-line-clamp: 1;
+}
+
+.session-item-recency--stale {
+  color: #fdd663;
 }
 
 .session-item-subhead {

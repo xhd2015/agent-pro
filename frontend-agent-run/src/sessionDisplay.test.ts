@@ -6,6 +6,8 @@ import {
   filterSessionsByStatus,
   formatSessionRecency,
   formatStatusLabel,
+  isStaleRunningSession,
+  sessionRowHasPrompt,
   sessionRowLabel,
   sessionWorkspaceLabel,
   shortSessionId,
@@ -71,10 +73,44 @@ describe('sessionRowLabel', () => {
     expect(label).toBe('How do I refactor the session list UX?')
   })
 
-  it('falls back to short session id when prompt missing', () => {
-    expect(sessionRowLabel(session({ session_id: 'web_101c73bc7aeacc15ab' }))).toBe(
-      'web_101c73…eacc15ab',
-    )
+  it('falls back to untitled label when prompt missing', () => {
+    expect(sessionRowLabel(session({ session_id: 'web_101c73bc7aeacc15ab' }))).toBe('Untitled chat')
+  })
+})
+
+describe('sessionRowHasPrompt', () => {
+  it('is true when initial_prompt is present', () => {
+    expect(
+      sessionRowHasPrompt(
+        session({ session_id: 'a', initial_prompt: 'Fix the session list' }),
+      ),
+    ).toBe(true)
+  })
+
+  it('is false when prompt is blank', () => {
+    expect(sessionRowHasPrompt(session({ session_id: 'a', initial_prompt: '   ' }))).toBe(false)
+  })
+})
+
+describe('isStaleRunningSession', () => {
+  const now = Date.parse('2026-07-08T12:00:00Z')
+
+  it('flags running sessions older than 24h', () => {
+    expect(
+      isStaleRunningSession('running', '2026-07-06T12:00:00Z', undefined, now),
+    ).toBe(true)
+  })
+
+  it('ignores recently updated running sessions', () => {
+    expect(
+      isStaleRunningSession('running', '2026-07-08T11:00:00Z', undefined, now),
+    ).toBe(false)
+  })
+
+  it('ignores non-running statuses', () => {
+    expect(
+      isStaleRunningSession('finished', '2026-07-01T12:00:00Z', undefined, now),
+    ).toBe(false)
   })
 })
 
