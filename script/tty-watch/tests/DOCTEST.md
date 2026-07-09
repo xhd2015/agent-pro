@@ -73,6 +73,8 @@ End-to-end tests for the standalone `tty-watch` CLI: `run` subcommand embeds pty
  |    +-- exits-cleans-registry/      (LEAF)  attached exit prunes registry (RED)
  |    +-- echo-prints-and-exits/      (LEAF)  run echo yes prints and exits promptly (RED)
  |    +-- bash-c-prints-and-exits/    (LEAF)  run bash -c echo yes prints and exits (RED)
+ |    +-- bash-c-no-orphan-serve/     (LEAF)  run bash -c echo yes must not leave KeepAlive __serve__ orphan (RED)
+ |    +-- bash-c-lock-held-no-hang/   (LEAF)  run bash -c echo yes must not hang forever when registry .lock held (RED)
  |    +-- cr-overwrite-preserved/     (LEAF)  \\r cursor positioning not stripped (RED)
  |    +-- interactive-bash-layout/    (LEAF)  interactive bash errors not smeared right (RED)
  |    +-- echo-clean-two-lines/      (LEAF)  echo yes: no leading blank line; yes + [Terminal exited] (RED)
@@ -203,6 +205,8 @@ Parameter ranking (most → least significant):
 | 6 | `run/exits-cleans-registry` | Attached `true` exit removes registry entry (RED) |
 | 7 | `run/echo-prints-and-exits` | `run echo yes` prints `yes` and exits 0 without hang (RED) |
 | 8 | `run/bash-c-prints-and-exits` | `run bash -c 'echo yes'` prints and exits promptly (RED) |
+| 8b | `run/bash-c-no-orphan-serve` | `run bash -c 'echo yes'` must not leave KeepAlive `__serve__` orphan (RED) |
+| 8c | `run/bash-c-lock-held-no-hang` | `run bash -c 'echo yes'` must not hang forever when registry `.lock` held (RED) |
 | 9 | `run/cr-overwrite-preserved` | `\r` overwrite preserved; no `MARKER_AMARKER_B` smear (RED) |
 | 20 | `run/interactive-bash-layout` | Interactive bash profile errors stay left; no smeared `bash:` (RED) |
 | 21 | `run/echo-clean-two-lines` | `run echo yes` has no leading blank line; only `yes` + `[Terminal exited]` (RED) |

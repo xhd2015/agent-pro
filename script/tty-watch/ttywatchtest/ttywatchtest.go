@@ -111,6 +111,10 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 		return phaseRunEchoExits(t, req)
 	case "run-bash-c-echo-exits":
 		return phaseRunBashCEchoExits(t, req)
+	case "run-bash-c-no-orphan-serve":
+		return phaseRunBashCNoOrphanServe(t, req)
+	case "run-while-registry-lock-held":
+		return phaseRunWhileRegistryLockHeld(t, req)
 	case "run-cr-overwrite":
 		return phaseRunCROverwrite(t, req)
 	case "run-interactive-bash-layout":
@@ -707,6 +711,126 @@ func phaseRunBashCEchoExits(t *testing.T, req *Request) (*Response, error) {
 	}
 	terminateProcessByHome(req.TTYWatchHome, req.Bin)
 	return resp, nil
+}
+
+// phaseRunBashCNoOrphanServe runs bash -c 'echo yes' with a fixed session id and
+// asserts the __serve__ child does not remain after the attached parent exits.
+// KeepAlive:true currently leaves zombie __serve__ processes forever.
+func phaseRunBashCNoOrphanServe(t *testing.T, req *Request) (*Response, error) {
+	sessionID := req.CustomSessionID
+	if sessionID == "" {
+		sessionID = "bash-c-no-orphan"
+	}
+	cmdArgv := req.RunCommand
+	if len(cmdArgv) == 0 {
+		cmdArgv = []string{"bash", "-c", "echo yes"}
+	}
+	// Full argv so execPTYSession's withRunSubcommand keeps --session-id.
+	// Serve child cmdline includes sessionID for orphan detection via ps(1).
+	argv := append([]string{"run", "--session-id", sessionID}, cmdArgv...)
+	resp, err := execPTYSession(t, req, argv, ptyOpts{maxWait: 5 * time.Second})
+	if err != nil {
+		return nil, err
+	}
+	// Allow non-keep-alive serve grace (2s) to finish if implemented correctly.
+	time.Sleep(2500 * time.Millisecond)
+	alive := processesMatchingSession(req.Bin, sessionID)
+	if len(alive) > 0 {
+		t.Cleanup(func() { killPIDs(alive) })
+	}
+	resp.SessionID = sessionID
+	resp.SessionRunning = len(alive) > 0
+	ids, _ := ListRegistryIDs(req.TTYWatchHome)
+	resp.RegistryIDs = ids
+	resp.RegistryExists = RegistryExists(req.TTYWatchHome, sessionID)
+	// Intentionally do not terminateProcessByHome before observing orphans.
+	return resp, nil
+}
+
+// phaseRunWhileRegistryLockHeld holds the registry flock and runs bash -c 'echo yes'.
+// Correct behavior: fail promptly with a lock error (or succeed if lock is non-blocking).
+// Bug: acquireRegistryLock blocks forever → parent hangs with no output.
+func phaseRunWhileRegistryLockHeld(t *testing.T, req *Request) (*Response, error) {
+	if err := os.MkdirAll(RegistryDir(req.TTYWatchHome), 0755); err != nil {
+		return nil, err
+	}
+	lockPath := filepath.Join(RegistryDir(req.TTYWatchHome), ".lock")
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0644)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX); err != nil {
+		_ = lockFile.Close()
+		return nil, fmt.Errorf("hold registry lock: %w", err)
+	}
+	t.Cleanup(func() {
+		_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+		_ = lockFile.Close()
+	})
+
+	argv := req.RunCommand
+	if len(argv) == 0 {
+		argv = []string{"bash", "-c", "echo yes"}
+	}
+	// Short budget: hang-forever is the bug; correct code returns within ~2s.
+	resp, err := execPTYSession(t, req, argv, ptyOpts{maxWait: 3 * time.Second})
+	if err != nil {
+		return nil, err
+	}
+	// Clean any serve that managed to start if lock was incorrectly skipped.
+	terminateProcessByHome(req.TTYWatchHome, req.Bin)
+	return resp, nil
+}
+
+// processesMatchingSession returns PIDs whose command line includes bin and sessionID.
+func processesMatchingSession(bin, sessionID string) []int {
+	if bin == "" || sessionID == "" {
+		return nil
+	}
+	out, err := exec.Command("ps", "-ax", "-o", "pid=,command=").Output()
+	if err != nil {
+		return nil
+	}
+	var pids []int
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if !strings.Contains(line, bin) {
+			continue
+		}
+		if !strings.Contains(line, sessionID) {
+			continue
+		}
+		// Prefer __serve_ children; also catch hung parent run processes.
+		fields := strings.Fields(line)
+		if len(fields) < 1 {
+			continue
+		}
+		pid, err := strconv.Atoi(fields[0])
+		if err != nil {
+			continue
+		}
+		pids = append(pids, pid)
+	}
+	return pids
+}
+
+func killPIDs(pids []int) {
+	for _, pid := range pids {
+		if pid <= 0 {
+			continue
+		}
+		_ = syscall.Kill(pid, syscall.SIGTERM)
+	}
+	time.Sleep(100 * time.Millisecond)
+	for _, pid := range pids {
+		if pid <= 0 {
+			continue
+		}
+		_ = syscall.Kill(pid, syscall.SIGKILL)
+	}
 }
 
 func phaseRunCROverwrite(t *testing.T, req *Request) (*Response, error) {

@@ -33,7 +33,10 @@ type HeadlessRunOptions struct {
 	BinaryPath     string // re-exec target for __serve__ (os.Args[0])
 	Cwd            string
 	ExtraPaths     []string
-	KeepAlive      bool // return after registry ready without waiting on child exit
+	// KeepAlive, when true, sets TTY_WATCH_KEEP_ALIVE so __serve__ stays alive
+	// after the PTY child exits (intentional keep-tty). Default false: serve
+	// exits shortly after the child so short attached runs leave no orphans.
+	KeepAlive bool
 }
 
 // HeadlessRunResult is returned after the detached serve child registers.
@@ -90,7 +93,9 @@ func HeadlessRun(ctx context.Context, opts HeadlessRunOptions) (*HeadlessRunResu
 			return nil, err
 		}
 	}
-	defer release()
+	// Reservation wrote a provisional claim under the flock. Release immediately
+	// so other runs are not blocked for the whole WaitForRegistryEntry window.
+	release()
 
 	serveToken := ServeSubcommand(opts.Command)
 	argv := append([]string{serveToken, sessionID}, opts.Command...)
@@ -104,6 +109,7 @@ func HeadlessRun(ctx context.Context, opts HeadlessRunOptions) (*HeadlessRunResu
 	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
+		clearSessionClaim(cfg, sessionID)
 		return nil, err
 	}
 
@@ -111,9 +117,10 @@ func HeadlessRun(ctx context.Context, opts HeadlessRunOptions) (*HeadlessRunResu
 	if err != nil {
 		_ = cmd.Process.Kill()
 		_, _ = cmd.Process.Wait()
+		// Drop claim and any partial registry left by a failed serve.
+		RemoveRegistry(cfg, sessionID)
 		return nil, err
 	}
-	release()
 
 	return &HeadlessRunResult{
 		SessionID: sessionID,

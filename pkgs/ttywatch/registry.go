@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unicode"
@@ -17,6 +18,11 @@ const (
 	envTTYWatchHome = "TTY_WATCH_HOME"
 	defaultHomeDir  = ".tty-watch"
 	defaultSubdir   = "registry"
+
+	// registryLockTimeout bounds exclusive flock acquisition so concurrent
+	// run cannot hang forever when registry/.lock is held.
+	registryLockTimeout = 1500 * time.Millisecond
+	registryLockPoll    = 25 * time.Millisecond
 )
 
 // RegistryConfig selects the registry directory under a home path.
@@ -86,7 +92,10 @@ func validateSessionID(id string) error {
 }
 
 // ReserveCustomSessionID validates id and ensures it is not held by a live session.
-// Stale registry entries are pruned so the id can be reused.
+// Stale registry entries are pruned so the id can be reused. On success a side-car
+// claim file is written so the exclusive flock can be released before __serve__
+// registers (the claim is not a *.json registry entry, so waiters do not treat it
+// as a ready session).
 func ReserveCustomSessionID(cfg RegistryConfig, sessionID string) (func(), error) {
 	if err := validateSessionID(sessionID); err != nil {
 		return nil, err
@@ -95,17 +104,17 @@ func ReserveCustomSessionID(cfg RegistryConfig, sessionID string) (func(), error
 	if err != nil {
 		return nil, err
 	}
-	if _, err := os.Stat(registryPath(cfg, sessionID)); err == nil {
-		entry, readErr := ReadRegistry(cfg, sessionID)
-		if readErr == nil {
-			if tcpReachable(entry.ListenAddr) {
-				release()
-				return nil, fmt.Errorf(`run: session id %q already in use`, sessionID)
-			}
-			RemoveRegistryIfMatch(cfg, sessionID, entry.ListenAddr, entry.PID)
-		} else {
-			RemoveRegistry(cfg, sessionID)
-		}
+	if err := pruneStaleSessionID(cfg, sessionID); err != nil {
+		release()
+		return nil, err
+	}
+	if sessionIDInUse(cfg, sessionID) {
+		release()
+		return nil, fmt.Errorf(`run: session id %q already in use`, sessionID)
+	}
+	if err := writeSessionClaim(cfg, sessionID); err != nil {
+		release()
+		return nil, err
 	}
 	return release, nil
 }
@@ -120,17 +129,35 @@ func acquireRegistryLock(cfg RegistryConfig) (func(), error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX); err != nil {
-		_ = lockFile.Close()
-		return nil, err
+
+	deadline := time.Now().Add(registryLockTimeout)
+	for {
+		err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			break
+		}
+		if err != syscall.EWOULDBLOCK && err != syscall.EAGAIN {
+			_ = lockFile.Close()
+			return nil, err
+		}
+		if time.Now().After(deadline) {
+			_ = lockFile.Close()
+			return nil, fmt.Errorf("registry lock busy: timed out after %s waiting for exclusive flock (another tty-watch run may be in progress)", registryLockTimeout)
+		}
+		time.Sleep(registryLockPoll)
 	}
+
+	var once sync.Once
 	return func() {
-		_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
-		_ = lockFile.Close()
+		once.Do(func() {
+			_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+			_ = lockFile.Close()
+		})
 	}, nil
 }
 
-// ReserveRegistrySessionID returns the next session-N id under flock.
+// ReserveRegistrySessionID returns the next session-N id under flock and writes
+// a side-car claim so the lock can be released before WaitForRegistryEntry.
 func ReserveRegistrySessionID(cfg RegistryConfig) (string, func(), error) {
 	release, err := acquireRegistryLock(cfg)
 	if err != nil {
@@ -149,15 +176,97 @@ func ReserveRegistrySessionID(cfg RegistryConfig) (string, func(), error) {
 			continue
 		}
 		name := ent.Name()
-		if !strings.HasSuffix(name, ".json") {
+		var id string
+		switch {
+		case strings.HasSuffix(name, ".json"):
+			id = strings.TrimSuffix(name, ".json")
+		case strings.HasPrefix(name, ".") && strings.HasSuffix(name, ".claim"):
+			// ".session-3.claim" → "session-3"
+			id = strings.TrimSuffix(strings.TrimPrefix(name, "."), ".claim")
+		default:
 			continue
 		}
-		id := strings.TrimSuffix(name, ".json")
 		if n, ok := registrySessionNumber(id); ok && n > maxN {
 			maxN = n
 		}
 	}
-	return fmt.Sprintf("session-%d", maxN+1), release, nil
+	sessionID := fmt.Sprintf("session-%d", maxN+1)
+	if err := writeSessionClaim(cfg, sessionID); err != nil {
+		release()
+		return "", nil, err
+	}
+	return sessionID, release, nil
+}
+
+func sessionClaimPath(cfg RegistryConfig, sessionID string) string {
+	return filepath.Join(RegistryDir(cfg), "."+sessionID+".claim")
+}
+
+// writeSessionClaim records a provisional reservation (PID of the reserving
+// process) without creating a *.json registry entry.
+func writeSessionClaim(cfg RegistryConfig, sessionID string) error {
+	if err := os.MkdirAll(RegistryDir(cfg), 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(sessionClaimPath(cfg, sessionID), []byte(strconv.Itoa(os.Getpid())+"\n"), 0644)
+}
+
+// clearSessionClaim removes a provisional reservation file.
+func clearSessionClaim(cfg RegistryConfig, sessionID string) {
+	_ = os.Remove(sessionClaimPath(cfg, sessionID))
+}
+
+func readSessionClaimPID(cfg RegistryConfig, sessionID string) (int, bool) {
+	data, err := os.ReadFile(sessionClaimPath(cfg, sessionID))
+	if err != nil {
+		return 0, false
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid <= 0 {
+		return 0, false
+	}
+	return pid, true
+}
+
+// sessionIDInUse reports whether a session id is reserved or live.
+func sessionIDInUse(cfg RegistryConfig, sessionID string) bool {
+	if entry, err := ReadRegistry(cfg, sessionID); err == nil {
+		if entry.ListenAddr != "" && tcpReachable(entry.ListenAddr) {
+			return true
+		}
+		if entry.PID > 0 && processAlive(entry.PID) {
+			return true
+		}
+	}
+	if pid, ok := readSessionClaimPID(cfg, sessionID); ok && processAlive(pid) {
+		return true
+	}
+	return false
+}
+
+// pruneStaleSessionID drops unreachable registry entries and dead claims for id.
+func pruneStaleSessionID(cfg RegistryConfig, sessionID string) error {
+	if _, err := os.Stat(registryPath(cfg, sessionID)); err == nil {
+		entry, readErr := ReadRegistry(cfg, sessionID)
+		if readErr == nil {
+			if entry.ListenAddr != "" && tcpReachable(entry.ListenAddr) {
+				return nil // still live; caller checks inUse
+			}
+			if entry.PID > 0 && processAlive(entry.PID) {
+				return nil
+			}
+			RemoveRegistry(cfg, sessionID)
+		} else {
+			// Corrupt or incomplete json — remove so the id can be reused.
+			RemoveRegistry(cfg, sessionID)
+		}
+	}
+	if pid, ok := readSessionClaimPID(cfg, sessionID); ok {
+		if !processAlive(pid) {
+			clearSessionClaim(cfg, sessionID)
+		}
+	}
+	return nil
 }
 
 func registrySessionNumber(id string) (int, bool) {
@@ -172,7 +281,8 @@ func registrySessionNumber(id string) (int, bool) {
 	return n, true
 }
 
-// WriteRegistry creates the registry file for a live session.
+// WriteRegistry creates the registry file for a live session and drops any
+// provisional claim for the same id.
 func WriteRegistry(cfg RegistryConfig, entry RegistryEntry) error {
 	if err := os.MkdirAll(RegistryDir(cfg), 0755); err != nil {
 		return err
@@ -184,7 +294,11 @@ func WriteRegistry(cfg RegistryConfig, entry RegistryEntry) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(registryPath(cfg, entry.SessionID), data, 0644)
+	if err := os.WriteFile(registryPath(cfg, entry.SessionID), data, 0644); err != nil {
+		return err
+	}
+	clearSessionClaim(cfg, entry.SessionID)
+	return nil
 }
 
 // ReadRegistry loads a session registry entry.
@@ -206,9 +320,10 @@ func ReadRegistry(cfg RegistryConfig, sessionID string) (*RegistryEntry, error) 
 	return &entry, nil
 }
 
-// RemoveRegistry deletes the registry file for a session.
+// RemoveRegistry deletes the registry file and any claim for a session.
 func RemoveRegistry(cfg RegistryConfig, sessionID string) {
 	_ = os.Remove(registryPath(cfg, sessionID))
+	clearSessionClaim(cfg, sessionID)
 }
 
 // RemoveRegistryIfMatch deletes the registry file only when the on-disk entry still
@@ -238,6 +353,13 @@ func ListRegistryEntries(cfg RegistryConfig, prune bool) ([]RegistryEntry, error
 	var out []RegistryEntry
 	for _, ent := range entries {
 		name := ent.Name()
+		if prune && strings.HasPrefix(name, ".") && strings.HasSuffix(name, ".claim") {
+			id := strings.TrimSuffix(strings.TrimPrefix(name, "."), ".claim")
+			if pid, ok := readSessionClaimPID(cfg, id); ok && !processAlive(pid) {
+				clearSessionClaim(cfg, id)
+			}
+			continue
+		}
 		if !strings.HasSuffix(name, ".json") {
 			continue
 		}

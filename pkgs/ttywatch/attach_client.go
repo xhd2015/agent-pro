@@ -220,6 +220,8 @@ func (d *detachReader) Read(p []byte) (int, error) {
 	}
 	if idx := indexByte(p[:n], detachByte); idx >= 0 {
 		d.detached = true
+		// Return bytes before the detach key (may be zero). Callers must check
+		// d.detached when n==0 with EOF — a lone Ctrl-] is a successful detach.
 		return idx, io.EOF
 	}
 	return n, err

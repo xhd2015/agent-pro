@@ -88,7 +88,10 @@ func runRun(args []string) error {
 		SessionID:  opts.customSessionID,
 		Command:    opts.commandArgs,
 		BinaryPath: os.Args[0],
-		KeepAlive:  true,
+		// KeepAlive must stay false for default CLI run: when true, __serve__
+		// waits forever on ctx after the PTY child exits and becomes an orphan.
+		// Intentional keep-tty is opt-in via agenttty KeepTerminalAlive.
+		KeepAlive: false,
 	})
 	if err != nil {
 		return err

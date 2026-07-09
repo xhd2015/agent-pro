@@ -152,8 +152,12 @@ func (s *TTYAttachSink) DrainOutputAfterInput() bool { return !s.stdinIsTTY }
 func (s *TTYAttachSink) RunInput(ctx context.Context, upstream *wsWriter) error {
 	_ = ctx
 	if s.stdinIsTTY {
+		// forwardInputWithDetach and detachReader both detect Ctrl-]. When the
+		// detach byte is the first/only input (common for harness "send 0x1d"),
+		// detachReader returns (0, EOF) with detached=true and the n>0 branch
+		// in forwardInputWithDetach never runs — so we must honor stdin.detached.
 		detached, err := forwardInputWithDetach(upstream, s.stdin)
-		if detached {
+		if detached || s.stdin.detached {
 			s.detached = true
 			return nil
 		}
