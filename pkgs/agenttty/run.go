@@ -22,6 +22,9 @@ type RunOptions struct {
 	Model                 string
 	ResumeSessionID       string
 	RunnerID              string
+	// SessionID is the terminal registry id. Empty → auto-reserve session-N.
+	// When set (explicit --session or --auto-session-id), storage and registry share it.
+	SessionID             string
 	AgentSessionID        string
 	SettingsPath          string
 	AgentPath             string
@@ -90,6 +93,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	result, err := ttywatch.HeadlessRun(ctx, ttywatch.HeadlessRunOptions{
 		Home:           opts.Home,
 		RegistrySubdir: provider.RegistryDir,
+		SessionID:      strings.TrimSpace(opts.SessionID),
 		BinaryPath:     binaryPath,
 		Command:        argv,
 		Cwd:            opts.Workspace,

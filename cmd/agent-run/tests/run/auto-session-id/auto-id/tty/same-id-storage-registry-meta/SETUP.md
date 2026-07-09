@@ -1,0 +1,25 @@
+# Scenario
+
+**Feature**: TTY auto-id is identical across stderr, storage, meta, and registry
+
+```
+agent-run run --agent-runner grok-tty --keep-tty --auto-session-id "hello world"
+  -> stderr: grok-tty: hello-world-YYYYMMDD-HHMMSS
+  -> sessions/grok-tty/<same-id>/
+  -> meta.session_id == meta.terminal_session_id == <same-id>
+  -> grok-tty-registry/<same-id>.json
+```
+
+## Steps
+
+1. Run with prompt `hello world` (slug base `hello-world`).
+
+```go
+import "testing"
+
+func Setup(t *testing.T, req *Request) error {
+	req.Prompt = "hello world"
+	req.Args = append(req.Args, req.Prompt)
+	return nil
+}
+```

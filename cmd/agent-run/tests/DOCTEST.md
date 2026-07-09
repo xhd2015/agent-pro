@@ -13,7 +13,7 @@ headless `run`, localhost `web` API, and session storage under `AGENT_RUN_HOME`.
 ```
 agent-run [--agent-runner RUNNER] [--help]
 agent-run web [--port PORT] [--dev] [--token TOKEN] [--no-open] [--agent-runner RUNNER]
-agent-run run "prompt" [--json] [--model M] [--session ID] [--agent-runner RUNNER]
+agent-run run "prompt" [--json] [--model M] [--session ID] [--auto-session-id] [--agent-runner RUNNER]
 agent-run attach <session-id>
 agent-run sessions [--json]
 agent-run sessions <runner>/<session_id> --print
@@ -73,6 +73,7 @@ cmd/agent-run/tests/
 │   ├── json-fake-codex-hi/          run --json --agent-runner fake-codex "hi"
 │   ├── events-persisted-to-home/    stdout NDJSON lines match events.jsonl
 │   ├── human-readable-no-json/      without --json, stdout not all JSON lines
+│   ├── auto-session-id/             nested: --auto-session-id + same-id TTY policy (see auto-session-id/DOCTEST.md)
 │   ├── agent-runner-binary/         nested: --agent-runner-binary SPEC (see agent-runner-binary/DOCTEST.md)
 │   └── agent-runner-config-home/    nested: --agent-runner-config-home PATH (see agent-runner-config-home/DOCTEST.md)
 ├── web/                             split: token mode (omit | explicit | auto)
@@ -190,6 +191,19 @@ cmd/agent-run/tests/
 | 34 | `web/timeline/streaming/assistant-phases-share-stable-id` | Phased assistant rows share one `id` |
 | 35 | `web/stream/sse-delivers-new-events` | SSE after=0 delivers user + assistant events |
 | 36 | `web/stream/sse-after-offset-skips-prior` | SSE at EOF offset on finished session → no replay |
+
+## Nested: run auto-session-id
+
+`--auto-session-id` and explicit `--session` same-id policy tests live at
+`cmd/agent-run/tests/run/auto-session-id/` (**nested DOCTEST root**). Covers help,
+flag mutual exclusion, non-TTY storage slug generation, TTY storage+registry same id,
+and collision suffixes. Spec version 0.0.2.
+
+```sh
+doctest vet ./cmd/agent-run/tests/run/auto-session-id
+doctest test ./cmd/agent-run/tests/run/auto-session-id
+doctest test -v ./cmd/agent-run/tests/run/auto-session-id/auto-id/tty/same-id-storage-registry-meta
+```
 
 ## Nested: run agent-runner-binary / config-home
 
