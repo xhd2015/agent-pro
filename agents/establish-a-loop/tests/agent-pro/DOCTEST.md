@@ -14,7 +14,9 @@ description.
 
 Registration of `establish-a-loop` means `agent-pro skill establish-a-loop show`
 succeeds and prints frontmatter `name: establish-a-loop`; the skills list includes
-`establish-a-loop` with description text.
+`establish-a-loop` with description text. Skill content must include bug-repro
+loop kind, REPRO PASS dry-run status, and anti-patterns against fixing during
+establishment (see `cmd/agent-pro/skill_cmd_test.go`).
 
 ## Version
 

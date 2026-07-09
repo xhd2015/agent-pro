@@ -94,6 +94,16 @@ func TestEstablishALoopSkillIsRegistered(t *testing.T) {
 	if !strings.Contains(sk.Content, "LOOP_<YYYY-MM-DD>_<slug>.md") {
 		t.Fatalf("skill content missing LOOP filename convention:\n%s", sk.Content)
 	}
+	for _, needle := range []string{
+		"bug-repro",
+		"REPRO PASS",
+		"No remediation during audit",
+		"Baking the fix into Run",
+	} {
+		if !strings.Contains(sk.Content, needle) {
+			t.Fatalf("establish-a-loop skill missing %q:\n%s", needle, sk.Content)
+		}
+	}
 }
 
 func TestLoopWorkflowSkillIsRegistered(t *testing.T) {
