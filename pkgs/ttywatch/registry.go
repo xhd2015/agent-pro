@@ -142,7 +142,7 @@ func acquireRegistryLock(cfg RegistryConfig) (func(), error) {
 		}
 		if time.Now().After(deadline) {
 			_ = lockFile.Close()
-			return nil, fmt.Errorf("registry lock busy: timed out after %s waiting for exclusive flock (another tty-watch run may be in progress)", registryLockTimeout)
+			return nil, formatRegistryLockBusyError(lockPath, registryLockTimeout)
 		}
 		time.Sleep(registryLockPoll)
 	}

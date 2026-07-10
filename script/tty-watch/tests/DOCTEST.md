@@ -21,6 +21,10 @@ End-to-end tests for the standalone `tty-watch` CLI: `run` subcommand embeds pty
 
 - Default run reserves `session-N`, starts ptywrap, writes registry, attaches as
   interactive writer; **host stays silent** (no session-id on stdout/stderr).
+- Registry exclusive flock timeout (~1.5s) fails with multi-line **stderr**
+  diagnostics: summary `registry lock busy`, absolute lock path, holders table
+  (PID/PPID/command via best-effort `lsof`), process tree (ancestors + children),
+  optional what-to-do; not only “another tty-watch run may be in progress”.
 - `run --headless` skips writer attach; prints `session-id: <id>\n` on stdout and
   blocks until the inner command exits or the user sends Ctrl-C (SIGINT). No PTY
   bytes on host stdout. Session stays in registry while the headless parent waits.
@@ -75,6 +79,7 @@ End-to-end tests for the standalone `tty-watch` CLI: `run` subcommand embeds pty
  |    +-- bash-c-prints-and-exits/    (LEAF)  run bash -c echo yes prints and exits (RED)
  |    +-- bash-c-no-orphan-serve/     (LEAF)  run bash -c echo yes must not leave KeepAlive __serve__ orphan (RED)
  |    +-- bash-c-lock-held-no-hang/   (LEAF)  run bash -c echo yes must not hang forever when registry .lock held (RED)
+ |    +-- bash-c-lock-held-diagnostics/ (LEAF) lock busy stderr: holders table + process tree + lock path (RED)
  |    +-- cr-overwrite-preserved/     (LEAF)  \\r cursor positioning not stripped (RED)
  |    +-- interactive-bash-layout/    (LEAF)  interactive bash errors not smeared right (RED)
  |    +-- echo-clean-two-lines/      (LEAF)  echo yes: no leading blank line; yes + [Terminal exited] (RED)
@@ -207,6 +212,7 @@ Parameter ranking (most → least significant):
 | 8 | `run/bash-c-prints-and-exits` | `run bash -c 'echo yes'` prints and exits promptly (RED) |
 | 8b | `run/bash-c-no-orphan-serve` | `run bash -c 'echo yes'` must not leave KeepAlive `__serve__` orphan (RED) |
 | 8c | `run/bash-c-lock-held-no-hang` | `run bash -c 'echo yes'` must not hang forever when registry `.lock` held (RED) |
+| 8d | `run/bash-c-lock-held-diagnostics` | lock busy stderr must include lock path, holder PID/command, holders + process tree (RED) |
 | 9 | `run/cr-overwrite-preserved` | `\r` overwrite preserved; no `MARKER_AMARKER_B` smear (RED) |
 | 20 | `run/interactive-bash-layout` | Interactive bash profile errors stay left; no smeared `bash:` (RED) |
 | 21 | `run/echo-clean-two-lines` | `run echo yes` has no leading blank line; only `yes` + `[Terminal exited]` (RED) |
@@ -292,6 +298,8 @@ Parameter ranking (most → least significant):
 doctest vet ./script/tty-watch/tests
 doctest test ./script/tty-watch/tests/...
 doctest test -v ./script/tty-watch/tests/run/registers-session
+doctest test -v ./script/tty-watch/tests/run/bash-c-lock-held-no-hang
+doctest test -v ./script/tty-watch/tests/run/bash-c-lock-held-diagnostics
 doctest test ./script/tty-watch/tests/run/custom-session-id/...
 doctest test ./script/tty-watch/tests/run/headless/...
 doctest test ./script/tty-watch/tests/run/detach/...

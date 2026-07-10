@@ -64,6 +64,10 @@ type Response struct {
 	AttachBOutput              string
 	WatchOutput                string
 	RunOutput                  string
+	// Lock diagnostics (run-while-registry-lock-held-diagnostics)
+	LockPath         string
+	LockHolderPID    int
+	LockHolderMarker string
 }
 
 // RegistryEntry mirrors the tty-watch registry JSON shape for harness helpers.
@@ -115,6 +119,8 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 		return phaseRunBashCNoOrphanServe(t, req)
 	case "run-while-registry-lock-held":
 		return phaseRunWhileRegistryLockHeld(t, req)
+	case "run-while-registry-lock-held-diagnostics":
+		return phaseRunWhileRegistryLockHeldDiagnostics(t, req)
 	case "run-cr-overwrite":
 		return phaseRunCROverwrite(t, req)
 	case "run-interactive-bash-layout":
@@ -780,6 +786,159 @@ func phaseRunWhileRegistryLockHeld(t *testing.T, req *Request) (*Response, error
 	// Clean any serve that managed to start if lock was incorrectly skipped.
 	terminateProcessByHome(req.TTYWatchHome, req.Bin)
 	return resp, nil
+}
+
+var (
+	cachedLockHolder     string
+	cachedLockHolderErr  error
+	cachedLockHolderOnce sync.Once
+)
+
+// buildLockHolder builds the distinctive flock-holder helper used by diagnostics leaves.
+func buildLockHolder(t *testing.T) string {
+	t.Helper()
+	cachedLockHolderOnce.Do(func() {
+		root, err := findModuleRoot()
+		if err != nil {
+			cachedLockHolderErr = err
+			return
+		}
+		out := filepath.Join(os.TempDir(), "tty-watch-lockholder-doctest")
+		cmd := exec.Command("go", "build", "-o", out, "./script/tty-watch/ttywatchtest/lockholder")
+		cmd.Dir = root
+		if combined, err := cmd.CombinedOutput(); err != nil {
+			cachedLockHolderErr = fmt.Errorf("build lockholder: %v\n%s", err, combined)
+			return
+		}
+		cachedLockHolder = out
+	})
+	if cachedLockHolderErr != nil {
+		t.Fatal(cachedLockHolderErr)
+	}
+	return cachedLockHolder
+}
+
+// phaseRunWhileRegistryLockHeldDiagnostics holds the registry flock via a
+// distinctive child process (known PID + marker in argv), then runs
+// `tty-watch run bash -c 'echo yes'` with separated stdout/stderr.
+// Asserts richer lock-busy diagnostics: summary, lock path, holders, process tree.
+func phaseRunWhileRegistryLockHeldDiagnostics(t *testing.T, req *Request) (*Response, error) {
+	if err := os.MkdirAll(RegistryDir(req.TTYWatchHome), 0755); err != nil {
+		return nil, err
+	}
+	lockPath := filepath.Join(RegistryDir(req.TTYWatchHome), ".lock")
+	// Distinctive argv marker so diagnostics must surface the holder command line.
+	marker := "ttywatch-lock-diag-" + filepath.Base(req.TTYWatchHome)
+
+	holderBin := buildLockHolder(t)
+	holder := exec.Command(holderBin, lockPath, marker)
+	// Own process group so Cleanup can kill holder + its --child descendant.
+	holder.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	holderStdout, err := holder.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("holder stdout pipe: %w", err)
+	}
+	if err := holder.Start(); err != nil {
+		return nil, fmt.Errorf("start lock holder: %w", err)
+	}
+	t.Cleanup(func() {
+		if holder.Process != nil {
+			pgid := holder.Process.Pid
+			_ = syscall.Kill(-pgid, syscall.SIGKILL)
+			_, _ = holder.Process.Wait()
+		}
+	})
+
+	holderPID, err := readHolderPID(holderStdout, 5*time.Second)
+	if err != nil {
+		_ = holder.Process.Kill()
+		return nil, fmt.Errorf("read lock holder pid: %w", err)
+	}
+
+	argv := req.RunCommand
+	if len(argv) == 0 {
+		argv = []string{"bash", "-c", "echo yes"}
+	}
+	runArgs := append([]string{"run"}, argv...)
+
+	// Budget covers ~1.5s lock timeout + diagnostics; hang-forever is still a fail.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	start := time.Now()
+	runCmd := exec.CommandContext(ctx, req.Bin, runArgs...)
+	runCmd.Env = envWithHome(req.TTYWatchHome)
+	var outBuf, errBuf bytes.Buffer
+	runCmd.Stdout = &outBuf
+	runCmd.Stderr = &errBuf
+	runErr := runCmd.Run()
+	elapsed := time.Since(start)
+
+	resp := &Response{
+		Stdout:           outBuf.String(),
+		Stderr:           errBuf.String(),
+		Combined:         combineOutput(outBuf.String(), errBuf.String()),
+		Elapsed:          elapsed,
+		LockPath:         lockPath,
+		LockHolderPID:    holderPID,
+		LockHolderMarker: marker,
+	}
+	if ctx.Err() == context.DeadlineExceeded {
+		resp.TimedOut = true
+	}
+	if runErr != nil {
+		if exitErr, ok := runErr.(*exec.ExitError); ok {
+			resp.ExitCode = exitErr.ExitCode()
+		} else if !resp.TimedOut {
+			return nil, runErr
+		}
+	}
+	// Clean any serve that managed to start if lock was incorrectly skipped.
+	terminateProcessByHome(req.TTYWatchHome, req.Bin)
+	return resp, nil
+}
+
+// readHolderPID reads a single decimal PID line from the lock-holder stdout.
+func readHolderPID(r io.Reader, timeout time.Duration) (int, error) {
+	type result struct {
+		line string
+		err  error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		buf := make([]byte, 64)
+		var acc []byte
+		for {
+			n, err := r.Read(buf)
+			if n > 0 {
+				acc = append(acc, buf[:n]...)
+				if i := bytes.IndexByte(acc, '\n'); i >= 0 {
+					ch <- result{line: string(acc[:i])}
+					return
+				}
+			}
+			if err != nil {
+				if len(acc) > 0 && err == io.EOF {
+					ch <- result{line: string(acc)}
+					return
+				}
+				ch <- result{err: err}
+				return
+			}
+		}
+	}()
+	select {
+	case res := <-ch:
+		if res.err != nil {
+			return 0, res.err
+		}
+		pid, err := strconv.Atoi(strings.TrimSpace(res.line))
+		if err != nil || pid <= 0 {
+			return 0, fmt.Errorf("invalid holder pid %q: %v", res.line, err)
+		}
+		return pid, nil
+	case <-time.After(timeout):
+		return 0, fmt.Errorf("timeout waiting for holder pid")
+	}
 }
 
 // processesMatchingSession returns PIDs whose command line includes bin and sessionID.
