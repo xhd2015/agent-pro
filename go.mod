@@ -22,6 +22,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02
 	github.com/openai/openai-go/v3 v3.29.0
+	github.com/slack-go/slack v0.27.0
 	golang.org/x/term v0.43.0
 )
 

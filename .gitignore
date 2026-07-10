@@ -23,3 +23,7 @@ node_modules
 /frontend-agent-run/dist
 
 .commandcode
+
+# debug secret configs (tokens, keys etc). Do not commit.
+slack-config.json
+script/debug/**/slack-config.json
