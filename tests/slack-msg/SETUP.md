@@ -3,11 +3,11 @@
 **Feature**: slack-msg CLI doctest harness builds binary and prepares isolated workdirs
 
 ```
-# session cache: build slack-msg once; slacktest for unit send/history; listen daemon probes
+# session cache: build slack-msg once; slacktest for unit send/history/channels/auth; listen daemon probes
 doctest -> build ./cmd/slack-msg -> temp workdir -> exec with controlled env/args -> capture stdout/stderr/exit
 
-# send / history unit branch
-SLACK_API_URL -> slacktest (conversations.list + chat.postMessage + history/replies)
+# send / history / channels / auth unit branch
+SLACK_API_URL -> slacktest (conversations.list + chat.postMessage + history/replies + auth.test + apps.connections.open)
 
 # listen unit branch
 slacktest Socket Mode + mock agent-run (SLACK_LISTEN_AGENT_RUN) -> chat.postMessage
