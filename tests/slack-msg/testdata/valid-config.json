@@ -1,0 +1,13 @@
+{
+  "source": "doctest-fixture",
+  "botToken": "xoxb-doctest-fake-token",
+  "appToken": "xapp-doctest-fake-token",
+  "defaultChannelId": "C0ALE44K5J6",
+  "defaultChannelName": "#general",
+  "knownChannels": {
+    "#general": "C0ALE44K5J6",
+    "general": "C0ALE44K5J6",
+    "#release-wise-todo-electron": "C0ALE46NKL2"
+  },
+  "config": {}
+}
