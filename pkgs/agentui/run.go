@@ -62,7 +62,7 @@ func Run(ctx context.Context, opts RunOptions) error {
 		runner = string(registry.AgentRunnerOpencode)
 	}
 
-	// userSessionID is set when --session or --auto-session-id chose the id.
+	// userSessionID is set when --session or --session-id-from-prompt chose the id.
 	// Only then do we also use it as the TTY terminal registry id.
 	userSessionID := strings.TrimSpace(opts.SessionID)
 	sessionID := userSessionID
@@ -188,7 +188,7 @@ func Run(ctx context.Context, opts RunOptions) error {
 }
 
 // streamRunner runs the selected agent. ttySessionID is the custom terminal
-// registry id (from --session / --auto-session-id); empty keeps session-N.
+// registry id (from --session / --session-id-from-prompt); empty keeps session-N.
 func streamRunner(ctx context.Context, runner, home, workspace string, env *agentexec.Env, prompt, model, agentRunnerBinary, agentRunnerConfigHome, runnerSessionID, agentSessionID, ttySessionID string, streamPhases, keepTerminalAlive, grokSyncOwnsEvents bool, onTerminalSessionID func(string), emit func(types.AgentEvent) error, stderr io.Writer) (string, string, error) {
 	if agenttty.IsTTYRunner(runner) {
 		terminalSessionID := ""

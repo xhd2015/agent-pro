@@ -23,7 +23,7 @@ type RunOptions struct {
 	ResumeSessionID       string
 	RunnerID              string
 	// SessionID is the terminal registry id. Empty → auto-reserve session-N.
-	// When set (explicit --session or --auto-session-id), storage and registry share it.
+	// When set (explicit --session or --session-id-from-prompt), storage and registry share it.
 	SessionID             string
 	AgentSessionID        string
 	SettingsPath          string

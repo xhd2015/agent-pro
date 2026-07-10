@@ -17,7 +17,7 @@ Options:
   --json              stream NDJSON AgentEvent lines to stdout
   --model MODEL       model name
   --session ID        session id
-  --auto-session-id   generate session id from prompt slug (storage + TTY registry)
+  --session-id-from-prompt   generate session id from prompt slug (storage + TTY registry)
   --keep-tty          keep TTY session alive after run completes
   --agent-runner RUNNER   codex, codex-tty, grok-tty, opencode, fake-codex, ...
   --agent-runner-binary SPEC
@@ -32,7 +32,7 @@ func runHeadless(args []string, defaultRunner string) error {
 	var jsonFlag bool
 	var model string
 	var sessionID string
-	var autoSessionID bool
+	var sessionIDFromPrompt bool
 	var agentRunner string
 	var agentRunnerBinary string
 	var agentRunnerConfigHome string
@@ -40,7 +40,7 @@ func runHeadless(args []string, defaultRunner string) error {
 	remaining, err := flags.Bool("--json", &jsonFlag).
 		String("--model", &model).
 		String("--session", &sessionID).
-		Bool("--auto-session-id", &autoSessionID).
+		Bool("--session-id-from-prompt", &sessionIDFromPrompt).
 		Bool("--keep-tty", &keepTTY).
 		String("--agent-runner", &agentRunner).
 		String("--agent-runner-binary", &agentRunnerBinary).
@@ -54,8 +54,8 @@ func runHeadless(args []string, defaultRunner string) error {
 	if prompt == "" {
 		return fmt.Errorf("prompt is required")
 	}
-	if autoSessionID && strings.TrimSpace(sessionID) != "" {
-		return fmt.Errorf("--session and --auto-session-id are mutually exclusive; cannot use both")
+	if sessionIDFromPrompt && strings.TrimSpace(sessionID) != "" {
+		return fmt.Errorf("--session and --session-id-from-prompt are mutually exclusive; cannot use both")
 	}
 	runner := agentRunner
 	if runner == "" {
@@ -68,7 +68,7 @@ func runHeadless(args []string, defaultRunner string) error {
 	if err != nil {
 		return err
 	}
-	if autoSessionID {
+	if sessionIDFromPrompt {
 		id, genErr := generateAutoSessionID(prompt, runner, store.Home())
 		if genErr != nil {
 			return genErr
