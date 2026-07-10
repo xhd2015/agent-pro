@@ -293,6 +293,12 @@ func deadlineForFetch(ctx context.Context) time.Time {
 	return time.Now().Add(timeoutFromEnv())
 }
 
+// Signed PROTOCOL.md keys for Codex Update available menu auto-Skip.
+const (
+	csiCursorDown = "\x1b[B" // hex 1b5b42
+	keyEnterCR    = "\r"     // hex 0d
+)
+
 func waitForPrompt(ctx context.Context, session *ttywatch.EphemeralSession, deadline time.Time, v *verboseLog) error {
 	provider, ok := agenttty.Get("codex-tty")
 	if !ok {
@@ -305,6 +311,7 @@ func waitForPrompt(ctx context.Context, session *ttywatch.EphemeralSession, dead
 	var lastPollLog time.Time
 	pollCount := 0
 	var snapshotTotal time.Duration
+	updateSkipDone := false
 	for {
 		select {
 		case <-ctx.Done():
@@ -347,6 +354,23 @@ func waitForPrompt(ctx context.Context, session *ttywatch.EphemeralSession, dead
 			v.stateChange("prompt-ready", fmt.Sprintf("status fields already visible (polls=%d snapshot_total=%s)", pollCount, snapshotTotal.Round(time.Millisecond)))
 			return nil
 		}
+
+		// Auto-Skip the blocking Update available menu before treating the screen
+		// as a normal wait-for-idle (signed PROTOCOL.md).
+		if !updateSkipDone && agenttty.IsBlockingUpdateMenu(snapshot) {
+			v.stateChange("update-menu", "blocking update menu detected; auto-Skip")
+			if err := dismissBlockingUpdateMenu(ctx, session, deadline, v); err != nil {
+				logCodexError("update_menu_skip", err, map[string]any{
+					"snapshot_excerpt": excerptText(snapshot, 300),
+				})
+				return err
+			}
+			updateSkipDone = true
+			// Resume polling for idle prompt after menu dismiss (residual banner OK).
+			sleepUntilPoll(ctx, deadline, retryPollInterval)
+			continue
+		}
+
 		st := provider.CheckWritable([]byte(snapshot))
 		if st.Ready && st.State == "idle" {
 			v.snapshot("wait-prompt", snapDur, fmt.Sprintf("poll=%d idle", pollCount))
@@ -378,16 +402,148 @@ func waitForPrompt(ctx context.Context, session *ttywatch.EphemeralSession, dead
 					"phase":     "prompt",
 				},
 				Fields: map[string]any{
-					"writable":          st.Ready,
-					"writable_state":    st.State,
-					"writable_reason":   st.Reason,
-					"elapsed_ms":        time.Since(waitStart).Milliseconds(),
-					"snapshot_excerpt":  excerptText(snapshot, 300),
+					"writable":         st.Ready,
+					"writable_state":   st.State,
+					"writable_reason":  st.Reason,
+					"elapsed_ms":       time.Since(waitStart).Milliseconds(),
+					"snapshot_excerpt": excerptText(snapshot, 300),
 				},
 			})
 		}
 
 		sleepUntilPoll(ctx, deadline, pollInterval)
+	}
+}
+
+// dismissBlockingUpdateMenu runs the signed Skip protocol:
+// CSI Down → verify selection is SKIP (retry Down at most once) → Enter → poll until menu gone.
+// Never sends Enter while selection is UPDATE_NOW.
+func dismissBlockingUpdateMenu(ctx context.Context, session *ttywatch.EphemeralSession, deadline time.Time, v *verboseLog) error {
+	// Initial Down (PROTOCOL step select_skip).
+	if err := session.Send(csiCursorDown); err != nil {
+		return fmt.Errorf("send CSI Down for update menu: %w", err)
+	}
+	v.stateChange("update-menu-down", "CSI Down (1)")
+
+	// Poll briefly for selection to move to Skip (TUI re-render lag).
+	sel, snapshot, err := waitForUpdateMenuSelection(ctx, session, deadline, v, "SKIP", 800*time.Millisecond)
+	if err != nil {
+		return err
+	}
+	if sel != "SKIP" {
+		// Retry Down at most once (PROTOCOL: if assert fails after first Down).
+		if err := session.Send(csiCursorDown); err != nil {
+			// Prefer a clear Skip-selection error when inject is already flaky;
+			// still never Enter while on Update now.
+			return fmt.Errorf("could not select Skip on update prompt (selection=%q): %w", sel, err)
+		}
+		v.stateChange("update-menu-down", "CSI Down (retry)")
+		sel, snapshot, err = waitForUpdateMenuSelection(ctx, session, deadline, v, "SKIP", 800*time.Millisecond)
+		if err != nil {
+			return err
+		}
+	}
+
+	if sel != "SKIP" {
+		// Never confirm Update now; fail early with a clear error.
+		return fmt.Errorf("could not select Skip on update prompt (selection=%q) excerpt=%q",
+			sel, excerptText(snapshot, 200))
+	}
+
+	// Enter only after verified Skip.
+	if err := session.Send(keyEnterCR); err != nil {
+		return fmt.Errorf("send Enter for update menu Skip: %w", err)
+	}
+	v.stateChange("update-menu-enter", "Enter on Skip")
+
+	// Poll until menu options are gone (immediate frame may still show the menu).
+	for {
+		select {
+		case <-ctx.Done():
+			return timeoutErr(ctx)
+		default:
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timeout waiting for update menu to dismiss")
+		}
+		snapshot, err = snapshotWithRetry(ctx, session, deadline)
+		if err != nil {
+			return err
+		}
+		if !agenttty.IsBlockingUpdateMenu(snapshot) {
+			v.stateChange("update-menu-gone", "blocking update menu dismissed")
+			debuglog.Log(debuglog.Entry{
+				Event: "update_menu_dismissed",
+				Labels: map[string]string{
+					"component": "codex_tty",
+					"provider":  "codex",
+					"phase":     "prompt",
+				},
+			})
+			return nil
+		}
+		sleepUntilPoll(ctx, deadline, retryPollInterval)
+	}
+}
+
+// waitForUpdateMenuSelection polls snapshots until selection matches want or the
+// wait window elapses. Returns the last selection and snapshot.
+func waitForUpdateMenuSelection(ctx context.Context, session *ttywatch.EphemeralSession, deadline time.Time, v *verboseLog, want string, maxWait time.Duration) (string, string, error) {
+	waitDeadline := time.Now().Add(maxWait)
+	if waitDeadline.After(deadline) {
+		waitDeadline = deadline
+	}
+	var lastSel string
+	var lastSnap string
+	for {
+		select {
+		case <-ctx.Done():
+			return lastSel, lastSnap, timeoutErr(ctx)
+		default:
+		}
+		if time.Now().After(deadline) {
+			return lastSel, lastSnap, fmt.Errorf("timeout waiting for status output")
+		}
+		snapshot, err := snapshotWithRetry(ctx, session, deadline)
+		if err != nil {
+			return lastSel, lastSnap, err
+		}
+		lastSnap = snapshot
+		lastSel = agenttty.UpdateMenuSelection(snapshot)
+		if lastSel == want {
+			return lastSel, lastSnap, nil
+		}
+		// Menu already gone (unexpected during select_skip) — stop waiting.
+		if !agenttty.IsBlockingUpdateMenu(snapshot) {
+			return lastSel, lastSnap, nil
+		}
+		if !time.Now().Before(waitDeadline) {
+			return lastSel, lastSnap, nil
+		}
+		v.stateChange("update-menu-wait", fmt.Sprintf("selection=%q want=%q", lastSel, want))
+		sleepUntilPoll(ctx, deadline, retryPollInterval)
+	}
+}
+
+func snapshotWithRetry(ctx context.Context, session *ttywatch.EphemeralSession, deadline time.Time) (string, error) {
+	for {
+		select {
+		case <-ctx.Done():
+			return "", timeoutErr(ctx)
+		default:
+		}
+		if time.Now().After(deadline) {
+			return "", fmt.Errorf("timeout waiting for status output")
+		}
+		snapshot, err := session.Snapshot()
+		if err != nil {
+			if isRetryableSnapshotError(err) && time.Now().Before(deadline) {
+				sleepUntilPoll(ctx, deadline, retryPollInterval)
+				continue
+			}
+			return "", err
+		}
+		return snapshot, nil
 	}
 }
 

@@ -12,8 +12,12 @@ import (
 )
 
 // ReadSnapshot fetches the current screen frame for a live session via a single
-// attach_mode=screen WebSocket (no resize). Scrollback is left empty so rendering
-// prefers the server screen frame.
+// attach_mode=snapshot WebSocket (no resize, does not claim writer). Scrollback is
+// left empty so rendering prefers the server screen frame.
+//
+// Important: do not use attach_mode=screen here. "screen" claims the writer role;
+// closing that short-lived socket reaps the PTY child (stopChild on writer close),
+// which breaks multi-poll waitForPrompt + inject (CSI Down / Enter / /status).
 func ReadSnapshot(listenAddr, sessionID string) (frame string, scrollback string, cols, rows int, err error) {
 	frame, cols, rows, err = readScreenSnapshotFrame(listenAddr, sessionID)
 	if err != nil {
@@ -145,7 +149,9 @@ func readScreenSnapshotFrame(listenAddr, sessionID string) (string, int, int, er
 }
 
 func readScreenSnapshotFrameOnce(listenAddr, sessionID string, deadline time.Time, cols, rows int) (frame string, outCols, outRows int, done bool, err error) {
-	conn, err := dialSnapshotWebSocket(listenAddr, sessionID, "screen")
+	// Use snapshot role (not "screen"): screen claims writer and kill-on-disconnect
+	// would destroy the ephemeral codex/fake TUI mid FetchStatus poll loop.
+	conn, err := dialSnapshotWebSocket(listenAddr, sessionID, "snapshot")
 	if err != nil {
 		return "", cols, rows, false, err
 	}
