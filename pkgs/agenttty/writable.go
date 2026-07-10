@@ -115,6 +115,13 @@ func checkCodexWritable(scrollback []byte) WritableStatus {
 	}
 	lower := strings.ToLower(plain)
 	compact := compactWritableText(lower)
+	// Update available modal shows › on menu options (e.g. "› 1. Update now…") and must
+	// not be treated as the main chat prompt, or FetchStatus injects /status into the modal.
+	if strings.Contains(lower, "update available") || strings.Contains(compact, "updateavailable") ||
+		strings.Contains(lower, "skip until next version") || strings.Contains(compact, "skipuntilnextversion") ||
+		strings.Contains(lower, "press enter to continue") || strings.Contains(compact, "pressentertocontinue") {
+		return WritableStatus{Reason: "codex update available", State: "loading"}
+	}
 	if strings.Contains(compact, "model:loading") {
 		return WritableStatus{Reason: "codex model loading", State: "loading"}
 	}

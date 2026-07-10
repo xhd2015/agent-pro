@@ -1,0 +1,5 @@
+{"file":"codex-update-available-modal.txt","ready":false,"state":"loading","reason":"update","tags":["live","update-modal","regression","not-idle"],"source":"/tmp/codex-status-fixtures-for-req/update-available-modal.txt"}
+{"file":"codex-update-plus-model-loading.txt","ready":false,"state":"loading","reason":"","tags":["live","update-banner","model-loading","not-idle"],"source":"/tmp/codex-status-fixtures-for-req/update-plus-model-loading.txt"}
+{"file":"codex-mcp-incomplete-prompt.txt","ready":true,"state":"idle","reason":"","tags":["live","main-prompt","mcp-incomplete","idle"],"source":"/tmp/codex-status-fixtures-for-req/mcp-incomplete-idle-prompt.txt"}
+{"file":"codex-main-prompt-mcp-incomplete.txt","ready":true,"state":"idle","reason":"","tags":["live","main-prompt","mcp-incomplete","idle"],"source":"/tmp/codex-status-fixtures-for-req/main-prompt-mcp-incomplete.txt"}
+{"file":"codex-empty-snapshot.txt","ready":false,"state":"unknown","reason":"no terminal output","tags":["empty","boot","unknown"],"source":"empty"}

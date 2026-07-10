@@ -1,0 +1,13 @@
+⚠ `[features].codex_hooks` is deprecated. Use `[features].hooks` instead.
+Enable it with `--enable hooks` or `[features].hooks` in config.toml. Seehttps://developers.openai.com/codex/config-basic#feature-flags for details.
+╭------------------------------------------------╮
+│ >_ OpenAI Codex (v0.143.0)                     │
+│                                                │
+│ model:       gpt-5.5 medium   /model to change │
+│ directory:   ~                                 │
+│ permissions: YOLO mode                         │
+╰------------------------------------------------╯
+  Tip: Use /init to create an AGENTS.md with project-specific guidance.
+⚠ MCP client for `computer-use` failed to start: MCP startup failed: No suchfile or directory (os error 2)
+⚠ MCP startup incomplete (failed: computer-use)
+› Use /skills to list available skillsgpt-5.5 medium · ~

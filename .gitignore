@@ -9,6 +9,7 @@
 /agent-pro
 .decisions.json
 *.jsonl
+!pkgs/agenttty/testdata/**/expectations.jsonl
 
 
 handoff_*
