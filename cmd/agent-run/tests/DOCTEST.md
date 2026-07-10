@@ -74,6 +74,7 @@ cmd/agent-run/tests/
 │   ├── events-persisted-to-home/    stdout NDJSON lines match events.jsonl
 │   ├── human-readable-no-json/      without --json, stdout not all JSON lines
 │   ├── session-id-from-prompt/             nested: --session-id-from-prompt + same-id TTY policy (see session-id-from-prompt/DOCTEST.md)
+│   ├── open/                        nested: run --open TTY silent attach (see open/DOCTEST.md)
 │   ├── agent-runner-binary/         nested: --agent-runner-binary SPEC (see agent-runner-binary/DOCTEST.md)
 │   └── agent-runner-config-home/    nested: --agent-runner-config-home PATH (see agent-runner-config-home/DOCTEST.md)
 ├── web/                             split: token mode (omit | explicit | auto)
@@ -198,6 +199,13 @@ cmd/agent-run/tests/
 `cmd/agent-run/tests/run/session-id-from-prompt/` (**nested DOCTEST root**). Covers help,
 flag mutual exclusion, non-TTY storage slug generation, TTY storage+registry same id,
 and collision suffixes. Spec version 0.0.2.
+
+## Nested: run --open
+
+`run --open` (TTY silent auto-attach + post-detach session id + keep-alive) tests live at
+`cmd/agent-run/tests/run/open/` (**nested DOCTEST root**). Covers help, non-TTY/`--json`
+rejection, empty-prompt policy, silence, post-attach id print, registry keep-alive, and
+codex-tty acceptance. Spec version 0.0.2. Test hook: `AGENT_RUN_OPEN_ATTACH_INSTANT=1`.
 
 ```sh
 doctest vet ./cmd/agent-run/tests/run/session-id-from-prompt

@@ -39,6 +39,8 @@ type RunOptions struct {
 	Stderr              io.Writer
 	StreamPhases        bool // web: phased assistant start/update/end; CLI: single message events
 	KeepTerminalAlive   bool
+	// Open is run --open: silent keep-alive TTY start, auto-attach, print id after detach.
+	Open bool
 	// WebManagedGrokSync skips in-process grok sync; caller runs agentsync.EnsureGrokSync.
 	WebManagedGrokSync bool
 }
@@ -48,7 +50,10 @@ func Run(ctx context.Context, opts RunOptions) error {
 	if opts.Store == nil {
 		return fmt.Errorf("store is required")
 	}
-	if strings.TrimSpace(opts.Prompt) == "" {
+	if opts.Open {
+		opts.KeepTerminalAlive = true
+	}
+	if strings.TrimSpace(opts.Prompt) == "" && !opts.Open {
 		return fmt.Errorf("prompt is required")
 	}
 	runner := strings.TrimSpace(opts.Runner)
@@ -119,6 +124,10 @@ func Run(ctx context.Context, opts RunOptions) error {
 		if err := opts.Store.AppendEvent(runner, sessionID, ev); err != nil {
 			return err
 		}
+		// --open stays silent: persist only, no human/JSON stream to the screen.
+		if opts.Open {
+			return nil
+		}
 		line, err := json.Marshal(ev)
 		if err != nil {
 			return err
@@ -150,19 +159,32 @@ func Run(ctx context.Context, opts RunOptions) error {
 		_ = opts.Store.UpdateSessionTerminalSessionID(runner, sessionID, id)
 	}
 	webGrokManaged := runner == "grok-tty" && opts.WebManagedGrokSync
-	grokSyncOwnsEvents := runner == "grok-tty" && opts.KeepTerminalAlive && !opts.WebManagedGrokSync
+	// Open mode does not wait on discovery; skip in-process grok sync screen noise.
+	grokSyncOwnsEvents := runner == "grok-tty" && opts.KeepTerminalAlive && !opts.WebManagedGrokSync && !opts.Open
 	// Web-managed sync uses agentsync.EnsureGrokSync only; disable agenttty inline grok tail.
-	ttyGrokSyncOwnsEvents := grokSyncOwnsEvents || webGrokManaged
+	// For Open, pass true so agenttty also skips inline discovery tails.
+	ttyGrokSyncOwnsEvents := grokSyncOwnsEvents || webGrokManaged || opts.Open
 	if grokSyncOwnsEvents {
 		startGrokSyncPoller(ctx, opts, emit)
 		_ = ensureGrokSyncForSession(context.Background(), opts, resolveGrokSessionID(opts.Store, runner, sessionID), emit)
 	}
-	newRunnerSessionID, newTerminalSessionID, runErr := streamRunner(ctx, runner, opts.Store.Home(), workspace, env, runnerPrompt, opts.Model, opts.AgentRunnerBinary, opts.AgentRunnerConfigHome, runnerSessionID, sessionID, userSessionID, opts.StreamPhases, opts.KeepTerminalAlive, ttyGrokSyncOwnsEvents, persistTerminalSessionID, emit, stderr)
+	newRunnerSessionID, newTerminalSessionID, runErr := streamRunner(ctx, runner, opts.Store.Home(), workspace, env, runnerPrompt, opts.Model, opts.AgentRunnerBinary, opts.AgentRunnerConfigHome, runnerSessionID, sessionID, userSessionID, opts.StreamPhases, opts.KeepTerminalAlive, opts.Open, ttyGrokSyncOwnsEvents, persistTerminalSessionID, emit, stderr)
 	if strings.TrimSpace(newRunnerSessionID) != "" {
 		_ = opts.Store.UpdateSessionRunnerSessionID(runner, sessionID, newRunnerSessionID)
 	}
 	if strings.TrimSpace(newTerminalSessionID) != "" {
 		_ = opts.Store.UpdateSessionTerminalSessionID(runner, sessionID, newTerminalSessionID)
+	}
+	if opts.Open {
+		if runErr != nil {
+			_ = opts.Store.UpdateSessionStatus(runner, sessionID, "error")
+			return runErr
+		}
+		// After attach returns: print once on stderr; leave session running/alive.
+		if id := strings.TrimSpace(newTerminalSessionID); id != "" {
+			_, _ = fmt.Fprintf(stderr, "%s: %s\n", runner, id)
+		}
+		return nil
 	}
 	if grokSyncOwnsEvents {
 		if id := strings.TrimSpace(newRunnerSessionID); id != "" {
@@ -189,7 +211,7 @@ func Run(ctx context.Context, opts RunOptions) error {
 
 // streamRunner runs the selected agent. ttySessionID is the custom terminal
 // registry id (from --session / --session-id-from-prompt); empty keeps session-N.
-func streamRunner(ctx context.Context, runner, home, workspace string, env *agentexec.Env, prompt, model, agentRunnerBinary, agentRunnerConfigHome, runnerSessionID, agentSessionID, ttySessionID string, streamPhases, keepTerminalAlive, grokSyncOwnsEvents bool, onTerminalSessionID func(string), emit func(types.AgentEvent) error, stderr io.Writer) (string, string, error) {
+func streamRunner(ctx context.Context, runner, home, workspace string, env *agentexec.Env, prompt, model, agentRunnerBinary, agentRunnerConfigHome, runnerSessionID, agentSessionID, ttySessionID string, streamPhases, keepTerminalAlive, open, grokSyncOwnsEvents bool, onTerminalSessionID func(string), emit func(types.AgentEvent) error, stderr io.Writer) (string, string, error) {
 	if agenttty.IsTTYRunner(runner) {
 		terminalSessionID := ""
 		onID := func(id string) {
@@ -209,7 +231,8 @@ func streamRunner(ctx context.Context, runner, home, workspace string, env *agen
 			AgentSessionID:        agentSessionID,
 			AgentPath:             agentRunnerBinary,
 			AgentRunnerConfigHome: agentRunnerConfigHome,
-			KeepTerminalAlive:     keepTerminalAlive,
+			KeepTerminalAlive:     keepTerminalAlive || open,
+			Open:                  open,
 			GrokSyncOwnsEvents:    grokSyncOwnsEvents,
 			Stderr:                stderr,
 			Emit:                  emit,

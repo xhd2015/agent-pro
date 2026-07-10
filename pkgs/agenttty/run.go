@@ -31,14 +31,18 @@ type RunOptions struct {
 	AgentRunnerConfigHome string
 	BinaryPath            string
 	KeepTerminalAlive     bool
-	GrokSyncOwnsEvents    bool
-	Stderr                io.Writer
-	Emit                  func(types.AgentEvent) error
-	OnTerminalSessionID   func(string)
+	// Open is run --open: silent start, optional inject, auto-attach, no pre-attach id print.
+	Open               bool
+	GrokSyncOwnsEvents bool
+	Stderr             io.Writer
+	Emit               func(types.AgentEvent) error
+	OnTerminalSessionID func(string)
 }
 
 // RunHeadless starts a detached ttywatch serve session, injects the prompt, tails
 // agent events, and waits for the child to exit unless KeepTerminalAlive is set.
+// When Open is set, starts keep-alive, injects only if prompt non-empty, auto-attaches,
+// and returns after attach without printing the session id (caller prints after).
 func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, terminalSessionID string, err error) {
 	ensureStubRegistered()
 	runnerID := strings.TrimSpace(opts.RunnerID)
@@ -49,7 +53,10 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	if !ok {
 		return "", "", fmt.Errorf("unknown TTY runner: %s", runnerID)
 	}
-	if strings.TrimSpace(opts.Prompt) == "" {
+	if opts.Open {
+		opts.KeepTerminalAlive = true
+	}
+	if strings.TrimSpace(opts.Prompt) == "" && !opts.Open {
 		return "", "", fmt.Errorf("prompt is required")
 	}
 	if opts.Stderr == nil {
@@ -113,12 +120,19 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 		go dualWriteAfterRegistry(opts.Home, runnerID, opts.AgentSessionID, sessionID, provider)
 	}
 
-	fmt.Fprintf(opts.Stderr, "%s: %s\n", runnerID, sessionID)
+	// Open mode prints the id only after attach returns (caller responsibility).
+	if !opts.Open {
+		fmt.Fprintf(opts.Stderr, "%s: %s\n", runnerID, sessionID)
+	}
 
 	runStart := time.Now()
 	promptText := strings.TrimSpace(opts.Prompt)
 
-	if err := waitForBannerRemote(ctx, listenAddr, sessionID, provider.BannerProvider, provider.BannerMarkers); err != nil {
+	// Instant-attach test hook: do not block on provider-specific banner markers
+	// (open harness may use a shared fake TUI across grok-tty/codex-tty).
+	if opts.Open && os.Getenv("AGENT_RUN_OPEN_ATTACH_INSTANT") == "1" {
+		_ = waitForOpenReady(ctx, listenAddr, sessionID, 3*time.Second)
+	} else if err := waitForBannerRemote(ctx, listenAddr, sessionID, provider.BannerProvider, provider.BannerMarkers); err != nil {
 		return "", terminalSessionID, err
 	}
 
@@ -128,8 +142,32 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	case <-time.After(200 * time.Millisecond):
 	}
 
-	if err := ttywatch.SendMessage(listenAddr, sessionID, promptText, true); err != nil {
-		return "", terminalSessionID, err
+	// Empty prompt under --open: skip inject (no bare \r).
+	if promptText != "" {
+		if err := ttywatch.SendMessage(listenAddr, sessionID, promptText, true); err != nil {
+			return "", terminalSessionID, err
+		}
+	}
+
+	if opts.Open {
+		// Persist dual-write snapshot while keep-alive, then auto-attach.
+		if terminalSessionID != "" && opts.AgentSessionID != "" && result.Entry != nil {
+			_ = WriteTTYJSON(opts.Home, TTYSnapshot{
+				RunnerID:          runnerID,
+				AgentSessionID:    opts.AgentSessionID,
+				TerminalSessionID: terminalSessionID,
+				ListenAddr:        result.Entry.ListenAddr,
+				PID:               result.Entry.PID,
+				CreatedAt:         result.Entry.CreatedAt,
+				ScreenStatus:      "unknown",
+				Alive:             true,
+			})
+		}
+		if _, attachErr := ttywatch.AttachWriter(listenAddr, sessionID, "attach"); attachErr != nil {
+			return "", terminalSessionID, attachErr
+		}
+		// Leave PTY/registry alive for re-attach/send; do not wait for turn.
+		return "", terminalSessionID, nil
 	}
 
 	keepBlocking := false
@@ -388,4 +426,23 @@ func resolveBinaryPath(explicit string) (string, error) {
 		return os.Args[0], nil
 	}
 	return os.Executable()
+}
+
+// waitForOpenReady polls until scrollback has any content or timeout elapses.
+// Used under AGENT_RUN_OPEN_ATTACH_INSTANT so open does not hang on banner markers.
+func waitForOpenReady(ctx context.Context, listenAddr, sessionID string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		snapshot, err := ttywatch.SnapshotText(listenAddr, sessionID)
+		if err == nil && strings.TrimSpace(snapshot) != "" {
+			return nil
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return fmt.Errorf("open ready: scrollback empty after %s", timeout)
 }

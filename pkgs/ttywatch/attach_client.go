@@ -227,9 +227,18 @@ func (d *detachReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// envOpenAttachInstant is set by tests (AGENT_RUN_OPEN_ATTACH_INSTANT=1) so
+// run --open auto-attach returns without a controlling TTY.
+const envOpenAttachInstant = "AGENT_RUN_OPEN_ATTACH_INSTANT"
+
 // AttachWriter attaches stdin/stdout to a live terminal session.
 // Returns detached=true when the user pressed Ctrl-].
 func AttachWriter(listenAddr, sessionID, attachMode string) (detached bool, err error) {
+	// CI / doctest hook for agent-run run --open: skip interactive attach.
+	if os.Getenv(envOpenAttachInstant) == "1" {
+		debugLogf("attachWriter instant return session=%s listen=%s (AGENT_RUN_OPEN_ATTACH_INSTANT=1)", sessionID, listenAddr)
+		return true, nil
+	}
 	stdoutFile := os.Stdout
 	rawTTY := term.IsTerminal(int(stdoutFile.Fd()))
 	cols, rows := TTYAttachTerminalSize(stdoutFile)

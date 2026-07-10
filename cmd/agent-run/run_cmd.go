@@ -6,12 +6,13 @@ import (
 	"os"
 	"strings"
 
+	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 	"github.com/xhd2015/agent-pro/pkgs/agentui"
 	"github.com/xhd2015/less-gen/flags"
 )
 
 const runHelp = `
-Usage: agent-run run [OPTIONS] "prompt"
+Usage: agent-run run [OPTIONS] ["prompt"]
 
 Options:
   --json              stream NDJSON AgentEvent lines to stdout
@@ -19,6 +20,7 @@ Options:
   --session ID        session id
   --session-id-from-prompt   generate session id from prompt slug (storage + TTY registry)
   --keep-tty          keep TTY session alive after run completes
+  --open              open keep-alive TTY and attach interactively (silent until detach; prints session id after)
   --agent-runner RUNNER   codex, codex-tty, grok-tty, opencode, fake-codex, ...
   --agent-runner-binary SPEC
                       agent executable: bare name/path or shell-style "binary flags..."
@@ -37,11 +39,13 @@ func runHeadless(args []string, defaultRunner string) error {
 	var agentRunnerBinary string
 	var agentRunnerConfigHome string
 	var keepTTY bool
+	var openFlag bool
 	remaining, err := flags.Bool("--json", &jsonFlag).
 		String("--model", &model).
 		String("--session", &sessionID).
 		Bool("--session-id-from-prompt", &sessionIDFromPrompt).
 		Bool("--keep-tty", &keepTTY).
+		Bool("--open", &openFlag).
 		String("--agent-runner", &agentRunner).
 		String("--agent-runner-binary", &agentRunnerBinary).
 		String("--agent-runner-config-home", &agentRunnerConfigHome).
@@ -51,11 +55,14 @@ func runHeadless(args []string, defaultRunner string) error {
 		return err
 	}
 	prompt := strings.TrimSpace(strings.Join(remaining, " "))
-	if prompt == "" {
+	if prompt == "" && !openFlag {
 		return fmt.Errorf("prompt is required")
 	}
 	if sessionIDFromPrompt && strings.TrimSpace(sessionID) != "" {
 		return fmt.Errorf("--session and --session-id-from-prompt are mutually exclusive; cannot use both")
+	}
+	if openFlag && jsonFlag {
+		return fmt.Errorf("--open and --json are mutually exclusive; cannot use both")
 	}
 	runner := agentRunner
 	if runner == "" {
@@ -63,6 +70,9 @@ func runHeadless(args []string, defaultRunner string) error {
 	}
 	if err := validateRunner(runner); err != nil {
 		return err
+	}
+	if openFlag && !agenttty.IsTTYRunner(runner) {
+		return fmt.Errorf("--open requires a TTY runner (got %s); non-TTY runners like fake-codex are not supported", runner)
 	}
 	store, err := openStore()
 	if err != nil {
@@ -83,7 +93,8 @@ func runHeadless(args []string, defaultRunner string) error {
 		AgentRunnerBinary:     agentRunnerBinary,
 		AgentRunnerConfigHome: agentRunnerConfigHome,
 		JSON:                  jsonFlag,
-		KeepTerminalAlive:     keepTTY,
+		KeepTerminalAlive:     keepTTY || openFlag,
+		Open:                  openFlag,
 		Store:                 store,
 		Stdout:                os.Stdout,
 		Stderr:                os.Stderr,
