@@ -21,6 +21,7 @@ Options:
   --session-id-from-prompt   generate session id from prompt slug (storage + TTY registry)
   --keep-tty          keep TTY session alive after run completes
   --open              open keep-alive TTY and attach interactively (silent until detach; prints session id after)
+  --no-submit         with --open: inject prompt into TTY without trailing Enter (no auto-submit)
   --agent-runner RUNNER   codex, codex-tty, grok-tty, opencode, fake-codex, ...
   --agent-runner-binary SPEC
                       agent executable: bare name/path or shell-style "binary flags..."
@@ -40,12 +41,14 @@ func runHeadless(args []string, defaultRunner string) error {
 	var agentRunnerConfigHome string
 	var keepTTY bool
 	var openFlag bool
+	var noSubmit bool
 	remaining, err := flags.Bool("--json", &jsonFlag).
 		String("--model", &model).
 		String("--session", &sessionID).
 		Bool("--session-id-from-prompt", &sessionIDFromPrompt).
 		Bool("--keep-tty", &keepTTY).
 		Bool("--open", &openFlag).
+		Bool("--no-submit", &noSubmit).
 		String("--agent-runner", &agentRunner).
 		String("--agent-runner-binary", &agentRunnerBinary).
 		String("--agent-runner-config-home", &agentRunnerConfigHome).
@@ -63,6 +66,9 @@ func runHeadless(args []string, defaultRunner string) error {
 	}
 	if openFlag && jsonFlag {
 		return fmt.Errorf("--open and --json are mutually exclusive; cannot use both")
+	}
+	if noSubmit && !openFlag {
+		return fmt.Errorf("--no-submit requires --open")
 	}
 	runner := agentRunner
 	if runner == "" {
@@ -95,6 +101,7 @@ func runHeadless(args []string, defaultRunner string) error {
 		JSON:                  jsonFlag,
 		KeepTerminalAlive:     keepTTY || openFlag,
 		Open:                  openFlag,
+		NoSubmit:              noSubmit,
 		Store:                 store,
 		Stdout:                os.Stdout,
 		Stderr:                os.Stderr,

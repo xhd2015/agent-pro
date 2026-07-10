@@ -33,6 +33,8 @@ type RunOptions struct {
 	KeepTerminalAlive     bool
 	// Open is run --open: silent start, optional inject, auto-attach, no pre-attach id print.
 	Open               bool
+	// NoSubmit injects the prompt without trailing Enter (suffixCR=false). Used with Open.
+	NoSubmit           bool
 	GrokSyncOwnsEvents bool
 	Stderr             io.Writer
 	Emit               func(types.AgentEvent) error
@@ -143,8 +145,9 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	}
 
 	// Empty prompt under --open: skip inject (no bare \r).
+	// NoSubmit: inject without trailing Enter (suffixCR=false).
 	if promptText != "" {
-		if err := ttywatch.SendMessage(listenAddr, sessionID, promptText, true); err != nil {
+		if err := ttywatch.SendMessage(listenAddr, sessionID, promptText, !opts.NoSubmit); err != nil {
 			return "", terminalSessionID, err
 		}
 	}
@@ -182,7 +185,10 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 
 	var autoExitCancel context.CancelFunc
 	if isCodexProvider(provider.BannerProvider) || runnerID == "codex-tty" {
-		go retryCodexSubmitRemote(ctx, listenAddr, sessionID, promptText)
+		// NoSubmit must not force Enter via retry submit path.
+		if !opts.NoSubmit {
+			go retryCodexSubmitRemote(ctx, listenAddr, sessionID, promptText)
+		}
 		if !opts.KeepTerminalAlive {
 			autoExitCtx, cancel := context.WithCancel(ctx)
 			autoExitCancel = cancel
