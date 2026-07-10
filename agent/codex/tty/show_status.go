@@ -87,7 +87,10 @@ func FetchStatusWithOptions(ctx context.Context, opts Options) (*UsageInfo, erro
 		logCodexError("reserve_session", err, map[string]any{"session_id": sessionID})
 		return nil, err
 	}
-	defer release()
+	// Release the registry flock immediately after reservation so concurrent
+	// tty-watch / reserve peers are not blocked for the whole StartInProcess + wait.
+	// Claim/registry still protect the session id until session.Kill().
+	release()
 
 	session := ttywatch.NewEphemeralSession(home, sessionID, codexArgv)
 	session.ExtraPaths = extraPaths
