@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
@@ -23,6 +24,7 @@ Options:
   --keep-tty          keep TTY session alive after run completes
   --open              open keep-alive TTY and attach interactively (silent until detach; prints session id after)
   --no-submit         with --open: inject prompt into TTY without trailing Enter (no auto-submit)
+  --dir DIR           workspace directory (default: process cwd)
   --agent-runner RUNNER   codex, codex-tty, grok-tty, opencode, fake-codex, ...
   --agent-runner-binary SPEC
                       agent executable: bare name/path or shell-style "binary flags..."
@@ -43,6 +45,7 @@ func runHeadless(args []string, defaultRunner string) error {
 	var keepTTY bool
 	var openFlag bool
 	var noSubmit bool
+	var dir string
 	remaining, err := flags.Bool("--json", &jsonFlag).
 		String("--model", &model).
 		String("--session,--session-id", &sessionID).
@@ -50,6 +53,7 @@ func runHeadless(args []string, defaultRunner string) error {
 		Bool("--keep-tty", &keepTTY).
 		Bool("--open", &openFlag).
 		Bool("--no-submit", &noSubmit).
+		String("--dir", &dir).
 		String("--agent-runner", &agentRunner).
 		String("--agent-runner-binary", &agentRunnerBinary).
 		String("--agent-runner-config-home", &agentRunnerConfigHome).
@@ -70,6 +74,10 @@ func runHeadless(args []string, defaultRunner string) error {
 	}
 	if noSubmit && !openFlag {
 		return fmt.Errorf("--no-submit requires --open")
+	}
+	workspace, err := resolveRunDir(dir)
+	if err != nil {
+		return err
 	}
 	runner := agentRunner
 	if runner == "" {
@@ -100,6 +108,7 @@ func runHeadless(args []string, defaultRunner string) error {
 		AgentRunnerBinary:     agentRunnerBinary,
 		AgentRunnerConfigHome: agentRunnerConfigHome,
 		JSON:                  jsonFlag,
+		Workspace:             workspace,
 		KeepTerminalAlive:     keepTTY || openFlag,
 		Open:                  openFlag,
 		NoSubmit:              noSubmit,
@@ -107,4 +116,32 @@ func runHeadless(args []string, defaultRunner string) error {
 		Stdout:                os.Stdout,
 		Stderr:                os.Stderr,
 	})
+}
+
+// resolveRunDir validates --dir when set: resolve relative paths against process
+// cwd, require exists + directory, prefer EvalSymlinks. Empty means default
+// (agentui uses Getwd).
+func resolveRunDir(dir string) (string, error) {
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		return "", nil
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return "", fmt.Errorf("--dir: %w", err)
+	}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = resolved
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("--dir: path does not exist: %s", abs)
+		}
+		return "", fmt.Errorf("--dir: %w", err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("--dir: %s is not a directory", abs)
+	}
+	return abs, nil
 }

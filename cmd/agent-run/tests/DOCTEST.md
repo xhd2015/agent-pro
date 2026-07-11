@@ -13,7 +13,7 @@ headless `run`, localhost `web` API, and session storage under `AGENT_RUN_HOME`.
 ```
 agent-run [--agent-runner RUNNER] [--help]
 agent-run web [--port PORT] [--dev] [--token TOKEN] [--no-open] [--agent-runner RUNNER]
-agent-run run "prompt" [--json] [--model M] [--session ID] [--session-id-from-prompt] [--agent-runner RUNNER]
+agent-run run "prompt" [--json] [--model M] [--session ID] [--session-id-from-prompt] [--dir DIR] [--agent-runner RUNNER]
 agent-run attach <session-id>
 agent-run sessions [--json]
 agent-run sessions <runner>/<session_id> --print
@@ -73,6 +73,10 @@ cmd/agent-run/tests/
 │   ├── json-fake-codex-hi/          run --json --agent-runner fake-codex "hi"
 │   ├── events-persisted-to-home/    stdout NDJSON lines match events.jsonl
 │   ├── human-readable-no-json/      without --json, stdout not all JSON lines
+│   ├── dir/                         run --dir DIR workspace independent of process cwd
+│   │   ├── help/run-help-lists-dir/
+│   │   ├── with-dir/absolute|relative|invalid/
+│   │   └── without-dir/defaults-to-process-cwd/
 │   ├── session-id-from-prompt/             nested: --session-id-from-prompt + same-id TTY policy (see session-id-from-prompt/DOCTEST.md)
 │   ├── open/                        nested: run --open TTY silent attach (see open/DOCTEST.md)
 │   ├── agent-runner-binary/         nested: --agent-runner-binary SPEC (see agent-runner-binary/DOCTEST.md)

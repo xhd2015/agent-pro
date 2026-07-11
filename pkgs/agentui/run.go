@@ -77,6 +77,17 @@ func Run(ctx context.Context, opts RunOptions) error {
 		sessionID = fmt.Sprintf("sess_%d", os.Getpid())
 	}
 
+	// Resolve workspace before session create so meta.workspace is always set
+	// (explicit --dir / RunOptions.Workspace, or process cwd default).
+	workspace := strings.TrimSpace(opts.Workspace)
+	if workspace == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		workspace = wd
+	}
+
 	runnerSessionID := ""
 	if sess, err := opts.Store.GetSession(runner, sessionID); err == nil {
 		runnerSessionID = strings.TrimSpace(sess.Meta.RunnerSessionID)
@@ -88,9 +99,7 @@ func Run(ctx context.Context, opts RunOptions) error {
 			Status:        "running",
 			Model:         opts.Model,
 			InitialPrompt: strings.TrimSpace(opts.Prompt),
-		}
-		if strings.TrimSpace(opts.Workspace) != "" {
-			createMeta.Workspace = opts.Workspace
+			Workspace:     workspace,
 		}
 		_ = opts.Store.CreateSession(runner, sessionID, createMeta)
 	}
@@ -105,15 +114,6 @@ func Run(ctx context.Context, opts RunOptions) error {
 	stderr := opts.Stderr
 	if stderr == nil {
 		stderr = os.Stderr
-	}
-
-	workspace := opts.Workspace
-	if workspace == "" {
-		wd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		workspace = wd
 	}
 
 	env := agentexec.NewEnv(&agentexec.PathsConfig{
