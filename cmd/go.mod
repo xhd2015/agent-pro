@@ -7,10 +7,12 @@ replace github.com/xhd2015/agent-pro => ..
 require (
 	github.com/creack/pty v1.1.24
 	github.com/gorilla/websocket v1.5.3
+	github.com/slack-go/slack v0.27.0
 	github.com/xhd2015/agent-pro v0.0.0-00010101000000-000000000000
-	github.com/xhd2015/dot-pkgs/go-pkgs v0.0.51
+	github.com/xhd2015/dot-pkgs/go-pkgs v0.0.68
+	github.com/xhd2015/less-flags v1.0.1
 	github.com/xhd2015/less-gen v0.0.19
-	github.com/xhd2015/skills v0.0.12
+	github.com/xhd2015/skills v0.0.16
 	golang.org/x/term v0.43.0
 )
 
