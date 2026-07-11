@@ -157,6 +157,12 @@ func readScreenSnapshotFrameOnce(listenAddr, sessionID string, deadline time.Tim
 	}
 	defer conn.Close()
 
+	// Snapshot servers may emit more than one binary frame before closing:
+	// older ptywrap wrote an alt-screen reset prefix then raw scrollback as a
+	// second message. Returning only the first frame left SnapshotText empty
+	// ("\x1b[?1049l\x1b[0m"). Drain until close; prefer a true screen frame.
+	var chunks [][]byte
+	gotBinary := false
 	for time.Now().Before(deadline) {
 		remain := time.Until(deadline)
 		readWait := 2 * time.Second
@@ -164,7 +170,7 @@ func readScreenSnapshotFrameOnce(listenAddr, sessionID string, deadline time.Tim
 			readWait = remain
 		}
 		if readWait <= 0 {
-			return "", cols, rows, false, nil
+			break
 		}
 
 		_ = conn.SetReadDeadline(time.Now().Add(readWait))
@@ -172,9 +178,19 @@ func readScreenSnapshotFrameOnce(listenAddr, sessionID string, deadline time.Tim
 		if err != nil {
 			if ne, ok := err.(interface{ Timeout() bool }); ok && ne.Timeout() {
 				// Gorilla marks the connection corrupt after any read error; redial instead of retrying.
+				if gotBinary {
+					return joinSnapshotBinaryFrames(chunks), cols, rows, true, nil
+				}
 				return "", cols, rows, false, nil
 			}
-			return "", cols, rows, false, normalizeTerminalReadError(err)
+			if nerr := normalizeTerminalReadError(err); nerr != nil {
+				return "", cols, rows, false, nerr
+			}
+			// Clean close / EOF: snapshot role closes after sendInitialFrame.
+			if gotBinary {
+				return joinSnapshotBinaryFrames(chunks), cols, rows, true, nil
+			}
+			return "", cols, rows, false, nil
 		}
 		switch msgType {
 		case websocket.TextMessage:
@@ -184,10 +200,47 @@ func readScreenSnapshotFrameOnce(listenAddr, sessionID string, deadline time.Tim
 				cols, rows = parseAttachRoleDimensions(data, cols, rows)
 			}
 		case websocket.BinaryMessage:
-			return string(data), cols, rows, true, nil
+			if len(data) == 0 {
+				continue
+			}
+			gotBinary = true
+			// Prefer a single rendered screen-snapshot frame when present.
+			if isScreenSnapshotFrame(data) {
+				return string(data), cols, rows, true, nil
+			}
+			chunks = append(chunks, append([]byte(nil), data...))
 		}
 	}
+	if gotBinary {
+		return joinSnapshotBinaryFrames(chunks), cols, rows, true, nil
+	}
 	return "", cols, rows, false, nil
+}
+
+// joinSnapshotBinaryFrames concatenates multi-part snapshot binary payloads.
+// When any chunk is a full screen-snapshot frame, prefer the last such chunk.
+func joinSnapshotBinaryFrames(chunks [][]byte) string {
+	if len(chunks) == 0 {
+		return ""
+	}
+	var lastScreen []byte
+	for _, c := range chunks {
+		if isScreenSnapshotFrame(c) {
+			lastScreen = c
+		}
+	}
+	if lastScreen != nil {
+		return string(lastScreen)
+	}
+	var total int
+	for _, c := range chunks {
+		total += len(c)
+	}
+	out := make([]byte, 0, total)
+	for _, c := range chunks {
+		out = append(out, c...)
+	}
+	return string(out)
 }
 
 func readSnapshotScrollback(listenAddr, sessionID string) (string, int, int, error) {
