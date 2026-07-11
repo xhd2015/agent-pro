@@ -39,9 +39,14 @@ agent-run run --session my-task "prompt"
 
 # mutual exclusion
 agent-run run --session X --session-id-from-prompt "p" -> error, exit ≠ 0
+agent-run run --session-id X --session-id-from-prompt "p" -> error, exit ≠ 0
+
+# --session-id alias of --session (AR1)
+agent-run run --session-id my-task "prompt"
+  -> same storage id as --session my-task
 
 # help
-agent-run run --help -> documents --session-id-from-prompt
+agent-run run --help -> documents --session-id-from-prompt and --session-id
 ```
 
 Conflict (id taken) when storage already has `sessions/<runner>/<id>/` (meta
@@ -58,9 +63,11 @@ cmd/agent-run/tests/run/session-id-from-prompt/
 ├── DOCTEST.md
 ├── SETUP.md
 ├── help/
-│   └── run-help-lists-flag/              # run --help documents --session-id-from-prompt
+│   ├── run-help-lists-flag/              # run --help documents --session-id-from-prompt
+│   └── run-help-lists-session-id/        # run --help documents --session-id alias (AR1)
 ├── flag-conflict/
-│   └── session-and-auto/                 # --session + --session-id-from-prompt → error
+│   ├── session-and-auto/                 # --session + --session-id-from-prompt → error
+│   └── session-id-and-auto/              # --session-id + --session-id-from-prompt → error
 ├── auto-id/                              # --session-id-from-prompt set; --session unset
 │   ├── non-tty/                          # fake-codex (storage only)
 │   │   ├── storage-id-from-prompt-slug/  # storage dir + id shape from prompt
@@ -71,8 +78,9 @@ cmd/agent-run/tests/run/session-id-from-prompt/
 │   └── tty/                              # grok-tty (storage + registry same id)
 │       ├── same-id-storage-registry-meta/# stderr, storage, meta, registry agree
 │       └── storage-collision-suffix/     # TTY auto-id also gets -N on storage clash
-└── explicit-session/                     # --session set; --session-id-from-prompt unset
-    ├── non-tty-storage-id/               # storage uses explicit id
+└── explicit-session/                     # --session / --session-id set; auto unset
+    ├── non-tty-storage-id/               # storage uses explicit --session id
+    ├── non-tty-session-id-alias/         # AR1 --session-id same as --session
     └── tty-same-id-registry-meta/        # TTY registry/stderr/meta use same explicit id
 ```
 
@@ -87,16 +95,19 @@ Parameter ranking (most → least significant):
 | # | Leaf | Description |
 |---|------|-------------|
 | 1 | `help/run-help-lists-flag` | `run --help` lists `--session-id-from-prompt`; stdout ends with `\n` |
-| 2 | `flag-conflict/session-and-auto` | Both flags → exit ≠ 0; clear stderr error |
-| 3 | `auto-id/non-tty/storage-id-from-prompt-slug` | Storage under `sessions/fake-codex/<slug-ts…>/`; id matches shape |
-| 4 | `auto-id/non-tty/punctuation-slug` | `"Hello, World!!"` → base `hello-world` + timestamp |
-| 5 | `auto-id/non-tty/long-prompt-truncates-base` | Base portion ≤ 128 runes before `-YYYYMMDD-HHMMSS` |
-| 6 | `auto-id/non-tty/empty-slug-uses-fallback-base` | Punctuation-only prompt → base `sess` or `task` |
-| 7 | `auto-id/non-tty/storage-collision-suffix` | Pre-seed storage for nearby timestamps → id ends with `-N` |
-| 8 | `auto-id/tty/same-id-storage-registry-meta` | stderr `grok-tty: <id>` == storage dir == meta == registry |
-| 9 | `auto-id/tty/storage-collision-suffix` | TTY auto-id collision appends `-N`; storage and registry share it |
-| 10 | `explicit-session/non-tty-storage-id` | `--session my-task` → `sessions/fake-codex/my-task/` |
-| 11 | `explicit-session/tty-same-id-registry-meta` | `--session my-task` on grok-tty → same id on stderr/storage/registry/meta |
+| 2 | `help/run-help-lists-session-id` | `run --help` lists `--session-id` alias (AR1) |
+| 3 | `flag-conflict/session-and-auto` | `--session` + auto → exit ≠ 0 |
+| 4 | `flag-conflict/session-id-and-auto` | `--session-id` + auto → exit ≠ 0 |
+| 5 | `auto-id/non-tty/storage-id-from-prompt-slug` | Storage under `sessions/fake-codex/<slug-ts…>/`; id matches shape |
+| 6 | `auto-id/non-tty/punctuation-slug` | `"Hello, World!!"` → base `hello-world` + timestamp |
+| 7 | `auto-id/non-tty/long-prompt-truncates-base` | Base portion ≤ 128 runes before `-YYYYMMDD-HHMMSS` |
+| 8 | `auto-id/non-tty/empty-slug-uses-fallback-base` | Punctuation-only prompt → base `sess` or `task` |
+| 9 | `auto-id/non-tty/storage-collision-suffix` | Pre-seed storage for nearby timestamps → id ends with `-N` |
+| 10 | `auto-id/tty/same-id-storage-registry-meta` | stderr `grok-tty: <id>` == storage dir == meta == registry |
+| 11 | `auto-id/tty/storage-collision-suffix` | TTY auto-id collision appends `-N`; storage and registry share it |
+| 12 | `explicit-session/non-tty-storage-id` | `--session my-task` → `sessions/fake-codex/my-task/` |
+| 13 | `explicit-session/non-tty-session-id-alias` | AR1 `--session-id my-task` same storage as `--session` |
+| 14 | `explicit-session/tty-same-id-registry-meta` | `--session my-task` on grok-tty → same id on stderr/storage/registry/meta |
 
 ## How to Run
 

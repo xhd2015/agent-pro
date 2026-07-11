@@ -18,6 +18,7 @@ Options:
   --json              stream NDJSON AgentEvent lines to stdout
   --model MODEL       model name
   --session ID        session id
+  --session-id ID     alias for --session
   --session-id-from-prompt   generate session id from prompt slug (storage + TTY registry)
   --keep-tty          keep TTY session alive after run completes
   --open              open keep-alive TTY and attach interactively (silent until detach; prints session id after)
@@ -44,7 +45,7 @@ func runHeadless(args []string, defaultRunner string) error {
 	var noSubmit bool
 	remaining, err := flags.Bool("--json", &jsonFlag).
 		String("--model", &model).
-		String("--session", &sessionID).
+		String("--session,--session-id", &sessionID).
 		Bool("--session-id-from-prompt", &sessionIDFromPrompt).
 		Bool("--keep-tty", &keepTTY).
 		Bool("--open", &openFlag).
@@ -62,7 +63,7 @@ func runHeadless(args []string, defaultRunner string) error {
 		return fmt.Errorf("prompt is required")
 	}
 	if sessionIDFromPrompt && strings.TrimSpace(sessionID) != "" {
-		return fmt.Errorf("--session and --session-id-from-prompt are mutually exclusive; cannot use both")
+		return fmt.Errorf("--session/--session-id and --session-id-from-prompt are mutually exclusive; cannot use both")
 	}
 	if openFlag && jsonFlag {
 		return fmt.Errorf("--open and --json are mutually exclusive; cannot use both")
