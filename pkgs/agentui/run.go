@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -58,6 +59,7 @@ func Run(ctx context.Context, opts RunOptions) error {
 	if strings.TrimSpace(opts.Prompt) == "" && !opts.Open {
 		return fmt.Errorf("prompt is required")
 	}
+	runStart := time.Now()
 	runner := strings.TrimSpace(opts.Runner)
 	if runner == "" {
 		cfg, err := opts.Store.Config()
@@ -182,9 +184,16 @@ func Run(ctx context.Context, opts RunOptions) error {
 			_ = opts.Store.UpdateSessionStatus(runner, sessionID, "error")
 			return runErr
 		}
-		// After attach returns: print once on stderr; leave session running/alive.
-		if id := strings.TrimSpace(newTerminalSessionID); id != "" {
-			_, _ = fmt.Fprintf(stderr, "%s: %s\n", runner, id)
+		// After attach returns: print terminal id, then finalize grok session bind.
+		termID := strings.TrimSpace(newTerminalSessionID)
+		if termID != "" {
+			_, _ = fmt.Fprintf(stderr, "%s: %s\n", runner, termID)
+		}
+		if runner == "grok-tty" {
+			if err := finalizeOpenGrokSession(ctx, opts, runner, sessionID, workspace, runnerPrompt, runStart, strings.TrimSpace(newRunnerSessionID), stderr); err != nil {
+				_ = opts.Store.UpdateSessionStatus(runner, sessionID, "error")
+				return err
+			}
 		}
 		return nil
 	}
@@ -209,6 +218,74 @@ func Run(ctx context.Context, opts RunOptions) error {
 		_ = opts.Store.UpdateSessionStatus(runner, sessionID, status)
 	}
 	return runErr
+}
+
+// finalizeOpenGrokSession discovers the provider grok session after --open attach
+// returns, persists runner_session_id, and prints the same stderr lines as non-open run.
+//
+// When discovery is "expected" (explicit GROK_HOME / config home / session-id hook),
+// failure is a hard error. Otherwise discovery is best-effort so legacy --open
+// lifecycle (fake TUI without a real grok home) still exits 0 after printing the
+// terminal id.
+func finalizeOpenGrokSession(ctx context.Context, opts RunOptions, runner, sessionID, workspace, prompt string, runStart time.Time, knownID string, stderr io.Writer) error {
+	grokHome := agenttty.GrokHomeForRunner(opts.AgentRunnerConfigHome)
+	requireBind := openGrokDiscoveryRequired(opts)
+	id := strings.TrimSpace(knownID)
+	updatesPath := ""
+	if id != "" {
+		if path, ok := agenttty.FindUpdatesBySessionID(grokHome, workspace, id); ok {
+			updatesPath = path
+		}
+	}
+	if id == "" || updatesPath == "" {
+		// Short grace for on-disk session materialization (or env session-id hook).
+		timeout := 5 * time.Second
+		if !requireBind {
+			// Best-effort: fail fast when no config home / hook is configured.
+			timeout = 750 * time.Millisecond
+		}
+		discCtx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		// Prefer original user prompt for matching; fall back to continuation prompt.
+		discoverPrompt := strings.TrimSpace(opts.Prompt)
+		if discoverPrompt == "" {
+			discoverPrompt = strings.TrimSpace(prompt)
+		}
+		discID, path, discErr := agenttty.DiscoverSession(discCtx, grokHome, workspace, discoverPrompt, runStart)
+		if discErr != nil || strings.TrimSpace(discID) == "" {
+			if requireBind {
+				return fmt.Errorf("error: grok session id not resolved for session %s", sessionID)
+			}
+			// Soft success: terminal id already printed by caller.
+			return nil
+		}
+		id = strings.TrimSpace(discID)
+		updatesPath = path
+	}
+	if abs, absErr := filepath.Abs(updatesPath); absErr == nil {
+		updatesPath = abs
+	}
+	_ = opts.Store.UpdateSessionRunnerSessionID(runner, sessionID, id)
+	_, _ = fmt.Fprintf(stderr, "grok-tty: grok session %s\n", id)
+	_, _ = fmt.Fprintf(stderr, "grok-tty: grok updates %s\n", updatesPath)
+	return nil
+}
+
+// openGrokDiscoveryRequired reports whether --open must resolve a grok session id.
+func openGrokDiscoveryRequired(opts RunOptions) bool {
+	if strings.TrimSpace(opts.AgentRunnerConfigHome) != "" {
+		return true
+	}
+	if strings.TrimSpace(os.Getenv("GROK_HOME")) != "" {
+		return true
+	}
+	if strings.TrimSpace(os.Getenv("AGENT_RUNNER_CONFIG_HOME")) != "" {
+		return true
+	}
+	if strings.TrimSpace(os.Getenv("AGENT_RUN_GROK_TTY_GROK_SESSION_ID")) != "" {
+		return true
+	}
+	return false
 }
 
 // streamRunner runs the selected agent. ttySessionID is the custom terminal

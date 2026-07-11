@@ -180,8 +180,24 @@ func serveChildEnv(base []string, opts HeadlessRunOptions) []string {
 	}
 	if opts.KeepAlive {
 		env = setEnvVar(env, envTTYWatchKeepAlive, "1")
+	} else {
+		// Explicitly clear ambient TTY_WATCH_KEEP_ALIVE so a parent process that
+		// exported keep-alive does not force detached serve children to linger.
+		env = withoutEnvVar(env, envTTYWatchKeepAlive)
 	}
 	return env
+}
+
+func withoutEnvVar(env []string, key string) []string {
+	prefix := key + "="
+	out := make([]string, 0, len(env))
+	for _, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			continue
+		}
+		out = append(out, entry)
+	}
+	return out
 }
 
 func setEnvVar(env []string, key, value string) []string {

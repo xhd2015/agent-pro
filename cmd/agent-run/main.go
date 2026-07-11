@@ -16,13 +16,14 @@ Usage: agent-run [--agent-runner RUNNER] [--help]
 Commands:
   web        start localhost web UI and API
   run        headless one-shot agent invocation
+  resume     resume a finished session (run shortcut with provider --resume)
   attach     attach to a live grok-tty or codex-tty session by id
   send       send a message to a live grok-tty or codex-tty session by id
   msg        inspect or cancel queued send messages
   snapshot   print a sanitized snapshot of a live TTY session by id
   watch      stream readonly output from a live TTY session by id
   sessions   list stored sessions or print one session's events
-  status     show agent-run status
+  status     show agent-run home or multi-layer session status
 
 Options:
   --agent-runner RUNNER   default agent runner (codex, codex-tty, grok-tty, opencode, fake-codex, ...)
@@ -76,6 +77,8 @@ func run(args []string) error {
 		return runWeb(sub, agentRunner)
 	case "run":
 		return runHeadless(sub, agentRunner)
+	case "resume":
+		return runResume(sub, agentRunner)
 	case "attach":
 		return runAttach(sub)
 	case "send":

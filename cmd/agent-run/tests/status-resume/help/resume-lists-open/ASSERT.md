@@ -1,0 +1,33 @@
+## Expected
+
+- Exit code 0 (help is success, even if resume is newly added).
+- Stdout contains `--open`.
+- Stdout mentions session id / followup positional usage.
+- Stdout ends with trailing newline `\n`.
+
+## Exit Code
+
+0
+
+```go
+import (
+	"strings"
+	"testing"
+)
+
+func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertSuccess(t, resp)
+	assertContains(t, resp.Stdout, "--open")
+	out := strings.ToLower(resp.Stdout)
+	assertContainsAny(t, out,
+		"session",
+		"session-id",
+		"session id",
+		"<session",
+	)
+	assertTrailingNewline(t, resp.Stdout, "resume help stdout")
+}
+```
