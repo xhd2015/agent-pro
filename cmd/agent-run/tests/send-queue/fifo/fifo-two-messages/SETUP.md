@@ -1,14 +1,15 @@
 # Scenario
 
-**Feature**: two no-wait enqueues deliver in FIFO order
+**Feature**: A2 — two `--no-wait` enqueues deliver FIFO without a blocking trigger send
 
 ```
---no-wait A -> --no-wait B -> blocking trigger -> inject A then B
+--no-wait A -> --no-wait B -> (CLI done) session drainer -> inject A then B
 ```
 
 ## Steps
 
 1. Leaf uses default `fifo` operation (no extra Setup fields).
+2. Harness must not issue a third default/blocking send to "wake" a CLI drainer.
 
 ```go
 import "time"

@@ -58,6 +58,7 @@ On successful enqueue, prints the session-local message id (msg_1, msg_2, …) t
 Options:
   --no-wait            enqueue and exit immediately without waiting for delivery
   --max-wait DURATION  enqueue, print id, then wait up to DURATION for delivery
+  --no-submit          inject without trailing Enter (no auto-submit); stored on queue entry
   -h, --help           show help
 `
 
@@ -250,8 +251,10 @@ func runTtyAttach(args []string) error {
 func runTtySend(args []string) error {
 	var noWait bool
 	var maxWait time.Duration
+	var noSubmit bool
 	remaining, err := flags.Bool("--no-wait", &noWait).
 		Duration("--max-wait", &maxWait).
+		Bool("--no-submit", &noSubmit).
 		Help("-h,--help", ttySendHelp).
 		Parse(args)
 	if err != nil {
@@ -297,7 +300,7 @@ func runTtySend(args []string) error {
 	}
 
 	enqueuedAt := time.Now()
-	id, err := agentsend.Enqueue(home, sess, message)
+	id, err := agentsend.EnqueueWith(home, sess, message, agentsend.EnqueueOptions{NoSubmit: noSubmit})
 	if err != nil {
 		return err
 	}

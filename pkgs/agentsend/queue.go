@@ -17,6 +17,8 @@ type Entry struct {
 	TerminalSessionID string    `json:"terminal_session_id"`
 	Runner            string    `json:"runner"`
 	EnqueuedAt        time.Time `json:"enqueued_at"`
+	// NoSubmit: when true, drain injects without trailing Enter / forced grok \n.
+	NoSubmit bool `json:"no_submit,omitempty"`
 }
 
 // Session identifies a live terminal send queue.

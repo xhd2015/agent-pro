@@ -1,6 +1,7 @@
 package agentsend
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -8,8 +9,12 @@ import (
 	"github.com/xhd2015/agent-pro/pkgs/ttywatch"
 )
 
+const sessionDrainerIdlePoll = 150 * time.Millisecond
+
 // StartDrainer launches a background loop that elects a drainer via flock and
 // delivers pending messages FIFO when the terminal becomes writable.
+// The loop exits when the queue is empty or a drain step fails unrecoverably.
+// Prefer RunSessionDrainer for session-owned consumers that must survive empty queues.
 func StartDrainer(home string, sess Session, provider agenttty.Provider) {
 	go func() {
 		for {
@@ -18,6 +23,45 @@ func StartDrainer(home string, sess Session, provider agenttty.Provider) {
 			}
 		}
 	}()
+}
+
+// StartSessionDrainer starts RunSessionDrainer in a new goroutine.
+func StartSessionDrainer(ctx context.Context, home string, sess Session, provider agenttty.Provider) {
+	go RunSessionDrainer(ctx, home, sess, provider)
+}
+
+// RunSessionDrainer is a durable session-owned queue consumer. It reuses drainStep
+// (flock + WaitUntilWritable + SendMessage + FIFO dequeue) and keeps polling while
+// the queue is empty until ctx is cancelled. Intended to run inside the live TTY
+// serve process so --no-wait enqueues deliver without a blocking CLI send.
+func RunSessionDrainer(ctx context.Context, home string, sess Session, provider agenttty.Provider) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		if !queueHasWork(home, sess) {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(sessionDrainerIdlePoll):
+			}
+			continue
+		}
+
+		more := drainStep(home, sess, provider)
+		if more {
+			continue
+		}
+		// Empty after delivery, lock failure, or transient error — brief backoff.
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(sessionDrainerIdlePoll):
+		}
+	}
 }
 
 func drainStep(home string, sess Session, provider agenttty.Provider) bool {
@@ -55,10 +99,13 @@ func drainStep(home string, sess Session, provider agenttty.Provider) bool {
 	}
 
 	payload := current.Text
-	if sess.Runner == "grok-tty" && !strings.Contains(payload, "\n") {
+	submit := !current.NoSubmit
+	// Grok prompt box expects a trailing newline before Enter when auto-submitting.
+	// When NoSubmit, leave text as-is (no forced \n) and do not send trailing Enter.
+	if submit && sess.Runner == "grok-tty" && !strings.Contains(payload, "\n") {
 		payload += "\n"
 	}
-	if err := ttywatch.SendMessage(sess.ListenAddr, sess.TerminalSessionID, payload, true); err != nil {
+	if err := ttywatch.SendMessage(sess.ListenAddr, sess.TerminalSessionID, payload, submit); err != nil {
 		return true
 	}
 	if err := dequeueHead(path); err != nil {

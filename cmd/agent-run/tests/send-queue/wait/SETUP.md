@@ -1,10 +1,10 @@
 # Scenario
 
-**Feature**: send wait modes control blocking and timeout behavior
+**Feature**: send wait modes control CLI blocking and timeout behavior (REG)
 
 ```
-default -> poll until msg_N delivered
---no-wait -> return immediately after enqueue
+default -> enqueue + poll until msg_N absent (session TTY drainer delivers)
+--no-wait -> return immediately after enqueue (return-before-inject on busy)
 --max-wait DURATION -> wall-clock timeout removes only caller message
 ```
 
@@ -12,6 +12,7 @@ default -> poll until msg_N delivered
 
 - Stub-tty scenario controls busy vs idle writable state.
 - Queue file inspectable under `send-queue/<runner>/<session-id>.jsonl`.
+- Eventual `--no-wait` delivery without CLI lifetime is covered under `tty-drainer/`.
 
 ## Steps
 

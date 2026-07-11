@@ -21,6 +21,11 @@ type ServeOptions struct {
 	Cwd            string
 	ExtraPaths     []string
 	KeepAlive      bool
+	// OnListening is invoked in a goroutine after the PTY session is created and
+	// the registry entry is written. ctx is cancelled when the serve session ends.
+	// listenAddr is the bound HTTP listen address; home and registrySubdir are the
+	// resolved registry location for this serve process.
+	OnListening func(ctx context.Context, listenAddr, home, registrySubdir string)
 }
 
 func serveKeepAlive(opts ServeOptions) bool {
@@ -102,6 +107,15 @@ func ServeSession(ctx context.Context, opts ServeOptions) error {
 		return err
 	}
 
+	// Session-scoped cancel so OnListening consumers (e.g. send-queue drainer)
+	// stop when this serve exits, even if the parent ctx is never cancelled.
+	serveCtx, serveCancel := context.WithCancel(ctx)
+	defer serveCancel()
+
+	if opts.OnListening != nil {
+		go opts.OnListening(serveCtx, listenAddr, home, cfg.Subdir)
+	}
+
 	waitDone := make(chan struct{})
 	go func() {
 		_ = mgr.Wait(opts.SessionID)
@@ -110,6 +124,7 @@ func ServeSession(ctx context.Context, opts ServeOptions) error {
 
 	select {
 	case <-ctx.Done():
+		serveCancel()
 		mgr.Remove(opts.SessionID)
 		shutdown()
 		RemoveRegistryIfMatch(cfg, opts.SessionID, listenAddr, entry.PID)
@@ -121,12 +136,14 @@ func ServeSession(ctx context.Context, opts ServeOptions) error {
 		// Keep the ptywrap server and registry reachable after the PTY child exits
 		// so web/CLI attach can replay scrollback on finished keep-tty sessions.
 		<-ctx.Done()
+		serveCancel()
 		shutdown()
 		mgr.Remove(opts.SessionID)
 		RemoveRegistryIfMatch(cfg, opts.SessionID, listenAddr, entry.PID)
 		return ctx.Err()
 	}
 
+	serveCancel()
 	const writerAttachGrace = 2 * time.Second
 	time.Sleep(writerAttachGrace)
 	shutdown()

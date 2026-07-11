@@ -1,16 +1,25 @@
 # Scenario
 
-**Feature**: agent-run send queue with session-local message ids
+**Feature**: agent-run send queue with session-local message ids and TTY-owned drainer
 
 ```
-agent-run send <session-id> "msg" -> agentsend.Enqueue -> stdout msg_N -> drainer -> ttywatch.SendMessage
+# CLI enqueues only (wait modes poll status; --no-wait exits after enqueue)
+agent-run send <session-id> "msg" [--no-wait|--max-wait D] -> agentsend.Enqueue -> stdout msg_N
+
+# Long-lived TTY serve owns the queue consumer for this terminalSessionID
+stub-tty ServeSession -> StartSessionDrainer(home, Session{Runner, TerminalSessionID}, provider)
+  -> loop drainStep (flock + WaitUntilWritable + SendMessage) until session ctx done
+
+# Status / cancel operate on the same per-session queue
 agent-run msg status|cancel <session-id>/msg_N -> agentsend.MessageStatus / Cancel
 ```
 
 ## Preconditions
 
-- Package `pkgs/agentsend` implements per-session JSONL queue (may not exist yet — tests RED).
+- Package `pkgs/agentsend` implements per-session JSONL queue.
 - Repository contains `cmd/agent-run` with `send` / `tty send` wired to agentsend.
+- Session-owned drainer starts from TTY serve (`ServeSession` / headless `__serve__`),
+  not from CLI process lifetime — required for A1/A2/A3 `--no-wait` delivery.
 - Each test uses isolated `AGENT_RUN_HOME=filepath.Join(t.TempDir(), ".agent-run")`.
 - Live-session tests set `AGENT_RUN_ENABLE_STUB_TTY=1` and start background stub-tty.
 - Queue files live at `AGENT_RUN_HOME/send-queue/<runner>/<terminal_session_id>.jsonl`.
@@ -61,8 +70,10 @@ func Setup(t *testing.T, req *Request) error {
 	if err := os.MkdirAll(filepath.Dir(req.AgentRun), 0755); err != nil {
 		return fmt.Errorf("mkdir bin: %w", err)
 	}
-	build := exec.Command("go", "build", "-o", req.AgentRun, "./cmd/agent-run")
-	build.Dir = req.RepoRoot
+	// agent-run is in the cmd module (cmd/go.mod), package ./agent-run — not root go.mod.
+	build := exec.Command("go", "build", "-o", req.AgentRun, "./agent-run")
+	build.Dir = filepath.Join(req.RepoRoot, "cmd")
+	build.Env = append(os.Environ(), "GOWORK=off")
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("build agent-run: %w\n%s", err, string(out))
 	}
@@ -80,6 +91,8 @@ func runSendQueueOp(t *testing.T, req *Request) (*Response, error) {
 		return runEnqueueOp(t, req)
 	case "wait":
 		return runWaitOp(t, req)
+	case "tty-drainer":
+		return runTTYDrainerOp(t, req)
 	case "fifo":
 		return runFifoOp(t, req)
 	case "cancel":
@@ -202,24 +215,86 @@ func runWaitOp(t *testing.T, req *Request) (*Response, error) {
 	}
 }
 
+func runTTYDrainerOp(t *testing.T, req *Request) (*Response, error) {
+	resp := &Response{}
+	switch req.Action {
+	case "no-wait-idle-delivers-after-cli-exits":
+		// A1: idle session; only --no-wait; CLI process fully exits; TTY-side drains.
+		startIdleStubSession(t, req)
+		capture := startInjectionCapture(t, req)
+		defer injectionCaptureStop(capture)
+		start := time.Now()
+		sendResp, err := execSend(t, req, req.SendMessage, "--no-wait")
+		resp.SendDuration = time.Since(start)
+		if err != nil {
+			return resp, err
+		}
+		copySendResp(resp, sendResp)
+		resp.MsgID = strings.TrimSpace(resp.Stdout)
+		// execSend Wait returned → CLI fully exited; no blocking send follows.
+		resp.InjectedMessages = injectionCaptureWaitFor(capture, req.SendMessage, 15*time.Second)
+		ref := sessionMessageRef(req.TerminalSessionID, resp.MsgID)
+		statusAfter, err := execAgentRun(t, req, "msg", "status", ref)
+		if err != nil {
+			return resp, err
+		}
+		resp.StatusAfterStdout = statusAfter.Stdout
+		resp.QueueFilePath = queueFilePath(req.Home, req.RunnerID, req.TerminalSessionID)
+		resp.QueueHasMsgID = queueContainsMsgID(t, resp.QueueFilePath, resp.MsgID)
+		return resp, nil
+	case "busy-no-wait-delivers-when-idle":
+		// A3: permanently busy first; --no-wait returns fast; busy→idle injects via TTY drainer.
+		req.StubScenarioJSON = stubScenarioBusyThenIdleJSON()
+		startIdleStubSession(t, req)
+		capture := startInjectionCapture(t, req)
+		defer injectionCaptureStop(capture)
+		start := time.Now()
+		sendResp, err := execSend(t, req, req.SendMessage, "--no-wait")
+		resp.SendDuration = time.Since(start)
+		if err != nil {
+			return resp, err
+		}
+		copySendResp(resp, sendResp)
+		resp.MsgID = strings.TrimSpace(resp.Stdout)
+		// No blocking send: wait only for session-owned drainer after writable transition (~12s).
+		resp.InjectedMessages = injectionCaptureWaitFor(capture, req.SendMessage, 25*time.Second)
+		ref := sessionMessageRef(req.TerminalSessionID, resp.MsgID)
+		statusAfter, err := execAgentRun(t, req, "msg", "status", ref)
+		if err != nil {
+			return resp, err
+		}
+		resp.StatusAfterStdout = statusAfter.Stdout
+		resp.QueueFilePath = queueFilePath(req.Home, req.RunnerID, req.TerminalSessionID)
+		resp.QueueHasMsgID = queueContainsMsgID(t, resp.QueueFilePath, resp.MsgID)
+		return resp, nil
+	default:
+		return nil, fmt.Errorf("unknown tty-drainer action %q", req.Action)
+	}
+}
+
 func runFifoOp(t *testing.T, req *Request) (*Response, error) {
+	// A2: two --no-wait enqueues only — session-owned TTY drainer delivers FIFO without
+	// a third blocking "trigger" send (old CLI-elected-drainer harness).
 	resp := &Response{}
 	startIdleStubSession(t, req)
 	capture := startInjectionCapture(t, req)
 	defer injectionCaptureStop(capture)
 	msgA := "fifo-message-A"
 	msgB := "fifo-message-B"
-	if _, err := execSend(t, req, msgA, "--no-wait"); err != nil {
-		return resp, err
-	}
-	if _, err := execSend(t, req, msgB, "--no-wait"); err != nil {
-		return resp, err
-	}
-	sendResp, err := execSend(t, req, "fifo-trigger")
+	first, err := execSend(t, req, msgA, "--no-wait")
 	if err != nil {
 		return resp, err
 	}
-	copySendResp(resp, sendResp)
+	if first.ExitCode != 0 {
+		return resp, fmt.Errorf("first --no-wait send failed: exit=%d stderr=%s", first.ExitCode, first.Stderr)
+	}
+	second, err := execSend(t, req, msgB, "--no-wait")
+	if err != nil {
+		return resp, err
+	}
+	copySendResp(resp, second)
+	resp.SecondStdout = first.Stdout
+	resp.SecondMsgID = strings.TrimSpace(second.Stdout)
 	order := injectionCaptureWaitForOrdered(capture, []string{msgA, msgB}, 15*time.Second)
 	resp.InjectedMessages = order
 	return resp, nil
@@ -662,7 +737,7 @@ func waitForPortOpen(t *testing.T, addr string, timeout time.Duration) {
 	t.Fatalf("timeout waiting for %s to be reachable", addr)
 }
 
-var injectionMarkers = []string{"fifo-message-A", "fifo-message-B", "hello", "first-message", "second-message", "writable-wait-probe", "max-wait-probe", "no-wait-probe", "cancel-probe", "fifo-trigger", "via-tty-send", "alias-probe", "delivered-probe", "timeout-probe"}
+var injectionMarkers = []string{"fifo-message-A", "fifo-message-B", "hello", "first-message", "second-message", "writable-wait-probe", "max-wait-probe", "no-wait-probe", "cancel-probe", "fifo-trigger", "via-tty-send", "alias-probe", "delivered-probe", "timeout-probe", "tty-drainer-idle-probe", "tty-drainer-busy-probe"}
 
 type injectionCapture struct {
 	t             *testing.T

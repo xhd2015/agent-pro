@@ -11,6 +11,7 @@ Use agent-run msg status|cancel <session-id>/<message-id> to inspect or remove q
 Options:
   --no-wait            enqueue and exit immediately without waiting for delivery
   --max-wait DURATION  enqueue, print id, then wait up to DURATION for delivery
+  --no-submit          inject without trailing Enter (no auto-submit); stored on queue entry
   -h, --help           show help
 `
 

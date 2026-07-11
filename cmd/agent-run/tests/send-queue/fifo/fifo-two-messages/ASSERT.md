@@ -1,7 +1,12 @@
 ## Expected
 
-- Blocking trigger send exits 0.
+- Both `--no-wait` sends succeed (exit 0); no third/blocking trigger send is used.
 - Injection order is `fifo-message-A` then `fifo-message-B`.
+
+## Side Effects
+
+- Session-owned TTY drainer is the sole consumer that flushes the queue after the
+  two CLI processes have exited.
 
 ## Exit Code
 
