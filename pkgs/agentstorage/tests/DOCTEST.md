@@ -72,9 +72,20 @@ pkgs/agentstorage/tests/
 │   ├── append-list-roundtrip/
 │   ├── pop-fifo-order/
 │   └── pop-empty-queue/
-└── isolation/
-    └── writes-stay-under-home/
+├── isolation/
+│   └── writes-stay-under-home/
+└── reltime/                         nested root: FormatRelativeAge (see reltime/DOCTEST.md)
+    ├── missing-or-zero/
+    ├── just-now/
+    ├── single-unit/
+    ├── two-units/
+    ├── zero-stops-chain/
+    └── max-two-units/
 ```
+
+Pure relative formatting for human session UPDATED lives in nested tree
+`reltime/` (own `DOCTEST.md` / `Run`). Implementer adds
+`FormatRelativeAge(now, t time.Time) string` in this package.
 
 ## Test Index
 
@@ -97,6 +108,7 @@ pkgs/agentstorage/tests/
 | 15 | `messages/pop-fifo-order` | `PopMessages` drains oldest-first |
 | 16 | `messages/pop-empty-queue` | `PopMessages` on empty queue returns nil/empty slice |
 | 17 | `isolation/writes-stay-under-home` | All tracked writes remain under home prefix |
+| — | `reltime/*` (nested) | Exact relative age strings; see `reltime/DOCTEST.md` |
 
 ## How to Run
 
@@ -104,6 +116,8 @@ pkgs/agentstorage/tests/
 doctest vet ./pkgs/agentstorage/tests
 doctest test -v ./pkgs/agentstorage/tests
 doctest test -v ./pkgs/agentstorage/tests/session/create-get-update-status
+doctest vet ./pkgs/agentstorage/tests/reltime
+doctest test -v ./pkgs/agentstorage/tests/reltime
 ```
 
 ```go

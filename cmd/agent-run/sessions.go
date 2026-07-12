@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"text/tabwriter"
+	"time"
 
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 	"github.com/xhd2015/less-gen/flags"
@@ -105,13 +106,15 @@ func runSessions(args []string) error {
 }
 
 func printSessionsListHuman(list []agentstorage.SessionMeta, total, limit int) error {
+	now := time.Now()
 	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(tw, "SESSION_ID\tRUNNER\tSTATUS\tUPDATED")
 	for _, s := range list {
-		updated := s.UpdatedAt
-		if updated == "" {
-			updated = s.CreatedAt
+		ts := s.UpdatedAt
+		if ts == "" {
+			ts = s.CreatedAt
 		}
+		updated := agentstorage.FormatRelativeAge(now, parseSessionTime(ts))
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", s.SessionID, s.Runner, s.Status, updated)
 	}
 	if err := tw.Flush(); err != nil {

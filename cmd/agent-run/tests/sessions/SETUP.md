@@ -4,6 +4,7 @@
 
 ```
 agent-run sessions [--json] [--limit N] -> list under AGENT_RUN_HOME/sessions (flat)
+# human UPDATED: FormatRelativeAge; --json: absolute timestamps
 agent-run sessions <session_id> --print -> read meta + events.jsonl -> FormatState trace
 # bare session id only; runner/id refs rejected (Q5)
 ```
@@ -145,4 +146,14 @@ func listDataRows(t *testing.T, stdout string) [][]string {
 	}
 	return rows
 }
+
+// listUpdatedCell returns the UPDATED column from a Fields-split data row.
+// Relative ages include a space ("2s ago", "just now"), so fields[3:] are joined.
+func listUpdatedCell(row []string) string {
+	if len(row) < 4 {
+		return ""
+	}
+	return strings.Join(row[3:], " ")
+}
 ```
+

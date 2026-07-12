@@ -50,7 +50,10 @@ human-readable via `agent/event/print`.
 **`sessions [--json] [--limit N]`** lists sessions sorted by `updated_at` desc
 (fallback `created_at`, then `session_id`). Default limit **10**; `--limit 0` =
 all. Human columns include **SESSION_ID**, **RUNNER**, **STATUS**, **UPDATED**.
-JSON uses the same sort/limit with `{"sessions":[...]}`.
+Human **UPDATED** is a **relative age** (`just now`, `2s ago`, `1h2m ago`, or
+`-` when times are missing) via `agentstorage.FormatRelativeAge`. JSON uses the
+same sort/limit with `{"sessions":[...]}` and keeps **absolute** `updated_at` /
+`created_at` timestamps.
 
 **`sessions <session_id> --print`** loads `meta.json` and `events.jsonl` from the
 file store (bare id only — compound `runner/id` is rejected). Formats events with
@@ -131,7 +134,10 @@ cmd/agent-run/tests/
 │   │   ├── limit-0-all/             --limit 0 = all
 │   │   ├── json-default-limit-10/   --json default limit 10
 │   │   ├── json-limit-0-all/        --json --limit 0
-│   │   └── human-columns-include-runner/  SESSION_ID RUNNER STATUS
+│   │   ├── human-columns-include-runner/  SESSION_ID RUNNER STATUS
+│   │   ├── human-updated-relative/  UPDATED cells are relative ages
+│   │   ├── human-updated-missing-dash/  missing times → "-"
+│   │   └── json-updated-absolute/   --json keeps absolute updated_at
 │   └── print/                       sessions <session_id> --print
 │       ├── finished-with-events/    status=finished; formatted trace stdout
 │       ├── no-events/               meta only; "(no events yet)" + Done footer
@@ -194,6 +200,9 @@ cmd/agent-run/tests/
 | 16e | `sessions/list/json-default-limit-10` | `--json` default limit 10, sorted desc |
 | 16f | `sessions/list/json-limit-0-all` | `--json --limit 0` → all |
 | 16g | `sessions/list/human-columns-include-runner` | header has RUNNER; bare ids |
+| 16h | `sessions/list/human-updated-relative` | human UPDATED is relative (`1h2m ago`, `1h ago`, …) not RFC3339 |
+| 16i | `sessions/list/human-updated-missing-dash` | missing created/updated → UPDATED `-` |
+| 16j | `sessions/list/json-updated-absolute` | `--json` keeps absolute `updated_at` (no `ago`) |
 | 22 | `sessions/print/finished-with-events` | bare id `--print` finished with events → trace + Done |
 | 23 | `sessions/print/no-events` | `--print` with meta only → `(no events yet)` and `Done (session finished)` |
 | 24 | `sessions/print/unknown-session` | unknown bare id → exit 1, stderr mentions session |
