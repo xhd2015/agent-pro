@@ -104,9 +104,9 @@ func Run(ctx context.Context, opts RunOptions) error {
 	}
 
 	runnerSessionID := ""
-	if sess, err := opts.Store.GetSession(runner, sessionID); err == nil {
+	if sess, err := opts.Store.GetSession(sessionID); err == nil {
 		runnerSessionID = strings.TrimSpace(sess.Meta.RunnerSessionID)
-		_ = opts.Store.UpdateSessionStatus(runner, sessionID, "running")
+		_ = opts.Store.UpdateSessionStatus(sessionID, "running")
 	} else {
 		createMeta := agentstorage.SessionMeta{
 			Runner:        runner,
@@ -116,10 +116,10 @@ func Run(ctx context.Context, opts RunOptions) error {
 			InitialPrompt: strings.TrimSpace(opts.Prompt),
 			Workspace:     workspace,
 		}
-		_ = opts.Store.CreateSession(runner, sessionID, createMeta)
+		_ = opts.Store.CreateSession(sessionID, createMeta)
 	}
 
-	priorEvents, _, _ := opts.Store.ReadEvents(runner, sessionID, 0)
+	priorEvents, _, _ := opts.Store.ReadEvents(sessionID, 0)
 	runnerPrompt := BuildContinuationPrompt(priorEvents, opts.Prompt)
 
 	stdout := opts.Stdout
@@ -138,7 +138,7 @@ func Run(ctx context.Context, opts RunOptions) error {
 	}, "AGENT_PRO_CONFIG_HOME")
 
 	appendEvent := func(ev types.AgentEvent) error {
-		if err := opts.Store.AppendEvent(runner, sessionID, ev); err != nil {
+		if err := opts.Store.AppendEvent(sessionID, ev); err != nil {
 			return err
 		}
 		// --open stays silent: persist only, no human/JSON stream to the screen.
@@ -173,7 +173,7 @@ func Run(ctx context.Context, opts RunOptions) error {
 		if id == "" {
 			return
 		}
-		_ = opts.Store.UpdateSessionTerminalSessionID(runner, sessionID, id)
+		_ = opts.Store.UpdateSessionTerminalSessionID(sessionID, id)
 	}
 	webGrokManaged := runner == "grok-tty" && opts.WebManagedGrokSync
 	// Open mode does not wait on discovery; skip in-process grok sync screen noise.
@@ -200,10 +200,10 @@ func Run(ctx context.Context, opts RunOptions) error {
 
 	newRunnerSessionID, newTerminalSessionID, runErr := streamRunner(ctx, runner, opts.Store.Home(), workspace, env, runnerPrompt, opts.Model, opts.AgentRunnerBinary, opts.AgentRunnerConfigHome, runnerSessionID, sessionID, ttySessionID, opts.StreamPhases, opts.KeepTerminalAlive, opts.Open, opts.NoSubmit, ttyGrokSyncOwnsEvents, persistTerminalSessionID, emit, stderr)
 	if strings.TrimSpace(newRunnerSessionID) != "" {
-		_ = opts.Store.UpdateSessionRunnerSessionID(runner, sessionID, newRunnerSessionID)
+		_ = opts.Store.UpdateSessionRunnerSessionID(sessionID, newRunnerSessionID)
 	}
 	if strings.TrimSpace(newTerminalSessionID) != "" {
-		_ = opts.Store.UpdateSessionTerminalSessionID(runner, sessionID, newTerminalSessionID)
+		_ = opts.Store.UpdateSessionTerminalSessionID(sessionID, newTerminalSessionID)
 	}
 	if opts.Open {
 		if runErr != nil {
@@ -211,7 +211,7 @@ func Run(ctx context.Context, opts RunOptions) error {
 				openBind.Cancel()
 				_ = openBind.Wait()
 			}
-			_ = opts.Store.UpdateSessionStatus(runner, sessionID, "error")
+			_ = opts.Store.UpdateSessionStatus(sessionID, "error")
 			return runErr
 		}
 		// After attach returns: print terminal id, then ALWAYS join bind worker.
@@ -228,19 +228,19 @@ func Run(ctx context.Context, opts RunOptions) error {
 				// Worker may have started before known id appeared; re-run
 				// finalize path only if hard-require still needs an id.
 				if err := finalizeOpenGrokSession(ctx, opts, runner, sessionID, workspace, runnerPrompt, runStart, strings.TrimSpace(newRunnerSessionID), stderr); err != nil {
-					_ = opts.Store.UpdateSessionStatus(runner, sessionID, "error")
+					_ = opts.Store.UpdateSessionStatus(sessionID, "error")
 					return err
 				}
 				return nil
 			}
 			if err := printOpenGrokBindResult(res, stderr); err != nil {
-				_ = opts.Store.UpdateSessionStatus(runner, sessionID, "error")
+				_ = opts.Store.UpdateSessionStatus(sessionID, "error")
 				return err
 			}
 		} else if runner == "grok-tty" {
 			// Non-worker path should not happen; keep finalize as safety net.
 			if err := finalizeOpenGrokSession(ctx, opts, runner, sessionID, workspace, runnerPrompt, runStart, strings.TrimSpace(newRunnerSessionID), stderr); err != nil {
-				_ = opts.Store.UpdateSessionStatus(runner, sessionID, "error")
+				_ = opts.Store.UpdateSessionStatus(sessionID, "error")
 				return err
 			}
 		}
@@ -257,14 +257,14 @@ func Run(ctx context.Context, opts RunOptions) error {
 	}
 	if grokSyncOwnsEvents || webGrokManaged {
 		if runErr != nil {
-			_ = opts.Store.UpdateSessionStatus(runner, sessionID, "error")
+			_ = opts.Store.UpdateSessionStatus(sessionID, "error")
 		}
 	} else {
 		status := "finished"
 		if runErr != nil {
 			status = "error"
 		}
-		_ = opts.Store.UpdateSessionStatus(runner, sessionID, status)
+		_ = opts.Store.UpdateSessionStatus(sessionID, status)
 	}
 	return runErr
 }
@@ -313,7 +313,7 @@ func finalizeOpenGrokSession(ctx context.Context, opts RunOptions, runner, sessi
 	if abs, absErr := filepath.Abs(updatesPath); absErr == nil {
 		updatesPath = abs
 	}
-	_ = opts.Store.UpdateSessionRunnerSessionID(runner, sessionID, id)
+	_ = opts.Store.UpdateSessionRunnerSessionID(sessionID, id)
 	_, _ = fmt.Fprintf(stderr, "grok-tty: grok session %s\n", id)
 	_, _ = fmt.Fprintf(stderr, "grok-tty: grok updates %s\n", updatesPath)
 	return nil

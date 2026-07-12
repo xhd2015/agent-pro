@@ -65,7 +65,7 @@ func resolveGrokSyncSessionDir(runner, sessionID string) (string, bool) {
 }
 
 func sessionDirUnderHome(home, runner, sessionID string) (string, bool) {
-	dir := filepath.Join(home, "sessions", runner, sessionID)
+	dir := filepath.Join(home, "sessions", sessionID)
 	if _, err := os.Stat(filepath.Join(dir, "meta.json")); err != nil {
 		return "", false
 	}

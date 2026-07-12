@@ -15,8 +15,8 @@ agent-run [--agent-runner RUNNER] [--help]
 agent-run web [--port PORT] [--dev] [--token TOKEN] [--no-open] [--agent-runner RUNNER]
 agent-run run "prompt" [--json] [--model M] [--session ID] [--session-id-from-prompt] [--dir DIR] [--agent-runner RUNNER]
 agent-run attach <session-id>
-agent-run sessions [--json]
-agent-run sessions <runner>/<session_id> --print
+agent-run sessions [--json] [--limit N]
+agent-run sessions <session_id> --print
 agent-run status
 ```
 
@@ -29,27 +29,34 @@ served without auth. API auth depends on `--token`:
 | `--token auto` | Bearer required; random hex generated | `agent-run web token: <hex>` |
 | `--token <value>` | Bearer required; value as-is | No token line; value persisted to `auth.token` |
 
-**Storage** (`pkgs/agentstorage`, not agent-hub):
+**Storage** (`pkgs/agentstorage`, not agent-hub) — **flat** session dirs:
 
 ```
 AGENT_RUN_HOME/                    # default ~/.agent-run/, temp dir in tests
   config.json
   auth.token
-  sessions/<runner>/<session_id>/
-    meta.json
-    events.jsonl                   # NDJSON types.AgentEvent lines
-    messages.jsonl
+  sessions/
+    .layout                        # optional migration marker {"version":2}
+    <session_id>/                  # global unique key; meta.runner is metadata only
+      meta.json
+      events.jsonl                 # NDJSON types.AgentEvent lines
+      messages.jsonl
 ```
 
 **`run --json`** streams NDJSON `types.AgentEvent` lines to stdout (one per line,
 flushed). The same events append to `events.jsonl`. Without `--json`, output is
 human-readable via `agent/event/print`.
 
-**`sessions <runner>/<session_id> --print`** loads `meta.json` and `events.jsonl`
-from the file store, formats events with `print.FormatState` (trace-style header,
-numbered lines, message bodies). When `meta.status` is `running`, the CLI prints
-existing events then tails `events.jsonl` until status is no longer `running`.
-Missing sessions exit 1; a session positional without `--print` is rejected.
+**`sessions [--json] [--limit N]`** lists sessions sorted by `updated_at` desc
+(fallback `created_at`, then `session_id`). Default limit **10**; `--limit 0` =
+all. Human columns include **SESSION_ID**, **RUNNER**, **STATUS**, **UPDATED**.
+JSON uses the same sort/limit with `{"sessions":[...]}`.
+
+**`sessions <session_id> --print`** loads `meta.json` and `events.jsonl` from the
+file store (bare id only — compound `runner/id` is rejected). Formats events with
+`print.FormatState`. When `meta.status` is `running`, the CLI prints existing
+events then tails `events.jsonl` until status is no longer `running`. Missing
+sessions exit 1; a session positional without `--print` is rejected.
 
 Each test sets `AGENT_RUN_HOME=filepath.Join(t.TempDir(), ".agent-run")` and
 builds `agent-run` + `fake-codex` binaries into the temp `bin/` directory.
@@ -115,15 +122,22 @@ cmd/agent-run/tests/
 │   └── grok-mock-config/            nested: --grok-home + --grok-tty-runner-binary (see grok-mock-config/DOCTEST.md)
 ├── home/
 │   └── agent-run-home-isolation/    no files outside AGENT_RUN_HOME after run
-├── sessions/                        split: list vs print
+├── sessions/                        split: list vs print (flat bare id)
 │   ├── list/
-│   │   └── json-empty/              sessions --json when empty
-│   └── print/                       sessions <runner>/<id> --print
+│   │   ├── empty-human/             human list empty home
+│   │   ├── json-empty/              sessions --json when empty
+│   │   ├── default-limit-10/        15 seeded → 10 newest
+│   │   ├── limit-3/                 --limit 3
+│   │   ├── limit-0-all/             --limit 0 = all
+│   │   ├── json-default-limit-10/   --json default limit 10
+│   │   ├── json-limit-0-all/        --json --limit 0
+│   │   └── human-columns-include-runner/  SESSION_ID RUNNER STATUS
+│   └── print/                       sessions <session_id> --print
 │       ├── finished-with-events/    status=finished; formatted trace stdout
 │       ├── no-events/               meta only; "(no events yet)" + Done footer
-│       ├── unknown-session/         missing session → exit 1
+│       ├── unknown-session/         missing bare id → exit 1
 │       ├── missing-print-flag/      session ref without --print → exit 1
-│       ├── malformed-session-ref/   positional without slash → exit 1
+│       ├── reject-compound-ref/     runner/id rejected (Q5)
 │       └── follow-running-appends/  status=running; tail until finished
 ├── status/
 │   └── exits-zero/                  status exits 0
@@ -173,11 +187,18 @@ cmd/agent-run/tests/
 | 14 | `web/default-port-8192` | `web --token test` without `--port` binds 8192 |
 | 15 | `home/agent-run-home-isolation` | After `run`, all writes stay under `AGENT_RUN_HOME` |
 | 16 | `sessions/list/json-empty` | `sessions --json` on empty store returns valid empty JSON |
-| 22 | `sessions/print/finished-with-events` | `--print` on finished session with events → trace header, message text, Done footer |
+| 16a | `sessions/list/empty-human` | human list empty home; trailing newline; no compound refs |
+| 16b | `sessions/list/default-limit-10` | 15 sessions → default lists 10 newest |
+| 16c | `sessions/list/limit-3` | `--limit 3` → 3 newest |
+| 16d | `sessions/list/limit-0-all` | `--limit 0` → all 15 |
+| 16e | `sessions/list/json-default-limit-10` | `--json` default limit 10, sorted desc |
+| 16f | `sessions/list/json-limit-0-all` | `--json --limit 0` → all |
+| 16g | `sessions/list/human-columns-include-runner` | header has RUNNER; bare ids |
+| 22 | `sessions/print/finished-with-events` | bare id `--print` finished with events → trace + Done |
 | 23 | `sessions/print/no-events` | `--print` with meta only → `(no events yet)` and `Done (session finished)` |
-| 24 | `sessions/print/unknown-session` | unknown runner/id → exit 1, stderr mentions session |
-| 25 | `sessions/print/missing-print-flag` | `sessions runner/id` without `--print` → exit 1 |
-| 26 | `sessions/print/malformed-session-ref` | `sessions noslash --print` → exit 1 |
+| 24 | `sessions/print/unknown-session` | unknown bare id → exit 1, stderr mentions session |
+| 25 | `sessions/print/missing-print-flag` | `sessions <id>` without `--print` → exit 1 |
+| 26 | `sessions/print/reject-compound-ref` | `sessions runner/id --print` → exit 1 invalid ref (Q5) |
 | 27 | `sessions/print/follow-running-appends` | running session follows new events until status finished |
 | 17 | `status/exits-zero` | `status` exits 0 |
 | 18 | `web/timeline/session-detail-includes-user-prompt` | POST session → GET detail events include `role=user` prompt |

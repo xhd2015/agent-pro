@@ -159,7 +159,7 @@ func runTtyStatus(args []string) error {
 	if agentSessionID == "" {
 		agentSessionID = sessionID
 	}
-	sessionFilePath := filepath.Join(home, "sessions", ttySess.RunnerID, agentSessionID, "meta.json")
+	sessionFilePath := filepath.Join(home, "sessions", agentSessionID, "meta.json")
 	tcpReachable := ttySess.TCPReachable
 	screenStatus := ttySess.ScreenStatus
 	if !tcpReachable && screenStatus == "" {

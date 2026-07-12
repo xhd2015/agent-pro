@@ -1,16 +1,17 @@
 # Scenario
 
-**Feature**: queued user messages at `messages.jsonl`
+**Feature**: queued user messages at `sessions/<session_id>/messages.jsonl`
 
 ```
-AppendMessage(text) -> Message{id, text, session_id, created_at}
-ListMessages -> all queued messages in append order
-PopMessages -> FIFO drain (oldest first), removes from queue
+AppendMessage(sessionID, text) -> Message{id, text, session_id, created_at}
+ListMessages(sessionID) -> all queued messages in append order
+PopMessages(sessionID) -> FIFO drain (oldest first), removes from queue
 ```
 
 ## Preconditions
 
-- Messages persist as NDJSON lines under the session directory.
+- Messages persist as NDJSON lines under the flat session directory.
+- APIs take bare `sessionID` only (no runner path arg).
 - `PopMessages` on an empty queue returns an empty/nil slice without error.
 
 ## Steps

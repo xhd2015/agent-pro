@@ -1,7 +1,8 @@
 ## Expected
 
 - Exit code 0.
-- Stdout is valid JSON representing an empty session list (array or object with empty `sessions`).
+- Stdout is valid JSON with empty `sessions` array (or empty array root).
+- Output ends with trailing newline after last content.
 
 ```go
 import (
@@ -12,6 +13,9 @@ import (
 
 func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	assertSuccess(t, resp)
+	if !strings.HasSuffix(resp.Stdout, "\n") {
+		t.Fatalf("expected trailing newline on stdout, got %q", resp.Stdout)
+	}
 	text := strings.TrimSpace(resp.Stdout)
 	var raw any
 	if err := json.Unmarshal([]byte(text), &raw); err != nil {
@@ -27,6 +31,8 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 			if len(sessions) != 0 {
 				t.Fatalf("expected empty sessions list, got %d", len(sessions))
 			}
+		} else {
+			t.Fatalf("expected sessions key with array, got %#v", v)
 		}
 	default:
 		t.Fatalf("unexpected JSON type %T", raw)

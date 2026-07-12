@@ -17,8 +17,8 @@ import (
 
 // WatchEvents tails events.jsonl from a byte offset and calls onLine for each new NDJSON row.
 // Tailing continues until ctx is cancelled; session meta status is not consulted.
-func WatchEvents(ctx context.Context, store agentstorage.Store, runner, sessionID string, afterOffset int64, onLine func(line string) error) error {
-	path := eventsPath(store, runner, sessionID)
+func WatchEvents(ctx context.Context, store agentstorage.Store, sessionID string, afterOffset int64, onLine func(line string) error) error {
+	path := eventsPath(store, sessionID)
 
 	if _, err := emitLinesFromOffset(path, afterOffset, onLine); err != nil {
 		return err
@@ -48,8 +48,8 @@ func WatchEvents(ctx context.Context, store agentstorage.Store, runner, sessionI
 	return nil
 }
 
-func eventsPath(store agentstorage.Store, runner, sessionID string) string {
-	return filepath.Join(store.Home(), "sessions", runner, sessionID, "events.jsonl")
+func eventsPath(store agentstorage.Store, sessionID string) string {
+	return filepath.Join(store.Home(), "sessions", sessionID, "events.jsonl")
 }
 
 type assistantStreamCursor struct {

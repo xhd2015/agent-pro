@@ -26,7 +26,7 @@ func nowRFC3339() string {
 }
 
 func ttyJSONPath(home, runner, agentSessionID string) string {
-	return filepath.Join(home, "sessions", runner, agentSessionID, "tty.json")
+	return filepath.Join(home, "sessions", agentSessionID, "tty.json")
 }
 
 // WriteTTYJSON dual-writes the denormalized TTY snapshot.

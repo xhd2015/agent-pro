@@ -17,13 +17,13 @@ import (
 )
 
 const statusHelp = `
-Usage: agent-run status [OPTIONS] [<session-id|runner/session_id>]
+Usage: agent-run status [OPTIONS] [<session-id>]
 
 Show agent-run home (bare) or multi-layer session status.
 
 With no arguments, prints the agent-run home path.
 
-With a session id (or runner/session_id ref), probes storage, process,
+With a bare session id, probes storage, process,
 terminal, runner (bound + exited), and resume readiness.
 
 Options:
@@ -108,55 +108,20 @@ func runStatus(args []string) error {
 	return nil
 }
 
-// resolveSessionMeta resolves <session-id> or <runner>/<session_id>.
+// resolveSessionMeta resolves a bare <session-id>. Compound runner/id refs are rejected (Q5).
 func resolveSessionMeta(store agentstorage.Store, ref string) (agentstorage.SessionMeta, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
 		return agentstorage.SessionMeta{}, fmt.Errorf("session not found: empty")
 	}
-	if runner, id, ok := splitRunnerSessionRef(ref); ok {
-		sess, err := store.GetSession(runner, id)
-		if err != nil {
-			return agentstorage.SessionMeta{}, fmt.Errorf("session not found: %s", ref)
-		}
-		return sess.Meta, nil
+	if strings.Contains(ref, "/") {
+		return agentstorage.SessionMeta{}, fmt.Errorf("invalid session reference %q: expected bare session_id (not runner/session_id)", ref)
 	}
-	// Bare session id: unique match across runners.
-	all, err := listAllSessions(store)
+	sess, err := store.GetSession(ref)
 	if err != nil {
-		return agentstorage.SessionMeta{}, err
-	}
-	var matches []agentstorage.SessionMeta
-	for _, m := range all {
-		if m.SessionID == ref {
-			matches = append(matches, m)
-		}
-	}
-	if len(matches) == 0 {
 		return agentstorage.SessionMeta{}, fmt.Errorf("session not found: %s", ref)
 	}
-	if len(matches) > 1 {
-		var refs []string
-		for _, m := range matches {
-			refs = append(refs, m.Runner+"/"+m.SessionID)
-		}
-		return agentstorage.SessionMeta{}, fmt.Errorf("session id %q is ambiguous; use one of: %s", ref, strings.Join(refs, ", "))
-	}
-	return matches[0], nil
-}
-
-func splitRunnerSessionRef(ref string) (runner, sessionID string, ok bool) {
-	i := strings.IndexByte(ref, '/')
-	if i <= 0 || i >= len(ref)-1 {
-		return "", "", false
-	}
-	// Only first slash: runner/session_id (session ids should not contain /).
-	runner = ref[:i]
-	sessionID = ref[i+1:]
-	if strings.Contains(sessionID, "/") {
-		return "", "", false
-	}
-	return runner, sessionID, true
+	return sess.Meta, nil
 }
 
 func probeSessionStatus(store agentstorage.Store, meta agentstorage.SessionMeta) sessionStatusReport {
@@ -295,7 +260,7 @@ func probeSessionStatus(store agentstorage.Store, meta agentstorage.SessionMeta)
 
 // bindInProgress reports durable open-bind state for concurrent status.
 func bindInProgress(home, runner, sessionID string) bool {
-	path := filepath.Join(home, "sessions", runner, sessionID, "bind.json")
+	path := filepath.Join(home, "sessions", sessionID, "bind.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return false

@@ -26,7 +26,7 @@ func handleTerminalStatus(store agentstorage.Store, runner, sessionID string) ht
 			return
 		}
 		if ttySess.Meta != nil && strings.TrimSpace(ttySess.Meta.TerminalSessionID) == "" && ttySess.TerminalSessionID != "" {
-			_ = store.UpdateSessionTerminalSessionID(runner, sessionID, ttySess.TerminalSessionID)
+			_ = store.UpdateSessionTerminalSessionID(sessionID, ttySess.TerminalSessionID)
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"available":           ttySess.TCPReachable,

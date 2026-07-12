@@ -1,10 +1,10 @@
 # Scenario
 
-**Feature**: append-only event log at `events.jsonl`
+**Feature**: append-only event log at `sessions/<session_id>/events.jsonl`
 
 ```
-AppendEvent(ev) -> NDJSON line appended
-ReadEvents(afterOffset) -> []AgentEvent + new byte offset
+AppendEvent(sessionID, ev) -> NDJSON line appended
+ReadEvents(sessionID, afterOffset) -> []AgentEvent + new byte offset
 offset 0 reads from start; non-zero offset skips prior lines
 ```
 
@@ -12,6 +12,7 @@ offset 0 reads from start; non-zero offset skips prior lines
 
 - Events are `agent/event/types.AgentEvent` serialized as one JSON object per line.
 - `ReadEvents` returns `(events, nextOffset, error)` where offset is byte position for resume.
+- APIs take bare `sessionID` only (no runner path arg).
 
 ## Steps
 

@@ -1,15 +1,17 @@
 # Scenario
 
-**Feature**: session create, get, and status update roundtrip
+**Feature**: session create, get, and status update roundtrip (flat path)
 
 ```
 CreateSession(running) -> GetSession -> UpdateSessionStatus(finished) -> GetSession
+# files land at sessions/<session_id>/meta.json
 ```
 
 ## Preconditions
 
 - Session does not exist before create.
 - Status transitions from `running` to `finished`.
+- `meta.Runner` is non-empty.
 
 ## Steps
 

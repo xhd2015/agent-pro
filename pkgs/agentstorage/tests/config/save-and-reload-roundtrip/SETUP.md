@@ -13,7 +13,7 @@ SaveConfig(cfg) -> Config() -> cfg fields equal
 ## Steps
 
 1. Set `req.Action = "save_reload"`.
-2. Populate `req.Config` with non-empty runner, model, and last session.
+2. Populate `req.Config` with non-empty runner, model, and last session (bare id).
 
 ```go
 import (
@@ -27,7 +27,7 @@ func Setup(t *testing.T, req *Request) error {
 	req.Config = agentstorage.Config{
 		DefaultAgentRunner: "fake-codex",
 		DefaultModel:       "gpt-test",
-		LastSession:        "fake-codex/sess_last",
+		LastSession:        "sess_last",
 	}
 	return nil
 }

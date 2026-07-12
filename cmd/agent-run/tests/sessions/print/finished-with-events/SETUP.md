@@ -3,29 +3,29 @@
 **Feature**: print finished session with events — human-readable trace on stdout
 
 ```
-seed meta.status=finished + events.jsonl -> sessions fake-codex/web_test123 --print -> trace lines
+seed meta.status=finished + events.jsonl -> sessions web_test123 --print -> trace lines
 ```
 
 ## Preconditions
 
-- Session exists under `AGENT_RUN_HOME` with `status=finished`.
+- Session exists under flat `AGENT_RUN_HOME/sessions/<id>/` with `status=finished`.
 - `events.jsonl` has multiple `AgentEvent` lines including assistant message text.
 
 ## Steps
 
-1. Seed session `fake-codex/web_test123` with status `finished`.
+1. Seed session `web_test123` (runner meta `fake-codex`) with status `finished`.
 2. Append message events with known text `Hello from test` and a second line.
-3. Run `agent-run sessions fake-codex/web_test123 --print`.
+3. Run `agent-run sessions web_test123 --print`.
 
 ```go
 import "testing"
 
 func Setup(t *testing.T, req *Request) error {
 	store := openAgentStore(t, req)
-	seedSessionMeta(t, store, printRunner, printSessionID, "finished")
-	appendAgentMessage(t, store, printRunner, printSessionID, "Hello from test")
-	appendAgentMessage(t, store, printRunner, printSessionID, "Second trace line")
-	req.Args = printSessionArgs(printRunner, printSessionID)
+	seedSessionMeta(t, store, printSessionID, "finished")
+	appendAgentMessage(t, store, printSessionID, "Hello from test")
+	appendAgentMessage(t, store, printSessionID, "Second trace line")
+	req.Args = printSessionArgs(printSessionID)
 	return nil
 }
 ```

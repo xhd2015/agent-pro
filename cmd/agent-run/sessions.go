@@ -4,29 +4,36 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"text/tabwriter"
 
+	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 	"github.com/xhd2015/less-gen/flags"
 )
 
 const sessionsHelp = `
-Usage: agent-run sessions [--json]
+Usage: agent-run sessions [--json] [--limit N]
        agent-run sessions --clear
-       agent-run sessions <runner>/<session_id> --print
+       agent-run sessions <session_id> --print
 
 Options:
   --json      list sessions as JSON (list mode only)
+  --limit N   max sessions to show (default 10; 0 = all)
   --clear     delete all stored sessions under agent-run home
-  --print     print formatted session events (required with <runner>/<session_id>)
+  --print     print formatted session events (required with <session_id>)
   -h, --help  show help
 `
+
+const defaultSessionsListLimit = 10
 
 func runSessions(args []string) error {
 	var jsonFlag bool
 	var printFlag bool
 	var clearFlag bool
+	limit := defaultSessionsListLimit
 	remaining, err := flags.Bool("--json", &jsonFlag).
 		Bool("--print", &printFlag).
 		Bool("--clear", &clearFlag).
+		Int("--limit", &limit).
 		Help("-h,--help", sessionsHelp).
 		Parse(args)
 	if err != nil {
@@ -50,40 +57,68 @@ func runSessions(args []string) error {
 	}
 	if len(remaining) > 0 {
 		if len(remaining) != 1 {
-			return fmt.Errorf("expected a single session reference runner/session_id")
+			return fmt.Errorf("expected a single session id")
 		}
 		if !printFlag {
-			return fmt.Errorf("sessions with a session reference requires --print; see agent-run sessions --help for usage")
+			return fmt.Errorf("sessions with a session id requires --print; see agent-run sessions --help for usage")
 		}
-		runner, sessionID, err := parseSessionRef(remaining[0])
+		sessionID, err := parseBareSessionID(remaining[0])
 		if err != nil {
 			return err
 		}
-		return runSessionsPrint(store, runner, sessionID)
+		return runSessionsPrint(store, sessionID)
 	}
 	if printFlag {
-		return fmt.Errorf("--print requires a session reference runner/session_id")
+		return fmt.Errorf("--print requires a session id")
 	}
 	list, err := listAllSessions(store)
 	if err != nil {
 		return err
 	}
+	sortSessionsNewestFirst(list)
+	total := len(list)
+	list = applySessionLimit(list, limit)
+
 	type item struct {
 		Runner    string `json:"runner"`
 		SessionID string `json:"session_id"`
 		Status    string `json:"status"`
+		CreatedAt string `json:"created_at,omitempty"`
+		UpdatedAt string `json:"updated_at,omitempty"`
 	}
-	var all []item
+	all := make([]item, 0, len(list))
 	for _, s := range list {
-		all = append(all, item{Runner: s.Runner, SessionID: s.SessionID, Status: s.Status})
+		all = append(all, item{
+			Runner:    s.Runner,
+			SessionID: s.SessionID,
+			Status:    s.Status,
+			CreatedAt: s.CreatedAt,
+			UpdatedAt: s.UpdatedAt,
+		})
 	}
 	if jsonFlag {
 		out := map[string]any{"sessions": all}
 		enc := json.NewEncoder(os.Stdout)
 		return enc.Encode(out)
 	}
-	for _, s := range all {
-		fmt.Printf("%s/%s %s\n", s.Runner, s.SessionID, s.Status)
+	return printSessionsListHuman(list, total, limit)
+}
+
+func printSessionsListHuman(list []agentstorage.SessionMeta, total, limit int) error {
+	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(tw, "SESSION_ID\tRUNNER\tSTATUS\tUPDATED")
+	for _, s := range list {
+		updated := s.UpdatedAt
+		if updated == "" {
+			updated = s.CreatedAt
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", s.SessionID, s.Runner, s.Status, updated)
+	}
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+	if limit > 0 && total > limit {
+		fmt.Fprintf(os.Stdout, "(showing %d of %d; use --limit N or --limit 0 for all)\n", limit, total)
 	}
 	return nil
 }

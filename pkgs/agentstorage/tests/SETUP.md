@@ -1,15 +1,18 @@
 # Scenario
 
-**Feature**: file-backed agent run storage under `AGENT_RUN_HOME`
+**Feature**: file-backed agent run storage under `AGENT_RUN_HOME` (flat sessions)
 
 ```
 t.TempDir/.agent-run -> AGENT_RUN_HOME -> NewFileStore -> Store CRUD
-config.json + sessions/<runner>/<id>/{meta.json,events.jsonl,messages.jsonl}
+config.json + sessions/<session_id>/{meta.json,events.jsonl,messages.jsonl}
+# meta.runner is metadata only; path has no runner directory layer
 ```
 
 ## Preconditions
 
 - Package `github.com/xhd2015/agent-pro/pkgs/agentstorage` implements `Store` and `NewFileStore`.
+- Session identity is a globally unique bare `session_id` directory under `sessions/`.
+- `CreateSession(sessionID, meta)` requires non-empty `meta.Runner`.
 - Each test uses an isolated temp directory; `AGENT_RUN_HOME` points at `filepath.Join(temp, ".agent-run")`.
 - Tests call store methods directly (no CLI subprocess).
 
@@ -23,8 +26,9 @@ config.json + sessions/<runner>/<id>/{meta.json,events.jsonl,messages.jsonl}
 ## Context
 
 - `OpenStore(t, req)` resolves home from `AGENT_RUN_HOME` (when set) and returns `(Store, homePath, error)`.
-- `WriteEvent` appends a single `types.AgentEvent` via the store.
+- `WriteEvent` appends a single `types.AgentEvent` via the store (sessionID only).
 - `AssertHomeOnly` verifies every path in `FilesWritten` is under `home` prefix.
+- Flat layout: `sessions/<session_id>/…` never `sessions/<runner>/<session_id>/…`.
 
 ```go
 import (
@@ -63,10 +67,10 @@ func openStore(t *testing.T, req *Request) (agentstorage.Store, string, error) {
 	return store, store.Home(), nil
 }
 
-func WriteEvent(t *testing.T, store agentstorage.Store, runner, sessionID, text string) {
+func WriteEvent(t *testing.T, store agentstorage.Store, sessionID, text string) {
 	t.Helper()
 	ev := types.AgentEvent{Type: types.ActionMessage, Text: text}
-	if err := store.AppendEvent(runner, sessionID, ev); err != nil {
+	if err := store.AppendEvent(sessionID, ev); err != nil {
 		t.Fatalf("AppendEvent: %v", err)
 	}
 }

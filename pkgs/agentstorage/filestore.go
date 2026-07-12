@@ -28,8 +28,9 @@ func (s *fileStore) configPath() string {
 	return filepath.Join(s.home, "config.json")
 }
 
-func (s *fileStore) sessionDir(runner, sessionID string) string {
-	return filepath.Join(s.home, "sessions", runner, sessionID)
+// sessionDir returns sessions/<sessionID>/ under the store home (flat layout).
+func (s *fileStore) sessionDir(sessionID string) string {
+	return filepath.Join(s.home, "sessions", sessionID)
 }
 
 func (s *fileStore) Config() (Config, error) {
@@ -61,13 +62,29 @@ func (s *fileStore) SaveConfig(cfg Config) error {
 	return os.WriteFile(s.configPath(), data, 0644)
 }
 
-func (s *fileStore) CreateSession(runner, sessionID string, meta SessionMeta) error {
-	dir := s.sessionDir(runner, sessionID)
+func (s *fileStore) CreateSession(sessionID string, meta SessionMeta) error {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+	if strings.TrimSpace(meta.Runner) == "" {
+		return fmt.Errorf("runner is required")
+	}
+	dir := s.sessionDir(sessionID)
+	if st, err := os.Stat(dir); err == nil && st.IsDir() {
+		return fmt.Errorf("session already exists: %s", sessionID)
+	} else if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	// Reject if meta.json already exists (partial dir).
+	metaPath := filepath.Join(dir, "meta.json")
+	if _, err := os.Stat(metaPath); err == nil {
+		return fmt.Errorf("session already exists: %s", sessionID)
+	}
 	if err := osMkdirAll(dir); err != nil {
 		return err
 	}
 	now := nowRFC3339()
-	meta.Runner = runner
 	meta.SessionID = sessionID
 	if meta.CreatedAt == "" {
 		meta.CreatedAt = now
@@ -77,15 +94,15 @@ func (s *fileStore) CreateSession(runner, sessionID string, meta SessionMeta) er
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "meta.json"), data, 0644)
+	return os.WriteFile(metaPath, data, 0644)
 }
 
-func (s *fileStore) GetSession(runner, sessionID string) (*Session, error) {
-	path := filepath.Join(s.sessionDir(runner, sessionID), "meta.json")
+func (s *fileStore) GetSession(sessionID string) (*Session, error) {
+	path := filepath.Join(s.sessionDir(sessionID), "meta.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("session not found: %s/%s", runner, sessionID)
+			return nil, fmt.Errorf("session not found: %s", sessionID)
 		}
 		return nil, err
 	}
@@ -96,8 +113,8 @@ func (s *fileStore) GetSession(runner, sessionID string) (*Session, error) {
 	return &Session{Meta: meta}, nil
 }
 
-func (s *fileStore) UpdateSessionStatus(runner, sessionID, status string) error {
-	sess, err := s.GetSession(runner, sessionID)
+func (s *fileStore) UpdateSessionStatus(sessionID, status string) error {
+	sess, err := s.GetSession(sessionID)
 	if err != nil {
 		return err
 	}
@@ -107,11 +124,11 @@ func (s *fileStore) UpdateSessionStatus(runner, sessionID, status string) error 
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(s.sessionDir(runner, sessionID), "meta.json"), data, 0644)
+	return os.WriteFile(filepath.Join(s.sessionDir(sessionID), "meta.json"), data, 0644)
 }
 
-func (s *fileStore) UpdateSessionRunnerSessionID(runner, sessionID, runnerSessionID string) error {
-	sess, err := s.GetSession(runner, sessionID)
+func (s *fileStore) UpdateSessionRunnerSessionID(sessionID, runnerSessionID string) error {
+	sess, err := s.GetSession(sessionID)
 	if err != nil {
 		return err
 	}
@@ -125,11 +142,11 @@ func (s *fileStore) UpdateSessionRunnerSessionID(runner, sessionID, runnerSessio
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(s.sessionDir(runner, sessionID), "meta.json"), data, 0644)
+	return os.WriteFile(filepath.Join(s.sessionDir(sessionID), "meta.json"), data, 0644)
 }
 
-func (s *fileStore) UpdateSessionTerminalSessionID(runner, sessionID, terminalSessionID string) error {
-	sess, err := s.GetSession(runner, sessionID)
+func (s *fileStore) UpdateSessionTerminalSessionID(sessionID, terminalSessionID string) error {
+	sess, err := s.GetSession(sessionID)
 	if err != nil {
 		return err
 	}
@@ -143,7 +160,7 @@ func (s *fileStore) UpdateSessionTerminalSessionID(runner, sessionID, terminalSe
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(s.sessionDir(runner, sessionID), "meta.json"), data, 0644)
+	return os.WriteFile(filepath.Join(s.sessionDir(sessionID), "meta.json"), data, 0644)
 }
 
 func (s *fileStore) ClearAllSessions() error {
@@ -154,8 +171,8 @@ func (s *fileStore) ClearAllSessions() error {
 	return nil
 }
 
-func (s *fileStore) ListSessions(runner string) ([]SessionMeta, error) {
-	root := filepath.Join(s.home, "sessions", runner)
+func (s *fileStore) ListSessions() ([]SessionMeta, error) {
+	root := filepath.Join(s.home, "sessions")
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -168,7 +185,12 @@ func (s *fileStore) ListSessions(runner string) ([]SessionMeta, error) {
 		if !ent.IsDir() {
 			continue
 		}
-		sess, err := s.GetSession(runner, ent.Name())
+		// skip hidden entries (e.g. .layout is a file; defensive)
+		name := ent.Name()
+		if strings.HasPrefix(name, ".") {
+			continue
+		}
+		sess, err := s.GetSession(name)
 		if err != nil {
 			continue
 		}
@@ -177,12 +199,12 @@ func (s *fileStore) ListSessions(runner string) ([]SessionMeta, error) {
 	return out, nil
 }
 
-func (s *fileStore) eventsPath(runner, sessionID string) string {
-	return filepath.Join(s.sessionDir(runner, sessionID), "events.jsonl")
+func (s *fileStore) eventsPath(sessionID string) string {
+	return filepath.Join(s.sessionDir(sessionID), "events.jsonl")
 }
 
-func (s *fileStore) AppendEvent(runner, sessionID string, ev types.AgentEvent) error {
-	dir := s.sessionDir(runner, sessionID)
+func (s *fileStore) AppendEvent(sessionID string, ev types.AgentEvent) error {
+	dir := s.sessionDir(sessionID)
 	if err := osMkdirAll(dir); err != nil {
 		return err
 	}
@@ -190,7 +212,7 @@ func (s *fileStore) AppendEvent(runner, sessionID string, ev types.AgentEvent) e
 	if err != nil {
 		return err
 	}
-	f, err := os.OpenFile(s.eventsPath(runner, sessionID), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(s.eventsPath(sessionID), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
@@ -199,8 +221,8 @@ func (s *fileStore) AppendEvent(runner, sessionID string, ev types.AgentEvent) e
 	return err
 }
 
-func (s *fileStore) ReadEvents(runner, sessionID string, afterOffset int64) ([]types.AgentEvent, int64, error) {
-	path := s.eventsPath(runner, sessionID)
+func (s *fileStore) ReadEvents(sessionID string, afterOffset int64) ([]types.AgentEvent, int64, error) {
+	path := s.eventsPath(sessionID)
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -245,12 +267,12 @@ func (s *fileStore) ReadEvents(runner, sessionID string, afterOffset int64) ([]t
 	return events, offset, nil
 }
 
-func (s *fileStore) messagesPath(runner, sessionID string) string {
-	return filepath.Join(s.sessionDir(runner, sessionID), "messages.jsonl")
+func (s *fileStore) messagesPath(sessionID string) string {
+	return filepath.Join(s.sessionDir(sessionID), "messages.jsonl")
 }
 
-func (s *fileStore) readAllMessages(runner, sessionID string) ([]Message, error) {
-	path := s.messagesPath(runner, sessionID)
+func (s *fileStore) readAllMessages(sessionID string) ([]Message, error) {
+	path := s.messagesPath(sessionID)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -277,12 +299,12 @@ func (s *fileStore) readAllMessages(runner, sessionID string) ([]Message, error)
 	return msgs, nil
 }
 
-func (s *fileStore) writeAllMessages(runner, sessionID string, msgs []Message) error {
-	dir := s.sessionDir(runner, sessionID)
+func (s *fileStore) writeAllMessages(sessionID string, msgs []Message) error {
+	dir := s.sessionDir(sessionID)
 	if err := osMkdirAll(dir); err != nil {
 		return err
 	}
-	path := s.messagesPath(runner, sessionID)
+	path := s.messagesPath(sessionID)
 	if len(msgs) == 0 {
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			return err
@@ -301,8 +323,8 @@ func (s *fileStore) writeAllMessages(runner, sessionID string, msgs []Message) e
 	return os.WriteFile(path, []byte(b.String()), 0644)
 }
 
-func (s *fileStore) AppendMessage(runner, sessionID, text string) (Message, error) {
-	msgs, err := s.readAllMessages(runner, sessionID)
+func (s *fileStore) AppendMessage(sessionID, text string) (Message, error) {
+	msgs, err := s.readAllMessages(sessionID)
 	if err != nil {
 		return Message{}, err
 	}
@@ -313,14 +335,14 @@ func (s *fileStore) AppendMessage(runner, sessionID, text string) (Message, erro
 		CreatedAt: nowRFC3339(),
 	}
 	msgs = append(msgs, msg)
-	if err := s.writeAllMessages(runner, sessionID, msgs); err != nil {
+	if err := s.writeAllMessages(sessionID, msgs); err != nil {
 		return Message{}, err
 	}
 	return msg, nil
 }
 
-func (s *fileStore) ListMessages(runner, sessionID string) ([]Message, error) {
-	msgs, err := s.readAllMessages(runner, sessionID)
+func (s *fileStore) ListMessages(sessionID string) ([]Message, error) {
+	msgs, err := s.readAllMessages(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -330,15 +352,15 @@ func (s *fileStore) ListMessages(runner, sessionID string) ([]Message, error) {
 	return msgs, nil
 }
 
-func (s *fileStore) PopMessages(runner, sessionID string) ([]Message, error) {
-	msgs, err := s.readAllMessages(runner, sessionID)
+func (s *fileStore) PopMessages(sessionID string) ([]Message, error) {
+	msgs, err := s.readAllMessages(sessionID)
 	if err != nil {
 		return nil, err
 	}
 	if msgs == nil {
 		msgs = []Message{}
 	}
-	if err := s.writeAllMessages(runner, sessionID, nil); err != nil {
+	if err := s.writeAllMessages(sessionID, nil); err != nil {
 		return nil, err
 	}
 	return msgs, nil

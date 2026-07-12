@@ -1,7 +1,8 @@
 # agentstorage Tests
 
 Doc-style tests for `github.com/xhd2015/agent-pro/pkgs/agentstorage`, covering
-file-backed session storage under `AGENT_RUN_HOME`.
+file-backed session storage under `AGENT_RUN_HOME` with **flat** session
+directories (no runner path segment).
 
 # DSN (Domain Specific Notion)
 
@@ -13,19 +14,28 @@ under a single home directory (default `~/.agent-run/`, overridden in tests via
 AGENT_RUN_HOME/
   config.json              # {default_agent_runner, default_model, last_session}
   auth.token               # optional web auth token (not exercised here)
-  sessions/<runner>/<session_id>/
-    meta.json              # SessionMeta: runner, session_id, status, model, workspace, timestamps
-    events.jsonl           # NDJSON lines of types.AgentEvent
-    messages.jsonl         # queued user follow-ups {id, text, session_id, created_at}
+  sessions/
+    .layout                # optional {"version":2} (migration marker; not required by Store writes)
+    <session_id>/          # global unique key = directory name
+      meta.json            # SessionMeta: runner (required metadata), session_id, status, model, workspace, timestamps
+      events.jsonl         # NDJSON lines of types.AgentEvent
+      messages.jsonl       # queued user follow-ups {id, text, session_id, created_at}
   cursors/
     web-ui.json
     tui.json
 ```
 
+Identity is bare `session_id`. `meta.runner` is agent-backend metadata only; it
+is **not** a path component. Store methods take `sessionID` only (no runner
+argument). `CreateSession` requires non-empty `meta.Runner` and rejects an
+existing session directory.
+
 `Store` methods map to paths: `Config`/`SaveConfig` ↔ `config.json`;
 `CreateSession`/`GetSession`/`UpdateSessionStatus`/`ListSessions` ↔ `meta.json`;
 `AppendEvent`/`ReadEvents` ↔ `events.jsonl` (offset = byte position for resume);
 `AppendMessage`/`ListMessages`/`PopMessages` ↔ `messages.jsonl` (FIFO pop).
+`ListSessions()` returns **all** sessions under `sessions/` regardless of
+`meta.runner`.
 
 Tests call the package directly (no CLI). Each run uses an isolated temp home
 `filepath.Join(t.TempDir(), ".agent-run")` with `AGENT_RUN_HOME` set accordingly.
@@ -43,15 +53,17 @@ pkgs/agentstorage/tests/
 ├── home/
 │   ├── env-override-home-path/     AGENT_RUN_HOME overrides explicit Home path
 │   └── creates-session-dirs-on-first-write/
-│                                     first write creates sessions/<runner>/<id>/
+│                                     first write creates sessions/<id>/
 ├── config/
 │   ├── load-missing-returns-empty-defaults/
 │   └── save-and-reload-roundtrip/
 ├── session/
-│   ├── create-get-update-status/
-│   ├── list-filters-by-runner/
+│   ├── create-get-update-status/   flat path + CRUD + status
+│   ├── create-duplicate-id-error/  second CreateSession same id fails
+│   ├── create-empty-runner-error/  empty meta.Runner rejected
+│   ├── list-all-sessions/          ListSessions returns all runners
 │   ├── get-missing-error/
-│   └── workspace-roundtrip/          CreateSession workspace → GetSession preserves path
+│   └── workspace-roundtrip/
 ├── events/
 │   ├── append-and-read-from-start/
 │   ├── read-after-offset-skips-prior/
@@ -61,7 +73,7 @@ pkgs/agentstorage/tests/
 │   ├── pop-fifo-order/
 │   └── pop-empty-queue/
 └── isolation/
-    └── writes-stay-under-home/     no files written outside AGENT_RUN_HOME
+    └── writes-stay-under-home/
 ```
 
 ## Test Index
@@ -69,20 +81,22 @@ pkgs/agentstorage/tests/
 | # | Leaf | Description |
 |---|------|-------------|
 | 1 | `home/env-override-home-path` | `AGENT_RUN_HOME` wins over constructor home argument |
-| 2 | `home/creates-session-dirs-on-first-write` | First `AppendEvent` creates session directory tree |
+| 2 | `home/creates-session-dirs-on-first-write` | First `AppendEvent` creates `sessions/<id>/` (no runner dir) |
 | 3 | `config/load-missing-returns-empty-defaults` | Missing `config.json` yields empty `Config` defaults |
 | 4 | `config/save-and-reload-roundtrip` | `SaveConfig` then `Config` returns identical values |
-| 5 | `session/create-get-update-status` | Create, get, update status, get again |
-| 6 | `session/list-filters-by-runner` | `ListSessions` returns only matching runner |
-| 7 | `session/get-missing-error` | `GetSession` on unknown id returns error |
-| 7b | `session/workspace-roundtrip` | `CreateSession` with `workspace` → `GetSession` returns same path |
-| 8 | `events/append-and-read-from-start` | Appended events readable from offset 0 |
-| 9 | `events/read-after-offset-skips-prior` | `ReadEvents(afterOffset)` skips earlier lines |
-| 10 | `events/read-empty-session` | New session returns zero events and offset 0 |
-| 11 | `messages/append-list-roundtrip` | `AppendMessage` then `ListMessages` preserves order |
-| 12 | `messages/pop-fifo-order` | `PopMessages` drains oldest-first |
-| 13 | `messages/pop-empty-queue` | `PopMessages` on empty queue returns nil/empty slice |
-| 14 | `isolation/writes-stay-under-home` | All tracked writes remain under home prefix |
+| 5 | `session/create-get-update-status` | Create, get, update status; path is `sessions/<id>/meta.json` |
+| 6 | `session/create-duplicate-id-error` | Duplicate `CreateSession` same id errors without overwrite |
+| 7 | `session/create-empty-runner-error` | Empty `meta.Runner` rejected |
+| 8 | `session/list-all-sessions` | `ListSessions()` returns sessions for all runners |
+| 9 | `session/get-missing-error` | `GetSession` on unknown id returns error |
+| 10 | `session/workspace-roundtrip` | `CreateSession` with `workspace` → `GetSession` preserves path |
+| 11 | `events/append-and-read-from-start` | Appended events readable from offset 0 under flat path |
+| 12 | `events/read-after-offset-skips-prior` | `ReadEvents(afterOffset)` skips earlier lines |
+| 13 | `events/read-empty-session` | New session returns zero events and offset 0 |
+| 14 | `messages/append-list-roundtrip` | `AppendMessage` then `ListMessages` preserves order |
+| 15 | `messages/pop-fifo-order` | `PopMessages` drains oldest-first |
+| 16 | `messages/pop-empty-queue` | `PopMessages` on empty queue returns nil/empty slice |
+| 17 | `isolation/writes-stay-under-home` | All tracked writes remain under home prefix |
 
 ## How to Run
 
@@ -156,7 +170,7 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 			resp.ResolvedHome = store.Home()
 		case "creates_dirs":
 			ev := sampleEvent("bootstrap")
-			if err := store.AppendEvent(req.Runner, req.SessionID, ev); err != nil {
+			if err := store.AppendEvent(req.SessionID, ev); err != nil {
 				resp.Err = err
 				return resp, err
 			}
@@ -202,45 +216,72 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 				Status:          "running",
 				Model:           req.Model,
 			}
-			if err := store.CreateSession(req.Runner, req.SessionID, meta); err != nil {
+			if err := store.CreateSession(req.SessionID, meta); err != nil {
 				resp.Err = err
 				return resp, err
 			}
-			sess, err := store.GetSession(req.Runner, req.SessionID)
+			sess, err := store.GetSession(req.SessionID)
 			if err != nil {
 				resp.Err = err
 				return resp, err
 			}
 			resp.Session = sess
-			if err := store.UpdateSessionStatus(req.Runner, req.SessionID, req.Status); err != nil {
+			if err := store.UpdateSessionStatus(req.SessionID, req.Status); err != nil {
 				resp.Err = err
 				return resp, err
 			}
-			sess2, err := store.GetSession(req.Runner, req.SessionID)
+			sess2, err := store.GetSession(req.SessionID)
 			if err != nil {
 				resp.Err = err
 				return resp, err
 			}
 			resp.Session = sess2
-		case "list_by_runner":
+			scanFileTracker(tracker)
+			resp.FilesWritten = tracker.paths
+		case "create_duplicate":
+			meta := agentstorage.SessionMeta{
+				Runner:    req.Runner,
+				SessionID: req.SessionID,
+				Status:    "running",
+			}
+			if err := store.CreateSession(req.SessionID, meta); err != nil {
+				resp.Err = err
+				return resp, err
+			}
+			// second create must fail
+			err := store.CreateSession(req.SessionID, meta)
+			resp.Err = err
+			scanFileTracker(tracker)
+			resp.FilesWritten = tracker.paths
+		case "create_empty_runner":
+			meta := agentstorage.SessionMeta{
+				Runner:    "",
+				SessionID: req.SessionID,
+				Status:    "running",
+			}
+			err := store.CreateSession(req.SessionID, meta)
+			resp.Err = err
+			scanFileTracker(tracker)
+			resp.FilesWritten = tracker.paths
+		case "list_all":
 			m1 := agentstorage.SessionMeta{Runner: req.Runner, SessionID: req.SessionID, Status: "running"}
 			m2 := agentstorage.SessionMeta{Runner: req.OtherRunner, SessionID: req.OtherSessID, Status: "running"}
-			if err := store.CreateSession(req.Runner, req.SessionID, m1); err != nil {
+			if err := store.CreateSession(req.SessionID, m1); err != nil {
 				resp.Err = err
 				return resp, err
 			}
-			if err := store.CreateSession(req.OtherRunner, req.OtherSessID, m2); err != nil {
+			if err := store.CreateSession(req.OtherSessID, m2); err != nil {
 				resp.Err = err
 				return resp, err
 			}
-			list, err := store.ListSessions(req.Runner)
+			list, err := store.ListSessions()
 			if err != nil {
 				resp.Err = err
 				return resp, err
 			}
 			resp.Sessions = list
 		case "get_missing":
-			sess, err := store.GetSession(req.Runner, req.SessionID)
+			sess, err := store.GetSession(req.SessionID)
 			resp.Session = sess
 			resp.Err = err
 		case "workspace_roundtrip":
@@ -250,11 +291,11 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 				Status:    "running",
 				Workspace: req.Workspace,
 			}
-			if err := store.CreateSession(req.Runner, req.SessionID, meta); err != nil {
+			if err := store.CreateSession(req.SessionID, meta); err != nil {
 				resp.Err = err
 				return resp, err
 			}
-			sess, err := store.GetSession(req.Runner, req.SessionID)
+			sess, err := store.GetSession(req.SessionID)
 			if err != nil {
 				resp.Err = err
 				return resp, err
@@ -268,12 +309,12 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 		switch req.Action {
 		case "append_read_start":
 			for _, ev := range req.Events {
-				if err := store.AppendEvent(req.Runner, req.SessionID, ev); err != nil {
+				if err := store.AppendEvent(req.SessionID, ev); err != nil {
 					resp.Err = err
 					return resp, err
 				}
 			}
-			events, offset, err := store.ReadEvents(req.Runner, req.SessionID, 0)
+			events, offset, err := store.ReadEvents(req.SessionID, 0)
 			if err != nil {
 				resp.Err = err
 				return resp, err
@@ -282,17 +323,17 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 			resp.EventsOffset = offset
 		case "read_after_offset":
 			for _, ev := range req.Events {
-				if err := store.AppendEvent(req.Runner, req.SessionID, ev); err != nil {
+				if err := store.AppendEvent(req.SessionID, ev); err != nil {
 					resp.Err = err
 					return resp, err
 				}
 			}
-			_, firstOffset, err := store.ReadEvents(req.Runner, req.SessionID, 0)
+			_, firstOffset, err := store.ReadEvents(req.SessionID, 0)
 			if err != nil {
 				resp.Err = err
 				return resp, err
 			}
-			events, offset, err := store.ReadEvents(req.Runner, req.SessionID, firstOffset)
+			events, offset, err := store.ReadEvents(req.SessionID, firstOffset)
 			if err != nil {
 				resp.Err = err
 				return resp, err
@@ -300,7 +341,7 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 			resp.Events = events
 			resp.EventsOffset = offset
 		case "read_empty":
-			events, offset, err := store.ReadEvents(req.Runner, req.SessionID, 0)
+			events, offset, err := store.ReadEvents(req.SessionID, 0)
 			if err != nil {
 				resp.Err = err
 				return resp, err
@@ -315,12 +356,12 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 		switch req.Action {
 		case "append_list":
 			for _, text := range req.MessageText {
-				if _, err := store.AppendMessage(req.Runner, req.SessionID, text); err != nil {
+				if _, err := store.AppendMessage(req.SessionID, text); err != nil {
 					resp.Err = err
 					return resp, err
 				}
 			}
-			msgs, err := store.ListMessages(req.Runner, req.SessionID)
+			msgs, err := store.ListMessages(req.SessionID)
 			if err != nil {
 				resp.Err = err
 				return resp, err
@@ -328,19 +369,19 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 			resp.Messages = msgs
 		case "pop_fifo":
 			for _, text := range req.MessageText {
-				if _, err := store.AppendMessage(req.Runner, req.SessionID, text); err != nil {
+				if _, err := store.AppendMessage(req.SessionID, text); err != nil {
 					resp.Err = err
 					return resp, err
 				}
 			}
-			msgs, err := store.PopMessages(req.Runner, req.SessionID)
+			msgs, err := store.PopMessages(req.SessionID)
 			if err != nil {
 				resp.Err = err
 				return resp, err
 			}
 			resp.Messages = msgs
 		case "pop_empty":
-			msgs, err := store.PopMessages(req.Runner, req.SessionID)
+			msgs, err := store.PopMessages(req.SessionID)
 			if err != nil {
 				resp.Err = err
 				return resp, err
@@ -354,7 +395,7 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 		switch req.Action {
 		case "writes_under_home":
 			meta := agentstorage.SessionMeta{Runner: req.Runner, SessionID: req.SessionID, Status: "running"}
-			if err := store.CreateSession(req.Runner, req.SessionID, meta); err != nil {
+			if err := store.CreateSession(req.SessionID, meta); err != nil {
 				resp.Err = err
 				return resp, err
 			}
@@ -362,11 +403,11 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 				resp.Err = err
 				return resp, err
 			}
-			if err := store.AppendEvent(req.Runner, req.SessionID, sampleEvent("iso")); err != nil {
+			if err := store.AppendEvent(req.SessionID, sampleEvent("iso")); err != nil {
 				resp.Err = err
 				return resp, err
 			}
-			if _, err := store.AppendMessage(req.Runner, req.SessionID, "hello"); err != nil {
+			if _, err := store.AppendMessage(req.SessionID, "hello"); err != nil {
 				resp.Err = err
 				return resp, err
 			}

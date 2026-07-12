@@ -30,7 +30,7 @@ func Setup(t *testing.T, req *Request) error {
 	req.Config = agentstorage.Config{
 		DefaultAgentRunner: "fake-opencode",
 		DefaultModel:       "isolation-model",
-		LastSession:        "fake-opencode/sess_iso_leaf",
+		LastSession:        "sess_iso_leaf",
 	}
 	return nil
 }

@@ -113,7 +113,7 @@ func findRegistryEntry(home, terminalSessionID string) (*ttywatch.RegistryEntry,
 // ResolveByAgentSession resolves via meta.terminal_session_id then live registry.
 func ResolveByAgentSession(store agentstorage.Store, runner, agentSessionID string) (*TTYSession, error) {
 	ensureStubRegistered()
-	sess, err := store.GetSession(runner, agentSessionID)
+	sess, err := store.GetSession(agentSessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +170,7 @@ func ResolveTerminalStatus(store agentstorage.Store, runner, agentSessionID stri
 		return sess, nil
 	}
 
-	sess, err := store.GetSession(runner, agentSessionID)
+	sess, err := store.GetSession(agentSessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -254,19 +254,21 @@ func readTTYJSON(home, runner, agentSessionID string) *TTYSnapshot {
 }
 
 func findTTYJSONForTerminal(home, runner, terminalSessionID string) (*TTYSnapshot, string) {
-	sessionsDir := filepath.Join(home, "sessions", runner)
+	sessionsDir := filepath.Join(home, "sessions")
 	entries, err := os.ReadDir(sessionsDir)
 	if err != nil {
 		return nil, ""
 	}
 	for _, ent := range entries {
-		if !ent.IsDir() {
+		if !ent.IsDir() || strings.HasPrefix(ent.Name(), ".") {
 			continue
 		}
 		agentID := ent.Name()
 		snap := readTTYJSON(home, runner, agentID)
 		if snap != nil && snap.TerminalSessionID == terminalSessionID {
-			return snap, agentID
+			if runner == "" || snap.RunnerID == "" || snap.RunnerID == runner {
+				return snap, agentID
+			}
 		}
 	}
 	return nil, ""
@@ -277,13 +279,13 @@ func findAgentSessionByTerminalID(home, runner, terminalSessionID string) string
 	if agentID != "" {
 		return agentID
 	}
-	sessionsDir := filepath.Join(home, "sessions", runner)
+	sessionsDir := filepath.Join(home, "sessions")
 	entries, err := os.ReadDir(sessionsDir)
 	if err != nil {
 		return ""
 	}
 	for _, ent := range entries {
-		if !ent.IsDir() {
+		if !ent.IsDir() || strings.HasPrefix(ent.Name(), ".") {
 			continue
 		}
 		metaPath := filepath.Join(sessionsDir, ent.Name(), "meta.json")
@@ -292,10 +294,13 @@ func findAgentSessionByTerminalID(home, runner, terminalSessionID string) string
 			continue
 		}
 		var meta struct {
+			Runner            string `json:"runner"`
 			TerminalSessionID string `json:"terminal_session_id"`
 		}
 		if json.Unmarshal(data, &meta) == nil && meta.TerminalSessionID == terminalSessionID {
-			return ent.Name()
+			if runner == "" || meta.Runner == "" || meta.Runner == runner {
+				return ent.Name()
+			}
 		}
 	}
 	return ""

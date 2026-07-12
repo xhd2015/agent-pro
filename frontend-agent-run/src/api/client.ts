@@ -110,21 +110,14 @@ export type SessionDetail = {
   events_offset?: number
 }
 
-export function readSessionBootstrap(
-  runner?: string,
-  sessionId?: string,
-): SessionDetail | null {
+export function readSessionBootstrap(sessionId?: string): SessionDetail | null {
   const el = document.getElementById('agent-run-session-bootstrap')
   if (!el?.textContent) {
     return null
   }
   try {
     const data = JSON.parse(el.textContent) as SessionDetail
-    if (
-      runner &&
-      sessionId &&
-      (data.session?.runner !== runner || data.session?.session_id !== sessionId)
-    ) {
+    if (sessionId && data.session?.session_id !== sessionId) {
       return null
     }
     return data
@@ -140,9 +133,9 @@ export type TerminalStatus = {
   terminal_session_id?: string
 }
 
-export async function fetchSessionDetail(runner: string, sessionId: string): Promise<SessionDetail | null> {
+export async function fetchSessionDetail(sessionId: string): Promise<SessionDetail | null> {
   const res = await apiFetch(
-    `/api/agent-run/sessions/${encodeURIComponent(runner)}/${encodeURIComponent(sessionId)}`,
+    `/api/agent-run/sessions/${encodeURIComponent(sessionId)}`,
   )
   if (!res.ok) {
     return null
@@ -163,12 +156,11 @@ export async function createSession(runner: string, prompt: string): Promise<Ses
 }
 
 export async function sendSessionMessage(
-  runner: string,
   sessionId: string,
   text: string,
 ): Promise<boolean> {
   const res = await apiFetch(
-    `/api/agent-run/sessions/${encodeURIComponent(runner)}/${encodeURIComponent(sessionId)}/messages`,
+    `/api/agent-run/sessions/${encodeURIComponent(sessionId)}/messages`,
     {
       method: 'POST',
       body: JSON.stringify({ text }),
@@ -178,11 +170,11 @@ export async function sendSessionMessage(
 }
 
 export async function fetchTerminalStatus(
-  runner: string,
   sessionId: string,
+  runner = '',
 ): Promise<TerminalStatus> {
   const res = await apiFetch(
-    `/api/agent-run/sessions/${encodeURIComponent(runner)}/${encodeURIComponent(sessionId)}/terminal`,
+    `/api/agent-run/sessions/${encodeURIComponent(sessionId)}/terminal`,
   )
   if (!res.ok) {
     return { available: false, runner, session_id: sessionId }
@@ -190,10 +182,10 @@ export async function fetchTerminalStatus(
   return (await res.json()) as TerminalStatus
 }
 
-export function openTerminalWebSocket(runner: string, sessionId: string): WebSocket {
+export function openTerminalWebSocket(sessionId: string): WebSocket {
   const token = getToken()
   const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const path = `/api/agent-run/sessions/${encodeURIComponent(runner)}/${encodeURIComponent(sessionId)}/terminal/ws`
+  const path = `/api/agent-run/sessions/${encodeURIComponent(sessionId)}/terminal/ws`
   const url = new URL(path, `${scheme}//${window.location.host}`)
   if (token) {
     url.searchParams.set('token', token)
@@ -203,14 +195,13 @@ export function openTerminalWebSocket(runner: string, sessionId: string): WebSoc
 
 /** Tails session events via SSE (supports Bearer auth). Calls onEvent per AgentEvent JSON line. */
 export function subscribeSessionEvents(
-  runner: string,
   sessionId: string,
   afterOffset: number,
   onEvent: (ev: AgentEvent) => void,
   signal?: AbortSignal,
   onClose?: () => void,
 ): void {
-  const url = `/api/agent-run/sessions/${encodeURIComponent(runner)}/${encodeURIComponent(sessionId)}/events/stream?after=${afterOffset}`
+  const url = `/api/agent-run/sessions/${encodeURIComponent(sessionId)}/events/stream?after=${afterOffset}`
   void (async () => {
     try {
       const res = await apiFetch(url, {

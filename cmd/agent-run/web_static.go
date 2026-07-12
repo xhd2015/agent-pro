@@ -60,15 +60,15 @@ func registerStatic(mux *http.ServeMux, store agentstorage.Store) error {
 }
 
 func sessionBootstrapJSON(store agentstorage.Store, urlPath string) string {
-	runner, sessionID, ok := parseSessionPagePath(urlPath)
+	sessionID, ok := parseSessionPagePath(urlPath)
 	if !ok {
 		return ""
 	}
-	meta, err := store.GetSession(runner, sessionID)
+	meta, err := store.GetSession(sessionID)
 	if err != nil {
 		return ""
 	}
-	events, eventsOffset, err := store.ReadEvents(runner, sessionID, 0)
+	events, eventsOffset, err := store.ReadEvents(sessionID, 0)
 	if err != nil {
 		return ""
 	}
@@ -87,17 +87,17 @@ func sessionBootstrapJSON(store agentstorage.Store, urlPath string) string {
 	return string(data)
 }
 
-func parseSessionPagePath(urlPath string) (runner, sessionID string, ok bool) {
+// parseSessionPagePath accepts /sessions/{session_id} (no runner segment).
+func parseSessionPagePath(urlPath string) (sessionID string, ok bool) {
 	parts := strings.Split(strings.Trim(urlPath, "/"), "/")
-	if len(parts) != 3 || parts[0] != "sessions" {
-		return "", "", false
+	if len(parts) != 2 || parts[0] != "sessions" {
+		return "", false
 	}
-	runner = strings.TrimSpace(parts[1])
-	sessionID = strings.TrimSpace(parts[2])
-	if runner == "" || sessionID == "" {
-		return "", "", false
+	sessionID = strings.TrimSpace(parts[1])
+	if sessionID == "" {
+		return "", false
 	}
-	return runner, sessionID, true
+	return sessionID, true
 }
 
 func mimeTypeByExtension(ext string) string {

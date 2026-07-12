@@ -538,7 +538,7 @@ function TerminalModal({
       focusTerminal()
     }
 
-    const ws = openTerminalWebSocket(runner, sessionId)
+    const ws = openTerminalWebSocket(sessionId)
     wsRef.current = ws
     ws.binaryType = 'arraybuffer'
     const appendTranscript = (data: string | Uint8Array) => {
@@ -776,7 +776,7 @@ function QuickResumeStrip({ sessions }: { sessions: SessionSummary[] }) {
               key={`${s.runner}/${s.session_id}`}
               className="quick-resume-chip"
               data-testid="quick-resume-chip"
-              to={`/sessions/${encodeURIComponent(s.runner)}/${encodeURIComponent(s.session_id)}`}
+              to={`/sessions/${encodeURIComponent(s.session_id)}`}
               title={label}
             >
               <span className="quick-resume-chip-dot" aria-hidden="true" />
@@ -822,7 +822,7 @@ const SessionList = forwardRef<
             key={`${s.runner}/${s.session_id}`}
             className={`session-item session-item--${s.status || 'unknown'}${staleRunning ? ' session-item--stale-running' : ''}`}
             data-testid="session-item"
-            to={`/sessions/${encodeURIComponent(s.runner)}/${encodeURIComponent(s.session_id)}`}
+            to={`/sessions/${encodeURIComponent(s.session_id)}`}
           >
             <div className="session-item-head">
               <span
@@ -990,7 +990,7 @@ function HomePage() {
           await refresh()
         } else {
           navigate(
-            `/sessions/${encodeURIComponent(session.runner)}/${encodeURIComponent(session.session_id)}`,
+            `/sessions/${encodeURIComponent(session.session_id)}`,
           )
         }
       } else {
@@ -1170,13 +1170,14 @@ function buildTimeline(events: AgentEvent[]): AgentEvent[] {
 }
 
 function SessionPage() {
-  const { runner, sessionId } = useParams()
+  const { sessionId } = useParams()
   const navigate = useNavigate()
   const { needsAuth, ready } = useAuthGate()
   const bootstrap = useMemo(
-    () => readSessionBootstrap(runner, sessionId),
-    [runner, sessionId],
+    () => readSessionBootstrap(sessionId),
+    [sessionId],
   )
+  const [runner, setRunnerMeta] = useState(bootstrap?.session.runner ?? '')
   const [events, setEvents] = useState<AgentEvent[]>(bootstrap?.events ?? [])
   const [status, setStatus] = useState(bootstrap?.session.status ?? '')
   const [workspace, setWorkspace] = useState(bootstrap?.session.workspace ?? '')
@@ -1221,7 +1222,7 @@ function SessionPage() {
 
   const refresh = useCallback(
     async (options?: { mode?: 'full' | 'meta'; fromStreamClose?: boolean }) => {
-      if (!runner || !sessionId) return
+      if (!sessionId) return
       const refreshStartedAt = Date.now()
       debugLog('refresh:start', {
         runner,
@@ -1230,7 +1231,7 @@ function SessionPage() {
         statusRef: statusRef.current,
         streamOffset: streamOffsetRef.current,
       })
-      const detail = await fetchSessionDetail(runner, sessionId)
+      const detail = await fetchSessionDetail(sessionId)
       if (!detail) {
         debugLog('refresh:no-detail', {
           runner,
@@ -1245,6 +1246,9 @@ function SessionPage() {
       const runCompleted =
         mode === 'meta' && statusRef.current === 'running' && nextStatus !== 'running'
 
+      if (detail.session.runner) {
+        setRunnerMeta(detail.session.runner)
+      }
       setSessionUpdatedAt(detail.session.updated_at)
       setSessionCreatedAt(detail.session.created_at)
       if (detail.session.workspace) {
@@ -1319,12 +1323,12 @@ function SessionPage() {
     resetFollow()
   }, [runner, sessionId, resetFollow, updateStreamOffset])
   useEffect(() => {
-    if (!ready || needsAuth || !runner || !sessionId) return
-    const sessionKey = `${runner}/${sessionId}`
+    if (!ready || needsAuth || !sessionId) return
+    const sessionKey = sessionId
     if (hydratedSessionRef.current === sessionKey) return
     hydratedSessionRef.current = sessionKey
     void refresh({ mode: 'full' })
-  }, [ready, needsAuth, runner, sessionId, refresh])
+  }, [ready, needsAuth, sessionId, refresh])
 
   const finishedRefreshDoneRef = useRef(false)
   useEffect(() => {
@@ -1334,7 +1338,7 @@ function SessionPage() {
   }, [status])
 
   useEffect(() => {
-    if (!ready || needsAuth || !runner || !sessionId) return
+    if (!ready || needsAuth || !sessionId) return
     if (status !== 'finished' || finishedRefreshDoneRef.current) return
     finishedRefreshDoneRef.current = true
     if (lastSentUserPromptRef.current == null) {
@@ -1357,10 +1361,10 @@ function SessionPage() {
         await new Promise((resolve) => window.setTimeout(resolve, 250))
       }
     })()
-  }, [ready, needsAuth, runner, sessionId, status, refresh])
+  }, [ready, needsAuth, sessionId, status, refresh])
 
   useEffect(() => {
-    if (!ready || needsAuth || !runner || !sessionId) return
+    if (!ready || needsAuth || !sessionId) return
     if (!isTTYRunnerID(runner)) return
     if (!sessionUpdatedAt) return
     if (terminalSessionIdRef.current) return
@@ -1378,7 +1382,7 @@ function SessionPage() {
 
     const refreshTerminal = async () => {
       if (stopped || terminalAvailableRef.current) return
-      const terminal = await fetchTerminalStatus(runner, sessionId)
+      const terminal = await fetchTerminalStatus(sessionId, runner)
       if (stopped) return
       if (terminal.available) {
         terminalAvailableRef.current = true
@@ -1397,7 +1401,7 @@ function SessionPage() {
   }, [ready, needsAuth, runner, sessionId, sessionUpdatedAt])
 
   useEffect(() => {
-    if (!ready || needsAuth || !runner || !sessionId) return
+    if (!ready || needsAuth || !sessionId) return
 
     const offset = streamOffset
     if (offset == null) return
@@ -1417,7 +1421,6 @@ function SessionPage() {
         eventSummary: summarizeEvents(eventsRef.current),
       })
       subscribeSessionEvents(
-        runner,
         sessionId,
         offset,
         (ev) => {
@@ -1515,7 +1518,7 @@ function SessionPage() {
 
   const handleSend = async () => {
     const text = draft.trim()
-    if (!text || sending || !runner || !sessionId) return
+    if (!text || sending || !sessionId) return
     const sendStartedAt = Date.now()
     const listEl = messageListRef.current
     const detached =
@@ -1535,7 +1538,7 @@ function SessionPage() {
     }
     setSending(true)
     try {
-      const ok = await sendSessionMessage(runner, sessionId, text)
+      const ok = await sendSessionMessage(sessionId, text)
       debugLog('send:post-result', {
         runner,
         sessionId,
@@ -1613,7 +1616,7 @@ function SessionPage() {
   }, [showInlineAssistantLoading, restorePinnedScroll])
 
   if (needsAuth) return <AuthPage />
-  if (!ready || !runner || !sessionId) {
+  if (!ready || !sessionId) {
     return (
       <Shell sessionPage>
         <div className="main-panel" />
@@ -1792,7 +1795,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
-      <Route path="/sessions/:runner/:sessionId" element={<SessionPage />} />
+      <Route path="/sessions/:sessionId" element={<SessionPage />} />
     </Routes>
   )
 }

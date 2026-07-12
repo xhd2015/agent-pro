@@ -3,7 +3,7 @@
 **Feature**: `sessions --json` on empty store returns valid empty JSON
 
 ```
-agent-run sessions --json (empty AGENT_RUN_HOME) → valid JSON, no sessions
+agent-run sessions --json (empty AGENT_RUN_HOME) → {"sessions":[]}
 ```
 
 ## Preconditions

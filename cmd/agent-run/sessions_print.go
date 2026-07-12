@@ -21,16 +21,20 @@ const (
 	sessionsPrintMaxGraceFinished   = 3 * time.Second
 )
 
-func parseSessionRef(ref string) (runner, sessionID string, err error) {
-	i := strings.Index(ref, "/")
-	if i <= 0 || i == len(ref)-1 {
-		return "", "", fmt.Errorf("invalid session reference %q: expected runner/session_id", ref)
+// parseBareSessionID accepts a bare session id only. Compound runner/id refs are rejected (Q5).
+func parseBareSessionID(ref string) (sessionID string, err error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return "", fmt.Errorf("invalid session reference: empty")
 	}
-	return ref[:i], ref[i+1:], nil
+	if strings.Contains(ref, "/") {
+		return "", fmt.Errorf("invalid session reference %q: expected bare session_id (not runner/session_id)", ref)
+	}
+	return ref, nil
 }
 
-func sessionEventsPath(store agentstorage.Store, runner, sessionID string) string {
-	return filepath.Join(store.Home(), "sessions", runner, sessionID, "events.jsonl")
+func sessionEventsPath(store agentstorage.Store, sessionID string) string {
+	return filepath.Join(store.Home(), "sessions", sessionID, "events.jsonl")
 }
 
 func printFormattedEvents(data []byte) int {
@@ -122,13 +126,13 @@ func countFormattedEventLines(data []byte) int {
 	return n
 }
 
-func runSessionsPrint(store agentstorage.Store, runner, sessionID string) error {
-	sess, err := store.GetSession(runner, sessionID)
+func runSessionsPrint(store agentstorage.Store, sessionID string) error {
+	sess, err := store.GetSession(sessionID)
 	if err != nil {
 		return err
 	}
 
-	eventsPath := sessionEventsPath(store, runner, sessionID)
+	eventsPath := sessionEventsPath(store, sessionID)
 	data, err := os.ReadFile(eventsPath)
 	hasEvents := err == nil
 	if err != nil && !os.IsNotExist(err) {
@@ -178,7 +182,7 @@ func runSessionsPrint(store agentstorage.Store, runner, sessionID string) error 
 
 	tailOffset := int64(0)
 	if hasEvents {
-		_, tailOffset, err = store.ReadEvents(runner, sessionID, 0)
+		_, tailOffset, err = store.ReadEvents(sessionID, 0)
 		if err != nil {
 			return fmt.Errorf("read events offset: %w", err)
 		}
@@ -202,10 +206,10 @@ func runSessionsPrint(store agentstorage.Store, runner, sessionID string) error 
 		}
 	)
 
-	go pollSessionsPrintFollowExit(ctx, cancel, store, runner, sessionID, idleSinceLastLine)
+	go pollSessionsPrintFollowExit(ctx, cancel, store, sessionID, idleSinceLastLine)
 
 	var watchState print.FormatState
-	watchErr := agentevents.WatchEvents(ctx, store, runner, sessionID, tailOffset, func(line string) error {
+	watchErr := agentevents.WatchEvents(ctx, store, sessionID, tailOffset, func(line string) error {
 		recordLineAt()
 		if isDoneEventLine(line) {
 			cancel()
@@ -245,7 +249,7 @@ func isDoneEventLine(line string) bool {
 
 // pollSessionsPrintFollowExit cancels CLI follow once the session is no longer running
 // and tailing has gone idle, so --print exits instead of blocking forever.
-func pollSessionsPrintFollowExit(ctx context.Context, cancel context.CancelFunc, store agentstorage.Store, runner, sessionID string, idleSinceLastLine func() time.Duration) {
+func pollSessionsPrintFollowExit(ctx context.Context, cancel context.CancelFunc, store agentstorage.Store, sessionID string, idleSinceLastLine func() time.Duration) {
 	ticker := time.NewTicker(sessionsPrintStatusPollInterval)
 	defer ticker.Stop()
 
@@ -256,7 +260,7 @@ func pollSessionsPrintFollowExit(ctx context.Context, cancel context.CancelFunc,
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			meta, err := store.GetSession(runner, sessionID)
+			meta, err := store.GetSession(sessionID)
 			if err != nil {
 				cancel()
 				return

@@ -15,7 +15,7 @@ import (
 )
 
 // OpenGrokBindState is durable bind progress for concurrent status probes.
-// Stored at sessions/<runner>/<session_id>/bind.json.
+// Stored at sessions/<session_id>/bind.json.
 type OpenGrokBindState struct {
 	State           string `json:"state"` // in_progress|ok|failed
 	StartedAt       string `json:"started_at"`
@@ -40,7 +40,7 @@ type openGrokBindWorker struct {
 
 // BindJSONPath returns the durable bind state path under the agent-run home.
 func BindJSONPath(home, runner, sessionID string) string {
-	return filepath.Join(home, "sessions", runner, sessionID, "bind.json")
+	return filepath.Join(home, "sessions", sessionID, "bind.json")
 }
 
 // ReadOpenGrokBindState loads bind.json if present.
@@ -61,7 +61,7 @@ func writeOpenGrokBindState(store agentstorage.Store, runner, sessionID string, 
 	if store == nil {
 		return fmt.Errorf("store is required")
 	}
-	dir := filepath.Join(store.Home(), "sessions", runner, sessionID)
+	dir := filepath.Join(store.Home(), "sessions", sessionID)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
@@ -206,7 +206,7 @@ func runOpenGrokBind(ctx context.Context, opts RunOptions, runner, sessionID, wo
 		}
 	}
 	// Persist runner id ASAP for mid-open status / concurrent probes.
-	_ = opts.Store.UpdateSessionRunnerSessionID(runner, sessionID, id)
+	_ = opts.Store.UpdateSessionRunnerSessionID(sessionID, id)
 	finished := time.Now().UTC().Format(time.RFC3339Nano)
 	_ = writeOpenGrokBindState(opts.Store, runner, sessionID, OpenGrokBindState{
 		State:           "ok",

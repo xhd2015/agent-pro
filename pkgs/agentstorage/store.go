@@ -5,22 +5,23 @@ import (
 )
 
 // Store is the durable agent-run storage contract.
+// Session identity is bare sessionID; runner is metadata on SessionMeta only.
 type Store interface {
 	Home() string
 	Config() (Config, error)
 	SaveConfig(Config) error
-	ListSessions(runner string) ([]SessionMeta, error)
+	ListSessions() ([]SessionMeta, error)
 	ClearAllSessions() error
-	GetSession(runner, sessionID string) (*Session, error)
-	CreateSession(runner, sessionID string, meta SessionMeta) error
-	UpdateSessionStatus(runner, sessionID, status string) error
-	UpdateSessionRunnerSessionID(runner, sessionID, runnerSessionID string) error
-	UpdateSessionTerminalSessionID(runner, sessionID, terminalSessionID string) error
-	AppendEvent(runner, sessionID string, ev types.AgentEvent) error
-	ReadEvents(runner, sessionID string, afterOffset int64) ([]types.AgentEvent, int64, error)
-	AppendMessage(runner, sessionID, text string) (Message, error)
-	PopMessages(runner, sessionID string) ([]Message, error)
-	ListMessages(runner, sessionID string) ([]Message, error)
+	GetSession(sessionID string) (*Session, error)
+	CreateSession(sessionID string, meta SessionMeta) error
+	UpdateSessionStatus(sessionID, status string) error
+	UpdateSessionRunnerSessionID(sessionID, runnerSessionID string) error
+	UpdateSessionTerminalSessionID(sessionID, terminalSessionID string) error
+	AppendEvent(sessionID string, ev types.AgentEvent) error
+	ReadEvents(sessionID string, afterOffset int64) ([]types.AgentEvent, int64, error)
+	AppendMessage(sessionID, text string) (Message, error)
+	PopMessages(sessionID string) ([]Message, error)
+	ListMessages(sessionID string) ([]Message, error)
 }
 
 // NewFileStore opens the default file-backed store. AGENT_RUN_HOME overrides home.

@@ -1,32 +1,31 @@
 # Scenario
 
-**Feature**: `sessions <runner>/<session_id> --print` — formatted session trace
+**Feature**: `sessions <session_id> --print` — formatted session trace
 
 ```
-agent-run sessions <runner>/<id> --print -> GetSession + events.jsonl -> FormatState -> stdout
+agent-run sessions <session_id> --print -> GetSession + events.jsonl -> FormatState -> stdout
 # running: tail events + poll meta.status until not running
+# bare session id only; reject runner/id (Q5)
 ```
 
 ## Preconditions
 
-- Positional ref is a single token `runner/session_id`.
+- Positional ref is a single bare `session_id` token (no `/`).
 - `--print` is required when the positional is present.
 
 ## Steps
 
 1. Grouping `Setup` sets `req.SessionRunner` and `req.SessionID` when leaves omit them.
-2. Leaf `Setup` seeds storage and builds `req.Args` as `sessions <runner>/<id> --print` (or CLI error variants).
+2. Leaf `Setup` seeds storage and builds `req.Args` as `sessions <id> --print` (or CLI error variants).
 3. `Run` executes the CLI against `AGENT_RUN_HOME`.
 
 ```go
 import (
-	"fmt"
 	"testing"
 )
 
-func printSessionArgs(runner, sessionID string, extra ...string) []string {
-	ref := fmt.Sprintf("%s/%s", runner, sessionID)
-	args := []string{"sessions", ref, "--print"}
+func printSessionArgs(sessionID string, extra ...string) []string {
+	args := []string{"sessions", sessionID, "--print"}
 	return append(args, extra...)
 }
 

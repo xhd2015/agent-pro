@@ -106,7 +106,7 @@ func webProcessWorkspace() (string, error) {
 }
 
 func sessionWorkspace(store agentstorage.Store, runner, sessionID string) (string, error) {
-	sess, err := store.GetSession(runner, sessionID)
+	sess, err := store.GetSession(sessionID)
 	if err != nil {
 		return "", err
 	}
@@ -117,7 +117,7 @@ func sessionWorkspace(store agentstorage.Store, runner, sessionID string) (strin
 }
 
 func appendUserPromptEvent(store agentstorage.Store, runner, sessionID, text string) error {
-	return store.AppendEvent(runner, sessionID, types.AgentEvent{
+	return store.AppendEvent(sessionID, types.AgentEvent{
 		Type:      types.ActionMessage,
 		Role:      "user",
 		Text:      text,
@@ -141,7 +141,7 @@ func waitForLiveTerminal(store agentstorage.Store, runner, sessionID string, tim
 	for time.Now().Before(deadline) {
 		if ttySess, err := agenttty.ResolveTerminalStatus(store, runner, sessionID); err == nil && ttySess.TCPReachable {
 			if strings.TrimSpace(ttySess.Meta.TerminalSessionID) == "" && ttySess.TerminalSessionID != "" {
-				_ = store.UpdateSessionTerminalSessionID(runner, sessionID, ttySess.TerminalSessionID)
+				_ = store.UpdateSessionTerminalSessionID(sessionID, ttySess.TerminalSessionID)
 			}
 			return
 		}
@@ -193,7 +193,7 @@ func waitForGrokUpdatesPath(grokHome, workspace, grokSessionID string, timeout t
 }
 
 func ensureWebGrokSync(runner, sessionID string, store agentstorage.Store, runCfg webRunConfig, promptHint ...string) {
-	meta, err := store.GetSession(runner, sessionID)
+	meta, err := store.GetSession(sessionID)
 	if err != nil {
 		return
 	}
@@ -334,8 +334,8 @@ func handleSessionsCollection(store agentstorage.Store, runCfg webRunConfig) htt
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			if _, err := store.GetSession(runner, sessionID); err != nil {
-				if err := store.CreateSession(runner, sessionID, agentstorage.SessionMeta{
+			if _, err := store.GetSession(sessionID); err != nil {
+				if err := store.CreateSession(sessionID, agentstorage.SessionMeta{
 					Runner:        runner,
 					SessionID:     sessionID,
 					Status:        "running",
@@ -346,7 +346,7 @@ func handleSessionsCollection(store agentstorage.Store, runCfg webRunConfig) htt
 					return
 				}
 			} else {
-				_ = store.UpdateSessionStatus(runner, sessionID, "running")
+				_ = store.UpdateSessionStatus(sessionID, "running")
 			}
 			if err := maybeAppendUserPromptEvent(store, runner, sessionID, prompt); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -382,40 +382,64 @@ func handleSessionResource(store agentstorage.Store, runCfg webRunConfig) http.H
 			return
 		}
 		parts := strings.Split(rest, "/")
-		if len(parts) < 2 {
+		if len(parts) < 1 || strings.TrimSpace(parts[0]) == "" {
 			http.NotFound(w, r)
 			return
 		}
-		runner, sessionID := parts[0], parts[1]
+		sessionID := parts[0]
 
-		if len(parts) == 3 && parts[2] == "terminal" {
+		// Load runner from meta when session exists; create/list paths still pass runner in body.
+		runnerFromMeta := func() (string, *agentstorage.Session, error) {
+			meta, err := store.GetSession(sessionID)
+			if err != nil {
+				return "", nil, err
+			}
+			return meta.Meta.Runner, meta, nil
+		}
+
+		if len(parts) == 2 && parts[1] == "terminal" {
 			if r.Method != http.MethodGet {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			runner, _, err := runnerFromMeta()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusNotFound)
 				return
 			}
 			handleTerminalStatus(store, runner, sessionID)(w, r)
 			return
 		}
 
-		if len(parts) == 4 && parts[2] == "terminal" && parts[3] == "ws" {
+		if len(parts) == 3 && parts[1] == "terminal" && parts[2] == "ws" {
 			if r.Method != http.MethodGet {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			runner, _, err := runnerFromMeta()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusNotFound)
 				return
 			}
 			handleTerminalWebSocket(store, runner, sessionID)(w, r)
 			return
 		}
 
-		if len(parts) == 4 && parts[2] == "events" && parts[3] == "stream" {
+		if len(parts) == 3 && parts[1] == "events" && parts[2] == "stream" {
 			if r.Method != http.MethodGet {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			runner, _, err := runnerFromMeta()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusNotFound)
 				return
 			}
 			handleSessionEventsStream(store, runCfg, runner, sessionID)(w, r)
 			return
 		}
 
-		if len(parts) == 3 && parts[2] == "messages" {
+		if len(parts) == 2 && parts[1] == "messages" {
 			if r.Method != http.MethodPost {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 				return
@@ -433,11 +457,12 @@ func handleSessionResource(store agentstorage.Store, runCfg webRunConfig) http.H
 				http.Error(w, "text is required", http.StatusBadRequest)
 				return
 			}
-			if _, err := store.GetSession(runner, sessionID); err != nil {
+			runner, _, err := runnerFromMeta()
+			if err != nil {
 				http.Error(w, err.Error(), http.StatusNotFound)
 				return
 			}
-			_ = store.UpdateSessionStatus(runner, sessionID, "running")
+			_ = store.UpdateSessionStatus(sessionID, "running")
 			if err := maybeAppendUserPromptEvent(store, runner, sessionID, text); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -464,7 +489,7 @@ func handleSessionResource(store agentstorage.Store, runCfg webRunConfig) http.H
 			return
 		}
 
-		if len(parts) != 2 {
+		if len(parts) != 1 {
 			http.NotFound(w, r)
 			return
 		}
@@ -472,7 +497,7 @@ func handleSessionResource(store agentstorage.Store, runCfg webRunConfig) http.H
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		meta, err := store.GetSession(runner, sessionID)
+		runner, meta, err := runnerFromMeta()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
@@ -480,7 +505,7 @@ func handleSessionResource(store agentstorage.Store, runCfg webRunConfig) http.H
 		if runner == "grok-tty" {
 			ensureWebGrokSync(runner, sessionID, store, runCfg)
 		}
-		events, eventsOffset, err := store.ReadEvents(runner, sessionID, 0)
+		events, eventsOffset, err := store.ReadEvents(sessionID, 0)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -508,7 +533,7 @@ func safeSSEFlush(flusher http.Flusher) (err error) {
 
 func handleSessionEventsStream(store agentstorage.Store, runCfg webRunConfig, runner, sessionID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if _, err := store.GetSession(runner, sessionID); err != nil {
+		if _, err := store.GetSession(sessionID); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
@@ -540,7 +565,7 @@ func handleSessionEventsStream(store agentstorage.Store, runCfg webRunConfig, ru
 		ctx, cancel := context.WithCancel(r.Context())
 		defer cancel()
 
-		eventsPath := filepath.Join(store.Home(), "sessions", runner, sessionID, "events.jsonl")
+		eventsPath := filepath.Join(store.Home(), "sessions", sessionID, "events.jsonl")
 		tailFromEOF := false
 		if info, err := os.Stat(eventsPath); err == nil && after >= info.Size() {
 			tailFromEOF = true
@@ -568,7 +593,7 @@ func handleSessionEventsStream(store agentstorage.Store, runCfg webRunConfig, ru
 			go pollWebSSEFinishedEOFExit(ctx, cancel, store, runner, sessionID, idleSinceLastTailLine)
 		}
 
-		_ = agentevents.WatchEvents(ctx, store, runner, sessionID, after, func(line string) error {
+		_ = agentevents.WatchEvents(ctx, store, sessionID, after, func(line string) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
@@ -592,7 +617,7 @@ func pollWebSSEFinishedEOFExit(ctx context.Context, cancel context.CancelFunc, s
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			meta, err := store.GetSession(runner, sessionID)
+			meta, err := store.GetSession(sessionID)
 			if err != nil || meta.Meta.Status == "running" {
 				continue
 			}

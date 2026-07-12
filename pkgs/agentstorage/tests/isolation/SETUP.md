@@ -5,6 +5,7 @@
 ```
 CreateSession + SaveConfig + AppendEvent + AppendMessage
 -> scan home tree -> every file path has home prefix
+# session files under sessions/<session_id>/ only
 ```
 
 ## Preconditions

@@ -151,7 +151,7 @@ func NewStoreGrokSyncSink(store agentstorage.Store, runner, sessionID, grokSessi
 }
 
 func (s *StoreGrokSyncSink) SessionDir() string {
-	return filepath.Join(s.store.Home(), "sessions", s.runner, s.sessionID)
+	return filepath.Join(s.store.Home(), "sessions", s.sessionID)
 }
 
 func normalizeGrokUserPromptText(text string) string {
@@ -172,7 +172,7 @@ func (s *StoreGrokSyncSink) AppendEvent(ev types.AgentEvent) error {
 	if ev.Type == types.ActionMessage && ev.Role == "user" {
 		text := normalizeGrokUserPromptText(ev.Text)
 		if text != "" {
-			events, _, err := s.store.ReadEvents(s.runner, s.sessionID, 0)
+			events, _, err := s.store.ReadEvents(s.sessionID, 0)
 			if err == nil {
 				for _, existing := range events {
 					if existing.Type != types.ActionMessage || existing.Role != "user" {
@@ -185,7 +185,7 @@ func (s *StoreGrokSyncSink) AppendEvent(ev types.AgentEvent) error {
 			}
 		}
 	}
-	return s.store.AppendEvent(s.runner, s.sessionID, ev)
+	return s.store.AppendEvent(s.sessionID, ev)
 }
 
 func (s *StoreGrokSyncSink) LoadCheckpoint() (GrokSyncState, error) {
@@ -215,11 +215,11 @@ func (s *StoreGrokSyncSink) SaveCheckpoint(st GrokSyncState) error {
 }
 
 func (s *StoreGrokSyncSink) OnTurnCompleted() error {
-	return s.store.UpdateSessionStatus(s.runner, s.sessionID, "finished")
+	return s.store.UpdateSessionStatus(s.sessionID, "finished")
 }
 
 func (s *StoreGrokSyncSink) UpdateRunnerSessionID(runnerSessionID string) error {
-	return s.store.UpdateSessionRunnerSessionID(s.runner, s.sessionID, runnerSessionID)
+	return s.store.UpdateSessionRunnerSessionID(s.sessionID, runnerSessionID)
 }
 
 // runGrokSyncSink optionally forwards emitted events to a callback while persisting checkpoints.

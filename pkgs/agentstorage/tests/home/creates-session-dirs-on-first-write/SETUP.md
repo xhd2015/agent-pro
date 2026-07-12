@@ -1,15 +1,16 @@
 # Scenario
 
-**Feature**: session directory tree created on first append
+**Feature**: session directory tree created on first append (flat)
 
 ```
-empty home -> AppendEvent(runner, sessionID, ev) -> sessions/<runner>/<sessionID>/events.jsonl exists
+empty home -> AppendEvent(sessionID, ev) -> sessions/<sessionID>/events.jsonl exists
 ```
 
 ## Preconditions
 
 - Home directory exists but has no `sessions/` subtree before the write.
 - First `AppendEvent` must create intermediate directories.
+- Path must be `sessions/<session_id>/`, not `sessions/<runner>/<session_id>/`.
 
 ## Steps
 

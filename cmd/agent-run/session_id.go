@@ -69,12 +69,12 @@ func generateAutoSessionID(prompt, runner, home string) (string, error) {
 // sessionIDTaken reports whether storage already has the id, or (for TTY runners)
 // a live terminal registry entry holds it.
 func sessionIDTaken(home, runner, id string) bool {
-	metaPath := filepath.Join(home, "sessions", runner, id, "meta.json")
+	metaPath := filepath.Join(home, "sessions", id, "meta.json")
 	if _, err := os.Stat(metaPath); err == nil {
 		return true
 	}
 	// Also treat an existing session directory as taken (meta may be mid-write).
-	dir := filepath.Join(home, "sessions", runner, id)
+	dir := filepath.Join(home, "sessions", id)
 	if st, err := os.Stat(dir); err == nil && st.IsDir() {
 		return true
 	}

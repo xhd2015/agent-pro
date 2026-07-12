@@ -270,7 +270,7 @@ func prepareResumeTerminalID(store agentstorage.Store, runner string, meta agent
 	if !ttywatch.SessionIDInUse(cfg, desired) && !sessionIDHeldAnywhere(store.Home(), desired) {
 		// Persist desired terminal id when meta lacked it but we will reuse SessionID.
 		if strings.TrimSpace(meta.TerminalSessionID) == "" && desired == sessionID {
-			_ = store.UpdateSessionTerminalSessionID(runner, sessionID, desired)
+			_ = store.UpdateSessionTerminalSessionID(sessionID, desired)
 		}
 		return desired, false, nil
 	}
@@ -278,7 +278,7 @@ func prepareResumeTerminalID(store agentstorage.Store, runner string, meta agent
 	// Fallback B: allocate new terminal id (auto session-N via PreferAutoTerminal).
 	// Clear the stale terminal mapping; agentui will persist the new id on start.
 	if sessionID != "" {
-		_ = store.UpdateSessionTerminalSessionID(runner, sessionID, "")
+		_ = store.UpdateSessionTerminalSessionID(sessionID, "")
 	}
 	return "", true, nil
 }

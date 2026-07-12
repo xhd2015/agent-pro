@@ -3,7 +3,7 @@
 **Feature**: get missing session returns error
 
 ```
-GetSession(runner, unknown_id) -> non-nil error, nil session
+GetSession(unknown_id) -> non-nil error, nil session
 ```
 
 ## Preconditions

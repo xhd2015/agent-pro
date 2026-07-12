@@ -15,7 +15,7 @@ type Config struct {
 	LastSession        string `json:"last_session"`
 }
 
-// SessionMeta is stored in sessions/<runner>/<session_id>/meta.json.
+// SessionMeta is stored in sessions/<session_id>/meta.json.
 type SessionMeta struct {
 	Runner            string `json:"runner"`
 	SessionID         string `json:"session_id"`

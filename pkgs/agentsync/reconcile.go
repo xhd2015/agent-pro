@@ -66,7 +66,7 @@ func scanAndReconcile(ctx context.Context, opts ReconcileOptions, runner string)
 	if home == "" {
 		return nil
 	}
-	root := filepath.Join(home, "sessions", runner)
+	root := filepath.Join(home, "sessions")
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -75,10 +75,19 @@ func scanAndReconcile(ctx context.Context, opts ReconcileOptions, runner string)
 		return err
 	}
 	for _, ent := range entries {
-		if !ent.IsDir() {
+		if !ent.IsDir() || strings.HasPrefix(ent.Name(), ".") {
 			continue
 		}
-		if err := reconcileSession(ctx, opts, runner, ent.Name()); err != nil {
+		sessionID := ent.Name()
+		meta, _, err := loadReconcileMeta(opts.Home, runner, sessionID)
+		if err != nil {
+			continue
+		}
+		// Only reconcile sessions for this runner (meta.runner).
+		if runner != "" && strings.TrimSpace(meta.Runner) != "" && meta.Runner != runner {
+			continue
+		}
+		if err := reconcileSession(ctx, opts, runner, sessionID); err != nil {
 			return err
 		}
 	}
@@ -128,7 +137,7 @@ func reconcileSession(ctx context.Context, opts ReconcileOptions, runner, sessio
 }
 
 func loadReconcileMeta(home, runner, sessionID string) (reconcileSessionMeta, string, error) {
-	sessionDir := filepath.Join(home, "sessions", runner, sessionID)
+	sessionDir := filepath.Join(home, "sessions", sessionID)
 	data, err := os.ReadFile(filepath.Join(sessionDir, "meta.json"))
 	if err != nil {
 		return reconcileSessionMeta{}, sessionDir, err
@@ -187,7 +196,7 @@ func parseRFC3339(value string) time.Time {
 func reconcileWorkspace(home, runner, sessionID, metaWorkspace string) string {
 	ws := strings.TrimSpace(metaWorkspace)
 	if ws != "" {
-		sessSuffix := filepath.Join("sessions", runner, sessionID)
+		sessSuffix := filepath.Join("sessions", sessionID)
 		if !strings.Contains(ws, sessSuffix) {
 			return ws
 		}
@@ -228,7 +237,7 @@ func checkpointBehindEOF(sessionDir string) bool {
 }
 
 func ttyAlive(home, runner, sessionID string) bool {
-	data, err := os.ReadFile(filepath.Join(home, "sessions", runner, sessionID, "tty.json"))
+	data, err := os.ReadFile(filepath.Join(home, "sessions", sessionID, "tty.json"))
 	if err != nil {
 		return false
 	}

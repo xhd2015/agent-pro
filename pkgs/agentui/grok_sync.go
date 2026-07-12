@@ -14,7 +14,7 @@ import (
 )
 
 func resolveGrokSessionID(store agentstorage.Store, runner, sessionID string) string {
-	if sess, err := store.GetSession(runner, sessionID); err == nil {
+	if sess, err := store.GetSession(sessionID); err == nil {
 		if id := strings.TrimSpace(sess.Meta.RunnerSessionID); id != "" {
 			return id
 		}
@@ -23,7 +23,7 @@ func resolveGrokSessionID(store agentstorage.Store, runner, sessionID string) st
 }
 
 func sessionCreatedAt(store agentstorage.Store, runner, sessionID string) time.Time {
-	sess, err := store.GetSession(runner, sessionID)
+	sess, err := store.GetSession(sessionID)
 	if err != nil {
 		return time.Now().Add(-2 * time.Second)
 	}
@@ -48,7 +48,7 @@ func parseSessionTime(value string) time.Time {
 }
 
 func initialPromptForSession(store agentstorage.Store, runner, sessionID, fallback string) string {
-	if sess, err := store.GetSession(runner, sessionID); err == nil {
+	if sess, err := store.GetSession(sessionID); err == nil {
 		if p := strings.TrimSpace(sess.Meta.InitialPrompt); p != "" {
 			return p
 		}

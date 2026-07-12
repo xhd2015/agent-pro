@@ -3,7 +3,7 @@
 **Feature**: print unknown session — clear failure
 
 ```
-empty AGENT_RUN_HOME -> sessions bogus/missing --print -> exit 1
+empty AGENT_RUN_HOME -> sessions missing_id --print -> exit 1
 ```
 
 ## Preconditions
@@ -12,13 +12,13 @@ empty AGENT_RUN_HOME -> sessions bogus/missing --print -> exit 1
 
 ## Steps
 
-1. Run `agent-run sessions bogus/missing --print` without seeding storage.
+1. Run `agent-run sessions missing_id --print` without seeding storage.
 
 ```go
 import "testing"
 
 func Setup(t *testing.T, req *Request) error {
-	req.Args = printSessionArgs("bogus", "missing")
+	req.Args = printSessionArgs("missing_id")
 	return nil
 }
 ```

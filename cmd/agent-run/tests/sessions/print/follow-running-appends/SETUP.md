@@ -13,7 +13,7 @@ seed running + 1 event -> --print tails -> append 2nd event + status finished ->
 
 ## Steps
 
-1. Seed `fake-codex/follow_append` with status `running` and one message event.
+1. Seed `follow_append` with status `running` and one message event.
 2. Start CLI with extended timeout; sidecar appends `Follow-up appended line` and sets `finished`.
 
 ```go
@@ -29,15 +29,14 @@ const followSessionID = "follow_append"
 
 func Setup(t *testing.T, req *Request) error {
 	store := openAgentStore(t, req)
-	seedSessionMeta(t, store, printRunner, followSessionID, "running")
-	appendAgentMessage(t, store, printRunner, followSessionID, "First running event")
+	seedSessionMeta(t, store, followSessionID, "running")
+	appendAgentMessage(t, store, followSessionID, "First running event")
 
 	req.SessionID = followSessionID
-	req.Args = printSessionArgs(printRunner, followSessionID)
+	req.Args = printSessionArgs(followSessionID)
 	req.ExecTimeout = 15 * time.Second
 
 	home := req.Home
-	runner := printRunner
 	sid := followSessionID
 	req.Sidecar = func() {
 		time.Sleep(500 * time.Millisecond)
@@ -45,12 +44,12 @@ func Setup(t *testing.T, req *Request) error {
 		if err != nil {
 			return
 		}
-		_ = s.AppendEvent(runner, sid, types.AgentEvent{
+		_ = s.AppendEvent(sid, types.AgentEvent{
 			Type: types.ActionMessage,
 			Role: "assistant",
 			Text: "Follow-up appended line",
 		})
-		_ = s.UpdateSessionStatus(runner, sid, "finished")
+		_ = s.UpdateSessionStatus(sid, "finished")
 	}
 	return nil
 }
