@@ -29,9 +29,15 @@ literal hit in `summary.json` (title-ish fields, cwd, model, agent) or
 `chat_history.jsonl` (message text by type/part) are listed. Limit applies
 **after** filtering. Under each matching session row, the formatter prints up
 to five indented hit lines `  <file>:<line>:<part>: <snippet>`, then
-`  ... and N more matches` when remaining hits exist. Color mode
-`never`/`always`/`auto` controls ANSI styling of hit lines (tests force
-`never` or `always`).
+`  ... and N more matches` when remaining hits exist. Each hit **snippet** is
+built from the matched field after whitespace collapse (runs of spaces/tabs/
+newlines → a single ASCII space, with leading/trailing trim): the window is at
+most **1024 runes** (Unicode code points), centered ~50/50 around the first
+literal match, with ASCII `...` (3 runes) on each truncated side; when the
+match itself is ≥1024 runes the snippet is the first 1024 runes of the match
+only. `MatchStart`/`MatchLen` are byte offsets into the final snippet for
+coloring the exact match. Color mode `never`/`always`/`auto` controls ANSI
+styling of hit lines (tests force `never` or `always`).
 
 For session detail, `Find` locates a session by exact UUID (no prefix matching),
 `Info` aggregates summary fields, filesystem paths, and token usage from
@@ -69,7 +75,10 @@ operation?
 │       ├── limit-after-filter/  limit applies after grep; newest matching N
 │       ├── case-insensitive/    pattern case differs from content → still matches
 │       ├── color-always/        Color=always → ANSI around hit styling
-│       └── color-never/         Color=never → no ANSI escapes
+│       ├── color-never/         Color=never → no ANSI escapes
+│       ├── snippet-window/      long field + mid match → ≤1024 runes, leading+trailing ...
+│       ├── snippet-short/       short field → full text, no snippet ellipsis
+│       └── snippet-match-only/  match ≥1024 runes → first 1024 of match only
 └── info/
     ├── known-session/        full summary + file paths + tokens from signals.json
     ├── unknown-session/      missing UUID → grok session not found
@@ -99,10 +108,13 @@ operation?
 | 16 | `list/grep/case-insensitive` | Pattern case differs from content → still matches |
 | 17 | `list/grep/color-always` | Color=always → ANSI escape sequences around match styling |
 | 18 | `list/grep/color-never` | Color=never → output has no ANSI escapes |
-| 19 | `info/known-session` | Info returns summary fields, file paths, and token usage from signals.json |
-| 20 | `info/unknown-session` | Unknown full UUID → `grok session not found` error |
-| 21 | `info/no-signals` | Session without signals.json → info succeeds, no Tokens section |
-| 22 | `info/untitled-session` | Empty title → shows `(untitled)`, num_chat_messages=1 |
+| 19 | `list/grep/snippet-window` | Long tool_result mid-match → snippet ≤1024 runes with leading and trailing `...` |
+| 20 | `list/grep/snippet-short` | Short matching field → full snippet text, no `...` ellipsis |
+| 21 | `list/grep/snippet-match-only` | Match length ≥1024 runes → snippet is first 1024 runes of the match |
+| 22 | `info/known-session` | Info returns summary fields, file paths, and token usage from signals.json |
+| 23 | `info/unknown-session` | Unknown full UUID → `grok session not found` error |
+| 24 | `info/no-signals` | Session without signals.json → info succeeds, no Tokens section |
+| 25 | `info/untitled-session` | Empty title → shows `(untitled)`, num_chat_messages=1 |
 
 ## How to Run
 

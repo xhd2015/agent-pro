@@ -9,12 +9,16 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"golang.org/x/term"
 )
 
 const maxDisplayedHits = 5
+const maxSnippetRunes = 1024
+const snippetEllipsis = "..."
+const snippetEllipsisRunes = 3
 
 // MatchHit is one content match inside a session file.
 type MatchHit struct {
@@ -332,11 +336,12 @@ func extractSummaryText(raw json.RawMessage) string {
 }
 
 func makeHit(file string, line int, part, text, pattern string) (MatchHit, bool) {
-	snippet := collapseToOneLine(text)
+	snippet := collapseWhitespace(text)
 	start, length, ok := findLiteralCI(snippet, pattern)
 	if !ok {
 		return MatchHit{}, false
 	}
+	snippet, start, length = windowSnippet(snippet, start, length)
 	return MatchHit{
 		File:       file,
 		Line:       line,
@@ -347,15 +352,112 @@ func makeHit(file string, line int, part, text, pattern string) (MatchHit, bool)
 	}, true
 }
 
-func collapseToOneLine(s string) string {
-	s = strings.ReplaceAll(s, "\r\n", "\n")
-	s = strings.ReplaceAll(s, "\r", "\n")
-	s = strings.ReplaceAll(s, "\n", " ")
-	// collapse runs of spaces from newline replacement only lightly
-	for strings.Contains(s, "  ") {
-		s = strings.ReplaceAll(s, "  ", " ")
+// collapseWhitespace replaces runs of Unicode space (spaces/tabs/newlines/etc.)
+// with a single ASCII space and trims edges.
+func collapseWhitespace(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	prevSpace := true // skip leading whitespace
+	for _, r := range s {
+		if unicode.IsSpace(r) {
+			if !prevSpace {
+				b.WriteByte(' ')
+				prevSpace = true
+			}
+			continue
+		}
+		b.WriteRune(r)
+		prevSpace = false
 	}
-	return s
+	out := b.String()
+	if prevSpace && len(out) > 0 {
+		// trailing space written before end
+		out = out[:len(out)-1]
+	}
+	return out
+}
+
+// windowSnippet builds a ≤maxSnippetRunes window around the match in collapsed
+// text. MatchStart/MatchLen are byte offsets into the returned snippet.
+func windowSnippet(collapsed string, matchStart, matchLen int) (snippet string, newStart, newLen int) {
+	runes := []rune(collapsed)
+	total := len(runes)
+	if total <= maxSnippetRunes {
+		return collapsed, matchStart, matchLen
+	}
+
+	// Byte offsets → rune indices for the match span.
+	matchStartRune := utf8.RuneCountInString(collapsed[:matchStart])
+	matchEndRune := utf8.RuneCountInString(collapsed[:matchStart+matchLen])
+	matchRuneCount := matchEndRune - matchStartRune
+
+	// Match alone fills (or exceeds) the budget: first maxSnippetRunes of match.
+	if matchRuneCount >= maxSnippetRunes {
+		s := string(runes[matchStartRune : matchStartRune+maxSnippetRunes])
+		return s, 0, len(s)
+	}
+
+	remaining := maxSnippetRunes - matchRuneCount
+	// ~50/50 before/after; odd remainder prefers after.
+	beforeBudget := remaining / 2
+	afterBudget := remaining - beforeBudget
+
+	beforeAvail := matchStartRune
+	afterAvail := total - matchEndRune
+
+	takeBefore := beforeBudget
+	takeAfter := afterBudget
+
+	// Reallocate unused budget from a short side to the long side.
+	if takeBefore > beforeAvail {
+		takeAfter += takeBefore - beforeAvail
+		takeBefore = beforeAvail
+	}
+	if takeAfter > afterAvail {
+		takeBefore += takeAfter - afterAvail
+		takeAfter = afterAvail
+		if takeBefore > beforeAvail {
+			takeBefore = beforeAvail
+		}
+	}
+
+	// Ellipsis only on sides that were cut; reserve 3 runes of that side's budget.
+	needBeforeEllipsis := takeBefore < beforeAvail
+	needAfterEllipsis := takeAfter < afterAvail
+
+	contentBefore := takeBefore
+	contentAfter := takeAfter
+	if needBeforeEllipsis {
+		contentBefore = takeBefore - snippetEllipsisRunes
+		if contentBefore < 0 {
+			contentBefore = 0
+		}
+	}
+	if needAfterEllipsis {
+		contentAfter = takeAfter - snippetEllipsisRunes
+		if contentAfter < 0 {
+			contentAfter = 0
+		}
+	}
+
+	var b strings.Builder
+	// Rough capacity: all ASCII in tests, but grow for multi-byte safely.
+	b.Grow(maxSnippetRunes * utf8.UTFMax)
+
+	if needBeforeEllipsis {
+		b.WriteString(snippetEllipsis)
+	}
+	beforeStart := matchStartRune - contentBefore
+	b.WriteString(string(runes[beforeStart:matchStartRune]))
+	newStart = b.Len()
+	matchStr := string(runes[matchStartRune:matchEndRune])
+	b.WriteString(matchStr)
+	newLen = len(matchStr)
+	b.WriteString(string(runes[matchEndRune : matchEndRune+contentAfter]))
+	if needAfterEllipsis {
+		b.WriteString(snippetEllipsis)
+	}
+	return b.String(), newStart, newLen
 }
 
 // findLiteralCI finds the first case-insensitive literal occurrence of pattern

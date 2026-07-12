@@ -17,6 +17,10 @@ sessions.ListWithGrep(grokHome, limit, pattern) -> []SessionMatch (newest matche
 - Hit line shape: two-space indent + `<file>:<line>:<part>: <snippet>`.
 - Hit order: summary.json field hits first, then chat_history.jsonl in file order.
 - Part for `generated_title` is `title`; chat parts follow message `type`.
+- Snippet window (after whitespace collapse): at most 1024 runes; ASCII `...`
+  (3 runes) on truncated sides; ~50/50 before/after match; match ≥1024 → first
+  1024 runes of the match only. `MatchStart`/`MatchLen` are byte offsets into
+  the final snippet. Short fields must not gain false ellipsis.
 
 ## Steps
 
