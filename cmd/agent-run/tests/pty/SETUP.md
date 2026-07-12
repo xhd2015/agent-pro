@@ -1,14 +1,15 @@
 # Scenario
 
-**Feature**: `agent-run pty` — stats, kill-orphans, and open-path serve reclaim
+**Feature**: `agent-run pty` — stats, kill-orphans (PPID / kind / all filters), and open-path serve reclaim
 
 ```
 # stats reads process table + optional sysctl/ptmx probes
 agent-run pty stats -> human-readable PTY limit / masters / __serve counts
 
-# kill-orphans enumerates agent-run __serve* (optional --exe filter)
-agent-run pty kill-orphans [--dry-run] [--exe PATH]
-  -> list or terminate matching serve PIDs (never self)
+# kill-orphans: default PPID==1; --kind OR predicates; --all wins; --exe ANDed
+agent-run pty kill-orphans [--dry-run] [--exe PATH] [--all]
+                           [--kind=test-generated] [--kind=workdir-at-tmp]
+  -> list or terminate selected serve PIDs (never self)
 
 # open keep-alive leaves detached __serve; harness reclaim removes it
 agent-run run --open (+ instant attach) -> keep-alive serve
@@ -24,23 +25,30 @@ agent-run run --open (+ instant attach) -> keep-alive serve
 - Session-scoped build cache: `$TMPDIR/agent-run-pty-doctest-<DOCTEST_SESSION_ID>/`
   shares the compiled `agent-run` binary across parallel leaves.
 - Kill tests **must** pass `--exe` pointing at the test binary so host
-  brainstorm/seatalk/`__serve*` processes are not destroyed.
+  brainstorm/seatalk/`__serve*` processes are not destroyed (when a single
+  binary path covers all spawned serves).
 - Open-cleanup leaves set `AGENT_RUN_OPEN_ATTACH_INSTANT=1` and a fake TUI via
   `AGENT_RUN_GROK_TTY_COMMAND` (no real Grok CLI).
 - No new durable store under `AGENT_RUN_HOME` for pty stats itself.
+- `workdir-at-tmp` kind assumes macOS Go temp (`/var/folders/…/T/`); related
+  leaves skip when `t.TempDir()` does not match that layout.
 
 ## Steps
 
 1. Root `Setup` builds `agent-run` once per session, sets `AGENT_RUN_HOME`.
-2. Grouping / leaf `Setup` sets `Mode`, `Args`, and optional spawn flags.
-3. `Run` executes CLI and/or spawn+kill / open+reclaim flows.
+2. Grouping / leaf `Setup` sets `Mode`, `Args`, optional `SpawnPlan` / `SpawnServe`.
+3. `Run` executes CLI and/or spawn+kill / open+reclaim flows (optional follow-up CLI).
 4. Leaf `Assert` checks exit code, stdout keywords / trailing `\n`, and process
-   liveness.
+   liveness / filter selection.
 
 ## Context
 
 - Serve matching: first argv is `IsServeSubcommand` (`__serve_<slug>__`) or
   command line is `agent-run __serve…`.
+- Selection after serve match: `--all` → all; else any `--kind` → OR of kind
+  predicates; else PPID == 1. Then `--exe` AND. Drop self PID.
+- Kind predicates: `TestGenerated` in command/exe; `/var/folders/` and `/T/`
+  in command/exe for workdir-at-tmp.
 - Successful user-facing CLI stdout must end with trailing `\n`.
 
 ```go
@@ -224,6 +232,42 @@ func terminatePID(pid int) {
 	_ = syscall.Kill(-pid, syscall.SIGKILL)
 }
 
+// tempDirLooksLikeWorkdirAtTmp reports whether path matches the workdir-at-tmp
+// kind predicate (macOS Go t.TempDir layout: /var/folders/…/T/…).
+func tempDirLooksLikeWorkdirAtTmp(path string) bool {
+	return strings.Contains(path, "/var/folders/") && strings.Contains(path, "/T/")
+}
+
+// serveBinaryForMarker returns an agent-run path whose command/exe string
+// carries the requested kind marker. Copies from req.AgentRun when needed.
+func serveBinaryForMarker(t *testing.T, req *Request, marker string) string {
+	t.Helper()
+	marker = strings.TrimSpace(marker)
+	switch marker {
+	case "", "workdir-at-tmp":
+		// Default leaf binary already lives under t.TempDir() → /var/folders/…/T/ on macOS.
+		return req.AgentRun
+	case "test-generated":
+		dst := filepath.Join(req.TempDir, "TestGeneratedCase", "bin", "agent-run")
+		if fileExists(dst) {
+			return dst
+		}
+		if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+			t.Fatalf("mkdir TestGeneratedCase bin: %v", err)
+		}
+		if err := copyFile(req.AgentRun, dst); err != nil {
+			t.Fatalf("copy TestGenerated agent-run: %v", err)
+		}
+		if err := os.Chmod(dst, 0755); err != nil {
+			t.Fatalf("chmod TestGenerated agent-run: %v", err)
+		}
+		return dst
+	default:
+		t.Fatalf("unknown PathMarker %q", marker)
+		return ""
+	}
+}
+
 // spawnDetachedServe starts agent-run as a true orphan __serve_* process (PPID 1)
 // running `sleep N` so kill-orphans can see a matching executable + serve token.
 // Double-fork is required: a mere Setsid child of go test becomes a zombie after
@@ -236,12 +280,22 @@ func spawnDetachedServe(t *testing.T, req *Request) (pid int, sessionID string) 
 		sessionID = fmt.Sprintf("pty-orphan-%d-%d", os.Getpid(), time.Now().UnixNano()%1e9)
 		req.ServeSessionID = sessionID
 	}
+	return spawnOrphanServeAt(t, req, req.AgentRun, sessionID)
+}
+
+// spawnOrphanServeAt double-forks bin as __serve under PPID 1.
+func spawnOrphanServeAt(t *testing.T, req *Request, bin, sessionID string) (pid int, sid string) {
+	t.Helper()
+	sid = strings.TrimSpace(sessionID)
+	if sid == "" {
+		sid = fmt.Sprintf("pty-orphan-%d-%d", os.Getpid(), time.Now().UnixNano()%1e9)
+	}
 	hold := req.ServeHoldSecs
 	if hold <= 0 {
 		hold = defaultServeHoldSecs
 	}
 	token := "__serve_sleep_" + strconv.Itoa(hold) + "__"
-	pidFile := filepath.Join(req.TempDir, fmt.Sprintf("serve-%s.pid", sessionID))
+	pidFile := filepath.Join(req.TempDir, fmt.Sprintf("serve-%s.pid", sid))
 	_ = os.Remove(pidFile)
 
 	// perl double-fork → orphan under launchd/PID 1; write grandchild pid then exec.
@@ -265,7 +319,7 @@ exec { $argv[0] } @argv or die "exec: $!";
 	args := []string{
 		"-e", perl,
 		pidFile,
-		req.AgentRun, token, sessionID, "sleep", strconv.Itoa(hold),
+		bin, token, sid, "sleep", strconv.Itoa(hold),
 	}
 	cmd := exec.Command("perl", args...)
 	cmd.Dir = req.TempDir
@@ -292,17 +346,61 @@ exec { $argv[0] } @argv or die "exec: $!";
 			p, convErr := strconv.Atoi(strings.TrimSpace(string(b)))
 			if convErr == nil && p > 0 && processAlive(p) {
 				pid = p
-				req.SpawnedServePID = pid
-				req.SpawnedSessionID = sessionID
 				t.Cleanup(func() { terminatePID(pid) })
 				time.Sleep(150 * time.Millisecond)
-				return pid, sessionID
+				return pid, sid
 			}
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("spawned orphan serve did not write live pid to %s", pidFile)
-	return 0, sessionID
+	return 0, sid
+}
+
+// spawnChildServeAt starts bin as a direct child __serve (PPID = harness, ≠ 1).
+// Caller must Wait via cleanup so SIGKILL does not leave a zombie for signal-0 checks.
+func spawnChildServeAt(t *testing.T, req *Request, bin, sessionID string) (pid int, sid string) {
+	t.Helper()
+	sid = strings.TrimSpace(sessionID)
+	if sid == "" {
+		sid = fmt.Sprintf("pty-child-%d-%d", os.Getpid(), time.Now().UnixNano()%1e9)
+	}
+	hold := req.ServeHoldSecs
+	if hold <= 0 {
+		hold = defaultServeHoldSecs
+	}
+	token := "__serve_sleep_" + strconv.Itoa(hold) + "__"
+	cmd := exec.Command(bin, token, sid, "sleep", strconv.Itoa(hold))
+	cmd.Dir = req.TempDir
+	cmd.Env = append(os.Environ(), req.Env...)
+	cmd.Stdin = nil
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("spawn child serve: %v", err)
+	}
+	pid = cmd.Process.Pid
+	t.Cleanup(func() {
+		terminatePID(pid)
+		_ = cmd.Wait()
+	})
+	// Brief settle so ps can observe the process.
+	time.Sleep(150 * time.Millisecond)
+	if !processAlive(pid) {
+		t.Fatalf("child serve pid %d died immediately", pid)
+	}
+	return pid, sid
+}
+
+// spawnServeSpec starts one ServeSpawnSpec and returns its PID and session id.
+func spawnServeSpec(t *testing.T, req *Request, spec ServeSpawnSpec) (pid int, sessionID string) {
+	t.Helper()
+	bin := serveBinaryForMarker(t, req, spec.PathMarker)
+	sessionID = strings.TrimSpace(spec.SessionID)
+	if spec.Orphan {
+		return spawnOrphanServeAt(t, req, bin, sessionID)
+	}
+	return spawnChildServeAt(t, req, bin, sessionID)
 }
 
 
@@ -349,21 +447,64 @@ func runAgentRun(t *testing.T, req *Request, args ...string) (*Response, error) 
 
 func runKillOrphansFlow(t *testing.T, req *Request) (*Response, error) {
 	t.Helper()
-	var pid int
-	if req.SpawnServe {
-		pid, _ = spawnDetachedServe(t, req)
+	spawnPIDs := make(map[string]int)
+	var primaryPID int
+	var primarySession string
+
+	if len(req.SpawnPlan) > 0 {
+		for i, spec := range req.SpawnPlan {
+			label := strings.TrimSpace(spec.Label)
+			if label == "" {
+				label = fmt.Sprintf("serve-%d", i)
+			}
+			pid, sid := spawnServeSpec(t, req, spec)
+			spawnPIDs[label] = pid
+			if primaryPID == 0 {
+				primaryPID = pid
+				primarySession = sid
+			}
+		}
+	} else if req.SpawnServe {
+		pid, sid := spawnDetachedServe(t, req)
+		primaryPID = pid
+		primarySession = sid
+		spawnPIDs["orphan"] = pid
+		req.SpawnedServePID = pid
+		req.SpawnedSessionID = sid
 	}
+
+	if primaryPID > 0 {
+		req.SpawnedServePID = primaryPID
+		if req.SpawnedSessionID == "" {
+			req.SpawnedSessionID = primarySession
+		}
+	}
+
 	resp, err := runAgentRun(t, req, req.Args...)
 	if resp == nil {
 		resp = &Response{}
 	}
-	resp.ServePID = pid
-	if pid > 0 {
+	resp.ServePID = primaryPID
+	resp.SpawnPIDs = spawnPIDs
+	if primaryPID > 0 {
 		resp.ServeAliveBefore = true // was alive when CLI ran (spawn just succeeded)
 		// Re-check after CLI (dry-run should leave alive; kill should not).
 		// Small settle for kill path.
 		time.Sleep(100 * time.Millisecond)
-		resp.ServeAliveAfter = processAlive(pid)
+		resp.ServeAliveAfter = processAlive(primaryPID)
+	}
+
+	if len(req.FollowUpArgs) > 0 {
+		follow, followErr := runAgentRun(t, req, req.FollowUpArgs...)
+		if followErr != nil && err == nil {
+			// Prefer surfacing follow-up transport errors.
+			err = followErr
+		}
+		if follow != nil {
+			resp.FollowUpStdout = follow.Stdout
+			resp.FollowUpStderr = follow.Stderr
+			resp.FollowUpExitCode = follow.ExitCode
+		}
 	}
 	return resp, err
 }

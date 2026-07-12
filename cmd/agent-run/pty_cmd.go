@@ -44,12 +44,20 @@ Options:
 const ptyKillOrphansHelp = `
 Usage: agent-run pty kill-orphans [OPTIONS]
 
-List or terminate agent-run __serve* processes (default: all matching serves).
+List or terminate orphan agent-run __serve* processes.
+
+Default selection: only serves with PPID == 1 (true orphans).
+Use --kind to match by path/argv markers (any PPID), or --all for every serve.
 
 Options:
-  --dry-run    list matching serves without killing
-  --exe PATH   only match serves whose executable equals PATH
-  -h, --help   show help
+  --dry-run                 list matching serves without killing
+  --exe PATH                only match serves whose executable equals PATH
+  --all                     match all agent-run __serve* processes (wins over --kind)
+  --kind=test-generated     match serves whose argv/exe contains TestGenerated
+  --kind=workdir-at-tmp     match serves whose argv/exe contains /var/folders/ and /T/
+  -h, --help                show help
+
+Multiple --kind values are OR-ed. --exe is always ANDed when set.
 `
 
 type ptyServeInfo struct {
@@ -141,9 +149,13 @@ func runPtyStats(args []string) error {
 
 func runPtyKillOrphans(args []string) error {
 	var dryRun bool
+	var all bool
 	var exeFilter string
+	var kinds []string
 	remaining, err := flags.Bool("--dry-run", &dryRun).
+		Bool("--all", &all).
 		String("--exe", &exeFilter).
+		StringSlice("--kind", &kinds).
 		Help("-h,--help", ptyKillOrphansHelp).
 		Parse(args)
 	if err != nil {
@@ -153,16 +165,32 @@ func runPtyKillOrphans(args []string) error {
 		return fmt.Errorf("pty kill-orphans: unexpected arguments: %s", strings.Join(remaining, " "))
 	}
 
+	// Validate --kind values up front (even when --all wins over kind matching).
+	for _, k := range kinds {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			return fmt.Errorf("pty kill-orphans: empty --kind value")
+		}
+		if !isKnownKillOrphanKind(k) {
+			return fmt.Errorf("pty kill-orphans: unknown kind %q (valid: test-generated, workdir-at-tmp)", k)
+		}
+	}
+
 	serves, listErr := listAgentRunServes(strings.TrimSpace(exeFilter))
 	if listErr != nil {
 		return fmt.Errorf("pty kill-orphans: cannot list processes: %w", listErr)
 	}
 
 	self := os.Getpid()
-	// Never target self (also skip if somehow our PID appeared).
+	// Selection: --all → keep all; else if any --kind → OR kind predicates;
+	// else default PPID == 1. --exe already applied in listAgentRunServes.
+	// Never target self.
 	filtered := serves[:0]
 	for _, s := range serves {
 		if s.PID == self {
+			continue
+		}
+		if !serveMatchesKillOrphanFilter(s, all, kinds) {
 			continue
 		}
 		filtered = append(filtered, s)
@@ -174,8 +202,9 @@ func runPtyKillOrphans(args []string) error {
 		return nil
 	}
 
+	filterHint := killOrphanFilterHint(all, kinds)
 	if dryRun {
-		fmt.Fprintf(os.Stdout, "dry-run: would kill %d matching serve(s)\n", len(serves))
+		fmt.Fprintf(os.Stdout, "dry-run: would kill %d matching serve(s) (%s)\n", len(serves), filterHint)
 		for _, s := range serves {
 			fmt.Fprintf(os.Stdout, "  pid=%d session=%s cmd=%s\n",
 				s.PID, emptyDash(s.SessionID), truncateCmd(s.Command, 120))
@@ -201,6 +230,57 @@ func runPtyKillOrphans(args []string) error {
 		return fmt.Errorf("failed to kill pid(s): %s", joinInts(failed))
 	}
 	return nil
+}
+
+func isKnownKillOrphanKind(kind string) bool {
+	switch kind {
+	case "test-generated", "workdir-at-tmp":
+		return true
+	default:
+		return false
+	}
+}
+
+// serveMatchesKillOrphanFilter applies selection after list+exe:
+// --all wins; else any --kind (OR); else PPID == 1 only.
+func serveMatchesKillOrphanFilter(s ptyServeInfo, all bool, kinds []string) bool {
+	if all {
+		return true
+	}
+	if len(kinds) > 0 {
+		for _, k := range kinds {
+			if serveMatchesKind(s, strings.TrimSpace(k)) {
+				return true
+			}
+		}
+		return false
+	}
+	return s.PPID == 1
+}
+
+func serveMatchesKind(s ptyServeInfo, kind string) bool {
+	haystack := s.Command
+	if s.Exe != "" && !strings.Contains(haystack, s.Exe) {
+		haystack = s.Exe + " " + haystack
+	}
+	switch kind {
+	case "test-generated":
+		return strings.Contains(haystack, "TestGenerated")
+	case "workdir-at-tmp":
+		return strings.Contains(haystack, "/var/folders/") && strings.Contains(haystack, "/T/")
+	default:
+		return false
+	}
+}
+
+func killOrphanFilterHint(all bool, kinds []string) string {
+	if all {
+		return "all"
+	}
+	if len(kinds) > 0 {
+		return "kind:" + strings.Join(kinds, ",")
+	}
+	return "ppid1"
 }
 
 func emptyDash(s string) string {
