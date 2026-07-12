@@ -26,7 +26,8 @@ Options:
   --session-id-from-prompt   generate session id from prompt slug (storage + TTY registry)
   --auto-send-or-resume      with --session-id: live→send, exited+bound→resume, else→run
   --keep-tty          keep TTY session alive after run completes
-  --open              open keep-alive TTY and attach interactively (silent until detach; prints session id after)
+  --open              open keep-alive TTY and attach interactively (silent until detach; prints session id after);
+                      with --auto-send-or-resume: required shape for create/resume; ignored when live (send only)
   --no-submit         with --open: inject prompt into TTY without trailing Enter (no auto-submit);
                       with --auto-send-or-resume send path: inject without Enter
   --dir DIR           workspace directory (default: process cwd; resume uses session workspace)
@@ -228,8 +229,10 @@ func runAutoSendOrResume(opts autoSendOrResumeOpts) error {
 }
 
 func autoSendLive(store agentstorage.Store, meta agentstorage.SessionMeta, opts autoSendOrResumeOpts) error {
+	// --open is accepted but ignored while live: callers (e.g. local-bot) always pass
+	// the same CLI for run/send/resume. Live work is enqueue + wait delivery only.
 	if opts.openFlag {
-		return fmt.Errorf("--open is not valid while session is live; use send without --open, or wait for exit and resume")
+		fmt.Fprintln(os.Stderr, "note: --open ignored while session is live; sending follow-up")
 	}
 	if opts.prompt == "" {
 		fmt.Fprintln(os.Stderr, "warning: session is live; no message to send")

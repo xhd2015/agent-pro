@@ -54,7 +54,7 @@ run --auto-send-or-resume --session-id NEW "prompt" (+ argv recorder)
 + non-empty prompt -> send to meta.terminal_session_id (fallback session_id);
                      stdout msg_N; honor --no-submit; NO provider --resume spawn
 + empty prompt     -> stderr warning (live / no message); exit 0; no enqueue
-+ --open           -> exit 1; --open not valid while live
++ --open           -> accepted; open ignored while live (still send); exit 0
 
 # MODE=resume (bound+exited, including zombie keep-alive)
 + followup         -> resume path; argv has --resume <runner_session_id>

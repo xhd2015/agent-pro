@@ -1,11 +1,11 @@
 # Scenario
 
-**Feature**: live session + auto + `--open` is rejected (open only for run/resume)
+**Feature**: live session + auto + `--open` is accepted (open ignored; send proceeds)
 
 ```
 seed live
   -> agent-run run --auto-send-or-resume --open --session-id ID "hi"
-  -> exit 1; --open not valid while live
+  -> exit 0; stdout msg_N; send path (not resume)
 ```
 
 ## Steps
@@ -15,6 +15,7 @@ seed live
 
 ```go
 import (
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -24,9 +25,9 @@ func Setup(t *testing.T, req *Request) error {
 	req.RunnerSessionID = "550e8400-e29b-41d4-a716-446655440c33"
 	req.TerminalSessionID = "term-auto-live-c3"
 	req.InitialPrompt = "prior live open"
-	req.FollowupPrompt = "should not open-send"
+	req.FollowupPrompt = "live open send followup"
 	seedLiveBoundNotExited(t, req)
-	req.OpenInstantAttach = true // even with instant attach, live auto must reject --open
+	req.ArgvProbePath = filepath.Join(req.TempDir, "argv-probe-live-open-should-not-exist.log")
 	req.Args = []string{
 		"run",
 		"--auto-send-or-resume",
@@ -34,7 +35,7 @@ func Setup(t *testing.T, req *Request) error {
 		"--session-id", req.SessionID,
 		req.FollowupPrompt,
 	}
-	req.ExecTimeout = 30 * time.Second
+	req.ExecTimeout = 45 * time.Second
 	return nil
 }
 ```
