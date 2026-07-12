@@ -28,7 +28,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	if len(resp.AgentInvocations) != 1 {
 		t.Fatalf("want 1 agent launch, got %d: %v", len(resp.AgentInvocations), resp.AgentInvocations)
 	}
-	sessionID := "slack-" + slackTestChannelID + "-1710000720.000100"
+	sessionID := "slack-channel-" + slackTestChannelID
 	path := expectedSessionSystemMDPath(req.HomeDir, sessionID)
 	if _, err := os.Stat(path); err == nil {
 		t.Fatalf("stateless must not write SYSTEM.md at %s", path)

@@ -9,7 +9,7 @@ explanation: thread follow-up dispatches RunInteractiveOpen run (not send)
 - Both use interactive open `run` profile (`--session-id=`, `--auto-send-or-resume`,
   `--new-terminal`, `--open`).
 - Neither uses bare `send` subcommand or `--keep-tty`.
-- Session id is `slack-{channel}-{root thread_ts}` for both.
+- Session id is `slack-channel-{channelID}` for both.
 
 ## Exit Code
 
@@ -28,7 +28,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	if len(resp.AgentInvocations) != 2 {
 		t.Fatalf("want 2 invocations, got %d: %v", len(resp.AgentInvocations), resp.AgentInvocations)
 	}
-	sessionID := "slack-" + slackTestChannelID + "-1710000200.000100"
+	sessionID := "slack-channel-" + slackTestChannelID
 	for i, line := range resp.AgentInvocations {
 		for _, want := range []string{
 			"run",

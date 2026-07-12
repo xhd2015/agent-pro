@@ -1,7 +1,7 @@
 ## Expected
 
 - Exit code 0.
-- Stdout matches same top-level usage as `-h` (includes `channels`, `auth`, Help topics, `--topic`).
+- Stdout matches same top-level usage as `-h` (includes `channels`, `auth`, `session`, Help topics, `--topic`).
 - Stderr empty.
 
 ## Exit Code
@@ -24,7 +24,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	if resp.Stderr != "" {
 		t.Fatalf("expected empty stderr, got:\n%s", resp.Stderr)
 	}
-	for _, cmd := range []string{"send", "history", "listen", "channels", "auth"} {
+	for _, cmd := range []string{"send", "history", "listen", "channels", "auth", "session"} {
 		if !strings.Contains(resp.Stdout, cmd) {
 			t.Fatalf("help missing command %q:\n%s", cmd, resp.Stdout)
 		}
@@ -50,6 +50,7 @@ Commands:
   listen    Socket Mode inbound bridge to agent-run
   channels  List or search workspace channels
   auth      Inspect bot or app token status
+  session   Session-bound reply and history
 
 Help topics:
   add-missing-scope  How to grant missing OAuth scopes (e.g. groups:read)

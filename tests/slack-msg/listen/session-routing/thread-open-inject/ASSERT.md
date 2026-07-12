@@ -8,7 +8,7 @@ explanation: open inject markers + strip bot mention + SYSTEM.md path in prompt
 - One agent launch (interactive open profile still used).
 - Launch argv/prompt line includes open-inject markers:
   - `Slack listen session open` (or equivalent session-open header)
-  - `session-id:` with `slack-{channel}-{ts}`
+  - `session-id:` with `slack-channel-{channelID}`
   - `channel:`
   - `thread_ts:`
   - `from:` including user id (display name preferred)
@@ -35,7 +35,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 		t.Fatalf("want 1 invocation, got %d: %v", len(resp.AgentInvocations), resp.AgentInvocations)
 	}
 	line := resp.AgentInvocations[0]
-	sessionID := "slack-" + slackTestChannelID + "-1710000710.000100"
+	sessionID := "slack-channel-" + slackTestChannelID
 	sysPath := expectedSessionSystemMDPath(req.HomeDir, sessionID)
 	rawMention := "<@" + slackTestBotUserID + ">"
 

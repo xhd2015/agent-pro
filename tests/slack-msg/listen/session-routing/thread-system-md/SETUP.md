@@ -1,17 +1,17 @@
 # Scenario
 
-**Feature**: thread mode first open writes SYSTEM.md playbook
+**Feature**: thread mode first open writes SYSTEM.md playbook with session recipes
 
 ```
-thread app_mention -> sessions/slack-C-ts/SYSTEM.md under ~/.agent-pro/slack-local-bot
-  with slack-msg send / history recipes (no secrets)
+thread app_mention -> sessions/slack-channel-{channelID}/SYSTEM.md under ~/.agent-pro/slack-local-bot
+  with slack-msg session history / session reply recipes (no secrets; no raw send)
 ```
 
 ## Steps
 
 1. Isolate HOME under workdir.
 2. Inject first thread message; wait for agent open.
-3. Assert SYSTEM.md exists with recipes.
+3. Assert SYSTEM.md exists with session recipes.
 
 ```go
 import (

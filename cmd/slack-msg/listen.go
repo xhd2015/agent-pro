@@ -43,11 +43,13 @@ type listener struct {
 	replyPrefix string
 	sessionMode string
 	dataRoot    string
-	processMu   sync.Mutex
-	dedupeMu    sync.Mutex
-	dedupeSeen  map[string]struct{}
-	userCacheMu sync.Mutex
-	userCache   map[string]string
+	// configPathAbs is the absolute path listen resolved for --config (may be empty).
+	configPathAbs string
+	processMu     sync.Mutex
+	dedupeMu      sync.Mutex
+	dedupeSeen    map[string]struct{}
+	userCacheMu   sync.Mutex
+	userCache     map[string]string
 }
 
 func (l *listener) handleEventsAPI(evt *socketmode.Event, smClient *socketmode.Client) {
@@ -101,7 +103,7 @@ func (l *listener) dispatchInbound(msg inboundMessage) {
 	defer l.processMu.Unlock()
 
 	threadTS := rootThreadTS(msg)
-	sid := sessionID(msg.ChannelID, threadTS)
+	sid := conversationSessionID(msg.ChannelID, msg.UserID)
 	cleaned := stripBotMention(msg.Text, l.filter.BotUserID)
 	display := l.userDisplayName(msg.UserID)
 
@@ -129,7 +131,35 @@ func (l *listener) dispatchInbound(msg inboundMessage) {
 			slack.MsgOptionTS(threadTS),
 		)
 	default:
-		// Thread mode: interactive open with SYSTEM.md inject; no PostMessage of agent body.
+		// Thread mode: upsert durable map, append inbound log, SYSTEM.md inject,
+		// interactive open with SLACK_MSG_* env; no PostMessage of agent body.
+		preview := cleaned
+		if preview == "" {
+			preview = strings.TrimSpace(msg.Text)
+		}
+		if err := upsertSessionEntry(l.dataRoot, durableSessionEntry{
+			SessionID:          sid,
+			ChannelID:          msg.ChannelID,
+			ThreadTS:           threadTS,
+			ConfigPath:         l.configPathAbs,
+			Kind:               "channel",
+			ReplyMode:          "channel",
+			LastMessagePreview: truncateRunes(preview, 80),
+		}); err != nil {
+			fmt.Fprintf(os.Stderr, "upsert sessions.json failed: %v\n", err)
+			return
+		}
+		if err := appendSessionMessage(l.dataRoot, sid, sessionLogEntry{
+			MessageID: msg.TS,
+			TS:        msg.TS,
+			User:      msg.UserID,
+			Text:      cleaned,
+			Direction: "in",
+		}); err != nil {
+			fmt.Fprintf(os.Stderr, "append messages.jsonl failed: %v\n", err)
+			return
+		}
+
 		sysPath := sessionSystemMDPath(l.dataRoot, sid)
 		if err := writeSystemPrompt(sysPath, systemPromptContext{
 			SessionID: sid,
@@ -152,8 +182,16 @@ func (l *listener) dispatchInbound(msg inboundMessage) {
 			SystemPromptPath: absSys,
 			UserMessage:      cleaned,
 		})
+
+		openOpts := l.agent
+		openOpts.Env = append([]string(nil), openOpts.Env...)
+		openOpts.Env = append(openOpts.Env, envSlackMsgSessionID+"="+sid)
+		if l.configPathAbs != "" {
+			openOpts.Env = append(openOpts.Env, envSlackMsgConfig+"="+l.configPathAbs)
+		}
+
 		fmt.Fprintf(os.Stderr, "agent open start session=%s\n", sid)
-		if err := runAgentInteractiveOpen(inject, sid, l.agent); err != nil {
+		if err := runAgentInteractiveOpen(inject, sid, openOpts); err != nil {
 			fmt.Fprintf(os.Stderr, "agent open failed: %v\n", err)
 			return
 		}
@@ -417,6 +455,8 @@ func runListen(cfg listenConfig) error {
 		allowFrom = []string{"*"}
 	}
 
+	configPathAbs := resolveConfigPathAbs(cfg.ConfigPath)
+
 	client := socketmode.New(api)
 	l := &listener{
 		api: api,
@@ -431,11 +471,12 @@ func runListen(cfg listenConfig) error {
 			Runner:           cfg.AgentRunner,
 			RunnerConfigHome: cfg.AgentRunnerConfigHome,
 		},
-		replyPrefix: cfg.ReplyPrefix,
-		sessionMode: cfg.SessionMode,
-		dataRoot:    defaultSlackLocalBotRoot(),
-		dedupeSeen:  make(map[string]struct{}),
-		userCache:   make(map[string]string),
+		replyPrefix:   cfg.ReplyPrefix,
+		sessionMode:   cfg.SessionMode,
+		dataRoot:      defaultSlackLocalBotRoot(),
+		configPathAbs: configPathAbs,
+		dedupeSeen:    make(map[string]struct{}),
+		userCache:     make(map[string]string),
 	}
 
 	done := make(chan struct{})

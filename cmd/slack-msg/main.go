@@ -18,6 +18,7 @@ Commands:
   listen    Socket Mode inbound bridge to agent-run
   channels  List or search workspace channels
   auth      Inspect bot or app token status
+  session   Session-bound reply and history
 
 Help topics:
   add-missing-scope  How to grant missing OAuth scopes (e.g. groups:read)
@@ -72,6 +73,8 @@ func run(args []string) error {
 		return runChannels(args[1:])
 	case "auth":
 		return runAuth(args[1:])
+	case "session":
+		return runSession(args[1:])
 	default:
 		if strings.HasPrefix(args[0], "-") {
 			return fmt.Errorf("unknown option: %s", args[0])

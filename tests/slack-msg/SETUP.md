@@ -6,14 +6,15 @@
 # session cache: build slack-msg once; slacktest for unit send/history/channels/auth; listen daemon probes
 doctest -> build ./cmd/slack-msg -> temp workdir -> exec with controlled env/args -> capture stdout/stderr/exit
 
-# send / history / channels / auth unit branch
+# send / history / channels / auth / session unit branch
 SLACK_API_URL -> slacktest (conversations.list + chat.postMessage + history/replies + auth.test + apps.connections.open)
+session store under $HOME/.agent-pro/slack-local-bot (sessions.json + messages.jsonl)
 
 # listen unit branch
 slacktest Socket Mode + mock agent-run (SLACK_LISTEN_AGENT_RUN; handles tty status ready)
   -> agentrunbridge RunInteractiveOpen (thread) / Run+CaptureStdout (stateless)
   -> chat.postMessage only for stateless agent body
-  -> default lock / banner / dedupe / operator logs / SYSTEM.md open inject
+  -> default lock / banner / dedupe / operator logs / SYSTEM.md + sessions map + -e env inject
 
 # integration branch
 --config repo slack-config.json + real slack.com
@@ -42,8 +43,9 @@ slacktest Socket Mode + mock agent-run (SLACK_LISTEN_AGENT_RUN; handles tty stat
 - Lock message (listen): `another slack-msg is already running`.
 - Default listen lock path: `$HOME/.agent-pro/slack-msg.listen.lock` (daemon harness
   auto-isolates with WorkDir lock unless `UseDefaultLock` / `NoLock`).
-- Thread SYSTEM.md: `$HOME/.agent-pro/slack-local-bot/sessions/<sessionID>/SYSTEM.md`
-  (isolate via `req.HomeDir`).
+- Session store: `$HOME/.agent-pro/slack-local-bot/{sessions.json,sessions/<id>/…}`
+  (isolate via `req.HomeDir` on CLI + daemon).
+- Session reply posts capture: `req.CapturePosts` for simple-run PostMessage asserts.
 
 ```go
 import (

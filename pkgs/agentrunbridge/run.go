@@ -21,10 +21,12 @@ type RunOpts struct {
 	WaitReady                                                              bool
 	ReadyTimeout, ReadyPollInterval                                        time.Duration
 	CaptureStdout                                                          bool
-	LookPath                                                               func(file string) (string, error)
-	RunCommand                                                             func(name string, args ...string) error
-	RunOutput                                                              func(name string, args ...string) (string, error)
-	Logf                                                                   func(format string, args ...any)
+	// Env is a list of "KEY=VALUE" pairs passed to agent-run as repeatable -e flags.
+	Env        []string
+	LookPath   func(file string) (string, error)
+	RunCommand func(name string, args ...string) error
+	RunOutput  func(name string, args ...string) (string, error)
+	Logf       func(format string, args ...any)
 }
 
 // RunResult holds optional captured launch stdout.

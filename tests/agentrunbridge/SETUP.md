@@ -24,12 +24,13 @@ LookPath + RunCommand + RunOutput hooks
   - `BuildArgs(opts RunOpts) []string`
   - `ParseTTYStatus(stdout string) (screen, sendable string)`
   - `IsSessionReady(stdout string) bool`
-- Types: `RunOpts`, `RunResult`, `InteractiveOpenOpts` with fields per REQUIREMENT-DESIGN.
+- Types: `RunOpts`, `RunResult`, `InteractiveOpenOpts` with fields per REQUIREMENT-DESIGN
+  (including `Env []string` for agent-run `-e KEY=VALUE`).
 - Test hooks on opts: `LookPath`, `RunCommand`, `RunOutput` (and optional
   `ReadyTimeout` / `ReadyPollInterval` on interactive opts for short timeouts).
 - **No real `agent-run` binary, PATH, or iTerm** — all unit leaves use fakes.
-- Package does not exist yet (implementer creates it); leaves are RED until then.
 - Argv uses equals form: `--session-id=`, `--agent-runner=`, `--dir=`.
+- `Env` entries emit two tokens each: `-e`, `KEY=VALUE`, after other flags, before `--`.
 - `BuildArgs` returns args **without** the binary name (first element is `run`).
 
 ## Steps

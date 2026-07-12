@@ -20,7 +20,7 @@ Caller -> slack-msg --topic … alone / unknown topic -> stderr + exit 1
 
 ## Context
 
-- Root help must list subcommands `send`, `history`, `listen`, `channels`, and `auth`.
+- Root help must list subcommands `send`, `history`, `listen`, `channels`, `auth`, and `session`.
 - Root help must list Help topics including `add-missing-scope` and usage line
   `slack-msg --help [--topic TOPIC]`.
 - Soft/hard missing_scope stderr points operators at

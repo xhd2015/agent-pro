@@ -50,6 +50,7 @@ type openInjectContext struct {
 }
 
 // formatSystemPrompt builds SYSTEM.md playbook body (no secrets).
+// Recipes use session-bound CLI only (no raw send --channel/--thread).
 func formatSystemPrompt(ctx systemPromptContext) string {
 	var b strings.Builder
 	b.WriteString("# Slack local-bot agent session\n\n")
@@ -67,19 +68,25 @@ func formatSystemPrompt(ctx systemPromptContext) string {
 	b.WriteString(ctx.ThreadTS)
 	b.WriteString("\n\n")
 	b.WriteString("## CLI recipes\n\n")
-	b.WriteString("Read thread history:\n")
+	b.WriteString("Read local session history:\n")
 	b.WriteString("```\n")
-	b.WriteString(fmt.Sprintf("slack-msg history --channel %s --thread %s\n", ctx.ChannelID, ctx.ThreadTS))
+	b.WriteString("slack-msg session history\n")
 	b.WriteString("```\n\n")
-	b.WriteString("Reply on Slack (same channel + thread):\n")
+	b.WriteString("Read history after a message id:\n")
 	b.WriteString("```\n")
-	b.WriteString(fmt.Sprintf("slack-msg send --channel %s --thread %s \"your answer\"\n", ctx.ChannelID, ctx.ThreadTS))
+	b.WriteString("slack-msg session history --after-msg-id <MSG_ID>\n")
+	b.WriteString("```\n\n")
+	b.WriteString("Reply on Slack (channel top-level):\n")
+	b.WriteString("```\n")
+	b.WriteString("slack-msg session reply \"your answer\"\n")
 	b.WriteString("```\n\n")
 	b.WriteString("## Workflow\n\n")
 	b.WriteString("1. Investigate the request\n")
-	b.WriteString("2. Reply via slack-msg send (thread_ts required for channel threads)\n\n")
+	b.WriteString("2. Optionally read session history\n")
+	b.WriteString("3. Reply via slack-msg session reply\n\n")
 	b.WriteString("## Notes\n\n")
-	b.WriteString("Use host env/config for credentials. Do not print secrets.\n")
+	b.WriteString("Session id and config are injected via env (SLACK_MSG_SESSION_ID, SLACK_MSG_CONFIG).\n")
+	b.WriteString("Use only the session recipes above. Do not print secrets.\n")
 	return b.String()
 }
 

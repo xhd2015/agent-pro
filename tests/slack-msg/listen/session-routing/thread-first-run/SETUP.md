@@ -3,7 +3,7 @@
 **Feature**: thread mode first message uses agentrunbridge RunInteractiveOpen
 
 ```
-first thread message -> agent-run run --session-id=slack-C-ts
+first channel message -> agent-run run --session-id=slack-channel-{channelID}
   --auto-send-or-resume --new-terminal --open -- <prompt>
 ```
 

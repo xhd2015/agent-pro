@@ -40,6 +40,15 @@ func BuildArgs(opts RunOpts) []string {
 		args = append(args, "--open")
 	}
 
+	// Env pairs after other flags and before "--" / prompt (agent-run StringSlice).
+	for _, e := range opts.Env {
+		e = strings.TrimSpace(e)
+		if e == "" {
+			continue
+		}
+		args = append(args, "-e", e)
+	}
+
 	prompt := strings.TrimSpace(opts.Prompt)
 	if opts.Open {
 		// Open profile: prompt after "--" separator (SeaTalk parity).

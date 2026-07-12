@@ -6,7 +6,7 @@ explanation: thread mode first message dispatches RunInteractiveOpen open profil
 ## Expected
 
 - Exactly one launch invocation (tty status polls not counted).
-- Argv contains `run`, `--session-id=slack-{channel}-{ts}`, `--auto-send-or-resume`,
+- Argv contains `run`, `--session-id=slack-channel-{channelID}`, `--auto-send-or-resume`,
   `--new-terminal`, `--open`.
 - Argv does **not** contain `--keep-tty` or bare `send` subcommand.
 
@@ -28,7 +28,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 		t.Fatalf("want 1 invocation, got %d: %v", len(resp.AgentInvocations), resp.AgentInvocations)
 	}
 	line := resp.AgentInvocations[0]
-	sessionID := "slack-" + slackTestChannelID + "-1710000100.000100"
+	sessionID := "slack-channel-" + slackTestChannelID
 	for _, want := range []string{
 		"run",
 		"--session-id=" + sessionID,

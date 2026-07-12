@@ -10,6 +10,8 @@ import (
 type InteractiveOpenOpts struct {
 	SessionID, Prompt, WorkspaceDir, Binary, AgentRunner, RunnerConfigHome string
 	NoSubmit                                                               bool
+	// Env is forwarded to RunOpts (each "KEY=VALUE" → agent-run -e KEY=VALUE).
+	Env []string
 	// ReadyTimeout / ReadyPollInterval optional; 0 → Run defaults (60s / 500ms).
 	ReadyTimeout      time.Duration
 	ReadyPollInterval time.Duration
@@ -44,6 +46,7 @@ func RunInteractiveOpen(opts InteractiveOpenOpts) (RunResult, error) {
 		Open:              true,
 		WaitReady:         true,
 		CaptureStdout:     false,
+		Env:               opts.Env,
 		ReadyTimeout:      opts.ReadyTimeout,
 		ReadyPollInterval: opts.ReadyPollInterval,
 		LookPath:          opts.LookPath,

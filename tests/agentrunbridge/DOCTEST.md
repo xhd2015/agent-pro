@@ -33,6 +33,9 @@ library that maps structured options to `agent-run` CLI argv, optionally polls
   defaults it to `grok-tty`.
 - Interactive open mapping: `AutoSendOrResume`, `NewTerminal`, `Open`,
   `WaitReady` true; `CaptureStdout` false.
+- `Env []string` on `RunOpts` / `InteractiveOpenOpts`: each `"KEY=VALUE"` emits
+  repeatable `-e KEY=VALUE` (two argv tokens: `-e` then `KEY=VALUE`) **after**
+  other flags and **before** `--` / open prompt.
 - Ready when `EqualFold(screen,"banner") && EqualFold(sendable,"yes")`.
 - Defaults: `ReadyTimeout` 0 → 60s; `ReadyPollInterval` 0 → 500ms.
 - `CaptureStdout` true → `RunResult.Stdout` is trimmed launch stdout.
@@ -63,7 +66,8 @@ tests/agentrunbridge/
 │   ├── keep-tty-session/               # --keep-tty, session, no --open
 │   ├── auto-send-no-open/              # --auto-send-or-resume, Open false
 │   ├── stateless/                      # run + prompt; no session id
-│   └── runner-empty-omitted/           # empty AgentRunner → no --agent-runner
+│   ├── runner-empty-omitted/           # empty AgentRunner → no --agent-runner
+│   └── env-flags/                      # Env → -e KEY=VALUE before --
 ├── status/                             # pure ParseTTYStatus / IsSessionReady
 │   ├── ready/                          # banner + sendable yes → ready
 │   └── not-ready/                      # starting + sendable no → not ready
@@ -78,14 +82,15 @@ tests/agentrunbridge/
     ├── defaults-wait-ready/            # minimal opts + wait success
     ├── dir-nosubmit/                   # WorkspaceDir + NoSubmit in argv
     ├── runner-default-grok-tty/        # empty AgentRunner injects grok-tty
-    └── same-argv-as-run-fill/          # spy: same argv as equivalent RunOpts fill
+    ├── same-argv-as-run-fill/          # spy: same argv as equivalent RunOpts fill
+    └── env-forwarded/                  # InteractiveOpenOpts.Env → -e in launch argv
 ```
 
 Parameter ranking (most → least significant):
 
 1. **API / concern** — pure args, pure status, `Run` exec path, interactive open profile
 2. **Validation vs exec vs wait** — empty prompt / binary / capture / poll outcomes
-3. **Flag profile** — open defaults, dir/nosubmit, keep-tty, stateless, runner defaults
+3. **Flag profile** — open defaults, dir/nosubmit, keep-tty, stateless, runner defaults, Env
 
 ## Test Index
 
@@ -97,6 +102,7 @@ Parameter ranking (most → least significant):
 | 4 | `build-args/auto-send-no-open` | `--auto-send-or-resume` present; no `--open` |
 | 5 | `build-args/stateless` | `run` + prompt only; no session id flag |
 | 6 | `build-args/runner-empty-omitted` | Empty `AgentRunner` omits `--agent-runner` |
+| 6a | `build-args/env-flags` | `Env` → `-e KEY=VALUE` after flags, before `--` prompt |
 | 7 | `status/ready` | Fixture banner+yes → `IsSessionReady` true |
 | 8 | `status/not-ready` | Fixture starting+no → false |
 | 9 | `run/empty-prompt` | Empty/whitespace prompt → error; zero launch calls |
@@ -109,6 +115,7 @@ Parameter ranking (most → least significant):
 | 16 | `interactive-open/dir-nosubmit` | Dir + NoSubmit appear in launch argv |
 | 17 | `interactive-open/runner-default-grok-tty` | Empty runner → `--agent-runner=grok-tty` |
 | 18 | `interactive-open/same-argv-as-run-fill` | Launch argv equals `BuildArgs` of filled `RunOpts` |
+| 19 | `interactive-open/env-forwarded` | `InteractiveOpenOpts.Env` forwarded as `-e` in launch argv |
 
 ## How to Run
 
@@ -119,6 +126,8 @@ doctest test ./tests/agentrunbridge
 doctest test -v ./tests/agentrunbridge/build-args/interactive-open-defaults
 doctest test -v ./tests/agentrunbridge/run/wait-ready-timeout
 doctest test -v ./tests/agentrunbridge/interactive-open/same-argv-as-run-fill
+doctest test -v ./tests/agentrunbridge/build-args/env-flags
+doctest test -v ./tests/agentrunbridge/interactive-open/env-forwarded
 ```
 
 ```go
@@ -153,6 +162,7 @@ type Request struct {
 	ReadyTimeout     time.Duration
 	ReadyPollInterval time.Duration
 	CaptureStdout    bool
+	Env              []string // each "KEY=VALUE" → agent-run -e KEY=VALUE
 
 	// status mode
 	StatusStdout string
@@ -357,6 +367,7 @@ func toRunOpts(req *Request, hooks *hookFns) agentrunbridge.RunOpts {
 		ReadyTimeout:      req.ReadyTimeout,
 		ReadyPollInterval: req.ReadyPollInterval,
 		CaptureStdout:     req.CaptureStdout,
+		Env:               append([]string(nil), req.Env...),
 	}
 	if hooks != nil {
 		opts.LookPath = hooks.LookPath
@@ -368,7 +379,7 @@ func toRunOpts(req *Request, hooks *hookFns) agentrunbridge.RunOpts {
 
 func toInteractiveOpts(req *Request, hooks *hookFns) agentrunbridge.InteractiveOpenOpts {
 	// InteractiveOpenOpts fields per requirement: SessionID, Prompt, WorkspaceDir,
-	// NoSubmit, Binary, AgentRunner, Logf, plus optional test hooks (LookPath,
+	// NoSubmit, Binary, AgentRunner, Env, Logf, plus optional test hooks (LookPath,
 	// RunCommand, RunOutput) forwarded into the filled RunOpts.
 	// ReadyTimeout / ReadyPollInterval live only on RunOpts; InteractiveOpen uses
 	// package defaults after fill (0 → 60s / 500ms). Short-timeout wait leaves use Mode=run.
@@ -379,6 +390,7 @@ func toInteractiveOpts(req *Request, hooks *hookFns) agentrunbridge.InteractiveO
 		NoSubmit:     req.NoSubmit,
 		Binary:       req.Binary,
 		AgentRunner:  req.AgentRunner,
+		Env:          append([]string(nil), req.Env...),
 	}
 	if hooks != nil {
 		opts.LookPath = hooks.LookPath
@@ -407,6 +419,7 @@ func filledInteractiveRunOpts(req *Request) agentrunbridge.RunOpts {
 		Open:             true,
 		WaitReady:        true,
 		CaptureStdout:    false,
+		Env:              append([]string(nil), req.Env...),
 	}
 }
 

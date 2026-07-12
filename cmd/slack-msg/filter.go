@@ -101,6 +101,11 @@ func rootThreadTS(msg inboundMessage) string {
 	return msg.TS
 }
 
-func sessionID(channelID, threadTS string) string {
-	return "slack-" + channelID + "-" + threadTS
+// conversationSessionID returns a stable agent session key for a Slack
+// conversation: one session per channel (or group/MPIM), one per DM user.
+func conversationSessionID(channelID, userID string) string {
+	if isDirectMessage(channelID) {
+		return "slack-dm-" + userID
+	}
+	return "slack-channel-" + channelID
 }

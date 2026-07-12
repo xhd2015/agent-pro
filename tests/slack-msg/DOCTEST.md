@@ -1,23 +1,25 @@
-# slack-msg CLI (send | history | listen | channels | auth) Doctests
+# slack-msg CLI (send | history | listen | channels | auth | session) Doctests
 
 Doc-style tests for the unified first-class CLI at `cmd/slack-msg` with subcommands
-`send`, `history`, `listen`, `channels` (`list` | `search`), and `auth status`
-(`--app` for app-level tokens). Ports contracts from `tests/slack-send-cli` and
-`tests/slack-listen` (updated argv and `--token` instead of `--bot-token`), history
-coverage (oldest→newest, `--json`, `--thread`), channel list/search, and auth
-status (bot via `auth.test`, app via `apps.connections.open`). Uses `pkgs/slackutil`
-for config/token/channel resolution and `slacktest` + `SLACK_API_URL` for unit paths.
+`send`, `history`, `listen`, `channels` (`list` | `search`), `auth status`
+(`--app` for app-level tokens), and `session` (`reply` | `history`). Ports contracts
+from `tests/slack-send-cli` and `tests/slack-listen` (updated argv and `--token`
+instead of `--bot-token`), history coverage (oldest→newest, `--json`, `--thread`),
+channel list/search, auth status (bot via `auth.test`, app via `apps.connections.open`),
+and session-bound reply/history (SeaTalk-like; channel top-level posts, no
+`thread_ts`). Uses `pkgs/slackutil` for config/token/channel resolution and
+`slacktest` + `SLACK_API_URL` for unit paths.
 
 # DSN (Domain Specific Notion)
 
 **Participants**
 
 - **Caller** — user or doctest harness invoking the `slack-msg` binary.
-- **slack-msg CLI** — root dispatcher for `send` | `history` | `listen` | `channels` | `auth`;
-  top-level `-h`/`--help` lists the five commands plus Help topics (including
-  `add-missing-scope`) and `slack-msg --help [--topic TOPIC]`; `--help --topic`
-  / `--topic … --help` print a topic body; `--topic` alone or unknown topic →
-  stderr + exit 1; unknown command → stderr + exit 1.
+- **slack-msg CLI** — root dispatcher for `send` | `history` | `listen` | `channels` |
+  `auth` | `session`; top-level `-h`/`--help` lists the six commands plus Help
+  topics (including `add-missing-scope`) and `slack-msg --help [--topic TOPIC]`;
+  `--help --topic` / `--topic … --help` print a topic body; `--topic` alone or
+  unknown topic → stderr + exit 1; unknown command → stderr + exit 1.
 - **send** — posts via `chat.postMessage`; requires exactly one positional MESSAGE;
   flags `--token`, `--channel`, `--config`, `--thread`, `-h`/`--help`; token/channel
   from CLI → env → config; prints Sending / Using config / OK lines on success.
@@ -35,10 +37,23 @@ for config/token/channel resolution and `slacktest` + `SLACK_API_URL` for unit p
   lock path or `(none)`). **Dedupe** inbound `app_mention`+`message` with the
   same `(channel, ts)` to one agent launch. **Operator logs** for accepted
   events (kind, user display, channel, ts, text) and agent open/errors. **Strip**
-  bot `<@BOTID>` from agent prompt text. Thread mode writes **SYSTEM.md** under
-  `~/.agent-pro/slack-local-bot/sessions/<sessionID>/` and open-injects a prompt
-  with session metadata + CLI recipes (`slack-msg send` / `history`); agent body
-  is not PostMessaged in thread mode.
+  bot `<@BOTID>` from agent prompt text. Thread mode **upserts** durable
+  `sessions.json`, **appends** inbound lines to `messages.jsonl`, writes
+  **SYSTEM.md** under `~/.agent-pro/slack-local-bot/sessions/<sessionID>/` with
+  **session** CLI recipes (`slack-msg session history` / `session reply` — no
+  raw `send --channel/--thread`), open-injects a prompt with session metadata +
+  SYSTEM.md path, and launches `RunInteractiveOpen` with Env
+  `SLACK_MSG_SESSION_ID` + `SLACK_MSG_CONFIG` (config only when path non-empty)
+  as agent-run `-e KEY=VALUE`. **Stable session ids:** channel/group/MPIM →
+  `slack-channel-{channelID}`; DM (`D…`) → `slack-dm-{userID}` (not per-message
+  ts; event dedupe stays `channelID:ts`). Agent body is not PostMessaged in
+  thread mode.
+- **session** — session-bound agent recipes: `reply` posts `chat.postMessage` to
+  the map entry's `channel_id` **without** `thread_ts` (channel top-level);
+  `history` prints local `messages.jsonl` (oldest→newest; `--after-msg-id`,
+  `--limit`, `--json`). Session id via `--session-id` or `SLACK_MSG_SESSION_ID`;
+  config via `--config` or `SLACK_MSG_CONFIG` or map `config_path`. Durable store:
+  `~/.agent-pro/slack-local-bot/sessions.json` + `sessions/<id>/messages.jsonl`.
 - **channels** — `list` or `search QUERY` over `conversations.list` (paginated
   **per mapped type**); default `--types public,private` maps to
   `public_channel` + `private_channel`; default exclude archived; sort by name
@@ -74,19 +89,22 @@ for config/token/channel resolution and `slacktest` + `SLACK_API_URL` for unit p
 - **Singleton lock** — default path `~/.agent-pro/slack-msg.listen.lock`; second
   listen instance exits non-zero with `another slack-msg is already running`
   when lock held; `--no-lock` disables singleton.
-- **Local-bot session store** — thread mode session dir
-  `~/.agent-pro/slack-local-bot/sessions/slack-{channel}-{rootThreadTS}/SYSTEM.md`
-  (playbook + `slack-msg send`/`history` recipes; no secrets embedded).
+- **Local-bot session store** — under `~/.agent-pro/slack-local-bot/`:
+  `sessions.json` (conversation map), `sessions/<sessionID>/SYSTEM.md` (playbook
+  + `slack-msg session history` / `session reply` recipes; no secrets),
+  `sessions/<sessionID>/messages.jsonl` (inbound/outbound log for session history).
 - **Test harness** — builds `./cmd/slack-msg` once per session; quick-exit CLI runs
-  for send/history/channels/auth/root; daemon probes for listen unit paths.
+  for send/history/channels/auth/session/root; daemon probes for listen unit paths.
   Daemon leaves auto-isolate `--lock-file` under WorkDir unless `UseDefaultLock`
-  or `NoLock` is set; optional `HomeDir` isolates `HOME` for default lock + SYSTEM.md.
+  or `NoLock` is set; optional `HomeDir` isolates `HOME` for default lock + session
+  store; `CapturePosts` captures `chat.postMessage` on simple (non-daemon) runs
+  for session reply leaves.
 
 **Behaviors**
 
-- `slack-msg -h|--help` — lists `send`, `history`, `listen`, `channels`, `auth`; Help topics
-  including `add-missing-scope`; usage line `slack-msg --help [--topic TOPIC]`;
-  exit 0; trailing `\n`.
+- `slack-msg -h|--help` — lists `send`, `history`, `listen`, `channels`, `auth`,
+  `session`; Help topics including `add-missing-scope`; usage line
+  `slack-msg --help [--topic TOPIC]`; exit 0; trailing `\n`.
 - `slack-msg --help --topic add-missing-scope` / `--topic add-missing-scope --help`
   — topic guideline body (groups:read, reinstall, botToken/config); exit 0; trailing `\n`.
 - `slack-msg --topic …` without `--help` — stderr e.g. `--topic requires --help`; exit 1.
@@ -103,9 +121,18 @@ for config/token/channel resolution and `slacktest` + `SLACK_API_URL` for unit p
   filter bot-self / DM / mention / allowFrom / channel; dedupe same channel+ts;
   operator logs for accepted inbound + agent open/error; strip bot mention from
   prompt; thread vs stateless session routing via agentrunbridge; default lock
-  path / `--no-lock`; thread mode SYSTEM.md + open inject + interactive open
-  (no agent-body PostMessage); stateless replies PostMessage with `thread_ts`
-  and optional `--reply-prefix` (no SYSTEM.md).
+  path / `--no-lock`; thread mode sessions.json upsert + messages.jsonl append +
+  SYSTEM.md (session recipes) + open inject + interactive open with
+  `-e SLACK_MSG_SESSION_ID=…` / `-e SLACK_MSG_CONFIG=…` (no agent-body
+  PostMessage); session id is `slack-channel-{channelID}` or
+  `slack-dm-{userID}`; stateless replies PostMessage with `thread_ts` and optional
+  `--reply-prefix` (no SYSTEM.md / session map).
+- `slack-msg session reply [options] MESSAGE` — resolve session id → map entry →
+  config/token → `chat.postMessage` to `channel_id` **without** `thread_ts` →
+  append outbound to messages.jsonl → `OK ts=… channel=…` + trailing `\n`;
+  missing session id / unknown session / missing token → exit 1.
+- `slack-msg session history [options]` — local messages.jsonl oldest→newest;
+  `--after-msg-id` filters; `--json` optional; trailing `\n` on success.
 - `slack-msg channels list [options]` — fetch per type, merge, exclude archived,
   sort by name, human or JSON; missing token → `bot token required`; multi-type
   private `missing_scope` → public rows + soft warning (with `see:` topic) exit 0;
@@ -187,9 +214,22 @@ tests/slack-msg/
 │   ├── filter/                        # label: unit
 │   ├── dedupe/                        # label: unit (app_mention+message same ts)
 │   ├── logs/                          # label: unit (operator inbound / agent error)
-│   ├── session-routing/               # label: unit (+ SYSTEM.md / open inject)
+│   ├── session-routing/               # label: unit (+ SYSTEM.md / map / env inject)
 │   ├── reply/                         # label: unit
 │   └── integration/                   # label: integration, slow
+├── session/                           # session reply | history (SeaTalk-like)
+│   ├── SETUP.md
+│   ├── help/                          # session -h / --help
+│   ├── reply/
+│   │   ├── SETUP.md
+│   │   ├── help/
+│   │   ├── success/                   # label: unit (channel post no thread)
+│   │   └── errors/                    # missing/unknown session, token
+│   └── history/
+│       ├── SETUP.md
+│       ├── help/
+│       ├── success/                   # label: unit (local messages.jsonl)
+│       └── errors/
 └── channels/
     ├── SETUP.md
     ├── help/                          # channels -h / --help
@@ -233,17 +273,18 @@ tests/slack-msg/
 
 Parameter ranking (most → least significant):
 
-1. **Command / outcome** — top-level help vs unknown vs send vs history vs listen vs channels vs auth
+1. **Command / outcome** — top-level help vs unknown vs send vs history vs listen vs channels vs auth vs session
 2. **Within command** — help vs validation-error vs success/unit path vs integration
-3. **Auth mode** — bot (default) vs `--app`
-4. **Credential / channel source** — CLI flags vs env vs `--config` JSON
-5. **Backend** — slacktest (`SLACK_API_URL`) vs live Slack vs no network
+3. **Session action** — `reply` vs `history` (session tree)
+4. **Auth mode** — bot (default) vs `--app`
+5. **Credential / session / config source** — CLI flags vs env (`SLACK_MSG_*`) vs map / `--config` JSON
+6. **Backend** — slacktest (`SLACK_API_URL`) vs live Slack vs local session store vs no network
 
 ## Test Index
 
 | # | Leaf | Labels | Description |
 |---|------|--------|-------------|
-| 1 | `help/short-flag` | (default) | Top-level `-h` lists commands including `auth` + Help topics (`add-missing-scope`); exit 0 |
+| 1 | `help/short-flag` | (default) | Top-level `-h` lists commands including `auth`, `session` + Help topics (`add-missing-scope`); exit 0 |
 | 2 | `help/long-flag` | (default) | Top-level `--help` same contract |
 | 2a | `help/topic/add-missing-scope/help-then-topic` | (default) | `--help --topic add-missing-scope` guideline; exit 0 |
 | 2b | `help/topic/add-missing-scope/topic-then-help` | (default) | `--topic add-missing-scope --help` same body; exit 0 |
@@ -311,15 +352,37 @@ Parameter ranking (most → least significant):
 | 57b | `listen/dedupe/different-ts` | unit | Two different ts → 2 agent launches |
 | 57c | `listen/logs/accepted-inbound` | unit | Accepted event logs kind/user display/channel/ts/text + agent open |
 | 57d | `listen/logs/agent-open-error` | unit | Agent open failure is logged (not silent) |
-| 58 | `listen/session-routing/thread-first-run` | unit | First msg → RunInteractiveOpen (`run` + `--session-id=` + auto-send/new-terminal/open) |
+| 58 | `listen/session-routing/thread-first-run` | unit | First msg → RunInteractiveOpen (`run` + `--session-id=slack-channel-{C}` + auto-send/new-terminal/open) |
 | 59 | `listen/session-routing/thread-follow-up-open` | unit | Follow-up also RunInteractiveOpen `run` (not `send`; was `thread-follow-up-send`) |
+| 59a | `listen/session-routing/channel-stable-session` | unit | Two channel msgs different ts → same `slack-channel-{C}` session id |
+| 59b | `listen/session-routing/dm-session-key` | unit | DM → `--session-id=slack-dm-{userID}` (not `slack-channel-D…`) |
 | 60 | `listen/session-routing/stateless-each-run` | unit | Stateless → every msg `Run` capture (no `--open` / session-id) |
-| 60a | `listen/session-routing/thread-system-md` | unit | Thread first open writes SYSTEM.md with send/history recipes |
+| 60a | `listen/session-routing/thread-system-md` | unit | Thread first open writes SYSTEM.md under `slack-channel-{C}` with **session** recipes (no raw send --channel/--thread) |
 | 60b | `listen/session-routing/thread-open-inject` | unit | Open prompt: inject markers, stripped mention, from:, SYSTEM.md path |
 | 60c | `listen/session-routing/stateless-no-system-md` | unit | Stateless does not write SYSTEM.md |
+| 60d | `listen/session-routing/thread-session-map` | unit | Upserts `sessions.json` entry (`slack-channel-{C}`, channel, thread_ts, config_path) |
+| 60e | `listen/session-routing/thread-messages-log` | unit | Appends inbound line to `messages.jsonl` under stable session id |
+| 60f | `listen/session-routing/thread-env-flags` | unit | Agent argv includes `-e SLACK_MSG_SESSION_ID=slack-channel-{C}` and `-e SLACK_MSG_CONFIG=…` |
 | 61 | `listen/reply/posts-in-thread` | unit | Thread interactive open → no agent-body PostMessage |
 | 62 | `listen/reply/reply-prefix` | unit | Stateless `--reply-prefix` + agent body PostMessage with `thread_ts` |
 | 63 | `listen/integration/live-socket-reply` | integration, slow | Live Socket Mode connect probe |
+| 63a | `session/help/short-flag` | (default) | `session -h` lists reply/history; exit 0 |
+| 63b | `session/help/long-flag` | (default) | `session --help` same as `-h` |
+| 63c | `session/reply/help/short-flag` | (default) | `session reply -h`; lists --session-id / --config / SLACK_MSG_* |
+| 63d | `session/reply/help/long-flag` | (default) | `session reply --help` |
+| 63e | `session/reply/success/map-config-flag` | unit | Map+`--session-id`+`--config` → PostMessage channel only (no thread_ts); OK line |
+| 63f | `session/reply/success/env-session-and-config` | unit | `SLACK_MSG_SESSION_ID` + `SLACK_MSG_CONFIG` resolve; channel post no thread |
+| 63g | `session/reply/success/appends-outbound-log` | unit | Successful reply appends `direction=out` to messages.jsonl |
+| 63h | `session/reply/errors/missing-session-id` | (default) | No session id → stderr session id required; exit 1 |
+| 63i | `session/reply/errors/unknown-session` | (default) | Unknown session → session not found; exit 1 |
+| 63j | `session/reply/errors/missing-token` | (default) | Map without config/token → bot token / config error; exit 1 |
+| 63k | `session/history/help/short-flag` | (default) | `session history -h` |
+| 63l | `session/history/help/long-flag` | (default) | `session history --help` |
+| 63m | `session/history/success/chronological` | unit | Local log lines oldest→newest |
+| 63n | `session/history/success/after-msg-id` | unit | `--after-msg-id` prints only later messages |
+| 63o | `session/history/success/json-output` | unit | `--json` document; trailing `\n` |
+| 63p | `session/history/errors/missing-session-id` | (default) | No session id → exit 1 |
+| 63q | `session/history/errors/unknown-session` | (default) | Unknown session → exit 1 |
 | 64 | `channels/help/short-flag` | (default) | `channels -h`; lists list/search |
 | 65 | `channels/help/long-flag` | (default) | `channels --help` |
 | 66 | `channels/list/help/short-flag` | (default) | `channels list -h` |
@@ -386,8 +449,36 @@ doctest test -v ./tests/slack-msg/listen/lock/default-path
 doctest test -v ./tests/slack-msg/listen/banner/startup-identity
 doctest test -v ./tests/slack-msg/listen/dedupe/same-channel-ts
 doctest test -v ./tests/slack-msg/listen/session-routing/thread-open-inject
+doctest test -v ./tests/slack-msg/listen/session-routing/thread-session-map
+doctest test -v ./tests/slack-msg/listen/session-routing/thread-env-flags
+doctest test -v ./tests/slack-msg/listen/session-routing/channel-stable-session
+doctest test -v ./tests/slack-msg/listen/session-routing/dm-session-key
+doctest test -v ./tests/slack-msg/session/reply/success/map-config-flag
+doctest test -v ./tests/slack-msg/session/history/success/chronological
 ```
 
+**Implementer note (stable session keys — RED until `sessionID` updated):**
+
+1. Channel / group / MPIM: `session_id = "slack-channel-" + channelID`.
+2. DM (`isDirectMessage`): `session_id = "slack-dm-" + userID` (not `slack-channel-D…`).
+3. Keep event dedupe as `channelID:ts`. Keep `thread_ts` on map as metadata only.
+4. No migration of old `slack-{C}-{ts}` dirs (orphan OK).
+5. Group/MPIM use channel key (not DM).
+
+**Implementer note (`session reply` / `session history` / listen bridge):**
+
+1. Root help lists `session` with send/history/listen/channels/auth.
+2. Durable store under `$HOME/.agent-pro/slack-local-bot/`: `sessions.json` map +
+   `sessions/<id>/{SYSTEM.md,messages.jsonl}` (ids use stable keys above).
+3. `session reply`: resolve session id (`--session-id` / `SLACK_MSG_SESSION_ID`) →
+   map entry → config (`--config` / `SLACK_MSG_CONFIG` / map.config_path) → bot token →
+   `chat.postMessage` **without** thread_ts → append outbound log → `OK ts=… channel=…\n`.
+4. `session history`: read local messages.jsonl; `--after-msg-id` / `--limit` / `--json`.
+5. Listen thread: upsert map (abs config_path), append inbound log, SYSTEM.md recipes
+   use `slack-msg session history` / `session reply` only (no `send --channel/--thread`),
+   `RunInteractiveOpen` Env: `SLACK_MSG_SESSION_ID` + `SLACK_MSG_CONFIG` → agent-run `-e`.
+6. Harness: `HomeDir` for CLI + daemon; `CapturePosts` for session reply PostMessage asserts;
+   `insertConfigAfterSubcommand` places `--config` after `session reply|history`.
 
 **Implementer note (`auth status` RED until done):**
 
@@ -513,11 +604,12 @@ type Request struct {
 	LockFile       string
 	NoLock         bool // pass --no-lock (disable singleton)
 	UseDefaultLock bool // omit --lock-file/--no-lock; product default under HomeDir/HOME
-	HomeDir        string // if set, daemon env HOME=<HomeDir> for lock + SYSTEM.md isolation
+	HomeDir        string // if set, env HOME=<HomeDir> for lock + session store isolation (CLI + daemon)
 	Daemon         bool
 	InjectEvents   []InjectedEvent
 	WantAgentCalls int // -1 => len(InjectEvents); counts launch lines only (not tty status)
 	WantPosts      int // >0 => wait for at least this many chat.postMessage captures
+	CapturePosts   bool // simple CLI (session reply): capture chat.postMessage via dedicated slacktest
 	AgentLogPath   string
 	MockAgentPath  string
 	ObserveTimeout time.Duration
@@ -1220,6 +1312,130 @@ func expectedSessionSystemMDPath(homeDir, sessionID string) string {
 	return filepath.Join(homeDir, filepath.FromSlash(defaultSlackLocalBotRelDir), "sessions", sessionID, "SYSTEM.md")
 }
 
+func expectedSessionsJSONPath(homeDir string) string {
+	return filepath.Join(homeDir, filepath.FromSlash(defaultSlackLocalBotRelDir), "sessions.json")
+}
+
+func expectedMessagesJSONLPath(homeDir, sessionID string) string {
+	return filepath.Join(homeDir, filepath.FromSlash(defaultSlackLocalBotRelDir), "sessions", sessionID, "messages.jsonl")
+}
+
+// sessionMapEntry is a durable sessions.json entry (subset used by leaves).
+type sessionMapEntry struct {
+	SessionID           string `json:"session_id"`
+	ChannelID           string `json:"channel_id"`
+	ThreadTS            string `json:"thread_ts"`
+	ConfigPath          string `json:"config_path"`
+	Kind                string `json:"kind"`
+	ReplyMode           string `json:"reply_mode"`
+	LastMessagePreview  string `json:"last_message_preview,omitempty"`
+	CreatedAt           string `json:"created_at,omitempty"`
+	UpdatedAt           string `json:"updated_at,omitempty"`
+}
+
+type sessionsJSONFile struct {
+	Version int               `json:"version"`
+	Entries []sessionMapEntry `json:"entries"`
+}
+
+type sessionLogMessage struct {
+	MessageID string `json:"message_id"`
+	TS        string `json:"ts"`
+	User      string `json:"user"`
+	Text      string `json:"text"`
+	Direction string `json:"direction"` // in | out
+}
+
+func seedSessionsJSON(t *testing.T, homeDir string, entries []sessionMapEntry) error {
+	t.Helper()
+	path := expectedSessionsJSONPath(homeDir)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	if entries == nil {
+		entries = []sessionMapEntry{}
+	}
+	for i := range entries {
+		if entries[i].Kind == "" {
+			entries[i].Kind = "channel"
+		}
+		if entries[i].ReplyMode == "" {
+			entries[i].ReplyMode = "channel"
+		}
+	}
+	data, err := json.MarshalIndent(sessionsJSONFile{Version: 1, Entries: entries}, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return os.WriteFile(path, data, 0o644)
+}
+
+func seedMessagesJSONL(t *testing.T, homeDir, sessionID string, msgs []sessionLogMessage) error {
+	t.Helper()
+	path := expectedMessagesJSONLPath(homeDir, sessionID)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	var b strings.Builder
+	for _, m := range msgs {
+		line, err := json.Marshal(m)
+		if err != nil {
+			return err
+		}
+		b.Write(line)
+		b.WriteByte('\n')
+	}
+	return os.WriteFile(path, []byte(b.String()), 0o644)
+}
+
+func readMessagesJSONL(t *testing.T, homeDir, sessionID string) ([]sessionLogMessage, error) {
+	t.Helper()
+	path := expectedMessagesJSONLPath(homeDir, sessionID)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var out []sessionLogMessage
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var m sessionLogMessage
+		if err := json.Unmarshal([]byte(line), &m); err != nil {
+			return nil, fmt.Errorf("parse messages.jsonl line %q: %w", line, err)
+		}
+		out = append(out, m)
+	}
+	return out, nil
+}
+
+func readSessionsJSON(t *testing.T, homeDir string) (*sessionsJSONFile, error) {
+	t.Helper()
+	path := expectedSessionsJSONPath(homeDir)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var doc sessionsJSONFile
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return nil, err
+	}
+	return &doc, nil
+}
+
+func isolateHome(t *testing.T, req *Request) error {
+	t.Helper()
+	if req.WorkDir == "" {
+		req.WorkDir = t.TempDir()
+	}
+	if req.HomeDir == "" {
+		req.HomeDir = filepath.Join(req.WorkDir, "home")
+	}
+	return os.MkdirAll(req.HomeDir, 0o755)
+}
+
 func newListenSlackTestServer(t *testing.T, posts *[]CapturedPost) (*slacktest.Server, string) {
 	t.Helper()
 	sts := slacktest.NewTestServer(func(s slacktest.Customize) {
@@ -1368,7 +1584,7 @@ func waitForPosts(posts *[]CapturedPost, wantMin int, timeout time.Duration) err
 
 func isSubcommand(s string) bool {
 	switch s {
-	case "send", "history", "listen", "channels", "auth":
+	case "send", "history", "listen", "channels", "auth", "session":
 		return true
 	default:
 		return false
@@ -1378,7 +1594,7 @@ func isSubcommand(s string) bool {
 func insertConfigAfterSubcommand(args []string, configPath string) []string {
 	cfg := []string{"--config", configPath}
 	if len(args) > 0 && isSubcommand(args[0]) {
-		// channels list|search and auth status: place --config after the action subcommand.
+		// channels list|search, auth status, session reply|history: place --config after action.
 		if args[0] == "channels" && len(args) > 1 && (args[1] == "list" || args[1] == "search") {
 			out := make([]string, 0, len(args)+2)
 			out = append(out, args[0], args[1])
@@ -1387,6 +1603,13 @@ func insertConfigAfterSubcommand(args []string, configPath string) []string {
 			return out
 		}
 		if args[0] == "auth" && len(args) > 1 && args[1] == "status" {
+			out := make([]string, 0, len(args)+2)
+			out = append(out, args[0], args[1])
+			out = append(out, cfg...)
+			out = append(out, args[2:]...)
+			return out
+		}
+		if args[0] == "session" && len(args) > 1 && (args[1] == "reply" || args[1] == "history") {
 			out := make([]string, 0, len(args)+2)
 			out = append(out, args[0], args[1])
 			out = append(out, cfg...)
@@ -1427,8 +1650,18 @@ func runSimple(t *testing.T, req *Request) (*Response, error) {
 	if req.WorkDir == "" {
 		req.WorkDir = t.TempDir()
 	}
+	if req.HomeDir != "" {
+		if err := os.MkdirAll(req.HomeDir, 0o755); err != nil {
+			return nil, err
+		}
+	}
 	if err := materializeConfig(t, req); err != nil {
 		return nil, err
+	}
+	var capturedPosts []CapturedPost
+	if req.CapturePosts {
+		_, apiURL := newListenSlackTestServer(t, &capturedPosts)
+		req.SlackAPIURL = apiURL
 	}
 	if req.HistoryAPIFail {
 		apiURL, err := ensureSlackTestServerHistoryFail(t)
@@ -1481,7 +1714,15 @@ func runSimple(t *testing.T, req *Request) (*Response, error) {
 
 	env := os.Environ()
 	if req.ClearSlackEnv {
-		env = withoutEnvKeys(env, "SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_CHANNEL", "SLACK_CONFIG", "SLACK_API_URL", envAgentRun, envAgentLog)
+		env = withoutEnvKeys(env,
+			"SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_CHANNEL", "SLACK_CONFIG", "SLACK_API_URL",
+			"SLACK_MSG_SESSION_ID", "SLACK_MSG_CONFIG",
+			envAgentRun, envAgentLog,
+		)
+	}
+	if req.HomeDir != "" {
+		env = withoutEnvKeys(env, "HOME", "USERPROFILE")
+		env = append(env, "HOME="+req.HomeDir)
 	}
 	if req.SlackAPIURL != "" {
 		env = withoutEnvKeys(env, "SLACK_API_URL")
@@ -1496,8 +1737,9 @@ func runSimple(t *testing.T, req *Request) (*Response, error) {
 
 	err := cmd.Run()
 	resp := &Response{
-		Stdout: stdout.String(),
-		Stderr: stderr.String(),
+		Stdout:       stdout.String(),
+		Stderr:       stderr.String(),
+		PostMessages: capturedPosts,
 	}
 	if err == nil {
 		resp.ExitCode = 0
@@ -1527,7 +1769,15 @@ func runListenQuick(t *testing.T, req *Request) (*Response, error) {
 	cmd.Dir = req.WorkDir
 	env := os.Environ()
 	if req.ClearSlackEnv {
-		env = withoutEnvKeys(env, "SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_CONFIG", "SLACK_API_URL", envAgentRun, envAgentLog)
+		env = withoutEnvKeys(env,
+			"SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_CONFIG", "SLACK_API_URL",
+			"SLACK_MSG_SESSION_ID", "SLACK_MSG_CONFIG",
+			envAgentRun, envAgentLog,
+		)
+	}
+	if req.HomeDir != "" {
+		env = withoutEnvKeys(env, "HOME", "USERPROFILE")
+		env = append(env, "HOME="+req.HomeDir)
 	}
 	if req.SlackAPIURL != "" {
 		env = withoutEnvKeys(env, "SLACK_API_URL")
@@ -1599,7 +1849,11 @@ func runDaemon(t *testing.T, req *Request) (*Response, error) {
 	cmd.Dir = req.WorkDir
 	env := os.Environ()
 	if req.ClearSlackEnv {
-		env = withoutEnvKeys(env, "SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_CONFIG", "SLACK_API_URL", envAgentRun, envAgentLog)
+		env = withoutEnvKeys(env,
+			"SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_CONFIG", "SLACK_API_URL",
+			"SLACK_MSG_SESSION_ID", "SLACK_MSG_CONFIG",
+			envAgentRun, envAgentLog,
+		)
 	}
 	if req.HomeDir != "" {
 		env = withoutEnvKeys(env, "HOME", "USERPROFILE")

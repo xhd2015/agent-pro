@@ -18,6 +18,8 @@ func agentRunBinary() string {
 type agentOptions struct {
 	Runner           string
 	RunnerConfigHome string
+	// Env is passed to agent-run as -e KEY=VALUE (e.g. SLACK_MSG_SESSION_ID).
+	Env []string
 }
 
 // runAgentInteractiveOpen launches thread-mode agent-run via interactive open
@@ -29,6 +31,7 @@ func runAgentInteractiveOpen(prompt, sessionID string, opts agentOptions) error 
 		Binary:           agentRunBinary(),
 		AgentRunner:      opts.Runner,
 		RunnerConfigHome: opts.RunnerConfigHome,
+		Env:              opts.Env,
 	})
 	return err
 }
