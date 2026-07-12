@@ -1,14 +1,16 @@
 # Scenario
 
-**Feature**: thread mode follow-up uses agent-run send
+**Feature**: thread mode follow-up also uses RunInteractiveOpen (not send)
 
 ```
-first message run --session -> second message in thread -> agent-run send <session-id>
+first message open run --session-id=…
+  -> second message same thread -> again open run --session-id=… (not send)
 ```
 
 ## Steps
 
 1. Inject two messages sharing thread_ts.
+2. Expect two interactive-open launches (no legacy `send` argv).
 
 ```go
 import "testing"

@@ -1,21 +1,24 @@
 # Scenario
 
-**Feature**: --reply-prefix prepended to Slack reply
+**Feature**: --reply-prefix prepended to Slack reply (stateless capture)
 
 ```
---reply-prefix [bot] + agent output -> PostMessage text starts with prefix
+--session-mode stateless --reply-prefix [bot] + agent stdout
+  -> PostMessage text starts with prefix; thread_ts = message ts
 ```
 
 ## Steps
 
-1. Pass `--reply-prefix [bot]`.
+1. Pass `--session-mode stateless` and `--reply-prefix [bot]`.
 2. Inject processable app_mention.
+3. Wait for PostMessage capture (`WantPosts = 1`).
 
 ```go
 import "testing"
 
 func Setup(t *testing.T, req *Request) error {
-	req.Args = append(req.Args, "--reply-prefix", "[bot]")
+	req.Args = append(req.Args, "--session-mode", "stateless", "--reply-prefix", "[bot]")
+	req.WantPosts = 1
 	req.InjectEvents = []InjectedEvent{{
 		Kind:    "app_mention",
 		Channel: slackTestChannelID,

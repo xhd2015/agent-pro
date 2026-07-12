@@ -1,9 +1,10 @@
 # Scenario
 
-**Feature**: thread mode first message uses agent-run run --keep-tty --session
+**Feature**: thread mode first message uses agentrunbridge RunInteractiveOpen
 
 ```
-first thread message -> agent-run run --keep-tty --session slack-C-ts
+first thread message -> agent-run run --session-id=slack-C-ts
+  --auto-send-or-resume --new-terminal --open -- <prompt>
 ```
 
 ## Steps

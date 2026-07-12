@@ -10,7 +10,10 @@ doctest -> build ./cmd/slack-msg -> temp workdir -> exec with controlled env/arg
 SLACK_API_URL -> slacktest (conversations.list + chat.postMessage + history/replies + auth.test + apps.connections.open)
 
 # listen unit branch
-slacktest Socket Mode + mock agent-run (SLACK_LISTEN_AGENT_RUN) -> chat.postMessage
+slacktest Socket Mode + mock agent-run (SLACK_LISTEN_AGENT_RUN; handles tty status ready)
+  -> agentrunbridge RunInteractiveOpen (thread) / Run+CaptureStdout (stateless)
+  -> chat.postMessage only for stateless agent body
+  -> default lock / banner / dedupe / operator logs / SYSTEM.md open inject
 
 # integration branch
 --config repo slack-config.json + real slack.com
@@ -37,6 +40,10 @@ slacktest Socket Mode + mock agent-run (SLACK_LISTEN_AGENT_RUN) -> chat.postMess
 - Validation-error leaves clear Slack-related env vars.
 - User-facing stdout ends with trailing newline after last content line.
 - Lock message (listen): `another slack-msg is already running`.
+- Default listen lock path: `$HOME/.agent-pro/slack-msg.listen.lock` (daemon harness
+  auto-isolates with WorkDir lock unless `UseDefaultLock` / `NoLock`).
+- Thread SYSTEM.md: `$HOME/.agent-pro/slack-local-bot/sessions/<sessionID>/SYSTEM.md`
+  (isolate via `req.HomeDir`).
 
 ```go
 import (

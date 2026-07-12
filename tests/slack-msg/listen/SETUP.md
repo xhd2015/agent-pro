@@ -3,7 +3,10 @@
 **Feature**: slack-msg listen Socket Mode inbound bridge
 
 ```
-Caller -> slack-msg listen [options] -> Socket Mode -> filter -> agent-run -> PostMessage reply
+Caller -> slack-msg listen [options] -> lock/banner -> Socket Mode -> filter/dedupe
+  -> logs -> agentrunbridge RunInteractiveOpen (thread + SYSTEM.md inject)
+           | Run+capture (stateless)
+  -> optional PostMessage (stateless agent body only)
 ```
 
 ## Preconditions

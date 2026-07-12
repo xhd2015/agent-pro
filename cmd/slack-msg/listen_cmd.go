@@ -29,6 +29,7 @@ Options:
   --agent-runner-config-home PATH
   --reply-prefix TEXT
   --lock-file PATH
+  --no-lock
   -h, --help
 `
 
@@ -48,6 +49,7 @@ func runListenCommand(args []string) error {
 		agentRunnerConfigHomeFlag *string
 		replyPrefixFlag           *string
 		lockFileFlag              *string
+		noLock                    bool
 	)
 
 	remain, err := lessflags.String("--token", &tokenFlag).
@@ -63,6 +65,7 @@ func runListenCommand(args []string) error {
 		String("--agent-runner-config-home", &agentRunnerConfigHomeFlag).
 		String("--reply-prefix", &replyPrefixFlag).
 		String("--lock-file", &lockFileFlag).
+		Bool("--no-lock", &noLock).
 		Help("-h,--help", listenHelpText).
 		HelpNoExit().
 		Parse(args)
@@ -132,6 +135,18 @@ func runListenCommand(args []string) error {
 		agentRunner = *agentRunnerFlag
 	}
 
+	// Lock resolution: --no-lock or empty --lock-file disables; explicit path
+	// wins; otherwise default ~/.agent-pro/slack-msg.listen.lock.
+	lockFile := ""
+	switch {
+	case noLock:
+		lockFile = ""
+	case lockFileFlag != nil:
+		lockFile = *lockFileFlag
+	default:
+		lockFile = defaultListenLockPath()
+	}
+
 	return runListen(listenConfig{
 		BotToken:              botToken,
 		AppToken:              appToken,
@@ -146,6 +161,6 @@ func runListenCommand(args []string) error {
 		AgentRunner:           agentRunner,
 		AgentRunnerConfigHome: flagString(agentRunnerConfigHomeFlag),
 		ReplyPrefix:           flagString(replyPrefixFlag),
-		LockFile:              flagString(lockFileFlag),
+		LockFile:              lockFile,
 	})
 }

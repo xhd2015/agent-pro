@@ -1,11 +1,14 @@
 ---
 label: unit
-explanation: thread mode first message dispatches agent-run run --keep-tty --session
+explanation: thread mode first message dispatches RunInteractiveOpen open profile
 ---
 
 ## Expected
 
-- Agent log contains `run`, `--keep-tty`, `--session`, and `slack-` + channel + thread ts.
+- Exactly one launch invocation (tty status polls not counted).
+- Argv contains `run`, `--session-id=slack-{channel}-{ts}`, `--auto-send-or-resume`,
+  `--new-terminal`, `--open`.
+- Argv does **not** contain `--keep-tty` or bare `send` subcommand.
 
 ## Exit Code
 
@@ -25,13 +28,24 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 		t.Fatalf("want 1 invocation, got %d: %v", len(resp.AgentInvocations), resp.AgentInvocations)
 	}
 	line := resp.AgentInvocations[0]
-	for _, want := range []string{"run", "--keep-tty", "--session", "slack-" + slackTestChannelID} {
+	sessionID := "slack-" + slackTestChannelID + "-1710000100.000100"
+	for _, want := range []string{
+		"run",
+		"--session-id=" + sessionID,
+		"--auto-send-or-resume",
+		"--new-terminal",
+		"--open",
+	} {
 		if !strings.Contains(line, want) {
 			t.Fatalf("agent argv missing %q in %q", want, line)
 		}
 	}
-	if strings.Contains(line, " send ") {
-		t.Fatalf("first thread message should not use send: %q", line)
+	if strings.Contains(line, "--keep-tty") {
+		t.Fatalf("interactive open must not use --keep-tty: %q", line)
+	}
+	// Bare send subcommand (legacy follow-up path), not --auto-send-or-resume.
+	if strings.Contains(line, " send ") || strings.HasPrefix(strings.TrimPrefix(line, "INVOCATION "), "send ") {
+		t.Fatalf("first thread message should not use send subcommand: %q", line)
 	}
 }
 ```

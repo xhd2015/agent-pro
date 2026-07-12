@@ -1,20 +1,23 @@
 # Scenario
 
-**Feature**: agent output posted back to Slack thread
+**Feature**: Slack reply after agent (stateless capture vs thread open)
 
 ```
-agent-run stdout -> chat.postMessage with thread_ts (and optional prefix)
+thread: interactive open -> no agent-body PostMessage
+stateless: agent-run stdout -> chat.postMessage with thread_ts (+ optional prefix)
 ```
 
 ## Preconditions
 
 - slacktest captures PostMessage form fields.
+- Default session mode is thread unless leaf sets `--session-mode stateless`.
+- Set `WantPosts` when the leaf expects PostMessage captures.
 
 ## Steps
 
 1. Daemon with reply-related flags.
 2. Inject one processable event.
-3. Assert captured PostMessage fields.
+3. Assert captured PostMessage fields and/or zero posts for thread open.
 
 ```go
 import "testing"

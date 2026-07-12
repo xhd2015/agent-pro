@@ -1,13 +1,13 @@
 ---
 label: unit
-explanation: PostMessage includes thread_ts from inbound event
+explanation: thread interactive open does not PostMessage agent body
 ---
 
 ## Expected
 
-- At least one PostMessage captured.
-- `thread_ts` equals inbound message ts `1710000400.000100`.
-- Reply text contains mock agent output.
+- Exactly one agent launch (open profile).
+- Zero PostMessage captures (TTY owns session; SeaTalk parity).
+- Agent argv includes `--open` / `--auto-send-or-resume`.
 
 ## Exit Code
 
@@ -23,18 +23,15 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(resp.PostMessages) < 1 {
-		t.Fatal("expected PostMessage reply")
+	if len(resp.AgentInvocations) != 1 {
+		t.Fatalf("want 1 agent launch, got %d: %v", len(resp.AgentInvocations), resp.AgentInvocations)
 	}
-	post := resp.PostMessages[0]
-	if post.ThreadTS != "1710000400.000100" {
-		t.Fatalf("thread_ts = %q, want %q", post.ThreadTS, "1710000400.000100")
+	line := resp.AgentInvocations[0]
+	if !strings.Contains(line, "--open") || !strings.Contains(line, "--auto-send-or-resume") {
+		t.Fatalf("expected interactive open argv, got %q", line)
 	}
-	if post.Channel != slackTestChannelID {
-		t.Fatalf("channel = %q, want %q", post.Channel, slackTestChannelID)
-	}
-	if !strings.Contains(post.Text, defaultAgentReply) {
-		t.Fatalf("reply text missing agent output %q: %q", defaultAgentReply, post.Text)
+	if len(resp.PostMessages) != 0 {
+		t.Fatalf("thread interactive open must not PostMessage agent body, got %v", resp.PostMessages)
 	}
 }
 ```

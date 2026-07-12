@@ -1,9 +1,9 @@
 # Scenario
 
-**Feature**: stateless mode runs agent-run run for every message
+**Feature**: stateless mode uses agentrunbridge Run (capture) for every message
 
 ```
---session-mode stateless + two messages -> two run invocations (no send)
+--session-mode stateless + two messages -> two run launches (no send, no --open)
 ```
 
 ## Steps

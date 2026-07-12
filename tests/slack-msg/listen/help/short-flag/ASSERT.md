@@ -20,6 +20,7 @@ Options:
   --agent-runner-config-home PATH
   --reply-prefix TEXT
   --lock-file PATH
+  --no-lock
   -h, --help
 ```
 
@@ -27,6 +28,7 @@ Options:
 
 - Exit code 0.
 - Stdout matches usage (trailing newline); uses `--token` not `--bot-token`.
+- Lists `--no-lock` (disable default singleton lock).
 - Stderr empty.
 
 ## Exit Code
@@ -74,6 +76,7 @@ Options:
   --agent-runner-config-home PATH
   --reply-prefix TEXT
   --lock-file PATH
+  --no-lock
   -h, --help
 `)
 }

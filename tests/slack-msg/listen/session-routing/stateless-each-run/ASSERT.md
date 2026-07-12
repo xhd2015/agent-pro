@@ -1,12 +1,13 @@
 ---
 label: unit
-explanation: stateless mode never uses send subcommand
+explanation: stateless mode every message is Run capture (no open / session-id / send)
 ---
 
 ## Expected
 
-- Two agent invocations.
+- Two launch invocations.
 - Both use `run`; neither uses `send`.
+- Neither includes `--open` or `--session-id` / `--session-id=`.
 
 ## Exit Code
 
@@ -29,8 +30,14 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 		if !strings.Contains(line, "run") {
 			t.Fatalf("invocation %d should use run, got %q", i, line)
 		}
-		if strings.Contains(line, " send ") {
+		if strings.Contains(line, " send ") || strings.HasPrefix(strings.TrimPrefix(line, "INVOCATION "), "send ") {
 			t.Fatalf("stateless should not use send, got %q", line)
+		}
+		if strings.Contains(line, "--open") {
+			t.Fatalf("stateless should not use --open, got %q", line)
+		}
+		if strings.Contains(line, "--session-id") || strings.Contains(line, "--session ") {
+			t.Fatalf("stateless should not include session id, got %q", line)
 		}
 	}
 }

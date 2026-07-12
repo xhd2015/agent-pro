@@ -49,6 +49,7 @@ Options:
   --agent-runner-config-home PATH
   --reply-prefix TEXT
   --lock-file PATH
+  --no-lock
   -h, --help
 `)
 }

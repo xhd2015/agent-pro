@@ -3,30 +3,32 @@
 **Feature**: singleton lock prevents concurrent listeners
 
 ```
-slack-msg listen (holds lock) -> second slack-msg listen -> another slack-msg is already running
+# explicit --lock-file PATH
+slack-msg listen --lock-file PATH (holds) -> second -> another slack-msg is already running
+
+# default path when flag omitted (~/.agent-pro/slack-msg.listen.lock under HOME)
+slack-msg listen (no --lock-file) -> second -> same singleton error
+
+# --no-lock disables singleton
+slack-msg listen --no-lock -> second without "already running"
 ```
 
 ## Preconditions
 
-- Custom `--lock-file` in temp workdir for isolation.
+- Leaves choose explicit `--lock-file`, product default (`UseDefaultLock` + `HomeDir`), or `--no-lock`.
+- Daemon isolation: non-lock leaves outside this group auto-get a WorkDir lock file via harness.
 
 ## Steps
 
-1. Start first instance as daemon with lock file.
-2. Attempt second instance while first is running.
+1. Isolate workdir and tokens.
+2. Leaf configures lock mode and second-instance probe as needed.
 
 ```go
-import (
-	"path/filepath"
-	"testing"
-)
+import "testing"
 
 func Setup(t *testing.T, req *Request) error {
 	req.WorkDir = t.TempDir()
-	req.LockFile = filepath.Join(req.WorkDir, "slack-msg.lock")
 	prependListenTokens(req)
-	req.Daemon = true
-	req.SecondInstance = true
 	req.ClearSlackEnv = true
 	return nil
 }

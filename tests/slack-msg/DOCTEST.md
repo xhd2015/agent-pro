@@ -24,8 +24,21 @@ for config/token/channel resolution and `slacktest` + `SLACK_API_URL` for unit p
 - **history** — fetches `conversations.history` or `conversations.replies` (`--thread`);
   prints human lines oldest→newest (`[ts] user: text`) or `--json` document in the
   same order; flags `--token`, `--channel`, `--config`, `--limit`, `--json`, `--thread`.
-- **listen** — Socket Mode inbound bridge → filter → agent-run → `chat.postMessage`
-  thread reply; flags use `--token` (bot) and `--app-token`; singleton lock file.
+- **listen** — Socket Mode inbound bridge → filter → `pkgs/agentrunbridge`
+  (`RunInteractiveOpen` for default thread session mode; `Run` + `CaptureStdout`
+  for `--session-mode stateless`) → optional `chat.postMessage` (stateless agent
+  body only; thread interactive open does not PostMessage agent stdout). Flags
+  use `--token` (bot) and `--app-token`. **Default singleton lock** at
+  `~/.agent-pro/slack-msg.listen.lock` when `--lock-file` omitted; `--no-lock`
+  (or empty lock path) disables. After AuthTest, prints a **startup banner**
+  (config path, team, bot identity, session-mode, require-mention, agent-runner,
+  lock path or `(none)`). **Dedupe** inbound `app_mention`+`message` with the
+  same `(channel, ts)` to one agent launch. **Operator logs** for accepted
+  events (kind, user display, channel, ts, text) and agent open/errors. **Strip**
+  bot `<@BOTID>` from agent prompt text. Thread mode writes **SYSTEM.md** under
+  `~/.agent-pro/slack-local-bot/sessions/<sessionID>/` and open-injects a prompt
+  with session metadata + CLI recipes (`slack-msg send` / `history`); agent body
+  is not PostMessaged in thread mode.
 - **channels** — `list` or `search QUERY` over `conversations.list` (paginated
   **per mapped type**); default `--types public,private` maps to
   `public_channel` + `private_channel`; default exclude archived; sort by name
@@ -58,10 +71,16 @@ for config/token/channel resolution and `slacktest` + `SLACK_API_URL` for unit p
   is set (`conversations.list`, `chat.postMessage`, `conversations.history`,
   `conversations.replies`, `auth.test`, `apps.connections.open`, Socket Mode).
 - **agent-run** — external runner for listen; mocked via `SLACK_LISTEN_AGENT_RUN`.
-- **Singleton lock** — second listen instance exits non-zero with
-  `another slack-msg is already running`.
+- **Singleton lock** — default path `~/.agent-pro/slack-msg.listen.lock`; second
+  listen instance exits non-zero with `another slack-msg is already running`
+  when lock held; `--no-lock` disables singleton.
+- **Local-bot session store** — thread mode session dir
+  `~/.agent-pro/slack-local-bot/sessions/slack-{channel}-{rootThreadTS}/SYSTEM.md`
+  (playbook + `slack-msg send`/`history` recipes; no secrets embedded).
 - **Test harness** — builds `./cmd/slack-msg` once per session; quick-exit CLI runs
   for send/history/channels/auth/root; daemon probes for listen unit paths.
+  Daemon leaves auto-isolate `--lock-file` under WorkDir unless `UseDefaultLock`
+  or `NoLock` is set; optional `HomeDir` isolates `HOME` for default lock + SYSTEM.md.
 
 **Behaviors**
 
@@ -80,9 +99,13 @@ for config/token/channel resolution and `slacktest` + `SLACK_API_URL` for unit p
 - `slack-msg history [options] [CHANNEL]` — channel via flag/positional/env/config;
   human or JSON oldest→newest; API failure → `history failed:` prefix, exit 1.
 - `slack-msg listen [options]` — missing bot/app token exit 1 before connect;
-  config `(none)` vs absolute path logging; filter bot-self / DM / mention /
-  allowFrom / channel; thread vs stateless session routing; lock singleton;
-  reply with `thread_ts` and optional `--reply-prefix`.
+  config `(none)` vs absolute path logging; startup banner after AuthTest;
+  filter bot-self / DM / mention / allowFrom / channel; dedupe same channel+ts;
+  operator logs for accepted inbound + agent open/error; strip bot mention from
+  prompt; thread vs stateless session routing via agentrunbridge; default lock
+  path / `--no-lock`; thread mode SYSTEM.md + open inject + interactive open
+  (no agent-body PostMessage); stateless replies PostMessage with `thread_ts`
+  and optional `--reply-prefix` (no SYSTEM.md).
 - `slack-msg channels list [options]` — fetch per type, merge, exclude archived,
   sort by name, human or JSON; missing token → `bot token required`; multi-type
   private `missing_scope` → public rows + soft warning (with `see:` topic) exit 0;
@@ -156,12 +179,15 @@ tests/slack-msg/
 │   └── history-errors/                # label: unit
 ├── listen/
 │   ├── SETUP.md
-│   ├── help/
+│   ├── help/                          # includes --no-lock
 │   ├── token-errors/                  # --token / --app-token
-│   ├── lock/                          # label: unit
+│   ├── lock/                          # label: unit (explicit / default / no-lock)
+│   ├── banner/                        # label: unit (startup identity)
 │   ├── config/
 │   ├── filter/                        # label: unit
-│   ├── session-routing/               # label: unit
+│   ├── dedupe/                        # label: unit (app_mention+message same ts)
+│   ├── logs/                          # label: unit (operator inbound / agent error)
+│   ├── session-routing/               # label: unit (+ SYSTEM.md / open inject)
 │   ├── reply/                         # label: unit
 │   └── integration/                   # label: integration, slow
 └── channels/
@@ -263,11 +289,14 @@ Parameter ranking (most → least significant):
 | 40 | `history/channel-resolve/api-name-with-hash` | unit | `#general` resolve then history |
 | 41 | `history/history-errors/channel-not-found` | unit | Unknown channel → `history failed:` + not found |
 | 42 | `history/history-errors/api-failed` | unit | API error → `history failed:` |
-| 43 | `listen/help/short-flag` | (default) | `listen -h`; `--token` not `--bot-token` |
-| 44 | `listen/help/long-flag` | (default) | `listen --help` |
+| 43 | `listen/help/short-flag` | (default) | `listen -h`; `--token` not `--bot-token`; lists `--no-lock` |
+| 44 | `listen/help/long-flag` | (default) | `listen --help` same options including `--no-lock` |
 | 45 | `listen/token-errors/missing-bot-token` | (default) | No bot token → `bot token required` |
 | 46 | `listen/token-errors/missing-app-token` | (default) | No app token → `app token required` |
-| 47 | `listen/lock/already-running` | unit | Second instance: `another slack-msg is already running` |
+| 47 | `listen/lock/already-running` | unit | Explicit `--lock-file`: second instance → `another slack-msg is already running` |
+| 47a | `listen/lock/default-path` | unit | No lock flag → default `~/.agent-pro/slack-msg.listen.lock`; second conflicts |
+| 47b | `listen/lock/no-lock` | unit | `--no-lock` → banner lock `(none)`; second has no singleton conflict |
+| 47c | `listen/banner/startup-identity` | unit | Startup banner: team, bot id, session-mode, require-mention, agent-runner, lock |
 | 48 | `listen/config/none-stdout-line` | unit | `Using config from: (none)` |
 | 49 | `listen/config/explicit-path` | unit | Absolute `--config` path logged |
 | 50 | `listen/config/bad-config-path` | (default) | Missing config → `failed to load config` |
@@ -278,11 +307,18 @@ Parameter ranking (most → least significant):
 | 55 | `listen/filter/allow-from-blocked` | unit | User not in allowFrom ignored |
 | 56 | `listen/filter/allow-from-wildcard` | unit | Default allow processes any user |
 | 57 | `listen/filter/channel-filter-excludes` | unit | `--channel` filter drops others |
-| 58 | `listen/session-routing/thread-first-run` | unit | First msg → `run --keep-tty --session` |
-| 59 | `listen/session-routing/thread-follow-up-send` | unit | Follow-up → `send <session-id>` |
-| 60 | `listen/session-routing/stateless-each-run` | unit | Stateless → every msg `run` |
-| 61 | `listen/reply/posts-in-thread` | unit | PostMessage includes `thread_ts` |
-| 62 | `listen/reply/reply-prefix` | unit | `--reply-prefix` applied |
+| 57a | `listen/dedupe/same-channel-ts` | unit | `app_mention`+`message` same channel+ts → 1 agent launch |
+| 57b | `listen/dedupe/different-ts` | unit | Two different ts → 2 agent launches |
+| 57c | `listen/logs/accepted-inbound` | unit | Accepted event logs kind/user display/channel/ts/text + agent open |
+| 57d | `listen/logs/agent-open-error` | unit | Agent open failure is logged (not silent) |
+| 58 | `listen/session-routing/thread-first-run` | unit | First msg → RunInteractiveOpen (`run` + `--session-id=` + auto-send/new-terminal/open) |
+| 59 | `listen/session-routing/thread-follow-up-open` | unit | Follow-up also RunInteractiveOpen `run` (not `send`; was `thread-follow-up-send`) |
+| 60 | `listen/session-routing/stateless-each-run` | unit | Stateless → every msg `Run` capture (no `--open` / session-id) |
+| 60a | `listen/session-routing/thread-system-md` | unit | Thread first open writes SYSTEM.md with send/history recipes |
+| 60b | `listen/session-routing/thread-open-inject` | unit | Open prompt: inject markers, stripped mention, from:, SYSTEM.md path |
+| 60c | `listen/session-routing/stateless-no-system-md` | unit | Stateless does not write SYSTEM.md |
+| 61 | `listen/reply/posts-in-thread` | unit | Thread interactive open → no agent-body PostMessage |
+| 62 | `listen/reply/reply-prefix` | unit | Stateless `--reply-prefix` + agent body PostMessage with `thread_ts` |
 | 63 | `listen/integration/live-socket-reply` | integration, slow | Live Socket Mode connect probe |
 | 64 | `channels/help/short-flag` | (default) | `channels -h`; lists list/search |
 | 65 | `channels/help/long-flag` | (default) | `channels --help` |
@@ -346,6 +382,10 @@ doctest test -v ./tests/slack-msg/channels/list/human-sorted/multi-channel
 doctest test -v ./tests/slack-msg/channels/list/soft-scope/private-missing
 doctest test -v ./tests/slack-msg/auth/status/bot/success/no-config
 doctest test -v ./tests/slack-msg/auth/status/app/success/with-token
+doctest test -v ./tests/slack-msg/listen/lock/default-path
+doctest test -v ./tests/slack-msg/listen/banner/startup-identity
+doctest test -v ./tests/slack-msg/listen/dedupe/same-channel-ts
+doctest test -v ./tests/slack-msg/listen/session-routing/thread-open-inject
 ```
 
 
@@ -402,12 +442,18 @@ const (
 	slackTestUserID        = "W012A3CDE"
 	slackTestOtherUserID   = "W0OTHERUSR"
 	slackTestBotUserID     = "U023BECGF"
+	slackTestBotName       = "TestSlackBot" // slacktest bots.info / BotName default
 	slackTestTeamID        = "T024BE7LD"
 	// auth.test fixture fields (override slacktest default; includes bot_id).
 	slackTestTeamName      = "SlackTest Team"
 	slackTestUserName      = "Egon Spengler"
+	// users.info display_name for defaultNonBotUser (slackTestUserID).
+	slackTestUserDisplayName = "spengler"
 	slackTestAuthURL       = "https://localhost.localdomain/"
 	slackTestAuthBotID     = "B0TESTBOTID"
+	// Product defaults under $HOME (isolate via Request.HomeDir in unit leaves).
+	defaultListenLockRelPath   = ".agent-pro/slack-msg.listen.lock"
+	defaultSlackLocalBotRelDir = ".agent-pro/slack-local-bot"
 	// Masked forms: type prefix + "..." + last 4 chars of full token.
 	slackTestTokenMasked   = "xoxb-...oken"
 	slackTestAppTokenMasked = "xapp-...oken"
@@ -465,9 +511,13 @@ type Request struct {
 	BotToken       string
 	AppToken       string
 	LockFile       string
+	NoLock         bool // pass --no-lock (disable singleton)
+	UseDefaultLock bool // omit --lock-file/--no-lock; product default under HomeDir/HOME
+	HomeDir        string // if set, daemon env HOME=<HomeDir> for lock + SYSTEM.md isolation
 	Daemon         bool
 	InjectEvents   []InjectedEvent
-	WantAgentCalls int // -1 => len(InjectEvents)
+	WantAgentCalls int // -1 => len(InjectEvents); counts launch lines only (not tty status)
+	WantPosts      int // >0 => wait for at least this many chat.postMessage captures
 	AgentLogPath   string
 	MockAgentPath  string
 	ObserveTimeout time.Duration
@@ -1119,17 +1169,55 @@ func ensureSlackTestServerChannelsAllMissingScope(t *testing.T) (string, error) 
 	return slackTestChannelsAllMissingScopeURL, slackTestChannelsAllMissingScopeErr
 }
 
+// mockAgentScript logs one flattened INVOCATION line (newlines in prompt → spaces)
+// so multi-line open-inject prompts still match as a single agent launch record.
+func mockAgentScript(logPath, successBody string, fail bool) string {
+	// Interactive open (agentrunbridge WaitReady) polls: <binary> tty status <sessionID>.
+	// Ready fixture must not count toward WantAgentCalls launch lines.
+	tail := fmt.Sprintf("printf %%s %q\n", successBody)
+	if fail {
+		tail = "echo \"mock agent failed\" >&2\nexit 1\n"
+	}
+	return fmt.Sprintf(`#!/bin/sh
+if [ "$1" = "tty" ] && [ "$2" = "status" ]; then
+  printf '%%s\n' 'screen status: banner'
+  printf '%%s\n' 'sendable: yes'
+  exit 0
+fi
+line="INVOCATION"
+for a in "$@"; do
+  flat=$(printf '%%s' "$a" | tr '\n' ' ')
+  line="$line $flat"
+done
+printf '%%s\n' "$line" >> %q
+%s`, logPath, tail)
+}
+
 func writeMockAgent(t *testing.T, dir, logPath string) string {
 	t.Helper()
 	path := filepath.Join(dir, "mock-agent-run")
-	script := fmt.Sprintf(`#!/bin/sh
-echo "INVOCATION $*" >> %q
-printf %%s %q
-`, logPath, defaultAgentReply)
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+	if err := os.WriteFile(path, []byte(mockAgentScript(logPath, defaultAgentReply, false)), 0o755); err != nil {
 		t.Fatalf("write mock agent: %v", err)
 	}
 	return path
+}
+
+// writeMockAgentFail logs the launch line then exits non-zero (agent open error path).
+func writeMockAgentFail(t *testing.T, dir, logPath string) string {
+	t.Helper()
+	path := filepath.Join(dir, "mock-agent-run-fail")
+	if err := os.WriteFile(path, []byte(mockAgentScript(logPath, "", true)), 0o755); err != nil {
+		t.Fatalf("write mock agent fail: %v", err)
+	}
+	return path
+}
+
+func expectedDefaultLockPath(homeDir string) string {
+	return filepath.Join(homeDir, filepath.FromSlash(defaultListenLockRelPath))
+}
+
+func expectedSessionSystemMDPath(homeDir, sessionID string) string {
+	return filepath.Join(homeDir, filepath.FromSlash(defaultSlackLocalBotRelDir), "sessions", sessionID, "SYSTEM.md")
 }
 
 func newListenSlackTestServer(t *testing.T, posts *[]CapturedPost) (*slacktest.Server, string) {
@@ -1217,7 +1305,8 @@ func injectEvent(sts *slacktest.Server, ev InjectedEvent) error {
 	if kind == "app_mention" {
 		eventType = "app_mention"
 	}
-	envelopeID := "Env-" + strings.ReplaceAll(ts, ".", "")
+	// Unique envelope ids even when dual events share channel+ts (dedupe leaf).
+	envelopeID := fmt.Sprintf("Env-%s-%s-%d", eventType, strings.ReplaceAll(ts, ".", ""), time.Now().UnixNano())
 	msg, err := socketModeEnvelope(envelopeID, eventType, inner)
 	if err != nil {
 		return err
@@ -1238,7 +1327,8 @@ func readAgentInvocations(path string) ([]string, error) {
 	out := make([]string, 0, len(lines))
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		if line != "" {
+		// Launch lines only; ignore any non-INVOCATION noise (status polls must not log).
+		if strings.HasPrefix(line, "INVOCATION") {
 			out = append(out, line)
 		}
 	}
@@ -1323,9 +1413,12 @@ func defaultListenArgs(req *Request) []string {
 	if req.ConfigPath != "" {
 		args = append(args, "--config", req.ConfigPath)
 	}
-	if req.LockFile != "" {
+	if req.NoLock {
+		args = append(args, "--no-lock")
+	} else if req.LockFile != "" {
 		args = append(args, "--lock-file", req.LockFile)
 	}
+	// UseDefaultLock: omit both flags so product default path applies.
 	args = append(args, req.Args...)
 	return args
 }
@@ -1475,6 +1568,15 @@ func runDaemon(t *testing.T, req *Request) (*Response, error) {
 	if err := materializeConfig(t, req); err != nil {
 		return nil, err
 	}
+	if req.HomeDir != "" {
+		if err := os.MkdirAll(req.HomeDir, 0o755); err != nil {
+			return nil, err
+		}
+	}
+	// Isolate product default lock across parallel leaves unless leaf opts in.
+	if !req.NoLock && req.LockFile == "" && !req.UseDefaultLock {
+		req.LockFile = filepath.Join(req.WorkDir, "slack-msg.listen.lock")
+	}
 	if req.AgentLogPath == "" {
 		req.AgentLogPath = filepath.Join(req.WorkDir, "agent.log")
 	}
@@ -1498,6 +1600,10 @@ func runDaemon(t *testing.T, req *Request) (*Response, error) {
 	env := os.Environ()
 	if req.ClearSlackEnv {
 		env = withoutEnvKeys(env, "SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_CONFIG", "SLACK_API_URL", envAgentRun, envAgentLog)
+	}
+	if req.HomeDir != "" {
+		env = withoutEnvKeys(env, "HOME", "USERPROFILE")
+		env = append(env, "HOME="+req.HomeDir)
 	}
 	env = mergeEnv(env,
 		"SLACK_API_URL="+req.SlackAPIURL,
@@ -1576,8 +1682,12 @@ func runDaemon(t *testing.T, req *Request) (*Response, error) {
 		<-done
 		return &Response{Stdout: stdoutBuf.String(), Stderr: stderrBuf.String(), AgentInvocations: invocations, PostMessages: posts}, agentErr
 	}
-	if wantAgent > 0 {
-		_ = waitForPosts(&posts, 1, 3*time.Second)
+	// Thread interactive open does not PostMessage agent body; only wait when leaf asks.
+	if req.WantPosts > 0 {
+		_ = waitForPosts(&posts, req.WantPosts, 3*time.Second)
+	} else if wantAgent > 0 {
+		// Brief settle so late captures (if any) land before SIGTERM; no full timeout.
+		time.Sleep(150 * time.Millisecond)
 	}
 	_ = cmd.Process.Signal(syscall.SIGTERM)
 	<-done
