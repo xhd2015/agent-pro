@@ -38,7 +38,10 @@ Options:
   --agent-runner-binary SPEC
                       agent executable: bare name/path or "binary flags..."
   --agent-runner-config-home PATH
-                      agent data directory (grok: GROK_HOME, codex: CODEX_HOME)
+                      agent data directory (grok: GROK_HOME, codex: CODEX_HOME);
+                      replaces stored value when set
+  --prepend-path DIR  append DIR to stored TTY child PATH prefixes (repeatable; TTY only)
+  -e, --env KEY=VALUE append env var for the TTY agent runner child (repeatable; TTY only)
   -h, --help          show help
 `
 
@@ -49,6 +52,8 @@ type resumeRunConfig struct {
 	agentRunner           string
 	agentRunnerBinary     string
 	agentRunnerConfigHome string
+	prependPaths          []string // CLI appends only (absolute); merged with meta in resumeExistingSession
+	envEntries            []string // CLI appends only
 	keepTTY               bool
 	openFlag              bool
 	noSubmit              bool
@@ -63,6 +68,8 @@ func runResume(args []string, defaultRunner string) error {
 	var agentRunner string
 	var agentRunnerBinary string
 	var agentRunnerConfigHome string
+	var prependPaths []string
+	var envEntries []string
 	var keepTTY bool
 	var openFlag bool
 	var noSubmit bool
@@ -76,6 +83,8 @@ func runResume(args []string, defaultRunner string) error {
 		String("--agent-runner", &agentRunner).
 		String("--agent-runner-binary", &agentRunnerBinary).
 		String("--agent-runner-config-home", &agentRunnerConfigHome).
+		StringSlice("--prepend-path", &prependPaths).
+		StringSlice("-e,--env", &envEntries).
 		Help("-h,--help", resumeHelp).
 		Parse(args)
 	if err != nil {
@@ -86,6 +95,19 @@ func runResume(args []string, defaultRunner string) error {
 	}
 	sessionRef := strings.TrimSpace(remaining[0])
 	prompt := strings.TrimSpace(strings.Join(remaining[1:], " "))
+
+	if err := validateEnvFlags(envEntries); err != nil {
+		return err
+	}
+	absPrepend, err := resolvePrependPaths(prependPaths)
+	if err != nil {
+		return err
+	}
+	absConfigHome, err := resolveAgentRunnerConfigHomeAbs(agentRunnerConfigHome)
+	if err != nil {
+		return err
+	}
+	envEntries = normalizeEnvEntries(envEntries)
 
 	if openFlag && jsonFlag {
 		return fmt.Errorf("--open and --json are mutually exclusive; cannot use both")
@@ -108,7 +130,9 @@ func runResume(args []string, defaultRunner string) error {
 		model:                 model,
 		agentRunner:           agentRunner,
 		agentRunnerBinary:     agentRunnerBinary,
-		agentRunnerConfigHome: agentRunnerConfigHome,
+		agentRunnerConfigHome: absConfigHome,
+		prependPaths:          absPrepend,
+		envEntries:            envEntries,
 		keepTTY:               keepTTY,
 		openFlag:              openFlag,
 		noSubmit:              noSubmit,
@@ -161,6 +185,19 @@ func resumeExistingSession(store agentstorage.Store, meta agentstorage.SessionMe
 	if openFlag && !agenttty.IsTTYRunner(runner) {
 		return fmt.Errorf("--open requires a TTY runner (got %s); non-TTY runners like fake-codex are not supported", runner)
 	}
+	// CLI session-env flags only: stored values reapply without re-checking TTY.
+	if err := requireTTYForSessionEnv(runner, cfg.prependPaths, cfg.envEntries); err != nil {
+		return err
+	}
+
+	// Resume merge: stored paths/env always applied; CLI flags append only.
+	// Config home: CLI replaces scalar when set, else use stored.
+	effectivePrepend := appendStringLists(meta.PrependPaths, cfg.prependPaths)
+	effectiveEnv := appendStringLists(meta.Env, cfg.envEntries)
+	configHome := strings.TrimSpace(cfg.agentRunnerConfigHome)
+	if configHome == "" {
+		configHome = strings.TrimSpace(meta.AgentRunnerConfigHome)
+	}
 
 	workspace, err := resolveResumeWorkspace(cfg.dir, meta)
 	if err != nil {
@@ -188,7 +225,9 @@ func resumeExistingSession(store agentstorage.Store, meta agentstorage.SessionMe
 		TerminalSessionID:     ttySessionID,
 		PreferAutoTerminal:    preferAuto,
 		AgentRunnerBinary:     cfg.agentRunnerBinary,
-		AgentRunnerConfigHome: cfg.agentRunnerConfigHome,
+		AgentRunnerConfigHome: configHome,
+		PrependPaths:          effectivePrepend,
+		Env:                   effectiveEnv,
 		JSON:                  cfg.jsonFlag,
 		Workspace:             workspace,
 		KeepTerminalAlive:     keepTTY || openFlag,

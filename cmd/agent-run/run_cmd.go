@@ -41,6 +41,8 @@ Options:
   --agent-runner-config-home PATH
                       agent data directory (grok: GROK_HOME, codex: CODEX_HOME);
                       default: AGENT_RUNNER_CONFIG_HOME env
+  --prepend-path DIR  prepend DIR to the TTY agent runner child PATH (repeatable; TTY only)
+  -e, --env KEY=VALUE set env var on the TTY agent runner child process (repeatable; TTY only)
   -h, --help          show help
 `
 
@@ -54,6 +56,8 @@ func runHeadless(args []string, defaultRunner string) error {
 	var agentRunner string
 	var agentRunnerBinary string
 	var agentRunnerConfigHome string
+	var prependPaths []string
+	var envEntries []string
 	var keepTTY bool
 	var openFlag bool
 	var noSubmit bool
@@ -72,6 +76,8 @@ func runHeadless(args []string, defaultRunner string) error {
 		String("--agent-runner", &agentRunner).
 		String("--agent-runner-binary", &agentRunnerBinary).
 		String("--agent-runner-config-home", &agentRunnerConfigHome).
+		StringSlice("--prepend-path", &prependPaths).
+		StringSlice("-e,--env", &envEntries).
 		Help("-h,--help", runHelp).
 		CollectParsedFlags(&recorded).
 		Parse(args)
@@ -79,6 +85,19 @@ func runHeadless(args []string, defaultRunner string) error {
 		return err
 	}
 	prompt := strings.TrimSpace(strings.Join(remaining, " "))
+
+	if err := validateEnvFlags(envEntries); err != nil {
+		return err
+	}
+	absPrepend, err := resolvePrependPaths(prependPaths)
+	if err != nil {
+		return err
+	}
+	absConfigHome, err := resolveAgentRunnerConfigHomeAbs(agentRunnerConfigHome)
+	if err != nil {
+		return err
+	}
+	envEntries = normalizeEnvEntries(envEntries)
 
 	if newTerminal && !autoSendOrResume {
 		return fmt.Errorf("--new-terminal requires --auto-send-or-resume")
@@ -92,7 +111,9 @@ func runHeadless(args []string, defaultRunner string) error {
 			sessionIDFromPrompt:   sessionIDFromPrompt,
 			agentRunner:           agentRunner,
 			agentRunnerBinary:     agentRunnerBinary,
-			agentRunnerConfigHome: agentRunnerConfigHome,
+			agentRunnerConfigHome: absConfigHome,
+			prependPaths:          absPrepend,
+			envEntries:            envEntries,
 			keepTTY:               keepTTY,
 			openFlag:              openFlag,
 			noSubmit:              noSubmit,
@@ -127,6 +148,9 @@ func runHeadless(args []string, defaultRunner string) error {
 	if openFlag && !agenttty.IsTTYRunner(runner) {
 		return fmt.Errorf("--open requires a TTY runner (got %s); non-TTY runners like fake-codex are not supported", runner)
 	}
+	if err := requireTTYForSessionEnv(runner, absPrepend, envEntries); err != nil {
+		return err
+	}
 	store, err := openStore()
 	if err != nil {
 		return err
@@ -144,7 +168,9 @@ func runHeadless(args []string, defaultRunner string) error {
 		Model:                 model,
 		SessionID:             sessionID,
 		AgentRunnerBinary:     agentRunnerBinary,
-		AgentRunnerConfigHome: agentRunnerConfigHome,
+		AgentRunnerConfigHome: absConfigHome,
+		PrependPaths:          absPrepend,
+		Env:                   envEntries,
 		JSON:                  jsonFlag,
 		Workspace:             workspace,
 		KeepTerminalAlive:     keepTTY || openFlag,
@@ -178,6 +204,8 @@ type autoSendOrResumeOpts struct {
 	agentRunner           string
 	agentRunnerBinary     string
 	agentRunnerConfigHome string
+	prependPaths          []string
+	envEntries            []string
 	keepTTY               bool
 	openFlag              bool
 	noSubmit              bool
@@ -235,6 +263,8 @@ func runAutoSendOrResume(opts autoSendOrResumeOpts) error {
 			agentRunner:           opts.agentRunner,
 			agentRunnerBinary:     opts.agentRunnerBinary,
 			agentRunnerConfigHome: opts.agentRunnerConfigHome,
+			prependPaths:          opts.prependPaths,
+			envEntries:            opts.envEntries,
 			keepTTY:               opts.keepTTY,
 			openFlag:              opts.openFlag,
 			noSubmit:              opts.noSubmit,
@@ -382,9 +412,9 @@ func autoSendLive(store agentstorage.Store, meta agentstorage.SessionMeta, opts 
 	fmt.Println(id)
 
 	waitOpts := agentsend.WaitOptions{
-		EnqueuedAt:    enqueuedAt,
-		Mode:          agentsend.WaitDefault,
-		StartDrainer:  true,
+		EnqueuedAt:   enqueuedAt,
+		Mode:         agentsend.WaitDefault,
+		StartDrainer: true,
 	}
 	agentsend.StartDrainer(home, sess, provider)
 	return agentsend.WaitForDelivery(home, sess, id, waitOpts)
@@ -408,6 +438,9 @@ func autoRunCreate(store agentstorage.Store, sessionID string, opts autoSendOrRe
 	if opts.openFlag && !agenttty.IsTTYRunner(runner) {
 		return fmt.Errorf("--open requires a TTY runner (got %s); non-TTY runners like fake-codex are not supported", runner)
 	}
+	if err := requireTTYForSessionEnv(runner, opts.prependPaths, opts.envEntries); err != nil {
+		return err
+	}
 	return agentui.Run(context.Background(), agentui.RunOptions{
 		Prompt:                opts.prompt,
 		Runner:                runner,
@@ -415,6 +448,8 @@ func autoRunCreate(store agentstorage.Store, sessionID string, opts autoSendOrRe
 		SessionID:             sessionID,
 		AgentRunnerBinary:     opts.agentRunnerBinary,
 		AgentRunnerConfigHome: opts.agentRunnerConfigHome,
+		PrependPaths:          opts.prependPaths,
+		Env:                   opts.envEntries,
 		JSON:                  opts.jsonFlag,
 		Workspace:             workspace,
 		KeepTerminalAlive:     opts.keepTTY || opts.openFlag,

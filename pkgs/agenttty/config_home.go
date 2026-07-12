@@ -34,13 +34,47 @@ func CodexHomeForRunner(configHome string) string {
 
 // PrependCommandEnv prefixes argv with env(1) assignments for the PTY child process.
 func PrependCommandEnv(argv []string, runnerID, configHome string) []string {
-	env := RunnerConfigHomeEnv(runnerID, configHome)
-	if len(env) == 0 {
+	return ApplyChildProcessEnv(argv, runnerID, configHome, nil, nil)
+}
+
+// ApplyChildProcessEnv prefixes argv with env(1) so the PTY child receives:
+// - env entries (KEY=VALUE, later wins for the same KEY)
+// - PATH with prependPaths joined ahead of the current PATH
+// - GROK_HOME / CODEX_HOME from configHome
+func ApplyChildProcessEnv(argv []string, runnerID, configHome string, prependPaths, envEntries []string) []string {
+	assignments := make([]string, 0, len(envEntries)+2)
+	// Preserve order for meta/logging; env(1) last-wins for duplicate keys.
+	for _, e := range envEntries {
+		e = strings.TrimSpace(e)
+		if e == "" {
+			continue
+		}
+		assignments = append(assignments, e)
+	}
+	if len(prependPaths) > 0 {
+		parts := make([]string, 0, len(prependPaths)+1)
+		for _, p := range prependPaths {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			parts = append(parts, p)
+		}
+		if len(parts) > 0 {
+			pathVal := strings.Join(parts, string(os.PathListSeparator))
+			if cur := os.Getenv("PATH"); cur != "" {
+				pathVal = pathVal + string(os.PathListSeparator) + cur
+			}
+			assignments = append(assignments, "PATH="+pathVal)
+		}
+	}
+	assignments = append(assignments, RunnerConfigHomeEnv(runnerID, configHome)...)
+	if len(assignments) == 0 {
 		return argv
 	}
-	out := make([]string, 0, 1+len(env)+len(argv))
+	out := make([]string, 0, 1+len(assignments)+len(argv))
 	out = append(out, "env")
-	out = append(out, env...)
+	out = append(out, assignments...)
 	out = append(out, argv...)
 	return out
 }

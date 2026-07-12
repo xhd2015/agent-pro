@@ -16,12 +16,12 @@ import (
 
 // RunOptions configures a headless TTY runner invocation via detached serve.
 type RunOptions struct {
-	Home                  string
-	Workspace             string
-	Prompt                string
-	Model                 string
-	ResumeSessionID       string
-	RunnerID              string
+	Home            string
+	Workspace       string
+	Prompt          string
+	Model           string
+	ResumeSessionID string
+	RunnerID        string
 	// SessionID is the terminal registry id. Empty → auto-reserve session-N.
 	// When set (explicit --session or --session-id-from-prompt), storage and registry share it.
 	SessionID             string
@@ -29,15 +29,19 @@ type RunOptions struct {
 	SettingsPath          string
 	AgentPath             string
 	AgentRunnerConfigHome string
-	BinaryPath            string
-	KeepTerminalAlive     bool
+	// PrependPaths are absolute dirs prepended to the PTY child PATH (ordered).
+	PrependPaths []string
+	// Env is ordered KEY=VALUE entries applied to the PTY child (last-win per key).
+	Env               []string
+	BinaryPath        string
+	KeepTerminalAlive bool
 	// Open is run --open: silent start, optional inject, auto-attach, no pre-attach id print.
-	Open               bool
+	Open bool
 	// NoSubmit injects the prompt without trailing Enter (suffixCR=false). Used with Open.
-	NoSubmit           bool
-	GrokSyncOwnsEvents bool
-	Stderr             io.Writer
-	Emit               func(types.AgentEvent) error
+	NoSubmit            bool
+	GrokSyncOwnsEvents  bool
+	Stderr              io.Writer
+	Emit                func(types.AgentEvent) error
 	OnTerminalSessionID func(string)
 }
 
@@ -102,7 +106,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 			configHome = provisioned
 		}
 	}
-	argv = PrependCommandEnv(argv, runnerID, configHome)
+	argv = ApplyChildProcessEnv(argv, runnerID, configHome, opts.PrependPaths, opts.Env)
 
 	binaryPath, err := resolveBinaryPath(opts.BinaryPath)
 	if err != nil {

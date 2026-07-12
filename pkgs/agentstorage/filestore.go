@@ -163,6 +163,31 @@ func (s *fileStore) UpdateSessionTerminalSessionID(sessionID, terminalSessionID 
 	return os.WriteFile(filepath.Join(s.sessionDir(sessionID), "meta.json"), data, 0644)
 }
 
+// UpdateSessionEnvConfig replaces prepend_paths/env when provided (including empty
+// slices when the caller passes non-nil empty) and replaces agent_runner_config_home
+// when configHome is non-empty after trim.
+func (s *fileStore) UpdateSessionEnvConfig(sessionID string, prependPaths, env []string, configHome string) error {
+	sess, err := s.GetSession(sessionID)
+	if err != nil {
+		return err
+	}
+	if prependPaths != nil {
+		sess.Meta.PrependPaths = append([]string(nil), prependPaths...)
+	}
+	if env != nil {
+		sess.Meta.Env = append([]string(nil), env...)
+	}
+	if v := strings.TrimSpace(configHome); v != "" {
+		sess.Meta.AgentRunnerConfigHome = v
+	}
+	sess.Meta.UpdatedAt = nowRFC3339()
+	data, err := json.Marshal(sess.Meta)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(s.sessionDir(sessionID), "meta.json"), data, 0644)
+}
+
 func (s *fileStore) ClearAllSessions() error {
 	root := filepath.Join(s.home, "sessions")
 	if err := os.RemoveAll(root); err != nil {

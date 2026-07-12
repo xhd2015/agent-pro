@@ -42,13 +42,17 @@ type RunOptions struct {
 	PreferAutoTerminal    bool
 	AgentRunnerBinary     string // optional binary name/path or "binary flag..." shell spec
 	AgentRunnerConfigHome string // grok/codex data dir; falls back to AGENT_RUNNER_CONFIG_HOME
-	JSON                  bool
-	Workspace             string
-	Store                 agentstorage.Store
-	Stdout                io.Writer
-	Stderr                io.Writer
-	StreamPhases          bool // web: phased assistant start/update/end; CLI: single message events
-	KeepTerminalAlive     bool
+	// PrependPaths are absolute dirs prepended to the TTY child PATH (persisted on meta).
+	PrependPaths []string
+	// Env is ordered KEY=VALUE entries for the TTY child (persisted on meta; last-win).
+	Env               []string
+	JSON              bool
+	Workspace         string
+	Store             agentstorage.Store
+	Stdout            io.Writer
+	Stderr            io.Writer
+	StreamPhases      bool // web: phased assistant start/update/end; CLI: single message events
+	KeepTerminalAlive bool
 	// Open is run --open: silent keep-alive TTY start, auto-attach, print id after detach.
 	Open bool
 	// NoSubmit is run --no-submit: with Open, inject prompt without trailing Enter.
@@ -107,14 +111,21 @@ func Run(ctx context.Context, opts RunOptions) error {
 	if sess, err := opts.Store.GetSession(sessionID); err == nil {
 		runnerSessionID = strings.TrimSpace(sess.Meta.RunnerSessionID)
 		_ = opts.Store.UpdateSessionStatus(sessionID, "running")
+		// Persist session-scoped env injection (resume merge is done by caller).
+		if len(opts.PrependPaths) > 0 || len(opts.Env) > 0 || strings.TrimSpace(opts.AgentRunnerConfigHome) != "" {
+			_ = opts.Store.UpdateSessionEnvConfig(sessionID, opts.PrependPaths, opts.Env, opts.AgentRunnerConfigHome)
+		}
 	} else {
 		createMeta := agentstorage.SessionMeta{
-			Runner:        runner,
-			SessionID:     sessionID,
-			Status:        "running",
-			Model:         opts.Model,
-			InitialPrompt: strings.TrimSpace(opts.Prompt),
-			Workspace:     workspace,
+			Runner:                runner,
+			SessionID:             sessionID,
+			Status:                "running",
+			Model:                 opts.Model,
+			InitialPrompt:         strings.TrimSpace(opts.Prompt),
+			Workspace:             workspace,
+			PrependPaths:          append([]string(nil), opts.PrependPaths...),
+			Env:                   append([]string(nil), opts.Env...),
+			AgentRunnerConfigHome: strings.TrimSpace(opts.AgentRunnerConfigHome),
 		}
 		_ = opts.Store.CreateSession(sessionID, createMeta)
 	}
@@ -198,7 +209,7 @@ func Run(ctx context.Context, opts RunOptions) error {
 		openBind = startOpenGrokBindWorker(opts, runner, sessionID, workspace, bindPrompt, runStart, runnerSessionID)
 	}
 
-	newRunnerSessionID, newTerminalSessionID, runErr := streamRunner(ctx, runner, opts.Store.Home(), workspace, env, runnerPrompt, opts.Model, opts.AgentRunnerBinary, opts.AgentRunnerConfigHome, runnerSessionID, sessionID, ttySessionID, opts.StreamPhases, opts.KeepTerminalAlive, opts.Open, opts.NoSubmit, ttyGrokSyncOwnsEvents, persistTerminalSessionID, emit, stderr)
+	newRunnerSessionID, newTerminalSessionID, runErr := streamRunner(ctx, runner, opts.Store.Home(), workspace, env, runnerPrompt, opts.Model, opts.AgentRunnerBinary, opts.AgentRunnerConfigHome, opts.PrependPaths, opts.Env, runnerSessionID, sessionID, ttySessionID, opts.StreamPhases, opts.KeepTerminalAlive, opts.Open, opts.NoSubmit, ttyGrokSyncOwnsEvents, persistTerminalSessionID, emit, stderr)
 	if strings.TrimSpace(newRunnerSessionID) != "" {
 		_ = opts.Store.UpdateSessionRunnerSessionID(sessionID, newRunnerSessionID)
 	}
@@ -379,7 +390,7 @@ func resolveTTYSessionID(opts RunOptions, userSessionID string) string {
 
 // streamRunner runs the selected agent. ttySessionID is the custom terminal
 // registry id (from --session / --session-id-from-prompt); empty keeps session-N.
-func streamRunner(ctx context.Context, runner, home, workspace string, env *agentexec.Env, prompt, model, agentRunnerBinary, agentRunnerConfigHome, runnerSessionID, agentSessionID, ttySessionID string, streamPhases, keepTerminalAlive, open, noSubmit, grokSyncOwnsEvents bool, onTerminalSessionID func(string), emit func(types.AgentEvent) error, stderr io.Writer) (string, string, error) {
+func streamRunner(ctx context.Context, runner, home, workspace string, env *agentexec.Env, prompt, model, agentRunnerBinary, agentRunnerConfigHome string, prependPaths, envEntries []string, runnerSessionID, agentSessionID, ttySessionID string, streamPhases, keepTerminalAlive, open, noSubmit, grokSyncOwnsEvents bool, onTerminalSessionID func(string), emit func(types.AgentEvent) error, stderr io.Writer) (string, string, error) {
 	if agenttty.IsTTYRunner(runner) {
 		terminalSessionID := ""
 		onID := func(id string) {
@@ -399,6 +410,8 @@ func streamRunner(ctx context.Context, runner, home, workspace string, env *agen
 			AgentSessionID:        agentSessionID,
 			AgentPath:             agentRunnerBinary,
 			AgentRunnerConfigHome: agentRunnerConfigHome,
+			PrependPaths:          prependPaths,
+			Env:                   envEntries,
 			KeepTerminalAlive:     keepTerminalAlive || open,
 			Open:                  open,
 			NoSubmit:              noSubmit,

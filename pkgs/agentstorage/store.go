@@ -17,6 +17,9 @@ type Store interface {
 	UpdateSessionStatus(sessionID, status string) error
 	UpdateSessionRunnerSessionID(sessionID, runnerSessionID string) error
 	UpdateSessionTerminalSessionID(sessionID, terminalSessionID string) error
+	// UpdateSessionEnvConfig writes session-scoped TTY child env fields.
+	// prependPaths/env replace the stored lists; configHome replaces when non-empty.
+	UpdateSessionEnvConfig(sessionID string, prependPaths, env []string, configHome string) error
 	AppendEvent(sessionID string, ev types.AgentEvent) error
 	ReadEvents(sessionID string, afterOffset int64) ([]types.AgentEvent, int64, error)
 	AppendMessage(sessionID, text string) (Message, error)

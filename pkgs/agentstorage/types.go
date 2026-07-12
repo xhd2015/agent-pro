@@ -25,8 +25,14 @@ type SessionMeta struct {
 	Status            string `json:"status"`
 	Workspace         string `json:"workspace,omitempty"`
 	Model             string `json:"model,omitempty"`
-	CreatedAt         string `json:"created_at,omitempty"`
-	UpdatedAt         string `json:"updated_at,omitempty"`
+	// PrependPaths are absolute directories prepended to the TTY child PATH (ordered, no dedup).
+	PrependPaths []string `json:"prepend_paths,omitempty"`
+	// Env is ordered KEY=VALUE entries applied to the TTY child (last-win per key).
+	Env []string `json:"env,omitempty"`
+	// AgentRunnerConfigHome is the agent data dir (grok: GROK_HOME, codex: CODEX_HOME).
+	AgentRunnerConfigHome string `json:"agent_runner_config_home,omitempty"`
+	CreatedAt             string `json:"created_at,omitempty"`
+	UpdatedAt             string `json:"updated_at,omitempty"`
 }
 
 func (m *SessionMeta) UnmarshalJSON(data []byte) error {
