@@ -1,0 +1,20 @@
+{"file":"grok-after_git-idle-false-positive-session18-synth.txt","ready":true,"source":"session-18-synth","state":"idle","tags":["regression","session-18","false-positive","idle"]}
+{"file":"grok-after_git-idle-prompt-8a04c6de.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_git","idle"]}
+{"file":"grok-after_hello-idle-prompt-37ff685b.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_hello","idle"]}
+{"file":"grok-after_hello-idle-prompt-540b9e73.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_hello","idle"]}
+{"file":"grok-after_ls-idle-prompt-0abef368.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_ls","idle"]}
+{"file":"grok-after_ls-idle-prompt-0dc4eca4.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_ls","idle"]}
+{"file":"grok-after_ls-idle-prompt-3c646df9.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_ls","idle"]}
+{"file":"grok-after_ls-idle-prompt-6fc33fa4.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_ls","idle"]}
+{"file":"grok-after_ls-idle-prompt-a3646cc8.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_ls","idle"]}
+{"file":"grok-after_ls-idle-prompt-b5943e39.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_ls","idle"]}
+{"file":"grok-after_ls-idle-prompt-c40753a0.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_ls","idle"]}
+{"file":"grok-after_ls-idle-prompt-d00a92d2.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_ls","idle"]}
+{"file":"grok-after_ls-idle-prompt-d7b44d57.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_ls","idle"]}
+{"file":"grok-after_ls-idle-prompt-f82b4286.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_ls","idle"]}
+{"file":"grok-after_recap-idle-prompt-e1f51a36.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_recap","idle"]}
+{"file":"grok-boot-unknown-empty-e3b0c442.txt","ready":false,"reason":"no terminal output","source":"probe","state":"unknown","tags":["boot","empty","unknown"]}
+{"file":"grok-regression-busy-thinking-prompt-tail.txt","ready":false,"reason":"agent still responding","source":"writable_test","state":"busy","tags":["regression","busy","thinking"]}
+{"file":"grok-regression-idle-heavy-prompt-post-turn.txt","ready":true,"source":"writable_test","state":"idle","tags":["regression","idle","heavy-prompt"]}
+{"file":"grok-regression-idle-legacy-angle-response.txt","ready":true,"source":"writable_test","state":"idle","tags":["regression","idle","legacy"]}
+{"file":"grok-workspace-project-directory-confirm.txt","ready":false,"reason":"could not detect input prompt in terminal output","source":"smoke-/tmp-project-directory-confirm","state":"unknown","tags":["modal","workspace-confirm","regression"]}

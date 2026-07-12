@@ -1,15 +1,18 @@
 # Scenario
 
-**Feature**: resume denied paths (exit 1)
+**Feature**: resume denied paths (exit ≠ 0)
 
 ```
-not-exited | unbound | missing-session | missing-prompt -> exit 1 + clear error
+not-exited (live → hint send, not already-in-use)
+  | unbound | missing-session | missing-prompt
+  | --no-submit without --open
+  -> exit ≠ 0 + clear error
 ```
 
 ## Steps
 
 1. Leaf seeds the denying state and runs resume.
-2. Assert exit 1 and error wording.
+2. Assert non-zero exit and error wording.
 
 ```go
 import "testing"

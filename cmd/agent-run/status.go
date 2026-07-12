@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
@@ -53,7 +57,7 @@ type terminalLayerReport struct {
 }
 
 type runnerLayerReport struct {
-	Status    string `json:"status"` // bound|unbound
+	Status    string `json:"status"` // binding|bound|unbound
 	Kind      string `json:"kind,omitempty"`
 	SessionID string `json:"session_id,omitempty"`
 	// Exited is true/false when known; nil means unknown (JSON null).
@@ -182,6 +186,10 @@ func probeSessionStatus(store agentstorage.Store, meta agentstorage.SessionMeta)
 		}
 	}
 
+	// scrollbackSnapshot is terminal text used for sendable + exited heuristics.
+	// Keep-alive serve stays TCP-reachable after agent /exit; markers live here.
+	var scrollbackSnapshot string
+
 	if ttySess != nil {
 		report.Process.PID = ttySess.Registry.PID
 		report.Terminal.Listen = ttySess.Registry.ListenAddr
@@ -201,6 +209,7 @@ func probeSessionStatus(store agentstorage.Store, meta agentstorage.SessionMeta)
 			if ok && provider.CheckWritable != nil {
 				scrollbackText, err := ttywatch.SnapshotText(ttySess.Registry.ListenAddr, ttySess.TerminalSessionID)
 				if err == nil && len(scrollbackText) > 0 {
+					scrollbackSnapshot = scrollbackText
 					scrollback := []byte(scrollbackText)
 					writable := provider.CheckWritable(scrollback)
 					if writable.Ready {
@@ -217,6 +226,10 @@ func probeSessionStatus(store agentstorage.Store, meta agentstorage.SessionMeta)
 					report.Terminal.Sendable = "no"
 				}
 			} else {
+				// Still try to snapshot for exit markers even without CheckWritable.
+				if scrollbackText, err := ttywatch.SnapshotText(ttySess.Registry.ListenAddr, ttySess.TerminalSessionID); err == nil {
+					scrollbackSnapshot = scrollbackText
+				}
 				report.Terminal.Sendable = "no"
 			}
 			if screen == "" {
@@ -249,11 +262,14 @@ func probeSessionStatus(store agentstorage.Store, meta agentstorage.SessionMeta)
 	if runnerSID != "" {
 		report.Runner.Status = "bound"
 		report.Runner.SessionID = runnerSID
+	} else if bindInProgress(store.Home(), meta.Runner, meta.SessionID) {
+		// Mid-open background bind: durable bind.json state=in_progress.
+		report.Runner.Status = "binding"
 	} else {
 		report.Runner.Status = "unbound"
 	}
 
-	exited := computeRunnerExited(report, meta)
+	exited := computeRunnerExited(report, meta, scrollbackSnapshot)
 	report.Runner.Exited = exited
 
 	// --- resume layer ---
@@ -264,6 +280,8 @@ func probeSessionStatus(store agentstorage.Store, meta agentstorage.SessionMeta)
 	} else {
 		report.Resume.Ready = false
 		switch {
+		case report.Runner.Status == "binding":
+			report.Resume.Reason = "runner session bind in progress"
 		case !bound:
 			report.Resume.Reason = "runner session not bound (missing runner_session_id)"
 		case exited != nil && !*exited:
@@ -273,6 +291,22 @@ func probeSessionStatus(store agentstorage.Store, meta agentstorage.SessionMeta)
 		}
 	}
 	return report
+}
+
+// bindInProgress reports durable open-bind state for concurrent status.
+func bindInProgress(home, runner, sessionID string) bool {
+	path := filepath.Join(home, "sessions", runner, sessionID, "bind.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var st struct {
+		State string `json:"state"`
+	}
+	if json.Unmarshal(data, &st) != nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(st.State), "in_progress")
 }
 
 func runnerKindFromMeta(runner string) string {
@@ -290,12 +324,34 @@ func runnerKindFromMeta(runner string) string {
 }
 
 // computeRunnerExited returns true/false when known, nil when unknown.
-func computeRunnerExited(report sessionStatusReport, meta agentstorage.SessionMeta) *bool {
+//
+// Keep-alive __serve__ remains TCP-reachable after the agent child exits
+// (zombie serve). Do not treat terminal.status==reachable alone as "still
+// active"; inspect scrollback exit markers, sendable idle, and serve children.
+func computeRunnerExited(report sessionStatusReport, meta agentstorage.SessionMeta, scrollback string) *bool {
 	t := true
 	f := false
-	// Live reachable terminal → not exited (agent still in TTY).
 	if report.Terminal.Status == "reachable" {
-		// Sendable idle or any live TCP means provider is still running.
+		// Truly live agent TUI: idle/sendable input prompt.
+		if report.Terminal.Sendable == "yes" {
+			return &f
+		}
+		// Zombie-after-/exit: exit footer / [Terminal exited] in snapshot.
+		// Prefer scrollback markers over "no child" alone — fixtures (and some
+		// hosts) register a non-serve PID that legitimately has zero children.
+		if scrollbackSuggestsAgentExited(scrollback) {
+			return &t
+		}
+		// Keep-alive serve still reachable but agent child is gone, and
+		// snapshot is non-empty without a live idle prompt (sendable already no).
+		if report.Terminal.Sendable == "no" &&
+			strings.TrimSpace(scrollback) != "" &&
+			!scrollbackLooksLiveAgent(scrollback) &&
+			report.Process.Status == "alive" && report.Process.PID > 0 &&
+			!processHasChildren(report.Process.PID) {
+			return &t
+		}
+		// Reachable but no exit signal (busy/loading/unknown/snapshot miss) → still active.
 		return &f
 	}
 	// Bound + terminal missing/unreachable → treat as exited.
@@ -313,11 +369,74 @@ func computeRunnerExited(report sessionStatusReport, meta agentstorage.SessionMe
 			return &t
 		}
 	}
-	// Unbound without live terminal: unknown exited.
-	if report.Runner.Status == "unbound" && report.Terminal.Status != "reachable" {
+	// Unbound/binding without live terminal: unknown exited.
+	if (report.Runner.Status == "unbound" || report.Runner.Status == "binding") && report.Terminal.Status != "reachable" {
 		return nil
 	}
 	return nil
+}
+
+// scrollbackSuggestsAgentExited reports post-/exit markers in terminal snapshot.
+// Matches left-aligned or indented "[Terminal exited]" and grok/codex resume footers.
+func scrollbackSuggestsAgentExited(scrollback string) bool {
+	if strings.TrimSpace(scrollback) == "" {
+		return false
+	}
+	// Snapshot may retain ANSI; plain substring match is enough for markers.
+	if strings.Contains(scrollback, "[Terminal exited]") {
+		return true
+	}
+	// "Resume this session with:" / "grok --resume <id>" / "codex --resume <id>"
+	lower := strings.ToLower(scrollback)
+	if strings.Contains(lower, "grok --resume") || strings.Contains(lower, "codex --resume") {
+		return true
+	}
+	if strings.Contains(lower, "resume this session with") {
+		return true
+	}
+	return false
+}
+
+// scrollbackLooksLiveAgent reports idle TUI prompt markers (agent still interactive).
+func scrollbackLooksLiveAgent(scrollback string) bool {
+	if strings.TrimSpace(scrollback) == "" {
+		return false
+	}
+	if strings.Contains(scrollback, "Grok \u203a") || strings.Contains(scrollback, "Grok ›") ||
+		strings.Contains(scrollback, "Grok >") {
+		return true
+	}
+	// Codex / generic prompt glyphs often mean interactive TUI.
+	if strings.Contains(scrollback, "\u203a") || strings.Contains(scrollback, "›") ||
+		strings.Contains(scrollback, "❯") {
+		return true
+	}
+	lower := strings.ToLower(scrollback)
+	if strings.Contains(lower, "response:") || strings.Contains(lower, "submitted:") {
+		return true
+	}
+	return false
+}
+
+// processHasChildren reports whether pid has at least one child process.
+// Used to detect zombie keep-alive serve (alive PID, agent child gone).
+func processHasChildren(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	// pgrep -P lists direct children; exit 1 means none (or error).
+	cmd := exec.Command("pgrep", "-P", strconv.Itoa(pid))
+	out, err := cmd.Output()
+	if err != nil {
+		// No children or pgrep unavailable — treat as no children only when
+		// output is empty; on hard errors prefer "has children" (not exited)
+		// only if we cannot tell — actually: empty → no children.
+		if len(bytes.TrimSpace(out)) == 0 {
+			return false
+		}
+		return true
+	}
+	return len(bytes.TrimSpace(out)) > 0
 }
 
 func printSessionStatusHuman(r sessionStatusReport) {

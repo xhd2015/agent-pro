@@ -282,6 +282,12 @@ func DiscoverSession(ctx context.Context, grokHome, workspace, prompt string, ru
 		if id, path, ok := scanSessionsForMatch(root, workspace, prompt, runStart); ok {
 			return id, path, nil
 		}
+		// Fallback: grok sometimes records a different cwd than agent-run's
+		// workspace (e.g. meta /tmp vs session cwd /Users/…/tmp). Match by
+		// prompt + created-after-runStart across all session trees.
+		if id, path, ok := scanAllSessionsForPrompt(grokHome, prompt, runStart); ok {
+			return id, path, nil
+		}
 
 		select {
 		case <-ctx.Done():
@@ -289,6 +295,60 @@ func DiscoverSession(ctx context.Context, grokHome, workspace, prompt string, ru
 		case <-time.After(sessionDiscoveryInterval):
 		}
 	}
+}
+
+// scanAllSessionsForPrompt finds the newest session under GROK_HOME/sessions
+// whose updates contain wantPrompt and whose summary created_at is not before
+// runStart (minus grace). Used when workspace-keyed discovery misses due to
+// cwd mismatch between agent-run and the grok process.
+func scanAllSessionsForPrompt(grokHome, prompt string, runStart time.Time) (sessionID, updatesPath string, ok bool) {
+	wantPrompt := strings.TrimSpace(prompt)
+	if wantPrompt == "" {
+		return "", "", false
+	}
+	sessionsRoot := filepath.Join(grokHome, "sessions")
+	encodedDirs, err := os.ReadDir(sessionsRoot)
+	if err != nil {
+		return "", "", false
+	}
+	var bestID, bestPath string
+	var bestCreated time.Time
+	for _, enc := range encodedDirs {
+		if !enc.IsDir() {
+			continue
+		}
+		encRoot := filepath.Join(sessionsRoot, enc.Name())
+		entries, err := os.ReadDir(encRoot)
+		if err != nil {
+			continue
+		}
+		for _, ent := range entries {
+			if !ent.IsDir() {
+				continue
+			}
+			id := ent.Name()
+			dir := filepath.Join(encRoot, id)
+			created, hasCreated := summaryCreatedAt(dir)
+			if !hasCreated || !sessionNotBefore(runStart, created) {
+				// Reject sessions older than runStart-grace (avoid prior-run
+				// collisions). Too-small grace caused parallel open-bind flakes.
+				continue
+			}
+			path := filepath.Join(dir, "updates.jsonl")
+			if !promptMatchesSession(path, wantPrompt) {
+				continue
+			}
+			if bestID == "" || created.After(bestCreated) {
+				bestID = id
+				bestPath = path
+				bestCreated = created
+			}
+		}
+	}
+	if bestID == "" {
+		return "", "", false
+	}
+	return bestID, bestPath, true
 }
 
 func scanSessionsForMatch(root, workspace, prompt string, runStart time.Time) (sessionID, updatesPath string, ok bool) {

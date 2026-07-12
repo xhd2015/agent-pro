@@ -1,6 +1,7 @@
 package ttywatch
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -198,6 +199,12 @@ func readScreenSnapshotFrameOnce(listenAddr, sessionID string, deadline time.Tim
 				return "", cols, rows, false, parseErr
 			} else if handled {
 				cols, rows = parseAttachRoleDimensions(data, cols, rows)
+			} else if len(bytes.TrimSpace(data)) > 0 {
+				// Non-control text frames: some test fakes (and legacy servers)
+				// emit plain scrollback as TextMessage. Treat as content so
+				// SnapshotText / sendable / exit markers work without BinaryMessage.
+				gotBinary = true
+				chunks = append(chunks, append([]byte(nil), data...))
 			}
 		case websocket.BinaryMessage:
 			if len(data) == 0 {

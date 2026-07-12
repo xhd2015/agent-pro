@@ -31,6 +31,15 @@ type RunOptions struct {
 	Runner              string
 	Model               string
 	SessionID           string
+	// TerminalSessionID is the TTY registry id. When empty, SessionID is used as
+	// the custom terminal id (legacy --session / --session-id-from-prompt).
+	// When PreferAutoTerminal is true, TerminalSessionID is ignored and the TTY
+	// id is auto-allocated (session-N) while SessionID remains agent storage.
+	TerminalSessionID string
+	// PreferAutoTerminal forces auto session-N for the TTY registry even when
+	// SessionID is set (used by resume fallback when zombie reclaim cannot free
+	// the prior terminal id).
+	PreferAutoTerminal bool
 	AgentRunnerBinary     string // optional binary name/path or "binary flag..." shell spec
 	AgentRunnerConfigHome string // grok/codex data dir; falls back to AGENT_RUNNER_CONFIG_HOME
 	JSON                bool
@@ -56,7 +65,9 @@ func Run(ctx context.Context, opts RunOptions) error {
 	if opts.Open {
 		opts.KeepTerminalAlive = true
 	}
-	if strings.TrimSpace(opts.Prompt) == "" && !opts.Open {
+	// Empty prompt is allowed for --open / keep-alive reopen (resume without
+	// followup). Headless one-shot still requires a prompt.
+	if strings.TrimSpace(opts.Prompt) == "" && !opts.Open && !opts.KeepTerminalAlive {
 		return fmt.Errorf("prompt is required")
 	}
 	runStart := time.Now()
@@ -72,12 +83,14 @@ func Run(ctx context.Context, opts RunOptions) error {
 	}
 
 	// userSessionID is set when --session or --session-id-from-prompt chose the id.
-	// Only then do we also use it as the TTY terminal registry id.
+	// By default that id is also used as the TTY terminal registry id unless the
+	// caller overrides via TerminalSessionID or PreferAutoTerminal (resume reclaim).
 	userSessionID := strings.TrimSpace(opts.SessionID)
 	sessionID := userSessionID
 	if sessionID == "" {
 		sessionID = fmt.Sprintf("sess_%d", os.Getpid())
 	}
+	ttySessionID := resolveTTYSessionID(opts, userSessionID)
 
 	// Resolve workspace before session create so meta.workspace is always set
 	// (explicit --dir / RunOptions.Workspace, or process cwd default).
@@ -172,7 +185,20 @@ func Run(ctx context.Context, opts RunOptions) error {
 		startGrokSyncPoller(ctx, opts, emit)
 		_ = ensureGrokSyncForSession(context.Background(), opts, resolveGrokSessionID(opts.Store, runner, sessionID), emit)
 	}
-	newRunnerSessionID, newTerminalSessionID, runErr := streamRunner(ctx, runner, opts.Store.Home(), workspace, env, runnerPrompt, opts.Model, opts.AgentRunnerBinary, opts.AgentRunnerConfigHome, runnerSessionID, sessionID, userSessionID, opts.StreamPhases, opts.KeepTerminalAlive, opts.Open, opts.NoSubmit, ttyGrokSyncOwnsEvents, persistTerminalSessionID, emit, stderr)
+
+	// Open + grok-tty: start bind worker early (before/alongside attach) so
+	// discovery runs for the whole open lifetime and mid-open status can report
+	// "binding". Use the original user prompt for matching (not continuation).
+	var openBind *openGrokBindWorker
+	if opts.Open && runner == "grok-tty" {
+		bindPrompt := strings.TrimSpace(opts.Prompt)
+		if bindPrompt == "" {
+			bindPrompt = runnerPrompt
+		}
+		openBind = startOpenGrokBindWorker(opts, runner, sessionID, workspace, bindPrompt, runStart, runnerSessionID)
+	}
+
+	newRunnerSessionID, newTerminalSessionID, runErr := streamRunner(ctx, runner, opts.Store.Home(), workspace, env, runnerPrompt, opts.Model, opts.AgentRunnerBinary, opts.AgentRunnerConfigHome, runnerSessionID, sessionID, ttySessionID, opts.StreamPhases, opts.KeepTerminalAlive, opts.Open, opts.NoSubmit, ttyGrokSyncOwnsEvents, persistTerminalSessionID, emit, stderr)
 	if strings.TrimSpace(newRunnerSessionID) != "" {
 		_ = opts.Store.UpdateSessionRunnerSessionID(runner, sessionID, newRunnerSessionID)
 	}
@@ -181,15 +207,38 @@ func Run(ctx context.Context, opts RunOptions) error {
 	}
 	if opts.Open {
 		if runErr != nil {
+			if openBind != nil {
+				openBind.Cancel()
+				_ = openBind.Wait()
+			}
 			_ = opts.Store.UpdateSessionStatus(runner, sessionID, "error")
 			return runErr
 		}
-		// After attach returns: print terminal id, then finalize grok session bind.
+		// After attach returns: print terminal id, then ALWAYS join bind worker.
 		termID := strings.TrimSpace(newTerminalSessionID)
 		if termID != "" {
 			_, _ = fmt.Fprintf(stderr, "%s: %s\n", runner, termID)
 		}
-		if runner == "grok-tty" {
+		if openBind != nil {
+			// Prefer id already discovered mid-open; if streamRunner also
+			// returned one and bind soft-missed, fall back to post-wait finalize
+			// only when worker finished unbound without hard error (rare).
+			res := openBind.Wait()
+			if strings.TrimSpace(res.id) == "" && strings.TrimSpace(newRunnerSessionID) != "" && res.err == nil {
+				// Worker may have started before known id appeared; re-run
+				// finalize path only if hard-require still needs an id.
+				if err := finalizeOpenGrokSession(ctx, opts, runner, sessionID, workspace, runnerPrompt, runStart, strings.TrimSpace(newRunnerSessionID), stderr); err != nil {
+					_ = opts.Store.UpdateSessionStatus(runner, sessionID, "error")
+					return err
+				}
+				return nil
+			}
+			if err := printOpenGrokBindResult(res, stderr); err != nil {
+				_ = opts.Store.UpdateSessionStatus(runner, sessionID, "error")
+				return err
+			}
+		} else if runner == "grok-tty" {
+			// Non-worker path should not happen; keep finalize as safety net.
 			if err := finalizeOpenGrokSession(ctx, opts, runner, sessionID, workspace, runnerPrompt, runStart, strings.TrimSpace(newRunnerSessionID), stderr); err != nil {
 				_ = opts.Store.UpdateSessionStatus(runner, sessionID, "error")
 				return err
@@ -238,11 +287,10 @@ func finalizeOpenGrokSession(ctx context.Context, opts RunOptions, runner, sessi
 		}
 	}
 	if id == "" || updatesPath == "" {
-		// Short grace for on-disk session materialization (or env session-id hook).
-		timeout := 5 * time.Second
+		// Discovery budget for post-attach finalize safety net.
+		timeout := openGrokBindPostDetachGrace
 		if !requireBind {
-			// Best-effort: fail fast when no config home / hook is configured.
-			timeout = 750 * time.Millisecond
+			timeout = openGrokBindSoftTimeout
 		}
 		discCtx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
@@ -272,7 +320,16 @@ func finalizeOpenGrokSession(ctx context.Context, opts RunOptions, runner, sessi
 }
 
 // openGrokDiscoveryRequired reports whether --open must resolve a grok session id.
+//
+// Real user --open with a non-empty prompt always requires bind (full discovery
+// budget + hard error on failure). Soft/best-effort is only for empty-prompt
+// open (reopen TUI) or legacy fake TUI without a user prompt — the previous
+// "soft unless GROK_HOME env is set" rule left default ~/.grok sessions unbound
+// after a 750ms race (see doc/LOOP_2026-07-11_open-bind-runner-unbound.md).
 func openGrokDiscoveryRequired(opts RunOptions) bool {
+	if strings.TrimSpace(opts.Prompt) != "" {
+		return true
+	}
 	if strings.TrimSpace(opts.AgentRunnerConfigHome) != "" {
 		return true
 	}
@@ -286,6 +343,19 @@ func openGrokDiscoveryRequired(opts RunOptions) bool {
 		return true
 	}
 	return false
+}
+
+// resolveTTYSessionID picks the custom terminal registry id for streamRunner.
+// PreferAutoTerminal → empty (auto session-N). Explicit TerminalSessionID wins.
+// Otherwise fall back to userSessionID (legacy --session-id behavior).
+func resolveTTYSessionID(opts RunOptions, userSessionID string) string {
+	if opts.PreferAutoTerminal {
+		return ""
+	}
+	if id := strings.TrimSpace(opts.TerminalSessionID); id != "" {
+		return id
+	}
+	return userSessionID
 }
 
 // streamRunner runs the selected agent. ttySessionID is the custom terminal

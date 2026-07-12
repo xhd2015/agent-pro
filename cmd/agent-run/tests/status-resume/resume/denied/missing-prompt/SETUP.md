@@ -1,16 +1,17 @@
 # Scenario
 
-**Feature**: resume without followup and without `--open` requires a prompt
+**Feature**: resume without followup is allowed (reopen only; not an error)
 
 ```
 exited bound meta -> agent-run resume <id>  (no followup, no --open)
-  -> exit 1, prompt required
+  -> does NOT fail with "prompt is required"
+  -> keep-tty reopen path (may still error on missing stub binary in this leaf)
 ```
 
 ## Steps
 
 1. Seed bound exited meta.
-2. Run resume with only session id.
+2. Run resume with only session id (no followup prompt).
 
 ```go
 import "testing"

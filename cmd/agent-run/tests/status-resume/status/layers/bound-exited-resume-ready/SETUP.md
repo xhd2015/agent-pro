@@ -1,6 +1,6 @@
 # Scenario
 
-**Feature**: bound + exited + dead/absent terminal ⇒ resume ready
+**Feature**: bound + exited + dead/absent terminal ⇒ resume ready (E3 unreachable path)
 
 ```
 meta finished, runner_session_id set, no live registry
@@ -10,8 +10,9 @@ meta finished, runner_session_id set, no live registry
 
 ## Steps
 
-1. Seed finished meta with runner_session_id; no live registry.
+1. Seed finished meta with runner_session_id; no live registry (terminal missing).
 2. Run human status.
+3. Complements zombie-serve leaves: here process/terminal are not live.
 
 ```go
 import "testing"

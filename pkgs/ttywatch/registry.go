@@ -244,6 +244,12 @@ func sessionIDInUse(cfg RegistryConfig, sessionID string) bool {
 	return false
 }
 
+// SessionIDInUse reports whether a session id is reserved or held by a live
+// registry entry (reachable listen address and/or alive serve PID).
+func SessionIDInUse(cfg RegistryConfig, sessionID string) bool {
+	return sessionIDInUse(cfg, sessionID)
+}
+
 // pruneStaleSessionID drops unreachable registry entries and dead claims for id.
 func pruneStaleSessionID(cfg RegistryConfig, sessionID string) error {
 	if _, err := os.Stat(registryPath(cfg, sessionID)); err == nil {

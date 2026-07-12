@@ -6,11 +6,12 @@
 seed meta + optional registry/ptywrap
   -> agent-run status <id> [--json]
   -> runner.exited + resume.ready derived from gate
+  # branches: dead terminal | zombie serve (exit markers) | live sendable | unbound
 ```
 
 ## Steps
 
-1. Leaf seeds a specific runner/terminal state.
+1. Leaf seeds a specific runner/terminal state (dead, zombie-after-exit, live, unbound).
 2. Run status (human or JSON).
 3. Assert layer fields and resume gate.
 

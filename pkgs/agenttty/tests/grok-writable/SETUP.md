@@ -37,9 +37,10 @@ import (
 )
 
 const (
-	fixtureFalsePositiveSession18 = "grok-after_git-idle-false-positive-session18-synth.txt"
-	fixtureBusyThinking           = "grok-regression-busy-thinking-prompt-tail.txt"
-	fixtureBootEmpty              = "grok-boot-unknown-empty-e3b0c442.txt"
+	fixtureFalsePositiveSession18          = "grok-after_git-idle-false-positive-session18-synth.txt"
+	fixtureBusyThinking                    = "grok-regression-busy-thinking-prompt-tail.txt"
+	fixtureBootEmpty                       = "grok-boot-unknown-empty-e3b0c442.txt"
+	fixtureWorkspaceProjectDirectoryConfirm = "grok-workspace-project-directory-confirm.txt"
 )
 
 func Setup(t *testing.T, req *Request) error {

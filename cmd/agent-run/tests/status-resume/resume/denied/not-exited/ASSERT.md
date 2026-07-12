@@ -19,6 +19,10 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	}
 	assertExitCode(t, resp, 1)
 	combined := strings.ToLower(resp.Stderr + "\n" + resp.Stdout)
+	// Live agent: must not surface registry "already in use" — steer to send.
+	if strings.Contains(combined, "already in use") {
+		t.Fatalf("live (not-exited) resume must deny with active/send, not already-in-use:\n%s", combined)
+	}
 	assertContainsAny(t, combined,
 		"cannot resume",
 		"not exited",

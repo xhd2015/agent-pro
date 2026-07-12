@@ -1,0 +1,13 @@
+ /private/tmp
+ ┃
+ ┃  Run Grok Build in a project directory?
+ ┃
+ ┃
+ ┃  1 (○) tmp (current)           /private/tmp                                █
+ ┃  2 (○) agent-pro-master-2026…  ~/.wrk/worktrees/agent-pro-master-2026-07-… █
+ ┃  3 (○) dot-pkgs-master-2026-…  ~/.wrk/worktrees/dot-pkgs-master-2026-07-…
+ ┃  z (○) Type your answer here
+ ┃
+ ┃  ↑/↓ navigate · y copy                                      Enter:submit
+ ┃
+ Esc:unselect  │  Tab:scrollback  │  Shift+x:dismiss

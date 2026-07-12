@@ -1,6 +1,6 @@
 ## Expected
 
-- `Run` returns one `FixtureResult` per `expectations.jsonl` row (currently 19 fixtures).
+- `Run` returns one `FixtureResult` per `expectations.jsonl` row (currently 20 fixtures).
 - Every result matches `ready`, `state`, and `reason` (when manifest specifies `reason`).
 - No fixture file is missing from disk.
 

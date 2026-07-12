@@ -58,7 +58,8 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	if opts.Open {
 		opts.KeepTerminalAlive = true
 	}
-	if strings.TrimSpace(opts.Prompt) == "" && !opts.Open {
+	// Empty prompt OK for open / keep-alive reopen (e.g. resume without followup).
+	if strings.TrimSpace(opts.Prompt) == "" && !opts.Open && !opts.KeepTerminalAlive {
 		return "", "", fmt.Errorf("prompt is required")
 	}
 	if opts.Stderr == nil {
@@ -82,6 +83,14 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	argv, err := provider.BuildArgv(env, opts.SettingsPath, opts.AgentPath, opts.Model, opts.ResumeSessionID)
 	if err != nil {
 		return "", "", err
+	}
+	// New session (no --resume): pass initial prompt as trailing positional arg
+	// (grok [PROMPT]). Resume follow-ups stay inject-only so argv keeps --resume.
+	// Headless still injects after banner for turn completion with fake TUI scripts.
+	if strings.TrimSpace(opts.ResumeSessionID) == "" {
+		if p := strings.TrimSpace(opts.Prompt); p != "" {
+			argv = append(argv, p)
+		}
 	}
 
 	configHome := ResolveAgentRunnerConfigHome(opts.AgentRunnerConfigHome)
@@ -347,15 +356,21 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 
 	var waitErr error
 	if opts.KeepTerminalAlive {
-		var extraComplete func() bool
-		if runnerID == "grok-tty" && !opts.GrokSyncOwnsEvents {
-			extraComplete = func() bool {
-				tailState.Lock()
-				defer tailState.Unlock()
-				return tailState.streamed
+		if strings.TrimSpace(promptText) == "" {
+			// Reopen-only (e.g. resume without followup): banner already waited;
+			// no user turn to complete. Leave PTY alive and return.
+			waitErr = nil
+		} else {
+			var extraComplete func() bool
+			if runnerID == "grok-tty" && !opts.GrokSyncOwnsEvents {
+				extraComplete = func() bool {
+					tailState.Lock()
+					defer tailState.Unlock()
+					return tailState.streamed
+				}
 			}
+			waitErr = waitForPersistentTurnRemote(ctx, listenAddr, sessionID, promptText, cfg, extraComplete)
 		}
-		waitErr = waitForPersistentTurnRemote(ctx, listenAddr, sessionID, promptText, cfg, extraComplete)
 	} else {
 		waitErr = ttywatch.WaitHeadless(ctx, result, argv)
 		if autoExitCancel != nil {

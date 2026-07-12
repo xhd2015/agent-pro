@@ -8,7 +8,19 @@ import (
 	"time"
 )
 
-const sessionDiscoveryGrace = 2 * time.Second
+// sessionDiscoveryGrace is how far before runStart a grok session's created_at
+// may still be accepted by DiscoverSession / prompt fallback.
+//
+// Must tolerate:
+//   - Setup preseed → build/copy lag → agent-run start (parallel doctests)
+//   - Delayed materialize finishing slightly before a starved process sets runStart
+//   - Real-world process start lag after parent schedules discovery
+//
+// Too tight (e.g. 2s) causes parallel open-bind flakes: session exists on disk
+// but is filtered forever → post-detach grace cancels with "not resolved".
+// 1m is enough for Setup/build lag and delayed materialize under parallel load
+// without a multi-hour same-prompt collision window.
+const sessionDiscoveryGrace = 1 * time.Minute
 
 func pathEscape(s string) string {
 	return url.PathEscape(s)

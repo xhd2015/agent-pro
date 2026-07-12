@@ -30,6 +30,9 @@ rendered tty-watch snapshot text fixtures under `pkgs/agenttty/testdata/grok-wri
 - Full-scrollback substring `working` matching `git working tree status` while prompt idle
   is a **false positive** (session-18 bug); correct behavior is `ready=true`.
 - Banner without prompt (`GROK_TTY_BANNER`) → `state=loading`.
+- Project-directory confirmation modal (`Run Grok Build in a project directory?`,
+  `Enter:submit`, radio options) → `ready=false`, **not** `idle` (blocking picker;
+  not a session turn prompt).
 
 ## Version
 
@@ -48,7 +51,8 @@ pkgs/agenttty/tests/grok-writable/
 │   ├── SETUP.md
 │   ├── git-working-tree-idle-prompt/        # F2: session-18 false positive (RED before fix)
 │   ├── thinking-prompt-tail-busy/           # F3: real busy while thinking
-│   └── empty-snapshot-unknown/              # F4: boot empty → unknown
+│   ├── empty-snapshot-unknown/              # F4: boot empty → unknown
+│   └── workspace-project-directory-confirm/ # W2: project-dir picker not idle
 └── probe-export/
     ├── SETUP.md
     └── capture-dir-round-trip/              # F5: -export-fixtures from mini capture
@@ -65,11 +69,12 @@ Parameter ranking (most → least significant):
 
 | # | Leaf | Description |
 |---|------|-------------|
-| 1 | `fixture-table/all-expectations-match` | Every `grok-*.txt` matches `expectations.jsonl` (F1) |
+| 1 | `fixture-table/all-expectations-match` | Every `grok-*.txt` matches `expectations.jsonl` (F1, 20 fixtures incl. workspace-confirm) |
 | 2 | `regression/git-working-tree-idle-prompt` | Scrollback `git working tree status` + idle prompt → `ready=true` (F2, RED before fix) |
 | 3 | `regression/thinking-prompt-tail-busy` | `thinking` in prompt tail → `state=busy` (F3) |
 | 4 | `regression/empty-snapshot-unknown` | Empty bytes → `state=unknown` (F4) |
-| 5 | `probe-export/capture-dir-round-trip` | Probe `-export-fixtures` from mini capture produces parseable manifest (F5) |
+| 5 | `regression/workspace-project-directory-confirm` | Project-dir picker → `ready=false`, not idle (W2) |
+| 6 | `probe-export/capture-dir-round-trip` | Probe `-export-fixtures` from mini capture produces parseable manifest (F5) |
 
 ## How to Run
 
@@ -77,6 +82,7 @@ Parameter ranking (most → least significant):
 doctest vet ./pkgs/agenttty/tests/grok-writable
 doctest test ./pkgs/agenttty/tests/grok-writable
 doctest test -v ./pkgs/agenttty/tests/grok-writable/regression/git-working-tree-idle-prompt
+doctest test -v ./pkgs/agenttty/tests/grok-writable/regression/workspace-project-directory-confirm
 doctest test -v ./pkgs/agenttty/tests/grok-writable/fixture-table/all-expectations-match
 
 go test ./pkgs/agenttty/ -run TestCheckGrokWritable -v

@@ -4,15 +4,17 @@
 
 ```
 seed meta -> agent-run resume [flags] <session-id> ["followup"]
-  denied: not exited | unbound | missing | no prompt
-  success: headless followup when exited (argv includes --resume <id>)
-  --open accepted as known flag
+  denied: not exited (hint send, not already-in-use)
+         | unbound | missing session
+         | --no-submit without --open
+  ready + dead terminal: headless followup / --open accepted
+  ready + zombie registry: reclaim terminal id then reserve (not already-in-use)
 ```
 
 ## Steps
 
-1. Leaf seeds meta / live fixtures and sets `req.Args` for resume.
-2. `Run` executes CLI; assert gate errors or argv/session success.
+1. Leaf seeds meta / live / zombie fixtures and sets `req.Args` for resume.
+2. `Run` executes CLI; assert gate errors, reclaim success, or argv/session success.
 
 ```go
 import "testing"

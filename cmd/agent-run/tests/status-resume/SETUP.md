@@ -1,22 +1,34 @@
 # Scenario
 
 **Feature**: session-level `status` multi-layer probe, `resume` as run shortcut,
-and `run --open` post-attach grok session bind
+and `run --open` grok session bind (post-exit finalize + background bind wait)
 
 ```
 # status probe
 seed meta + optional registry/ptywrap
   -> agent-run status <ref> [--json]
   -> session / process / terminal / runner.exited / resume.ready
+     (runner.status may be binding|bound|unbound)
+  # zombie keep-alive: process alive + terminal reachable + exit scrollback
+  #   => exited true / resume ready (not reachable-alone = still active)
 
-# resume gate + run shortcut
+# resume gate + run shortcut (+ zombie terminal reclaim)
 seed meta (bound+exited | live | unbound | missing)
+  [+ optional zombie registry: alive PID + reachable + exit scrollback]
   -> agent-run resume [flags] <id> ["followup"]
-  -> deny (exit 1) or run path with --resume <runner_session_id>
+  -> deny (exit 1; live → send, not already-in-use)
+  -> or reclaim zombie terminal id then run path with --resume <runner_session_id>
+  -> --no-submit without --open → error
 
-# open post-exit
+# open post-exit finalize
 agent-run run --open (+ instant attach hook + optional GROK_HOME seed)
   -> after attach: print/persist grok session or error not resolved
+
+# open background bind
+agent-run run --open (+ instant attach + delayed GROK_HOME materialization)
+  -> bind worker runs without blocking attach
+  -> detach then ALWAYS wait for bind
+  -> stderr grok session + meta.runner_session_id (or hard-fail error)
 ```
 
 ## Preconditions
@@ -198,6 +210,14 @@ func applyGrokTTYCommand(req *Request) {
 }
 
 func applyGrokHomeEnv(req *Request) {
+	if req.NoGrokHomeEnv {
+		// O1: strip ambient hard-require env so only non-empty prompt forces hard wait.
+		// GrokHome is still used for materialization under isolated HOME/.grok.
+		req.Env = withoutEnvKey(req.Env, "GROK_HOME")
+		req.Env = withoutEnvKey(req.Env, "AGENT_RUNNER_CONFIG_HOME")
+		req.Env = withoutEnvKey(req.Env, envGrokTTYGrokSession)
+		return
+	}
 	if strings.TrimSpace(req.GrokHome) == "" {
 		return
 	}
@@ -205,6 +225,19 @@ func applyGrokHomeEnv(req *Request) {
 	if id := strings.TrimSpace(req.GrokSessionUUID); id != "" {
 		setEnvKV(req, envGrokTTYGrokSession, id)
 	}
+}
+
+// buildExecEnv builds the child process environment. When NoGrokHomeEnv is set,
+// strip ambient GROK_HOME / config-home / session-id hook from the parent environ
+// so they cannot force hard-require or pin discovery.
+func buildExecEnv(req *Request) []string {
+	base := os.Environ()
+	if req.NoGrokHomeEnv {
+		base = withoutEnvKey(base, "GROK_HOME")
+		base = withoutEnvKey(base, "AGENT_RUNNER_CONFIG_HOME")
+		base = withoutEnvKey(base, envGrokTTYGrokSession)
+	}
+	return append(base, req.Env...)
 }
 
 func ensureDefaults(req *Request) {
@@ -461,6 +494,73 @@ func seedLiveBoundNotExited(t *testing.T, req *Request) {
 	writeRegistryEntry(t, req)
 }
 
+// zombieServeExitScrollback is the post-/exit keep-alive serve scrollback:
+// resume footer + [Terminal exited], no idle Grok prompt (sendable: no).
+func zombieServeExitScrollback(runnerSessionID string) string {
+	id := strings.TrimSpace(runnerSessionID)
+	if id == "" {
+		id = "550e8400-e29b-41d4-a716-446655440222"
+	}
+	return "Resume this session with:\n  grok --resume " + id + "\n[Terminal exited]\n"
+}
+
+// startDetachedSleepPID starts a long-lived child process used as a keep-alive
+// serve PID in reclaim fixtures. Prefer this over RegistryPID=0 (test process)
+// when production code may tear down the registry PID on zombie reclaim.
+func startDetachedSleepPID(t *testing.T) int {
+	t.Helper()
+	cmd := exec.Command("sleep", "3600")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start detached sleep (zombie serve PID): %v", err)
+	}
+	t.Cleanup(func() {
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+			_, _ = cmd.Process.Wait()
+		}
+	})
+	return cmd.Process.Pid
+}
+
+// seedZombieServeAfterExit models keep-alive __serve__ still TCP-reachable and
+// process alive after the agent /exit (child gone), with exit markers in
+// scrollback. Status must report runner.exited true and resume.ready yes when
+// bound — not treat reachable alone as still active.
+//
+// RegistryPID: leave 0 for os.Getpid() (status leaves); set >0 before call for a
+// detached serve PID (resume reclaim leaves — safe if reclaim kills the PID).
+func seedZombieServeAfterExit(t *testing.T, req *Request) {
+	t.Helper()
+	req.SeedMeta = true
+	req.MetaStatus = "running"
+	ensureDefaults(req)
+	if req.SessionID == "" {
+		req.SessionID = "test-zombie-s1"
+	}
+	if req.RunnerSessionID == "" {
+		req.RunnerSessionID = "550e8400-e29b-41d4-a716-446655440222"
+	}
+	if req.TerminalSessionID == "" {
+		req.TerminalSessionID = "term-zombie-1"
+	}
+	if req.InitialPrompt == "" {
+		req.InitialPrompt = "zombie after exit"
+	}
+	req.StartFakePTYWrap = true
+	req.WriteRegistry = true
+	// Preserve caller-set positive PID (detached zombie serve). Negative → force
+	// alive default (0 = test process via resolveRegistryPID).
+	if req.RegistryPID < 0 {
+		req.RegistryPID = 0
+	}
+	if req.FakePTYWrapScrollback == "" {
+		req.FakePTYWrapScrollback = zombieServeExitScrollback(req.RunnerSessionID)
+	}
+	startFakePTYWrapServer(t, req)
+	seedSessionMeta(t, req)
+	writeRegistryEntry(t, req)
+}
+
 // seedUnbound seeds meta without runner_session_id.
 func seedUnbound(t *testing.T, req *Request) {
 	t.Helper()
@@ -501,22 +601,45 @@ func grokSessionDir(grokHome, workspace, sessionUUID string) string {
 
 func writeFakeGrokSessionDir(t *testing.T, grokHome, workspace, sessionUUID, prompt string) string {
 	t.Helper()
-	dir := grokSessionDir(grokHome, workspace, sessionUUID)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		t.Fatalf("mkdir grok session: %v", err)
+	path, err := writeFakeGrokSessionDirErr(grokHome, workspace, sessionUUID, prompt)
+	if err != nil {
+		t.Fatalf("write fake grok session: %v", err)
 	}
-	abs, _ := filepath.Abs(workspace)
+	return path
+}
+
+// writeFakeGrokSessionDirAtCwd seeds a session under sessionCwd's encoded path
+// (and summary.info.cwd), which may differ from the agent-run workspace.
+func writeFakeGrokSessionDirAtCwd(t *testing.T, grokHome, sessionCwd, sessionUUID, prompt string) string {
+	t.Helper()
+	path, err := writeFakeGrokSessionDirErr(grokHome, sessionCwd, sessionUUID, prompt)
+	if err != nil {
+		t.Fatalf("write fake grok session at cwd: %v", err)
+	}
+	return path
+}
+
+func writeFakeGrokSessionDirErr(grokHome, sessionCwd, sessionUUID, prompt string) (string, error) {
+	dir := grokSessionDir(grokHome, sessionCwd, sessionUUID)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", fmt.Errorf("mkdir grok session: %w", err)
+	}
+	abs, _ := filepath.Abs(sessionCwd)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
 	summary := map[string]any{
 		"info": map[string]any{
 			"cwd":       abs,
 			"sessionId": sessionUUID,
-			"openedAt":  time.Now().UTC().Format(time.RFC3339Nano),
+			"openedAt":  now,
 		},
-		"created_at": time.Now().UTC().Format(time.RFC3339Nano),
+		"created_at": now,
 	}
-	sb, _ := json.Marshal(summary)
+	sb, err := json.Marshal(summary)
+	if err != nil {
+		return "", err
+	}
 	if err := os.WriteFile(filepath.Join(dir, "summary.json"), sb, 0644); err != nil {
-		t.Fatalf("write summary.json: %v", err)
+		return "", fmt.Errorf("write summary.json: %w", err)
 	}
 	userLine, _ := json.Marshal(map[string]any{
 		"sessionUpdate": "user_message_chunk",
@@ -529,9 +652,97 @@ func writeFakeGrokSessionDir(t *testing.T, grokHome, workspace, sessionUUID, pro
 	updatesPath := filepath.Join(dir, "updates.jsonl")
 	body := string(userLine) + "\n" + string(agentLine) + "\n"
 	if err := os.WriteFile(updatesPath, []byte(body), 0644); err != nil {
-		t.Fatalf("write updates.jsonl: %v", err)
+		return "", fmt.Errorf("write updates.jsonl: %w", err)
 	}
-	return updatesPath
+	return updatesPath, nil
+}
+
+// openPromptForDiscover picks the prompt text used when materializing delayed
+// GROK_HOME session files (must match the open inject / DiscoverSession match).
+func openPromptForDiscover(req *Request) string {
+	if p := strings.TrimSpace(req.OpenPrompt); p != "" {
+		return p
+	}
+	if p := strings.TrimSpace(req.InitialPrompt); p != "" {
+		return p
+	}
+	if n := len(req.Args); n > 0 {
+		last := strings.TrimSpace(req.Args[n-1])
+		if last != "" && !strings.HasPrefix(last, "-") {
+			return last
+		}
+	}
+	return "open bind"
+}
+
+// scheduleDelayedGrokMaterialize starts a background write of summary.json +
+// updates.jsonl after req.GrokMaterializeDelay. No-op when delay is zero.
+// Session path uses GrokSessionCwd when set, else Workspace / TempDir.
+func scheduleDelayedGrokMaterialize(t *testing.T, req *Request) {
+	t.Helper()
+	if req.GrokMaterializeDelay <= 0 {
+		return
+	}
+	if strings.TrimSpace(req.GrokHome) == "" || strings.TrimSpace(req.GrokSessionUUID) == "" {
+		t.Fatal("GrokMaterializeDelay requires GrokHome and GrokSessionUUID")
+	}
+	delay := req.GrokMaterializeDelay
+	grokHome := req.GrokHome
+	sessionCwd := strings.TrimSpace(req.GrokSessionCwd)
+	if sessionCwd == "" {
+		sessionCwd = req.Workspace
+	}
+	if sessionCwd == "" {
+		sessionCwd = req.TempDir
+	}
+	uuid := req.GrokSessionUUID
+	prompt := openPromptForDiscover(req)
+	go func() {
+		time.Sleep(delay)
+		path, err := writeFakeGrokSessionDirErr(grokHome, sessionCwd, uuid, prompt)
+		if err != nil {
+			// Best-effort log; Assert will fail if discovery never succeeds.
+			fmt.Fprintf(os.Stderr, "doctest delayed grok materialize: %v\n", err)
+			return
+		}
+		req.GrokUpdatesPath = path
+	}()
+}
+
+// findMetaRunnerSessionID walks sessions/<runner> for meta.json whose
+// runner_session_id equals want (or any non-empty id when want == "").
+func findMetaRunnerSessionID(t *testing.T, home, runner, want string) (metaPath, gotID string, ok bool) {
+	t.Helper()
+	root := filepath.Join(home, "sessions", runner)
+	_ = filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil || info == nil || info.IsDir() {
+			return nil
+		}
+		if info.Name() != "meta.json" {
+			return nil
+		}
+		data, rErr := os.ReadFile(path)
+		if rErr != nil {
+			return nil
+		}
+		var meta map[string]any
+		if json.Unmarshal(data, &meta) != nil {
+			return nil
+		}
+		id, _ := meta["runner_session_id"].(string)
+		id = strings.TrimSpace(id)
+		if id == "" {
+			return nil
+		}
+		if want == "" || id == want {
+			metaPath = path
+			gotID = id
+			ok = true
+			return io.EOF // stop walk
+		}
+		return nil
+	})
+	return metaPath, gotID, ok
 }
 
 func writeArgvRecordingRunner(t *testing.T, dir, name, probePath string) string {
@@ -552,6 +763,13 @@ exit 0
 
 func execCmd(t *testing.T, command string, args []string, dir string, env []string, timeout time.Duration) (*Response, error) {
 	t.Helper()
+	return execCmdWithBase(t, command, args, dir, append(os.Environ(), env...), timeout)
+}
+
+// execCmdWithBase is like execCmd but uses a pre-built base environment slice
+// (used so NoGrokHomeEnv can strip ambient keys before appending req.Env).
+func execCmdWithBase(t *testing.T, command string, args []string, dir string, fullEnv []string, timeout time.Duration) (*Response, error) {
+	t.Helper()
 	if timeout <= 0 {
 		timeout = 45 * time.Second
 	}
@@ -559,7 +777,7 @@ func execCmd(t *testing.T, command string, args []string, dir string, env []stri
 	defer cancel()
 	cmd := exec.CommandContext(ctx, command, args...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), env...)
+	cmd.Env = fullEnv
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -583,15 +801,161 @@ func execCmd(t *testing.T, command string, args []string, dir string, env []stri
 	return resp, err
 }
 
+func enrichMetaAfter(req *Request, resp *Response) {
+	if req.SessionID == "" {
+		return
+	}
+	runner := req.Runner
+	if runner == "" {
+		runner = defaultRunner
+	}
+	path := metaJSONPath(req.Home, runner, req.SessionID)
+	if data, rErr := os.ReadFile(path); rErr == nil {
+		var obj map[string]any
+		if json.Unmarshal(data, &obj) == nil {
+			resp.MetaAfter = obj
+		}
+	}
+}
+
+func runOpenWithMidStatusProbe(t *testing.T, req *Request, args []string) (*Response, error) {
+	t.Helper()
+	timeout := req.ExecTimeout
+	if timeout <= 0 {
+		timeout = 60 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	scheduleDelayedGrokMaterialize(t, req)
+	applyOpenInstantAttach(req)
+	applyGrokTTYCommand(req)
+	applyGrokHomeEnv(req)
+
+	cmd := exec.CommandContext(ctx, req.AgentRun, args...)
+	cmd.Dir = req.TempDir
+	cmd.Env = buildExecEnv(req)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	start := time.Now()
+	if err := cmd.Start(); err != nil {
+		return &Response{Stdout: stdout.String(), Stderr: stderr.String(), Err: err, Elapsed: time.Since(start)}, err
+	}
+
+	runner := req.Runner
+	if runner == "" {
+		runner = defaultRunner
+	}
+	sessionID := strings.TrimSpace(req.SessionID)
+	if sessionID == "" {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		return nil, fmt.Errorf("open-status-mid requires Request.SessionID (use --session)")
+	}
+	metaPath := metaJSONPath(req.Home, runner, sessionID)
+
+	// Wait until open creates session meta (bind may still be in progress).
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		if _, err := os.Stat(metaPath); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+			return &Response{
+				Stdout:  stdout.String(),
+				Stderr:  stderr.String(),
+				Elapsed: time.Since(start),
+			}, fmt.Errorf("timeout waiting for session meta %s\nstderr:\n%s", metaPath, stderr.String())
+		}
+		select {
+		case <-ctx.Done():
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+			return &Response{Stdout: stdout.String(), Stderr: stderr.String(), Elapsed: time.Since(start)}, ctx.Err()
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+
+	probeAfter := req.StatusProbeAfter
+	if probeAfter <= 0 {
+		probeAfter = 400 * time.Millisecond
+	}
+	select {
+	case <-ctx.Done():
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		return &Response{Stdout: stdout.String(), Stderr: stderr.String(), Elapsed: time.Since(start)}, ctx.Err()
+	case <-time.After(probeAfter):
+	}
+
+	probeArgs := req.StatusProbeArgs
+	if len(probeArgs) == 0 {
+		probeArgs = []string{"status", "--json", sessionID}
+	}
+	probeResp, probeErr := execCmdWithBase(t, req.AgentRun, probeArgs, req.TempDir, buildExecEnv(req), 15*time.Second)
+	if probeErr != nil && probeResp == nil {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		return nil, fmt.Errorf("status probe: %w", probeErr)
+	}
+
+	waitErr := cmd.Wait()
+	elapsed := time.Since(start)
+	resp := &Response{
+		Stdout:  stdout.String(),
+		Stderr:  stderr.String(),
+		Elapsed: elapsed,
+	}
+	if waitErr == nil {
+		resp.ExitCode = 0
+	} else if ctx.Err() != nil {
+		resp.Err = ctx.Err()
+		return resp, ctx.Err()
+	} else {
+		var exitErr *exec.ExitError
+		if errors.As(waitErr, &exitErr) {
+			resp.ExitCode = exitErr.ExitCode()
+		} else {
+			resp.Err = waitErr
+			return resp, waitErr
+		}
+	}
+	if probeResp != nil {
+		resp.StatusProbeStdout = probeResp.Stdout
+		resp.StatusProbeStderr = probeResp.Stderr
+		resp.StatusProbeExit = probeResp.ExitCode
+		if strings.TrimSpace(probeResp.Stdout) != "" {
+			var obj map[string]any
+			if jErr := json.Unmarshal([]byte(probeResp.Stdout), &obj); jErr == nil {
+				resp.StatusProbeJSON = obj
+			}
+		}
+	}
+	enrichMetaAfter(req, resp)
+	return resp, nil
+}
+
 func runAgentRun(t *testing.T, req *Request, args ...string) (*Response, error) {
 	t.Helper()
 	if len(args) == 0 {
 		args = req.Args
 	}
+	if req.Mode == "open-status-mid" {
+		return runOpenWithMidStatusProbe(t, req, args)
+	}
+	scheduleDelayedGrokMaterialize(t, req)
 	applyOpenInstantAttach(req)
 	applyGrokTTYCommand(req)
 	applyGrokHomeEnv(req)
-	resp, err := execCmd(t, req.AgentRun, args, req.TempDir, req.Env, req.ExecTimeout)
+	start := time.Now()
+	resp, err := execCmdWithBase(t, req.AgentRun, args, req.TempDir, buildExecEnv(req), req.ExecTimeout)
+	if resp != nil {
+		resp.Elapsed = time.Since(start)
+	}
 	if err != nil {
 		return resp, err
 	}
@@ -608,19 +972,7 @@ func runAgentRun(t *testing.T, req *Request, args ...string) (*Response, error) 
 			resp.JSONBody = obj
 		}
 	case "read-meta":
-		if req.SessionID != "" {
-			runner := req.Runner
-			if runner == "" {
-				runner = defaultRunner
-			}
-			path := metaJSONPath(req.Home, runner, req.SessionID)
-			if data, rErr := os.ReadFile(path); rErr == nil {
-				var obj map[string]any
-				if json.Unmarshal(data, &obj) == nil {
-					resp.MetaAfter = obj
-				}
-			}
-		}
+		enrichMetaAfter(req, resp)
 	}
 	return resp, nil
 }

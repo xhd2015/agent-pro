@@ -1,11 +1,12 @@
 ## Expected
 
-- Exit code 1.
-- Error indicates prompt is required (mirrors run policy without `--open`).
+- Must **not** fail with "prompt is required" — empty followup means resume-only reopen.
+- Exit may still be non-zero if the TTY runner cannot start in this fixture (no real grok);
+  that is OK as long as the error is not about a missing prompt.
 
 ## Exit Code
 
-1
+any (must not be the old "prompt is required" gate)
 
 ```go
 import (
@@ -17,13 +18,16 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertExitCode(t, resp, 1)
 	combined := strings.ToLower(resp.Stderr + "\n" + resp.Stdout)
-	assertContainsAny(t, combined,
-		"prompt is required",
-		"prompt required",
-		"requires a prompt",
-		"followup",
-	)
+	if strings.Contains(combined, "prompt is required") ||
+		strings.Contains(combined, "prompt required") ||
+		strings.Contains(combined, "requires a prompt") {
+		t.Fatalf("resume without followup must not require a prompt; got:\n%s", combined)
+	}
+	// If the command succeeded, good. If it failed, ensure it got past the gate
+	// (e.g. unknown binary / tty errors are acceptable for this leaf).
+	if resp.ExitCode != 0 {
+		t.Logf("resume no-prompt exited %d (gate passed); stderr:\n%s", resp.ExitCode, resp.Stderr)
+	}
 }
 ```

@@ -88,3 +88,6 @@ go test ./pkgs/agenttty/ -run TestCheckGrokWritable -v
   (scrollback contains `git working tree status`, prompt idle; must be `ready=true` after fix)
 - **Inline regression strings** from `pkgs/agenttty/writable_test.go` (busy thinking, legacy
   prompt, heavy post-turn prompt)
+- **Workspace project-directory confirm** —
+  `grok-workspace-project-directory-confirm.txt` (smoke `/tmp` open; must be
+  `ready=false`, not `idle`)
