@@ -1,10 +1,12 @@
-# agent-run run --auto-send-or-resume + resume workspace
+# agent-run run --auto-send-or-resume + resume workspace + --new-terminal
 
 Doc-style tests for `agent-run run --auto-send-or-resume --session-id <id>`
-branching (run / send / resume) and for resume workspace resolution
-(`meta.workspace` vs `--dir` vs process cwd). Prefer stub fixtures (seeded meta,
-registry, fake ptywrap with inject APIs, argv/cwd-recording fake runner) over
-real grok.
+branching (run / send / resume), resume workspace resolution
+(`meta.workspace` vs `--dir` vs process cwd), and `--new-terminal` (iTerm2
+ModeForceNew launcher that strips the flag and re-invokes `run` in a new
+window). Prefer stub fixtures (seeded meta, registry, fake ptywrap with inject
+APIs, argv/cwd-recording fake runner, `KOOL_ITERM2_*` script capture) over
+real grok / real iTerm2 UI.
 
 # DSN (Domain Specific Notion)
 
@@ -13,6 +15,7 @@ real grok.
 - **agent-run CLI (`run`)** — with `--auto-send-or-resume` classifies a stable
   `--session-id` into MODE=run | send | resume and dispatches existing
   run/send/resume semantics. Without the flag, `run` is unchanged.
+  Optional `--new-terminal` is valid only with `--auto-send-or-resume`.
 - **agent-run CLI (`resume`)** — original subcommand; workspace must prefer
   `meta.workspace` when `--dir` is unset (same helper as auto→resume).
 - **Session storage** — `AGENT_RUN_HOME/sessions/<runner>/<session_id>/meta.json`
@@ -27,6 +30,9 @@ real grok.
   bound. Resume injects `provider --resume <runner_session_id>`.
 - **Fake runner** — `--agent-runner-binary` argv/cwd recorder; must not set
   `AGENT_RUN_GROK_TTY_COMMAND` on argv-sensitive leaves (hook hides `--resume`).
+- **iTerm2 launcher** — `github.com/xhd2015/dot-pkgs/go-pkgs/shell/iterm2`
+  `OpenConfig` with `ModeForceNew`. Tests set `KOOL_ITERM2_INSTALLED=1` and
+  `KOOL_ITERM2_SCRIPT_OUT=<file>` so AppleScript is written without osascript UI.
 
 **Behaviors**
 
@@ -36,8 +42,10 @@ run --auto-send-or-resume (no --session-id)
   -> exit 1; error requires --session-id
 run --auto-send-or-resume --session-id X --session-id-from-prompt …
   -> exit 1; mutually exclusive
+run --new-terminal … (without --auto-send-or-resume)
+  -> exit 1; error requires --auto-send-or-resume
 run -h / run --help
-  -> documents --auto-send-or-resume; stdout ends with \n
+  -> documents --auto-send-or-resume and --new-terminal; stdout ends with \n
 
 # decision (after resolve session by id; missing OK)
 probeSessionStatus(meta):
@@ -61,6 +69,19 @@ run --auto-send-or-resume --session-id NEW "prompt" (+ argv recorder)
 + empty prompt     -> keep-tty reopen OK (exit 0 with fake runner)
 + --open/--no-submit -> accepted on resume path (not live-open error)
 
+# --new-terminal (requires --auto-send-or-resume)
+run --auto-send-or-resume --new-terminal --session-id ID [flags…] [prompt]
+  MODE=send  -> ignore --new-terminal (optional stderr note); existing send path;
+                no iTerm script; enqueue/deliver still works
+  MODE=run | resume ->
+    1. record parsed flags (less-flags CollectParsedFlags)
+    2. strip --new-terminal; reconstruct run-level argv
+    3. argv = ["run"] + reconstructed + (prompt != "" ? ["--", prompt] : [])
+    4. iterm2.OpenConfig(workspaceDir, ModeForceNew, shell-quoted full command)
+    5. launcher exits 0 WITHOUT in-process provider spawn
+  workspaceDir: --dir if set, else meta.workspace (resume), else process cwd
+  ForceNew script: always "create window" (no session scan / create tab)
+
 # workspace (resume + auto→resume)
 1) --dir if set (exists, is dir) wins
 2) else non-empty meta.workspace
@@ -81,7 +102,7 @@ cmd/agent-run/tests/auto-send-or-resume/
 ├── validation/                              # flag / arg gates (pre-branch)
 │   ├── missing-session-id/                  # A1 no --session-id → exit 1
 │   ├── session-id-from-prompt-mutex/        # A2 mutex with --session-id-from-prompt
-│   └── run-help-lists-flag/                 # A3 run -h documents flag
+│   └── run-help-lists-flag/                 # A3 run -h documents --auto-send-or-resume
 ├── run-mode/                                # MODE=run (missing / unbound / else)
 │   └── missing-session-creates/             # B1 new id + prompt → create, no --resume
 ├── send-mode/                               # MODE=send (live exited=false)
@@ -91,19 +112,27 @@ cmd/agent-run/tests/auto-send-or-resume/
 ├── resume-mode/                             # MODE=resume (bound+exited)
 │   ├── followup-argv/                       # D1 argv has --resume <id>
 │   └── empty-prompt-reopen/                 # D2 empty followup reopen exit 0
-└── workspace/                               # resume + auto→resume cwd
-    ├── resume-meta-workspace/               # E1 resume uses meta.workspace
-    ├── auto-resume-meta-workspace/          # E2 auto→resume uses meta.workspace
-    └── dir-override/                        # E3 --dir wins over meta.workspace
+├── workspace/                               # resume + auto→resume cwd
+│   ├── resume-meta-workspace/               # E1 resume uses meta.workspace
+│   ├── auto-resume-meta-workspace/          # E2 auto→resume uses meta.workspace
+│   └── dir-override/                        # E3 --dir wins over meta.workspace
+└── new-terminal/                            # --new-terminal + iTerm2 ModeForceNew
+    ├── requires-auto-flag/                  # NT-V1 without --auto-send-or-resume → exit 1
+    ├── run-help-lists-flag/                 # NT-V2 run -h documents --new-terminal
+    ├── mode-run-opens-iterm/                # NT-D1 MODE=run → ForceNew script; no in-process spawn
+    ├── mode-resume-opens-iterm/             # NT-D2 MODE=resume → ForceNew script; no parent resume spawn
+    ├── mode-send-ignores/                   # NT-D3 MODE=send → no script; still msg_N
+    └── prompt-dash-separator/               # NT-D4 prompt starts with "-" → `--` before prompt
 ```
 
 Parameter ranking (most → least significant):
 
 1. **Invocation gate** — validation (missing session-id / mutex / help) vs runtime auto
 2. **Session lifecycle mode** — run (missing) | send (live) | resume (exited)
-3. **Prompt / open flags within mode** — empty vs non-empty; `--open` on live vs resume
-4. **Workspace source** — meta.workspace | auto path | `--dir` override
-5. **Fixtures** — argv probe, cwd probe, fake ptywrap inject
+3. **`--new-terminal` dispatch** — gate (requires auto) | ForceNew launcher (run/resume) | ignore (send)
+4. **Prompt / open flags within mode** — empty vs non-empty; dash-leading prompt; `--open` on live vs resume
+5. **Workspace source** — meta.workspace | auto path | `--dir` override
+6. **Fixtures** — argv probe, cwd probe, fake ptywrap inject, KOOL_ITERM2 script out
 
 ## Test Index
 
@@ -121,6 +150,12 @@ Parameter ranking (most → least significant):
 | 10 | `workspace/resume-meta-workspace` | E1 | `resume` child cwd = meta.workspace (CLI cwd differs) |
 | 11 | `workspace/auto-resume-meta-workspace` | E2 | auto→resume child cwd = meta.workspace |
 | 12 | `workspace/dir-override` | E3 | resume `--dir` override wins; child cwd = override |
+| 13 | `new-terminal/requires-auto-flag` | NT-V1 | `--new-terminal` without auto → exit 1; requires `--auto-send-or-resume` |
+| 14 | `new-terminal/run-help-lists-flag` | NT-V2 | `run -h` documents `--new-terminal`; trailing `\n` |
+| 15 | `new-terminal/mode-run-opens-iterm` | NT-D1 | auto+new-terminal missing session → exit 0; ForceNew script; no `--new-terminal` in follow-up; no in-process provider |
+| 16 | `new-terminal/mode-resume-opens-iterm` | NT-D2 | auto+new-terminal bound+exited → exit 0; script; no parent argv probe spawn |
+| 17 | `new-terminal/mode-send-ignores` | NT-D3 | auto+new-terminal live → exit 0; no iTerm script; still `msg_N` |
+| 18 | `new-terminal/prompt-dash-separator` | NT-D4 | prompt like `-v explain` → follow-up has `--` then that prompt |
 
 ## How to Run
 
@@ -145,6 +180,15 @@ doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/resume-mode/empty-prom
 doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/workspace/resume-meta-workspace
 doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/workspace/auto-resume-meta-workspace
 doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/workspace/dir-override
+
+# --new-terminal (iTerm2 ModeForceNew)
+doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/new-terminal
+doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/new-terminal/requires-auto-flag
+doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/new-terminal/run-help-lists-flag
+doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/new-terminal/mode-run-opens-iterm
+doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/new-terminal/mode-resume-opens-iterm
+doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/new-terminal/mode-send-ignores
+doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/new-terminal/prompt-dash-separator
 ```
 
 ```go
@@ -202,6 +246,10 @@ type Request struct {
 	AgentRunnerBinary string
 	FollowupPrompt    string
 	DirOverride       string // --dir value when set in leaf Args
+
+	// iTerm2 test hooks (--new-terminal leaves). When set, Run/Setup env gets
+	// KOOL_ITERM2_INSTALLED=1 and KOOL_ITERM2_SCRIPT_OUT=<path>.
+	ItermScriptOut string
 }
 
 type RegistryEntryData struct {

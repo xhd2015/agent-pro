@@ -12,7 +12,9 @@ import (
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 	"github.com/xhd2015/agent-pro/pkgs/agentui"
-	"github.com/xhd2015/less-gen/flags"
+	"github.com/xhd2015/agent-pro/pkgs/shell"
+	"github.com/xhd2015/dot-pkgs/go-pkgs/shell/iterm2"
+	flags "github.com/xhd2015/less-flags"
 )
 
 const runHelp = `
@@ -25,6 +27,8 @@ Options:
   --session-id ID     alias for --session
   --session-id-from-prompt   generate session id from prompt slug (storage + TTY registry)
   --auto-send-or-resume      with --session-id: live→send, exited+bound→resume, else→run
+  --new-terminal      with --auto-send-or-resume: open a new iTerm2 window for run/resume
+                      (ignored when MODE=send / live)
   --keep-tty          keep TTY session alive after run completes
   --open              open keep-alive TTY and attach interactively (silent until detach; prints session id after);
                       with --auto-send-or-resume: required shape for create/resume; ignored when live (send only)
@@ -46,6 +50,7 @@ func runHeadless(args []string, defaultRunner string) error {
 	var sessionID string
 	var sessionIDFromPrompt bool
 	var autoSendOrResume bool
+	var newTerminal bool
 	var agentRunner string
 	var agentRunnerBinary string
 	var agentRunnerConfigHome string
@@ -53,11 +58,13 @@ func runHeadless(args []string, defaultRunner string) error {
 	var openFlag bool
 	var noSubmit bool
 	var dir string
+	var recorded flags.Flags
 	remaining, err := flags.Bool("--json", &jsonFlag).
 		String("--model", &model).
 		String("--session,--session-id", &sessionID).
 		Bool("--session-id-from-prompt", &sessionIDFromPrompt).
 		Bool("--auto-send-or-resume", &autoSendOrResume).
+		Bool("--new-terminal", &newTerminal).
 		Bool("--keep-tty", &keepTTY).
 		Bool("--open", &openFlag).
 		Bool("--no-submit", &noSubmit).
@@ -66,11 +73,16 @@ func runHeadless(args []string, defaultRunner string) error {
 		String("--agent-runner-binary", &agentRunnerBinary).
 		String("--agent-runner-config-home", &agentRunnerConfigHome).
 		Help("-h,--help", runHelp).
+		CollectParsedFlags(&recorded).
 		Parse(args)
 	if err != nil {
 		return err
 	}
 	prompt := strings.TrimSpace(strings.Join(remaining, " "))
+
+	if newTerminal && !autoSendOrResume {
+		return fmt.Errorf("--new-terminal requires --auto-send-or-resume")
+	}
 
 	if autoSendOrResume {
 		return runAutoSendOrResume(autoSendOrResumeOpts{
@@ -87,6 +99,8 @@ func runHeadless(args []string, defaultRunner string) error {
 			dir:                   dir,
 			prompt:                prompt,
 			defaultRunner:         defaultRunner,
+			newTerminal:           newTerminal,
+			recorded:              recorded,
 		})
 	}
 
@@ -170,6 +184,8 @@ type autoSendOrResumeOpts struct {
 	dir                   string
 	prompt                string
 	defaultRunner         string
+	newTerminal           bool
+	recorded              flags.Flags
 }
 
 // runAutoSendOrResume classifies a stable --session-id into MODE=run|send|resume
@@ -210,6 +226,9 @@ func runAutoSendOrResume(opts autoSendOrResumeOpts) error {
 	case "send":
 		return autoSendLive(store, meta, opts)
 	case "resume":
+		if opts.newTerminal {
+			return openAutoInNewTerminal(opts, meta, found)
+		}
 		return resumeExistingSession(store, meta, resumeRunConfig{
 			jsonFlag:              opts.jsonFlag,
 			model:                 opts.model,
@@ -224,8 +243,93 @@ func runAutoSendOrResume(opts autoSendOrResumeOpts) error {
 			defaultRunner:         opts.defaultRunner,
 		})
 	default:
+		if opts.newTerminal {
+			return openAutoInNewTerminal(opts, meta, found)
+		}
 		return autoRunCreate(store, sessionID, opts)
 	}
+}
+
+// openAutoInNewTerminal re-launches the auto-send-or-resume command in a new
+// iTerm2 window (ModeForceNew), stripping --new-terminal so the child runs in-process.
+// The launcher does not spawn the provider.
+func openAutoInNewTerminal(opts autoSendOrResumeOpts, meta agentstorage.SessionMeta, found bool) error {
+	childFlags := opts.recorded.Remove("--new-terminal")
+	tokens := childFlags.Reconstruct()
+	argv := make([]string, 0, 1+len(tokens)+2)
+	argv = append(argv, "run")
+	argv = append(argv, tokens...)
+	if opts.prompt != "" {
+		argv = append(argv, "--", opts.prompt)
+	}
+
+	exe, err := agentRunExecutable()
+	if err != nil {
+		return err
+	}
+	quoted := make([]string, 0, 1+len(argv))
+	quoted = append(quoted, shell.ShellQuote(exe))
+	for _, tok := range argv {
+		quoted = append(quoted, shell.ShellQuote(tok))
+	}
+	followUp := strings.Join(quoted, " ")
+
+	dir, err := resolveNewTerminalDir(opts.dir, meta, found)
+	if err != nil {
+		return err
+	}
+	return iterm2.OpenConfig(dir, &iterm2.Config{
+		Mode:             iterm2.ModeForceNew,
+		FollowUpCommands: []string{followUp},
+	})
+}
+
+// agentRunExecutable returns an absolute path to this process binary for re-exec.
+func agentRunExecutable() (string, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		if len(os.Args) > 0 && os.Args[0] != "" {
+			exe = os.Args[0]
+		} else {
+			return "", fmt.Errorf("resolve agent-run executable: %w", err)
+		}
+	}
+	if abs, absErr := filepath.Abs(exe); absErr == nil {
+		exe = abs
+	}
+	if resolved, evalErr := filepath.EvalSymlinks(exe); evalErr == nil {
+		exe = resolved
+	}
+	return exe, nil
+}
+
+// resolveNewTerminalDir picks the workspace for iterm2.OpenConfig:
+// --dir if set, else session meta workspace (when found), else process cwd.
+func resolveNewTerminalDir(dir string, meta agentstorage.SessionMeta, found bool) (string, error) {
+	if resolved, err := resolveRunDir(dir); err != nil {
+		return "", err
+	} else if resolved != "" {
+		return resolved, nil
+	}
+	if found {
+		if w := strings.TrimSpace(meta.Workspace); w != "" {
+			abs, err := filepath.Abs(w)
+			if err != nil {
+				return "", fmt.Errorf("workspace: %w", err)
+			}
+			if info, err := os.Stat(abs); err == nil && info.IsDir() {
+				if real, err := filepath.EvalSymlinks(abs); err == nil {
+					return real, nil
+				}
+				return abs, nil
+			}
+		}
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("cwd: %w", err)
+	}
+	return cwd, nil
 }
 
 func autoSendLive(store agentstorage.Store, meta agentstorage.SessionMeta, opts autoSendOrResumeOpts) error {
@@ -233,6 +337,9 @@ func autoSendLive(store agentstorage.Store, meta agentstorage.SessionMeta, opts 
 	// the same CLI for run/send/resume. Live work is enqueue + wait delivery only.
 	if opts.openFlag {
 		fmt.Fprintln(os.Stderr, "note: --open ignored while session is live; sending follow-up")
+	}
+	if opts.newTerminal {
+		fmt.Fprintln(os.Stderr, "note: --new-terminal ignored while session is live; sending follow-up")
 	}
 	if opts.prompt == "" {
 		fmt.Fprintln(os.Stderr, "warning: session is live; no message to send")

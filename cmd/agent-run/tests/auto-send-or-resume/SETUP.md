@@ -8,6 +8,7 @@ and resume workspace resolution (`meta.workspace` / `--dir` / cwd)
 agent-run run --auto-send-or-resume …  (gates)
   -> requires --session-id; mutex with --session-id-from-prompt
   -> run -h lists --auto-send-or-resume
+  -> --new-terminal requires --auto-send-or-resume; run -h lists --new-terminal
 
 # classify session
 seed or missing meta + optional registry/ptywrap
@@ -18,6 +19,10 @@ seed or missing meta + optional registry/ptywrap
 MODE=run   -> agentui.Run create/re-run; no --resume
 MODE=send  -> enqueue/deliver to terminal_session_id; live open denied
 MODE=resume -> reclaim zombie if needed; provider --resume <id>; workspace rule
+
+# --new-terminal
+MODE=run|resume + --new-terminal -> iTerm2 ModeForceNew; strip flag; launcher exits
+MODE=send + --new-terminal -> ignore; still send
 
 # workspace
 resume / auto→resume child cwd:
@@ -197,6 +202,36 @@ func applyGrokTTYCommand(req *Request) {
 		return
 	}
 	setEnvKV(req, envGrokTTYCommand, req.GrokTTYCommand)
+}
+
+const (
+	envIterm2Installed = "KOOL_ITERM2_INSTALLED"
+	envIterm2ScriptOut = "KOOL_ITERM2_SCRIPT_OUT"
+	envIterm2GOOS      = "KOOL_ITERM2_GOOS"
+)
+
+// applyIterm2TestHooks enables the iterm2 package test env: treat iTerm as
+// installed and write AppleScript to ItermScriptOut instead of running osascript.
+func applyIterm2TestHooks(req *Request) {
+	if strings.TrimSpace(req.ItermScriptOut) == "" {
+		return
+	}
+	setEnvKV(req, envIterm2Installed, "1")
+	setEnvKV(req, envIterm2ScriptOut, req.ItermScriptOut)
+	// Force darwin platform check inside iterm2 even if host GOOS differs.
+	setEnvKV(req, envIterm2GOOS, "darwin")
+}
+
+// ensureItermScriptOutPath sets a default script-out path under TempDir when
+// NewTerminal leaves enable capture without an explicit path.
+func ensureItermScriptOutPath(req *Request) {
+	if strings.TrimSpace(req.ItermScriptOut) != "" {
+		return
+	}
+	if req.TempDir == "" {
+		return
+	}
+	req.ItermScriptOut = filepath.Join(req.TempDir, "iterm-script.applescript")
 }
 
 func buildExecEnv(req *Request) []string {
@@ -646,6 +681,7 @@ func runAgentRun(t *testing.T, req *Request, args ...string) (*Response, error) 
 	}
 	applyOpenInstantAttach(req)
 	applyGrokTTYCommand(req)
+	applyIterm2TestHooks(req)
 	workDir := req.WorkDir
 	if workDir == "" {
 		workDir = req.TempDir
@@ -715,6 +751,66 @@ func assertTrailingNewline(t *testing.T, s, label string) {
 			tail = tail[len(tail)-32:]
 		}
 		t.Fatalf("%s must end with trailing newline; last bytes %q", label, tail)
+	}
+}
+
+func readItermScript(t *testing.T, req *Request) string {
+	t.Helper()
+	path := strings.TrimSpace(req.ItermScriptOut)
+	if path == "" {
+		path = filepath.Join(req.TempDir, "iterm-script.applescript")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read iTerm script %s: %v", path, err)
+	}
+	return string(data)
+}
+
+func assertItermForceNewScript(t *testing.T, script string) {
+	t.Helper()
+	if !strings.Contains(script, "create window") {
+		t.Fatalf("ModeForceNew script must create a window; script:\n%s", script)
+	}
+	// ForceNew skips session scan / tab reuse branch.
+	if strings.Contains(script, "create tab") {
+		t.Fatalf("ModeForceNew script must not create tabs (session scan path); script:\n%s", script)
+	}
+}
+
+func assertNoItermScript(t *testing.T, req *Request) {
+	t.Helper()
+	path := strings.TrimSpace(req.ItermScriptOut)
+	if path == "" {
+		path = filepath.Join(req.TempDir, "iterm-script.applescript")
+	}
+	if !fileExists(path) {
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	if strings.TrimSpace(string(data)) != "" {
+		t.Fatalf("expected no iTerm script (MODE=send ignores --new-terminal); path=%s content:\n%s", path, data)
+	}
+}
+
+func assertNoInProcessProviderSpawn(t *testing.T, req *Request, resp *Response) {
+	t.Helper()
+	probePath := strings.TrimSpace(req.ArgvProbePath)
+	if probePath == "" {
+		return
+	}
+	if !fileExists(probePath) {
+		return
+	}
+	data, err := os.ReadFile(probePath)
+	if err != nil {
+		return
+	}
+	if strings.TrimSpace(string(data)) != "" {
+		t.Fatalf("launcher with --new-terminal must not spawn provider in-process; argv probe:\n%s\nstderr:\n%s\nstdout:\n%s", data, resp.Stderr, resp.Stdout)
 	}
 }
 
