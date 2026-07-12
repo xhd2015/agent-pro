@@ -760,18 +760,24 @@ func handleGrok(args []string) error {
 }
 
 const grokSessionsHelp = `
-Usage: agent-pro grok sessions [--limit N]
+Usage: agent-pro grok sessions [--limit N] [--grep PATTERN] [--color]
 
 List recent Grok CLI sessions from ~/.grok (or $GROK_HOME).
 
 Options:
-  --limit <n>   max sessions to list (default 20, max 100)
-  -h,--help     show help
+  --limit <n>    max sessions to list (default 20, max 100)
+  --grep <pat>   search session JSON; print indented hit lines under each match
+  --color        always use ANSI colors (even when stdout is not a TTY)
+  -h,--help      show help
 `
 
 func handleGrokSessions(args []string) error {
 	var limitFlag *int
+	var grepFlag *string
+	var colorFlag *bool
 	_, err := flags.Int("--limit", &limitFlag).
+		String("--grep", &grepFlag).
+		Bool("--color", &colorFlag).
 		Help("-h,--help", grokSessionsHelp).
 		Parse(args)
 	if err != nil {
@@ -784,12 +790,32 @@ func handleGrokSessions(args []string) error {
 	}
 
 	grokHome := agenttty.GrokHome()
+	home := homeDir()
+	now := time.Now()
+
+	if grepFlag != nil {
+		pattern := strings.TrimSpace(*grepFlag)
+		if pattern == "" {
+			return fmt.Errorf("--grep requires a non-empty pattern")
+		}
+		colorMode := "auto"
+		if colorFlag != nil && *colorFlag {
+			colorMode = "always"
+		}
+		matches, err := groksessions.ListWithGrep(grokHome, limit, pattern)
+		if err != nil {
+			return fmt.Errorf("list grok sessions: %w", err)
+		}
+		fmt.Println(groksessions.FormatListTableWithHits(matches, home, now, colorMode))
+		return nil
+	}
+
 	sessions, err := groksessions.List(grokHome, limit)
 	if err != nil {
 		return fmt.Errorf("list grok sessions: %w", err)
 	}
 
-	fmt.Println(groksessions.FormatListTable(sessions, homeDir(), time.Now()))
+	fmt.Println(groksessions.FormatListTable(sessions, home, now))
 	return nil
 }
 
