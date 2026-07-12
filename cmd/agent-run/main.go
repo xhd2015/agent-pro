@@ -24,6 +24,8 @@ Commands:
   watch      stream readonly output from a live TTY session by id
   sessions   list stored sessions or print one session's events
   status     show agent-run home or multi-layer session status
+  tty        TTY session helpers (status, attach, send, snapshot, watch)
+  pty        PTY resource stats and kill orphan __serve processes
 
 Options:
   --agent-runner RUNNER   default agent runner (codex, codex-tty, grok-tty, opencode, fake-codex, ...)
@@ -91,6 +93,8 @@ func run(args []string) error {
 		return runWatch(sub)
 	case "tty":
 		return runTty(sub)
+	case "pty":
+		return runPty(sub)
 	case "sessions":
 		return runSessions(sub)
 	case "status":
