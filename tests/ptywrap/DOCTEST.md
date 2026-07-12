@@ -2,7 +2,7 @@
 
 Tests for `github.com/xhd2015/dot-pkgs/go-pkgs/shell/ptywrap` — PTY session
 manager, WebSocket attach protocol, scrollback, resize, REST session API, and
-exited-session retention.
+session lifecycle / PTY leak behavior.
 
 # DSN (Domain Specific Notion)
 
@@ -27,16 +27,20 @@ exited-session retention.
 - Arbitrary command spawn: PTY output (e.g. `echo hello`) reaches WS client.
 - WS keystrokes written to PTY stdin appear in output stream.
 - `{"type":"resize","cols":N,"rows":N}` updates PTY window size.
-- WS disconnect keeps session alive; re-attach replays scrollback.
+- WS disconnect may keep session **metadata** for scrollback re-attach; the
+  child process must not remain running after a normal writer close (frees PTY).
 - `POST /api/terminal/sessions` returns new session metadata with id.
 - `PATCH /api/terminal/sessions/{id}` renames; list reflects new name.
 - Exited sessions remain listed with `status: "exited"` until deleted.
 - WS connect with `name` + `cwd` query (no `session_id`) creates shell session
   and sends `session_id` JSON (ai-critic legacy compat).
+- Writer close code **1000** must free the child process (release OS PTY).
+- Writer close code **4000** removes the session and kills the child.
+- Create-on-connect churn with normal close must not leave orphan shells.
 
 ## Version
 
-0.0.2
+0.0.3
 
 ## Decision Tree
 
@@ -62,7 +66,10 @@ exited-session retention.
  |
  +-- session-lifecycle/
       |
-      +-- exited-stays-listed/      (LEAF)  exited session remains in GET list
+      +-- exited-stays-listed/                    (LEAF)  exited session remains in GET list
+      +-- writer-close-1000-frees-pty/           (LEAF)  normal close frees child PTY
+      +-- writer-close-4000-removes/             (LEAF)  close 4000 removes + kills
+      +-- multi-create-on-connect-no-orphan/     (LEAF)  create churn leaves 0 orphans
 ```
 
 ## Test Index
@@ -78,6 +85,9 @@ exited-session retention.
 | 7 | `rest-api/create-session` | REST POST creates session and returns id |
 | 8 | `rest-api/rename-session` | REST PATCH renames; GET list shows new name |
 | 9 | `session-lifecycle/exited-stays-listed` | Exited session listed with `status: exited` |
+| 10 | `session-lifecycle/writer-close-1000-frees-pty` | Close 1000 must not leave child running |
+| 11 | `session-lifecycle/writer-close-4000-removes` | Close 4000 removes session and kills child |
+| 12 | `session-lifecycle/multi-create-on-connect-no-orphan` | N create-on-connect + close 1000 leaves 0 shells |
 
 ## How to Run
 
