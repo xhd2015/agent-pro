@@ -325,8 +325,13 @@ func finalizeOpenGrokSession(ctx context.Context, opts RunOptions, runner, sessi
 // Non-empty prompt always hard-waits so real grok under default ~/.grok is not
 // unbound after a soft race (see doc/LOOP_2026-07-11_open-bind-runner-unbound.md).
 // Explicit config home / GROK_HOME / session-id hook also force hard wait.
+// NoSubmit skips hard discovery: draft was never submitted, so no provider session
+// is expected (soft unbound with short timeout).
 // Whether an unresolved bind is a hard *error* is openGrokHardFailOnUnresolved.
 func openGrokDiscoveryRequired(opts RunOptions) bool {
+	if opts.NoSubmit {
+		return false
+	}
 	if strings.TrimSpace(opts.Prompt) != "" {
 		return true
 	}
@@ -339,7 +344,11 @@ func openGrokDiscoveryRequired(opts RunOptions) bool {
 // isolation leaves). Non-empty prompt alone hard-waits discovery but still allows
 // soft unbound on miss so attach-first --open (fake TUI / production path without
 // an explicit grok home) can exit 0 after printing the terminal session id.
+// NoSubmit always soft-unbounds: draft-only open never starts a provider turn.
 func openGrokHardFailOnUnresolved(opts RunOptions) bool {
+	if opts.NoSubmit {
+		return false
+	}
 	if strings.TrimSpace(opts.AgentRunnerConfigHome) != "" {
 		return true
 	}

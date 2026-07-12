@@ -86,8 +86,9 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	}
 	// New session (no --resume): pass initial prompt as trailing positional arg
 	// (grok [PROMPT]). Resume follow-ups stay inject-only so argv keeps --resume.
+	// NoSubmit: never put draft on argv (real Grok auto-submits positional PROMPT).
 	// Headless still injects after banner for turn completion with fake TUI scripts.
-	if strings.TrimSpace(opts.ResumeSessionID) == "" {
+	if strings.TrimSpace(opts.ResumeSessionID) == "" && !opts.NoSubmit {
 		if p := strings.TrimSpace(opts.Prompt); p != "" {
 			argv = append(argv, p)
 		}
@@ -154,12 +155,13 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 		}
 
 		// Inject policy under --open:
-		// - New session: initial prompt already on argv when non-empty → do not re-inject.
+		// - New session (default): initial prompt already on argv when non-empty → do not re-inject.
+		// - New session + NoSubmit: draft not on argv → inject with suffixCR=false.
 		// - Resume + non-empty follow-up: wait inject-ready then inject if ready; banner
 		//   timeout must not fail open — still attach.
 		// - Empty prompt: no inject.
 		// - NoSubmit: when inject happens, suffixCR=false.
-		if promptText != "" && isResume {
+		if promptText != "" && (isResume || opts.NoSubmit) {
 			if readyErr := waitForBannerRemote(ctx, listenAddr, sessionID, provider.BannerProvider, provider.BannerMarkers); readyErr != nil {
 				if ctx.Err() != nil {
 					return "", terminalSessionID, ctx.Err()
