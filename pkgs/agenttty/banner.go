@@ -48,7 +48,13 @@ func waitForBannerRemote(ctx context.Context, listenAddr, sessionID, provider st
 			time.Sleep(bannerPollInterval)
 			continue
 		}
-		if bannerDetectedConfig(scrollback, provider, markers) {
+		// Grok: use OpenReady so modern starting/busy/idle chrome succeeds and the
+		// project-directory modal does not (legacy "grok build" false-positive).
+		if isGrokProvider(provider) {
+			if OpenReady(scrollback) {
+				return nil
+			}
+		} else if bannerDetectedConfig(scrollback, provider, markers) {
 			return nil
 		}
 		time.Sleep(bannerPollInterval)

@@ -301,10 +301,10 @@ func finalizeOpenGrokSession(ctx context.Context, opts RunOptions, runner, sessi
 		}
 		discID, path, discErr := agenttty.DiscoverSession(discCtx, grokHome, workspace, discoverPrompt, runStart)
 		if discErr != nil || strings.TrimSpace(discID) == "" {
-			if requireBind {
+			if openGrokHardFailOnUnresolved(opts) {
 				return fmt.Errorf("error: grok session id not resolved for session %s", sessionID)
 			}
-			// Soft success: terminal id already printed by caller.
+			// Soft success: terminal id already printed by caller (attach-first).
 			return nil
 		}
 		id = strings.TrimSpace(discID)
@@ -319,17 +319,27 @@ func finalizeOpenGrokSession(ctx context.Context, opts RunOptions, runner, sessi
 	return nil
 }
 
-// openGrokDiscoveryRequired reports whether --open must resolve a grok session id.
+// openGrokDiscoveryRequired reports whether --open uses the hard discovery wait
+// (full budget / post-detach grace) rather than the empty-prompt soft 750ms timeout.
 //
-// Real user --open with a non-empty prompt always requires bind (full discovery
-// budget + hard error on failure). Soft/best-effort is only for empty-prompt
-// open (reopen TUI) or legacy fake TUI without a user prompt — the previous
-// "soft unless GROK_HOME env is set" rule left default ~/.grok sessions unbound
-// after a 750ms race (see doc/LOOP_2026-07-11_open-bind-runner-unbound.md).
+// Non-empty prompt always hard-waits so real grok under default ~/.grok is not
+// unbound after a soft race (see doc/LOOP_2026-07-11_open-bind-runner-unbound.md).
+// Explicit config home / GROK_HOME / session-id hook also force hard wait.
+// Whether an unresolved bind is a hard *error* is openGrokHardFailOnUnresolved.
 func openGrokDiscoveryRequired(opts RunOptions) bool {
 	if strings.TrimSpace(opts.Prompt) != "" {
 		return true
 	}
+	return openGrokHardFailOnUnresolved(opts)
+}
+
+// openGrokHardFailOnUnresolved reports whether unresolved bind must fail the open.
+//
+// Explicit GROK_HOME / config home / session-id hook: hard error (status-resume
+// isolation leaves). Non-empty prompt alone hard-waits discovery but still allows
+// soft unbound on miss so attach-first --open (fake TUI / production path without
+// an explicit grok home) can exit 0 after printing the terminal session id.
+func openGrokHardFailOnUnresolved(opts RunOptions) bool {
 	if strings.TrimSpace(opts.AgentRunnerConfigHome) != "" {
 		return true
 	}

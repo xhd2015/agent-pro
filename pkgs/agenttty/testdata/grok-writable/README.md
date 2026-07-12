@@ -22,6 +22,12 @@ pkgs/agenttty/testdata/grok-writable/
 | `reason` | no | Expected `WritableStatus.Reason` when non-empty |
 | `tags` | yes | String array for filtering / documentation |
 | `source` | no | How the frame was captured or synthesized |
+| `banner_detected_legacy` | no | Expected legacy banner detector result (open-lifecycle characterization) |
+| `open_ready` | no | Expected open-lifecycle readiness (`OpenReady`) |
+| `screen_class` | no | Coarse class: `empty` \| `starting` \| `busy` \| `idle` \| `modal` \| `unknown` |
+
+F1 `all-expectations-match` asserts only `ready`/`state`/`reason`. Optional open-ready fields
+document desired open-lifecycle behavior and are enforced by regression leaves.
 
 Naming convention (probe export):
 
@@ -90,4 +96,9 @@ go test ./pkgs/agenttty/ -run TestCheckGrokWritable -v
   prompt, heavy post-turn prompt)
 - **Workspace project-directory confirm** —
   `grok-workspace-project-directory-confirm.txt` (smoke `/tmp` open; must be
-  `ready=false`, not `idle`)
+  `ready=false`, not `idle`; legacy banner FP; `open_ready=false`, `screen_class=modal`)
+- **Modern SeaTalk chrome** (from `script/debug/grok-screen-snapshots/`):
+  - `grok-modern-starting-session-chrome.txt` ← `02-early-tui-chrome-or-input.txt`
+  - `grok-modern-busy-thinking-tasks.txt` ← `03-busy-working.txt`
+  - `grok-modern-idle-input-post-turn.txt` ← `04-idle-input-ready.txt`
+  Writable option A recorded as-is; open-ready true for starting/busy/idle (implementer)

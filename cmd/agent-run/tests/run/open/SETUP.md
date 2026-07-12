@@ -26,6 +26,11 @@ agent-run run --agent-runner grok-tty --open ["prompt"]
   interactive TUI that prints `GROK_TTY_BANNER` then reads/holds.
 - Lifecycle leaves set `AGENT_RUN_OPEN_ATTACH_INSTANT=1` so auto-attach returns
   without a real controlling TTY (test contract; implementer must honor).
+- **attach-without-banner** leaves deliberately **do not** set
+  `AGENT_RUN_OPEN_ATTACH_INSTANT` — they exercise the production open readiness
+  path (attach-first; no hard banner fail). Fake TUI prints no banner/OpenReady
+  markers, holds long enough for attach, then exits so `AttachWriter` can return
+  without an interactive controlling TTY.
 - Session-scoped build cache may share compiled binaries across parallel leaves.
 - Discovery hang / “Resolve session id…” **fixing** is out of scope; open mode
   must simply not print that progress to the screen.
@@ -35,10 +40,12 @@ agent-run run --agent-runner grok-tty --open ["prompt"]
 1. Root `Setup` resolves repo root, creates temp home, builds `agent-run` and
    `fake-codex` (session cache), sets `AGENT_RUN_HOME` + `PATH`.
 2. Grouping `Setup` narrows outcome class (`help` / `reject` / `prompt-policy` /
-   `tty-lifecycle`) and runner.
-3. Leaf `Setup` finalizes flags, prompt, TTY hooks, and open-attach instant env.
+   `tty-lifecycle` / `attach-without-banner`) and runner.
+3. Leaf `Setup` finalizes flags, prompt, TTY hooks, and open-attach instant env
+   (INSTANT only for tty-lifecycle; attach-without-banner forces INSTANT off).
 4. `Run` executes `agent-run` with `req.Args` (optional registry post-read).
-5. Leaf `Assert` checks exit code, error text, silence, session id line, registry.
+5. Leaf `Assert` checks exit code, error text, silence, session id line, registry,
+   banner-policy, or inject probe.
 
 ## Context
 
@@ -135,6 +142,93 @@ func fakeTUIRespondHi() string {
 
 func fakeTUIHoldSeconds(sec int) string {
 	return fmt.Sprintf(`sh -c 'printf "GROK_TTY_BANNER\nGrok › "; sleep %d'`, sec)
+}
+
+// fakeTUIDelayedBanner delays legacy banner so non-open inject wait can be proven.
+func fakeTUIDelayedBanner() string {
+	return `sh -c 'sleep 0.3; printf "GROK_TTY_BANNER\nGrok › "; read line; echo "Response: $line"'`
+}
+
+// writeFakeTUIDelayedBannerProbe delays banner, then records the first stdin line
+// (injected prompt) into probePath — proves non-open hard-wait inject without
+// relying on grok session discovery / capture streaming.
+func writeFakeTUIDelayedBannerProbe(t *testing.T, dir, probePath string) string {
+	t.Helper()
+	path := filepath.Join(dir, "fake-tui-delayed-banner-probe.sh")
+	script := fmt.Sprintf(`#!/bin/sh
+sleep 0.3
+printf "GROK_TTY_BANNER\nGrok › "
+if read -r line; then
+  echo "STDIN=$line" > %q
+  echo "Response: $line"
+else
+  echo "STDIN_COUNT=0" > %q
+fi
+`, probePath, probePath)
+	if err := os.WriteFile(path, []byte(script), 0755); err != nil {
+		t.Fatalf("write delayed-banner probe TUI: %v", err)
+	}
+	return path
+}
+
+// writeFakeTUINoBannerHold writes a script that never prints legacy banner or
+// modern OpenReady chrome (no GROK_TTY_BANNER / Grok › / ❯+Grok). Holds then
+// exits so AttachWriter can complete via terminal-exit without INSTANT.
+func writeFakeTUINoBannerHold(t *testing.T, dir string, holdSec int) string {
+	t.Helper()
+	if holdSec <= 0 {
+		holdSec = 12
+	}
+	path := filepath.Join(dir, "fake-tui-no-banner-hold.sh")
+	script := fmt.Sprintf("#!/bin/sh\nprintf 'booting\\n'\nsleep %d\n", holdSec)
+	if err := os.WriteFile(path, []byte(script), 0755); err != nil {
+		t.Fatalf("write no-banner hold TUI: %v", err)
+	}
+	return path
+}
+
+// writeFakeTUINoBannerArgvStdinProbe records trailing argv (new-session prompt)
+// and any PTY stdin inject. Prints only non-ready "booting" text.
+func writeFakeTUINoBannerArgvStdinProbe(t *testing.T, dir, probePath string, readTimeoutSec, holdAfterSec int) string {
+	t.Helper()
+	if readTimeoutSec <= 0 {
+		readTimeoutSec = 5
+	}
+	if holdAfterSec <= 0 {
+		holdAfterSec = 2
+	}
+	path := filepath.Join(dir, "fake-tui-no-banner-probe.sh")
+	script := fmt.Sprintf(`#!/bin/sh
+{
+  echo "ARGV=$*"
+  echo "PROMPT_ARG=${1-}"
+} > %q
+printf 'booting\n'
+if read -t %d line; then
+  echo "STDIN=$line" >> %q
+  echo "STDIN_COUNT=1" >> %q
+else
+  echo "STDIN_COUNT=0" >> %q
+fi
+sleep %d
+`, probePath, readTimeoutSec, probePath, probePath, probePath, holdAfterSec)
+	if err := os.WriteFile(path, []byte(script), 0755); err != nil {
+		t.Fatalf("write no-banner probe TUI: %v", err)
+	}
+	return path
+}
+
+func clearOpenInstantAttach(req *Request) {
+	req.OpenInstantAttach = false
+	// Force off even if the parent process exported INSTANT=1 (req.Env overrides
+	// os.Environ duplicates by being appended last in execCmd).
+	setEnvKV(req, envOpenAttachInstant, "0")
+}
+
+func hasBannerNotDetected(combined string) bool {
+	lower := strings.ToLower(combined)
+	return strings.Contains(lower, "banner not detected") ||
+		strings.Contains(lower, "tui banner not detected")
 }
 
 func withoutEnvKey(env []string, key string) []string {

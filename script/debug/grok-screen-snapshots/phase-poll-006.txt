@@ -1,0 +1,7 @@
+ ⎇ master-2026-07-11-agent-run-status-and-resume worktree ~/.wrk/worktrees/… +1
+   #1 Run: sleep 90; echo BUSY_DONE. First briefly say starting, then call the…
+   ⠴ Starting session… 0.7s
+ ╭---------------------------------------------------------------------------╮
+ │ ❯                                                                          │
+ ╰----------------------------------------- Grok 4.5 (high) · always-approve -╯
+ Shift+Tab:mode  │  Ctrl+;:queue  │  Ctrl+.:shortcuts

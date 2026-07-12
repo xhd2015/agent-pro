@@ -1,0 +1,1 @@
+from open in /tmp: 'Run Grok Build in a project directory?' — contains 'grok build' substring (banner false-positive risk) but is NOT idle input

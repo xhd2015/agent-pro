@@ -138,30 +138,38 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 
 	runStart := time.Now()
 	promptText := strings.TrimSpace(opts.Prompt)
+	isResume := strings.TrimSpace(opts.ResumeSessionID) != ""
 
-	// Instant-attach test hook: do not block on provider-specific banner markers
-	// (open harness may use a shared fake TUI across grok-tty/codex-tty).
-	if opts.Open && os.Getenv("AGENT_RUN_OPEN_ATTACH_INSTANT") == "1" {
-		_ = waitForOpenReady(ctx, listenAddr, sessionID, 3*time.Second)
-	} else if err := waitForBannerRemote(ctx, listenAddr, sessionID, provider.BannerProvider, provider.BannerMarkers); err != nil {
-		return "", terminalSessionID, err
-	}
-
-	select {
-	case <-ctx.Done():
-		return "", terminalSessionID, ctx.Err()
-	case <-time.After(200 * time.Millisecond):
-	}
-
-	// Empty prompt under --open: skip inject (no bare \r).
-	// NoSubmit: inject without trailing Enter (suffixCR=false).
-	if promptText != "" {
-		if err := ttywatch.SendMessage(listenAddr, sessionID, promptText, !opts.NoSubmit); err != nil {
-			return "", terminalSessionID, err
-		}
-	}
-
+	// --open is attach-first: banner/OpenReady is inject-readiness, not attach readiness.
+	// Soft-wait for any scrollback content; never fail open on ready-marker timeout.
+	// AGENT_RUN_OPEN_ATTACH_INSTANT=1 keeps the same short soft wait (AttachWriter also
+	// returns immediately under that env).
 	if opts.Open {
+		_ = waitForOpenReady(ctx, listenAddr, sessionID, 3*time.Second)
+
+		select {
+		case <-ctx.Done():
+			return "", terminalSessionID, ctx.Err()
+		case <-time.After(200 * time.Millisecond):
+		}
+
+		// Inject policy under --open:
+		// - New session: initial prompt already on argv when non-empty → do not re-inject.
+		// - Resume + non-empty follow-up: wait inject-ready then inject if ready; banner
+		//   timeout must not fail open — still attach.
+		// - Empty prompt: no inject.
+		// - NoSubmit: when inject happens, suffixCR=false.
+		if promptText != "" && isResume {
+			if readyErr := waitForBannerRemote(ctx, listenAddr, sessionID, provider.BannerProvider, provider.BannerMarkers); readyErr != nil {
+				if ctx.Err() != nil {
+					return "", terminalSessionID, ctx.Err()
+				}
+				// Soft: skip inject on banner/OpenReady timeout; proceed to attach.
+			} else if err := ttywatch.SendMessage(listenAddr, sessionID, promptText, !opts.NoSubmit); err != nil {
+				return "", terminalSessionID, err
+			}
+		}
+
 		// Persist dual-write snapshot while keep-alive, then auto-attach.
 		if terminalSessionID != "" && opts.AgentSessionID != "" && result.Entry != nil {
 			_ = WriteTTYJSON(opts.Home, TTYSnapshot{
@@ -180,6 +188,24 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 		}
 		// Leave PTY/registry alive for re-attach/send; do not wait for turn.
 		return "", terminalSessionID, nil
+	}
+
+	// Non-open headless: hard-wait inject-ready (banner/OpenReady), then inject.
+	if err := waitForBannerRemote(ctx, listenAddr, sessionID, provider.BannerProvider, provider.BannerMarkers); err != nil {
+		return "", terminalSessionID, err
+	}
+
+	select {
+	case <-ctx.Done():
+		return "", terminalSessionID, ctx.Err()
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	// NoSubmit: inject without trailing Enter (suffixCR=false).
+	if promptText != "" {
+		if err := ttywatch.SendMessage(listenAddr, sessionID, promptText, !opts.NoSubmit); err != nil {
+			return "", terminalSessionID, err
+		}
 	}
 
 	keepBlocking := false
@@ -450,7 +476,8 @@ func resolveBinaryPath(explicit string) (string, error) {
 }
 
 // waitForOpenReady polls until scrollback has any content or timeout elapses.
-// Used under AGENT_RUN_OPEN_ATTACH_INSTANT so open does not hang on banner markers.
+// Used on the --open attach-first path (including AGENT_RUN_OPEN_ATTACH_INSTANT)
+// as a best-effort soft wait; callers ignore timeout so open still attaches.
 func waitForOpenReady(ctx context.Context, listenAddr, sessionID string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {

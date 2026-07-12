@@ -11,7 +11,7 @@ glob testdata/grok-writable/grok-*.txt
 
 ## Preconditions
 
-- `expectations.jsonl` has one entry per `grok-*.txt` fixture (20 rows in current seed, including workspace-confirm).
+- `expectations.jsonl` has one entry per `grok-*.txt` fixture (23 rows: historical seed + workspace-confirm + 3 modern open-ready frames).
 
 ## Steps
 

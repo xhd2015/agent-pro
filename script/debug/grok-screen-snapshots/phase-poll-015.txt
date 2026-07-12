@@ -1,0 +1,11 @@
+ ⎇ master-2026-07-11-agent-run-status-and-resume worktree ~/.wrk/wo… 16K / 500K
+    Run: sleep 90; echo BUSY_DONE. First briefly say starting, then   9:50 AMcall the shell sleep 90, then say done.
+    ◆ user_prompt_submit  [hooks: 1]
+    ◆ Thought for 0.0s
+    Starting.                                                         9:50 AM
+ ┃  ◆ Run Sleep 90s then echo BUSY_DONE
+   ⠧ Sleep 90s then echo BUSY_DONE… 0.9s                  3.4s ⇣16.3k [↓][stop]
+ ╭---------------------------------------------------------------------------╮
+ │ ❯                                                                          │
+ ╰----------------------------------------- Grok 4.5 (high) · always-approve -╯
+ Shift+Tab:mode  │  Ctrl+c:cancel  │  Ctrl+g:send to bg  │  Ctrl+.:shortcuts

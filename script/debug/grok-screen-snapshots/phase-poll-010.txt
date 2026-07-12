@@ -1,0 +1,7 @@
+ ⎇ master-2026-07-11-agent-run-status-and-resume worktree ~/.wrk/w… 5.3K / 500K
+    Run: sleep 90; echo BUSY_DONE. First briefly say starting, then   9:50 AMcall the shell sleep 90, then say done.
+   ⠼ Waiting for response… 0.7s                              0.7s ⇣5.30k [stop]
+ ╭---------------------------------------------------------------------------╮
+ │ ❯                                                                          │
+ ╰----------------------------------------- Grok 4.5 (high) · always-approve -╯
+ Shift+Tab:mode  │  Ctrl+c:cancel  │  Ctrl+.:shortcuts

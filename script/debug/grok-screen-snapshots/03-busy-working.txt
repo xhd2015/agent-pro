@@ -1,0 +1,16 @@
+ ⎇ master-2026-07-11-agent-run-status-and-resume worktree ~/.… ⸬ 1 │ 16K / 500K
+    ▾ Tasks 1
+    ⸬ Task Sleep 90s then echo BUSY_DONE                          1.8s [↗][✗]
+    Run: sleep 90; echo BUSY_DONE. First briefly say starting, then   9:50 AMcall the shell sleep 90, then say done.
+    ◆ user_prompt_submit  [hooks: 1]
+    ◆ Thought for 0.0s
+    Starting.                                                         9:50 AM
+    ◆ Task started: Sleep 90s then echo BUSY_DONE
+ ┃  ◆ Thinking…
+ ┃
+ ┃  The command
+   ⠹ Thinking… 0.0s                                           19s ⇣16.5k [stop]
+ ╭---------------------------------------------------------------------------╮
+ │ ❯                                                                          │
+ ╰----------------------------------------- Grok 4.5 (high) · always-approve -╯
+ Shift+Tab:mode  │  Ctrl+c:cancel  │  Ctrl+.:shortcuts

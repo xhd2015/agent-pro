@@ -1,0 +1,7 @@
+ ⎇ master-2026-07-11-agent-run-status-and-resume wor… ⠙ MCP (0/1) │ 5.3K / 500K
+    Run: sleep 90; echo BUSY_DONE. First briefly say starting, then   9:50 AMcall the shell sleep 90, then say done.
+   ⠙ Waiting for response… 0.3s                              0.3s ⇣5.30k [stop]
+ ╭---------------------------------------------------------------------------╮
+ │ ❯                                                                          │
+ ╰----------------------------------------- Grok 4.5 (high) · always-approve -╯
+ Shift+Tab:mode  │  Ctrl+c:cancel  │  Ctrl+.:shortcuts

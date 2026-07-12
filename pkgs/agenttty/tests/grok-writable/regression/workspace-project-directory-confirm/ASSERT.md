@@ -8,6 +8,11 @@
   modal/loading/busy state after implementer hardens detection; either is OK as long
   as ready stays false and state is not idle.
 - `reason` is non-empty.
+- **Legacy banner characterization:** `banner_detected_legacy=true` (false-positive on
+  `"grok build"` substring in the modal title).
+- **Open readiness:** `open_ready=false` — modal must override legacy match so open wait
+  does not treat the picker as ready to inject.
+- `screen_class=modal`.
 
 ## Exit Code
 
@@ -19,15 +24,21 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 )
 
 func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	text, err := os.ReadFile(filepath.Join(req.TestdataDir, fixtureWorkspaceProjectDirectoryConfirm))
-	if err != nil {
-		t.Fatal(err)
+	text := resp.Scrollback
+	if len(text) == 0 {
+		var readErr error
+		text, readErr = os.ReadFile(filepath.Join(req.TestdataDir, fixtureWorkspaceProjectDirectoryConfirm))
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
 	}
 	s := string(text)
 	lower := strings.ToLower(s)
@@ -55,5 +66,11 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	if strings.TrimSpace(resp.Status.Reason) == "" {
 		t.Fatalf("expected non-empty reason for non-ready workspace confirm (state=%q)", resp.Status.State)
 	}
+
+	// Open-lifecycle characterization (RED until OpenReady rejects modal despite legacy FP).
+	gotLegacy := agenttty.BannerDetected(text, "grok", grokLegacyBannerMarkers)
+	gotOpen := agenttty.OpenReady(text)
+	gotClass := agenttty.ClassifyGrokScreen(text)
+	assertOpenReadyTriplet(t, "workspace modal", gotLegacy, true, gotOpen, false, gotClass, "modal")
 }
 ```

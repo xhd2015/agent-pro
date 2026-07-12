@@ -188,7 +188,9 @@ func runOpenGrokBind(ctx context.Context, opts RunOptions, runner, sessionID, wo
 				FinishedAt: finished,
 				Error:      msg,
 			})
-			if requireBind {
+			// Hard-wait may still soft-unbound when only non-empty prompt forced
+			// discovery (attach-first open without explicit GROK_HOME / hook).
+			if openGrokHardFailOnUnresolved(opts) {
 				res.err = fmt.Errorf("error: grok session id not resolved for session %s (grokHome=%s discErr=%v sessionsRootEntries=%d)",
 					sessionID, grokHome, discErr, len(entries))
 			}

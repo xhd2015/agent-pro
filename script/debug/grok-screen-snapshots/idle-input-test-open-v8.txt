@@ -1,0 +1,10 @@
+ ~/tmp                                                              5.7K / 500K
+    ◆ user_prompt_submit  [hooks: 1]
+    one word of France capital                                        9:05 PM
+    ◆ Thought for 0.8s
+    ◆ stop  [hooks: 2]
+    Paris                                                             9:05 PM
+ ╭----------------------------------------------------------------------------╮
+ │ ❯
+ ╰----------------------------------------- Grok 4.5 (high) · always-approve -╯
+ Shift+Tab:mode  │  Ctrl+.:shortcuts
