@@ -7,6 +7,16 @@ import (
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 )
 
+// ResolveRunnerPrompt chooses inject text for this turn.
+// When resumeID is non-empty, the provider session already has context — return newPrompt only.
+// When resumeID is empty, return BuildContinuationPrompt(prior, newPrompt).
+func ResolveRunnerPrompt(resumeID, newPrompt string, prior []types.AgentEvent) string {
+	if strings.TrimSpace(resumeID) != "" {
+		return strings.TrimSpace(newPrompt)
+	}
+	return BuildContinuationPrompt(prior, newPrompt)
+}
+
 // BuildContinuationPrompt formats prior timeline messages plus the new user turn for the runner.
 func BuildContinuationPrompt(prior []types.AgentEvent, newPrompt string) string {
 	newPrompt = strings.TrimSpace(newPrompt)

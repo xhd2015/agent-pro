@@ -10,6 +10,7 @@ types.AgentEvent history + new user text -> BuildContinuationPrompt -> runner-re
 
 - Package `pkgs/agentui` exports `BuildContinuationPrompt(events []types.AgentEvent, newPrompt string) string`.
 - Tests are pure Go (no `AGENT_RUN_HOME`, no CLI).
+- Resume-id gate coverage is a nested tree under `resolve-runner-prompt/` (separate `DOCTEST.md`).
 
 ## Steps
 

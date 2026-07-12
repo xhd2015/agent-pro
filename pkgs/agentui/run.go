@@ -27,10 +27,10 @@ import (
 
 // RunOptions configures a headless agent-run invocation.
 type RunOptions struct {
-	Prompt              string
-	Runner              string
-	Model               string
-	SessionID           string
+	Prompt    string
+	Runner    string
+	Model     string
+	SessionID string
 	// TerminalSessionID is the TTY registry id. When empty, SessionID is used as
 	// the custom terminal id (legacy --session / --session-id-from-prompt).
 	// When PreferAutoTerminal is true, TerminalSessionID is ignored and the TTY
@@ -39,16 +39,16 @@ type RunOptions struct {
 	// PreferAutoTerminal forces auto session-N for the TTY registry even when
 	// SessionID is set (used by resume fallback when zombie reclaim cannot free
 	// the prior terminal id).
-	PreferAutoTerminal bool
+	PreferAutoTerminal    bool
 	AgentRunnerBinary     string // optional binary name/path or "binary flag..." shell spec
 	AgentRunnerConfigHome string // grok/codex data dir; falls back to AGENT_RUNNER_CONFIG_HOME
-	JSON                bool
-	Workspace           string
-	Store               agentstorage.Store
-	Stdout              io.Writer
-	Stderr              io.Writer
-	StreamPhases        bool // web: phased assistant start/update/end; CLI: single message events
-	KeepTerminalAlive   bool
+	JSON                  bool
+	Workspace             string
+	Store                 agentstorage.Store
+	Stdout                io.Writer
+	Stderr                io.Writer
+	StreamPhases          bool // web: phased assistant start/update/end; CLI: single message events
+	KeepTerminalAlive     bool
 	// Open is run --open: silent keep-alive TTY start, auto-attach, print id after detach.
 	Open bool
 	// NoSubmit is run --no-submit: with Open, inject prompt without trailing Enter.
@@ -120,7 +120,7 @@ func Run(ctx context.Context, opts RunOptions) error {
 	}
 
 	priorEvents, _, _ := opts.Store.ReadEvents(sessionID, 0)
-	runnerPrompt := BuildContinuationPrompt(priorEvents, opts.Prompt)
+	runnerPrompt := ResolveRunnerPrompt(runnerSessionID, opts.Prompt, priorEvents)
 
 	stdout := opts.Stdout
 	if stdout == nil {
