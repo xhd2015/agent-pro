@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
@@ -156,6 +157,25 @@ func listSessions() ([]sessionDir, error) {
 		})
 	}
 	return result, nil
+}
+
+// ListRecentSessions returns sessions sorted by dirname timestamp descending,
+// limited to at most limit entries, plus the total count before limiting.
+// limit is normalized the same way as the list CLI: <=0 → default 10, cap 100.
+func ListRecentSessions(limit int) (sessions []sessionDir, total int, err error) {
+	sessions, err = listSessions()
+	if err != nil {
+		return nil, 0, err
+	}
+	sort.Slice(sessions, func(i, j int) bool {
+		return sessions[i].timestamp.After(sessions[j].timestamp)
+	})
+	total = len(sessions)
+	limit = normalizeListLimit(limit)
+	if len(sessions) > limit {
+		sessions = sessions[:limit]
+	}
+	return sessions, total, nil
 }
 
 func parseTimestamp(dirName string) (time.Time, error) {

@@ -14,9 +14,13 @@ import (
 )
 
 var explainHelp = `Usage: explain [options] <message> [follow-up messages...]
+       explain list [--limit N] [--color]
 
 Ask an AI agent a question and get an answer. Sessions are reused when the
 positional arguments match a prefix of a previous session's user messages.
+
+Subcommands:
+  list        List recent explain sessions (newest first)
 
 Options:
   --model MODEL
@@ -85,6 +89,12 @@ func RunExplain(args []string) error {
 }
 
 func RunExplainWithRunner(rawArgs []string, runner Runner) error {
+	// Dispatch `list` before global flag parse so `explain list --limit N` works
+	// (global parse would reject --limit as unrecognized).
+	if len(rawArgs) > 0 && rawArgs[0] == "list" {
+		return RunList(rawArgs[1:])
+	}
+
 	var model string
 	var agentRunner string
 	var verbose bool
