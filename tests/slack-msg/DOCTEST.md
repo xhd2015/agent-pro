@@ -6,8 +6,8 @@ Doc-style tests for the unified first-class CLI at `cmd/slack-msg` with subcomma
 from `tests/slack-send-cli` and `tests/slack-listen` (updated argv and `--token`
 instead of `--bot-token`), history coverage (oldest→newest, `--json`, `--thread`),
 channel list/search, auth status (bot via `auth.test`, app via `apps.connections.open`),
-and session-bound reply/history (SeaTalk-like; channel top-level posts, no
-`thread_ts`). Uses `pkgs/slackutil` for config/token/channel resolution and
+and session-bound list/info/update/reply/history (SeaTalk-like; channel top-level
+posts, no `thread_ts`). Uses `pkgs/slackutil` for config/token/channel resolution and
 `slacktest` + `SLACK_API_URL` for unit paths.
 
 # DSN (Domain Specific Notion)
@@ -48,12 +48,21 @@ and session-bound reply/history (SeaTalk-like; channel top-level posts, no
   `slack-channel-{channelID}`; DM (`D…`) → `slack-dm-{userID}` (not per-message
   ts; event dedupe stays `channelID:ts`). Agent body is not PostMessaged in
   thread mode.
-- **session** — session-bound agent recipes: `reply` posts `chat.postMessage` to
-  the map entry's `channel_id` **without** `thread_ts` (channel top-level);
-  `history` prints local `messages.jsonl` (oldest→newest; `--after-msg-id`,
-  `--limit`, `--json`). Session id via `--session-id` or `SLACK_MSG_SESSION_ID`;
-  config via `--config` or `SLACK_MSG_CONFIG` or map `config_path`. Durable store:
-  `~/.agent-pro/slack-local-bot/sessions.json` + `sessions/<id>/messages.jsonl`.
+- **session** — session-bound management + agent recipes: `list` prints map rows
+  (human header `SESSION_ID CHANNEL DIR UPDATED PREVIEW` with column padding,
+  sort `updated_at` desc; empty map → empty stdout exit 0; `--json` / `--limit`);
+  `info` shows one entry + derived `message_count` / `session_dir` (human
+  `key: value` or `--json`); `update --dir PATH` sets workspace `dir` (must exist
+  as directory; store absolute path; bump `updated_at`; preserve other fields;
+  human `OK session=… dir=…` or `--json` full entry); `reply` posts
+  `chat.postMessage` to the map entry's `channel_id` **without** `thread_ts`
+  (channel top-level); `history` prints local `messages.jsonl` (oldest→newest;
+  `--after-msg-id`, `--limit`, `--json`). Session id via `--session-id` or
+  `SLACK_MSG_SESSION_ID`; config via `--config` or `SLACK_MSG_CONFIG` or map
+  `config_path`. JSON list/info/update emit both `session_id` and
+  `agent_session_id` (equal today). Empty `dir` human `-`, JSON `""`. Durable
+  store: `~/.agent-pro/slack-local-bot/sessions.json` (optional entry field `dir`)
+  + `sessions/<id>/messages.jsonl`.
 - **channels** — `list` or `search QUERY` over `conversations.list` (paginated
   **per mapped type**); default `--types public,private` maps to
   `public_channel` + `private_channel`; default exclude archived; sort by name
@@ -127,6 +136,15 @@ and session-bound reply/history (SeaTalk-like; channel top-level posts, no
   PostMessage); session id is `slack-channel-{channelID}` or
   `slack-dm-{userID}`; stateless replies PostMessage with `thread_ts` and optional
   `--reply-prefix` (no SYSTEM.md / session map).
+- `slack-msg session list [--json] [--limit N]` — map rows sorted by `updated_at`
+  desc; human table (header first label `SESSION_ID`); empty map empty stdout
+  exit 0; `--json` `{"sessions":[…]}` with `session_id`+`agent_session_id`.
+- `slack-msg session info [--session-id ID] [--json]` — one entry +
+  `message_count` + `session_dir`; missing id / not found → exit 1.
+- `slack-msg session update [--session-id ID] --dir PATH [--json]` — require
+  existing session and `--dir` (exists, is directory); store abs `dir`; human
+  `OK session=… dir=…` or `--json` full entry; errors for missing id / not found /
+  nothing to update / dir missing or not a directory.
 - `slack-msg session reply [options] MESSAGE` — resolve session id → map entry →
   config/token → `chat.postMessage` to `channel_id` **without** `thread_ts` →
   append outbound to messages.jsonl → `OK ts=… channel=…` + trailing `\n`;
@@ -217,9 +235,20 @@ tests/slack-msg/
 │   ├── session-routing/               # label: unit (+ SYSTEM.md / map / env inject)
 │   ├── reply/                         # label: unit
 │   └── integration/                   # label: integration, slow
-├── session/                           # session reply | history (SeaTalk-like)
+├── session/                           # session list | info | update | reply | history
 │   ├── SETUP.md
-│   ├── help/                          # session -h / --help
+│   ├── help/                          # session -h / --help (list,info,update,reply,history)
+│   ├── list/
+│   │   ├── SETUP.md
+│   │   └── success/                   # label: unit (empty / sorted human / json / limit)
+│   ├── info/
+│   │   ├── SETUP.md
+│   │   ├── success/                   # label: unit (human keys / json / env session id)
+│   │   └── errors/                    # missing/unknown session
+│   ├── update/
+│   │   ├── SETUP.md
+│   │   ├── success/                   # label: unit (set-dir abs / preserves / json)
+│   │   └── errors/                    # id / not found / missing dir / bad path
 │   ├── reply/
 │   │   ├── SETUP.md
 │   │   ├── help/
@@ -275,7 +304,7 @@ Parameter ranking (most → least significant):
 
 1. **Command / outcome** — top-level help vs unknown vs send vs history vs listen vs channels vs auth vs session
 2. **Within command** — help vs validation-error vs success/unit path vs integration
-3. **Session action** — `reply` vs `history` (session tree)
+3. **Session action** — `list` vs `info` vs `update` vs `reply` vs `history`
 4. **Auth mode** — bot (default) vs `--app`
 5. **Credential / session / config source** — CLI flags vs env (`SLACK_MSG_*`) vs map / `--config` JSON
 6. **Backend** — slacktest (`SLACK_API_URL`) vs live Slack vs local session store vs no network
@@ -366,8 +395,24 @@ Parameter ranking (most → least significant):
 | 61 | `listen/reply/posts-in-thread` | unit | Thread interactive open → no agent-body PostMessage |
 | 62 | `listen/reply/reply-prefix` | unit | Stateless `--reply-prefix` + agent body PostMessage with `thread_ts` |
 | 63 | `listen/integration/live-socket-reply` | integration, slow | Live Socket Mode connect probe |
-| 63a | `session/help/short-flag` | (default) | `session -h` lists reply/history; exit 0 |
+| 63a | `session/help/short-flag` | (default) | `session -h` lists list/info/update/reply/history; exit 0 |
 | 63b | `session/help/long-flag` | (default) | `session --help` same as `-h` |
+| 63r | `session/list/success/empty-map` | unit | Empty sessions.json → empty stdout; exit 0 |
+| 63s | `session/list/success/multi-sorted-human` | unit | Human header `SESSION_ID…` + column padding; sort updated_at desc; empty dir `-` |
+| 63t | `session/list/success/json-output` | unit | `--json` sessions[] with session_id + agent_session_id; sort desc |
+| 63u | `session/list/success/limit` | unit | `--limit N` after sort; at most N data rows |
+| 63v | `session/info/success/human-keys` | unit | Human key: value incl. agent_session_id, message_count, session_dir |
+| 63w | `session/info/success/json-output` | unit | `--json` object with session_id + agent_session_id + message_count + session_dir |
+| 63x | `session/info/success/env-session-id` | unit | `SLACK_MSG_SESSION_ID` without `--session-id` |
+| 63y | `session/info/errors/missing-session-id` | (default) | No session id → session id required; exit 1 |
+| 63z | `session/info/errors/unknown-session` | (default) | Unknown id → session not found; exit 1 |
+| 64a | `session/update/success/set-dir` | unit | `--dir` existing dir → store abs path; OK line; bump updated_at; preserve fields |
+| 64b | `session/update/success/json-output` | unit | `update --json` full map entry with session_id + agent_session_id + dir |
+| 64c | `session/update/errors/missing-session-id` | (default) | No session id → exit 1 |
+| 64d | `session/update/errors/unknown-session` | (default) | Unknown session → exit 1 |
+| 64e | `session/update/errors/missing-dir` | (default) | No `--dir` → nothing to update; exit 1 |
+| 64f | `session/update/errors/dir-does-not-exist` | (default) | `--dir` missing path → dir does not exist; exit 1 |
+| 64g | `session/update/errors/dir-not-directory` | (default) | `--dir` is a file → dir is not a directory; exit 1 |
 | 63c | `session/reply/help/short-flag` | (default) | `session reply -h`; lists --session-id / --config / SLACK_MSG_* |
 | 63d | `session/reply/help/long-flag` | (default) | `session reply --help` |
 | 63e | `session/reply/success/map-config-flag` | unit | Map+`--session-id`+`--config` → PostMessage channel only (no thread_ts); OK line |
@@ -455,7 +500,26 @@ doctest test -v ./tests/slack-msg/listen/session-routing/channel-stable-session
 doctest test -v ./tests/slack-msg/listen/session-routing/dm-session-key
 doctest test -v ./tests/slack-msg/session/reply/success/map-config-flag
 doctest test -v ./tests/slack-msg/session/history/success/chronological
+doctest test -v ./tests/slack-msg/session/list/success/multi-sorted-human
+doctest test -v ./tests/slack-msg/session/info/success/human-keys
+doctest test -v ./tests/slack-msg/session/update/success/set-dir
 ```
+
+**Implementer note (`session list` / `info` / `update` — RED until landed):**
+
+1. Help lists commands: `list`, `info`, `update`, `reply`, `history`.
+2. Map entry optional `dir` (workspace); preserve across listen/reply upserts when omitted.
+3. `list`: sort `updated_at` desc; human columns `SESSION_ID CHANNEL DIR UPDATED PREVIEW`
+   with right-pad to max width, join columns with two spaces; empty dir → `-`;
+   empty map → empty stdout exit 0; `--limit` after sort; `--json` array entries emit
+   both `session_id` and `agent_session_id` (same value today).
+4. `info`: human `key: value` lines; derived `message_count` (jsonl lines),
+   `session_dir` (`…/sessions/<id>`); JSON same keys; empty dir human `-` / JSON `""`.
+5. `update --dir PATH`: path must exist and be a directory; store absolute path;
+   bump `updated_at`; preserve other fields; human `OK session=<id> dir=<abs>\n`;
+   `--json` full updated entry including both session id fields.
+6. Errors (stderr, empty stdout, exit 1): `session id required`, `session not found`,
+   `nothing to update`, `dir does not exist`, `dir is not a directory`.
 
 **Implementer note (stable session keys — RED until `sessionID` updated):**
 
@@ -1322,15 +1386,16 @@ func expectedMessagesJSONLPath(homeDir, sessionID string) string {
 
 // sessionMapEntry is a durable sessions.json entry (subset used by leaves).
 type sessionMapEntry struct {
-	SessionID           string `json:"session_id"`
-	ChannelID           string `json:"channel_id"`
-	ThreadTS            string `json:"thread_ts"`
-	ConfigPath          string `json:"config_path"`
-	Kind                string `json:"kind"`
-	ReplyMode           string `json:"reply_mode"`
-	LastMessagePreview  string `json:"last_message_preview,omitempty"`
-	CreatedAt           string `json:"created_at,omitempty"`
-	UpdatedAt           string `json:"updated_at,omitempty"`
+	SessionID          string `json:"session_id"`
+	ChannelID          string `json:"channel_id"`
+	ThreadTS           string `json:"thread_ts"`
+	ConfigPath         string `json:"config_path"`
+	Dir                string `json:"dir,omitempty"` // optional agent workspace (abs preferred)
+	Kind               string `json:"kind"`
+	ReplyMode          string `json:"reply_mode"`
+	LastMessagePreview string `json:"last_message_preview,omitempty"`
+	CreatedAt          string `json:"created_at,omitempty"`
+	UpdatedAt          string `json:"updated_at,omitempty"`
 }
 
 type sessionsJSONFile struct {

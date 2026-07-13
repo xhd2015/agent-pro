@@ -1,18 +1,22 @@
 # Scenario
 
-**Feature**: slack-msg session reply / history (SeaTalk-like session bridge)
+**Feature**: slack-msg session list / info / update / reply / history
 
 ```
-Caller -> slack-msg session reply|history [options]
-  -> resolve SLACK_MSG_SESSION_ID / --session-id
+Caller -> slack-msg session list|info|update|reply|history [options]
+  -> resolve SLACK_MSG_SESSION_ID / --session-id (info/update/reply/history)
   -> load ~/.agent-pro/slack-local-bot/sessions.json
+  -> list: sorted map rows (human table or --json)
+  -> info: one entry + message_count + session_dir
+  -> update: set dir (abs) on map entry
   -> reply: chat.postMessage channel-only (no thread_ts) + append messages.jsonl out
   -> history: print local messages.jsonl
 ```
 
 ## Preconditions
 
-- Subcommand is always `session` as first arg; action is `reply` or `history`.
+- Subcommand is always `session` as first arg; action is one of
+  `list` | `info` | `update` | `reply` | `history`.
 - Session store under `$HOME/.agent-pro/slack-local-bot/` (isolate via `req.HomeDir`).
 - Config for reply: `--config` / `SLACK_MSG_CONFIG` / map `config_path`.
 - Unit reply leaves use `CapturePosts` + slacktest for PostMessage (no thread_ts).
@@ -27,6 +31,7 @@ Caller -> slack-msg session reply|history [options]
 
 - Reply posts at channel top-level (no MsgOptionTS / thread_ts).
 - History prefers local log over live API.
+- List/info/update are local-store only (no live Slack).
 - Success stdout ends with trailing `\n`.
 
 ```go

@@ -1,9 +1,9 @@
 # Scenario
 
-**Feature**: session top-level help lists reply and history
+**Feature**: session top-level help lists list, info, update, reply, history
 
 ```
-slack-msg session -h|--help -> lists reply / history; exit 0
+slack-msg session -h|--help -> lists list / info / update / reply / history; exit 0
 ```
 
 ## Steps

@@ -20,6 +20,7 @@ type durableSessionEntry struct {
 	ChannelID          string `json:"channel_id"`
 	ThreadTS           string `json:"thread_ts"`
 	ConfigPath         string `json:"config_path"`
+	Dir                string `json:"dir,omitempty"` // optional agent workspace (abs preferred)
 	Kind               string `json:"kind"`
 	ReplyMode          string `json:"reply_mode"`
 	CreatedAt          string `json:"created_at,omitempty"`
@@ -134,6 +135,10 @@ func upsertSessionEntry(dataRoot string, entry durableSessionEntry) error {
 			entry.CreatedAt = doc.Entries[i].CreatedAt
 		} else if entry.CreatedAt == "" {
 			entry.CreatedAt = now
+		}
+		// Preserve dir when incoming entry omits it.
+		if strings.TrimSpace(entry.Dir) == "" && doc.Entries[i].Dir != "" {
+			entry.Dir = doc.Entries[i].Dir
 		}
 		entry.UpdatedAt = now
 		doc.Entries[i] = entry

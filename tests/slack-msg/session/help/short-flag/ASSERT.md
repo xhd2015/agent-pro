@@ -1,12 +1,15 @@
 ## Expected Output
 
 ```
-slack-msg session: session-bound reply and history.
+slack-msg session: session-bound management, reply and history.
 
 Usage:
   slack-msg session <command> [options]
 
 Commands:
+  list     List sessions from the local map
+  info     Show details for one session
+  update   Update session fields (e.g. workspace dir)
   reply    Post a channel reply for the bound session
   history  Show local session message history
 
@@ -17,7 +20,7 @@ Options:
 ## Expected
 
 - Exit code 0.
-- Stdout lists `reply` and `history`.
+- Stdout lists `list`, `info`, `update`, `reply`, and `history`.
 - Stderr empty.
 
 ## Exit Code
@@ -40,7 +43,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	if resp.Stderr != "" {
 		t.Fatalf("expected empty stderr, got:\n%s", resp.Stderr)
 	}
-	for _, cmd := range []string{"reply", "history"} {
+	for _, cmd := range []string{"list", "info", "update", "reply", "history"} {
 		if !strings.Contains(resp.Stdout, cmd) {
 			t.Fatalf("session help missing %q:\n%s", cmd, resp.Stdout)
 		}
@@ -48,12 +51,15 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	assert.Output(t, resp.Stdout, `---
 version: 2
 ---
-slack-msg session: session-bound reply and history.
+slack-msg session: session-bound management, reply and history.
 
 Usage:
   slack-msg session <command> [options]
 
 Commands:
+  list     List sessions from the local map
+  info     Show details for one session
+  update   Update session fields (e.g. workspace dir)
   reply    Post a channel reply for the bound session
   history  Show local session message history
 

@@ -18,6 +18,8 @@ func agentRunBinary() string {
 type agentOptions struct {
 	Runner           string
 	RunnerConfigHome string
+	// WorkspaceDir is the agent workspace (from session map dir when set).
+	WorkspaceDir string
 	// Env is passed to agent-run as -e KEY=VALUE (e.g. SLACK_MSG_SESSION_ID).
 	Env []string
 }
@@ -28,6 +30,7 @@ func runAgentInteractiveOpen(prompt, sessionID string, opts agentOptions) error 
 	_, err := agentrunbridge.RunInteractiveOpen(agentrunbridge.InteractiveOpenOpts{
 		SessionID:                     sessionID,
 		Prompt:                        prompt,
+		WorkspaceDir:                  opts.WorkspaceDir,
 		Binary:                        agentRunBinary(),
 		AgentRunner:                   opts.Runner,
 		RunnerConfigHome:              opts.RunnerConfigHome,

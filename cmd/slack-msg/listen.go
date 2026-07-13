@@ -189,6 +189,11 @@ func (l *listener) dispatchInbound(msg inboundMessage) {
 		if l.configPathAbs != "" {
 			openOpts.Env = append(openOpts.Env, envSlackMsgConfig+"="+l.configPathAbs)
 		}
+		if entry, lookupErr := lookupSessionEntry(l.dataRoot, sid); lookupErr == nil && entry != nil {
+			if d := strings.TrimSpace(entry.Dir); d != "" {
+				openOpts.WorkspaceDir = d
+			}
+		}
 
 		fmt.Fprintf(os.Stderr, "agent open start session=%s\n", sid)
 		if err := runAgentInteractiveOpen(inject, sid, openOpts); err != nil {
