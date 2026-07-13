@@ -46,8 +46,16 @@ type UsageInfo struct {
 
 var (
 	weeklyLimitRe = regexp.MustCompile(`(?i)weekly\s*limit:\s*(\d+%)`)
-	nextResetRe   = regexp.MustCompile(`(?i)next\s*reset:\s*([A-Za-z]+\s*\d{1,2},\s*\d{1,2}:\d{2}\s*(?:PT|UTC|[A-Z]{2,4}))`)
-	resetDateRe   = regexp.MustCompile(`^([A-Za-z]+)\s*(\d{1,2}),\s*(\d{1,2}:\d{2})\s*(PT)$`)
+	// nextResetCandidates: ordered formats for "Next reset"; first match wins.
+	// Whitelist known TZs only (PT, UTC) — no catch-all [A-Z]{2,4} (matches junk like "Imag").
+	// No-timezone form is last and is normalized to default PT.
+	nextResetCandidates = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)next\s*reset:\s*([A-Za-z]+\s*\d{1,2},\s*\d{1,2}:\d{2}\s*PT)`),
+		regexp.MustCompile(`(?i)next\s*reset:\s*([A-Za-z]+\s*\d{1,2},\s*\d{1,2}:\d{2}\s*UTC)`),
+		regexp.MustCompile(`(?i)next\s*reset:\s*([A-Za-z]+\s*\d{1,2},\s*\d{1,2}:\d{2})`),
+	}
+	// Matches Month Day, HH:MM with optional PT|UTC after spaces are stripped.
+	resetDateRe = regexp.MustCompile(`(?i)^([A-Za-z]+)(\d{1,2}),(\d{1,2}:\d{2})(PT|UTC)?$`)
 )
 
 // Options configures FetchUsage.
@@ -614,14 +622,24 @@ func parseUsage(scrollback []byte) (*UsageInfo, error) {
 
 func parseUsageText(corpus string) (*UsageInfo, error) {
 	weekly := weeklyLimitRe.FindStringSubmatch(corpus)
-	next := nextResetRe.FindStringSubmatch(corpus)
-	if len(weekly) < 2 || len(next) < 2 {
+	nextRaw, ok := matchNextReset(corpus)
+	if len(weekly) < 2 || !ok {
 		return nil, fmt.Errorf("failed to parse usage output")
 	}
 	return &UsageInfo{
 		WeeklyLimit: strings.TrimSpace(weekly[1]),
-		NextReset:   normalizeResetDate(strings.TrimSpace(next[1])),
+		NextReset:   normalizeResetDate(nextRaw),
 	}, nil
+}
+
+// matchNextReset tries ordered next-reset candidates; first match wins.
+func matchNextReset(corpus string) (string, bool) {
+	for _, re := range nextResetCandidates {
+		if m := re.FindStringSubmatch(corpus); len(m) >= 2 {
+			return strings.TrimSpace(m[1]), true
+		}
+	}
+	return "", false
 }
 
 func usageCorpus(scrollback []byte) string {
@@ -633,12 +651,20 @@ func usageCorpus(scrollback []byte) string {
 	return plain
 }
 
+// normalizeResetDate reformats Month Day, HH:MM [TZ] canonically.
+// Missing timezone defaults to PT (Grok 0.2.99 omits the suffix).
 func normalizeResetDate(raw string) string {
+	raw = strings.TrimSpace(raw)
 	compact := strings.ReplaceAll(raw, " ", "")
-	if m := resetDateRe.FindStringSubmatch(compact); len(m) == 5 {
-		return fmt.Sprintf("%s %s, %s %s", m[1], m[2], m[3], m[4])
+	m := resetDateRe.FindStringSubmatch(compact)
+	if len(m) < 4 {
+		return raw
 	}
-	return strings.TrimSpace(raw)
+	tz := "PT" // default when Grok omits timezone
+	if len(m) >= 5 && m[4] != "" {
+		tz = strings.ToUpper(m[4])
+	}
+	return fmt.Sprintf("%s %s, %s %s", m[1], m[2], m[3], tz)
 }
 
 func timeoutErr(ctx context.Context) error {
