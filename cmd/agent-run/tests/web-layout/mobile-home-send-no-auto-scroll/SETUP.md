@@ -46,7 +46,7 @@ func Setup(t *testing.T, req *Request) error {
 	}
 
 	body := openHomePage(req.BaseURL) + waitForSessionListOverflow() +
-		scrollSessionListUpFromBottom(250) + assertSessionListDetached() +
+		scrollSessionListDownFromTop(250) + assertSessionListDetached() +
 		recordSessionListScrollTop("BeforeSend") + sendComposerMessage(prompt) +
 		`
 await page.waitForTimeout(500);

@@ -1,0 +1,30 @@
+.auth-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 100%;
+  padding: 16px;
+}
+
+.auth-page form {
+  margin-top: auto;
+}
+
+.auth-page input {
+  flex: 1;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 22px;
+  border: 1px solid #3a4254;
+  background: #0f1115;
+  color: inherit;
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.auth-page input:focus {
+  outline: none;
+  border-color: #8ab4f8;
+  box-shadow: 0 0 0 2px rgba(138, 180, 248, 0.2);
+}

@@ -1,18 +1,19 @@
 # Scenario
 
 **Feature**: `--open` attaches without hard-failing on missing banner/OpenReady;
-non-open headless still waits for inject-ready banner
+non-open new-session matches open inject policy (argv only, no PTY re-inject)
 
 ```
 # open attach-first (production path; no AGENT_RUN_OPEN_ATTACH_INSTANT)
 agent-run run --agent-runner grok-tty --open ["prompt"]
   + fake TUI never paints GROK_TTY_BANNER / Grok › / modern OpenReady chrome
   -> exit 0; no "banner not detected"; session id after attach
+  -> new-session prompt: PROMPT_ARG set; STDIN_COUNT=0
 
-# non-open compat: hard-wait inject-ready still works
-agent-run run --agent-runner grok-tty "hi"
-  + delayed GROK_TTY_BANNER
-  -> inject after banner; exit 0
+# non-open: same no-double-inject for new-session normal submit
+agent-run run --agent-runner grok-tty "once-only"|"hi"
+  + banner (immediate or delayed) + argv/stdin probe
+  -> PROMPT_ARG set; STDIN_COUNT=0 (no PTY re-inject)
 ```
 
 ## Preconditions
@@ -22,12 +23,13 @@ agent-run run --agent-runner grok-tty "hi"
   controlling TTY (ExitOnTerminalExit), while still exercising production
   readiness (not the INSTANT soft-banner branch).
 - Existing `tty-lifecycle/*` INSTANT leaves remain the CI-fast lifecycle suite.
+- Non-open new-session must not double-submit (argv + SendMessage).
 
 ## Steps
 
-1. Grouping documents banner-wait policy class.
+1. Grouping documents banner-wait / inject-policy class.
 2. `open/` vs `non-open/` split on whether `--open` is set.
-3. Leaves choose empty/with-prompt/probe or delayed-banner fixtures.
+3. Leaves choose empty/with-prompt/no-double-inject or delayed-banner fixtures.
 
 ```go
 import "testing"

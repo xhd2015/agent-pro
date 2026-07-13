@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionSummary } from './api/client'
 import {
+  cleanWorkspacePath,
   countDoneSessions,
   countSessionsByStatus,
   filterSessionsByStatus,
   formatSessionRecency,
   formatStatusLabel,
+  formatWorkspaceLabel,
   getQuickResumeSessions,
   isStaleRunningSession,
   sessionListCountLabel,
@@ -14,6 +16,7 @@ import {
   sessionWorkspaceLabel,
   shortSessionId,
   shortWorkspaceLabel,
+  sortSessionsNewestFirst,
   sortSessionsOldestFirst,
   truncateSessionPreview,
 } from './sessionDisplay'
@@ -47,9 +50,65 @@ describe('shortSessionId', () => {
   })
 })
 
+describe('formatWorkspaceLabel', () => {
+  it('full mode returns cleaned absolute path', () => {
+    expect(
+      formatWorkspaceLabel('/Users/xhd2015/Projects/xhd2015/working/', { mode: 'full' }),
+    ).toBe('/Users/xhd2015/Projects/xhd2015/working')
+  })
+
+  it('compact short paths under home become ~', () => {
+    expect(
+      formatWorkspaceLabel('/Users/xhd2015', {
+        mode: 'compact',
+        home: '/Users/xhd2015',
+      }),
+    ).toBe('~')
+  })
+
+  it('compact uses ~/ when path is under home', () => {
+    expect(
+      formatWorkspaceLabel('/Users/me/projects/agent-pro/src', {
+        mode: 'compact',
+        home: '/Users/me',
+        maxChars: 80,
+      }),
+    ).toBe('~/projects/agent-pro/src')
+  })
+
+  it('compact long paths keep basename with tilde cue', () => {
+    const long =
+      '/Users/xhd2015/Projects/gopath/src/git.gna.com/some/path/project-api-capture'
+    expect(
+      formatWorkspaceLabel(long, {
+        mode: 'compact',
+        home: '/Users/xhd2015',
+        maxChars: 40,
+      }),
+    ).toBe('~/…/project-api-capture')
+  })
+
+  it('compact preserves leading path identity without home (inferred /Users)', () => {
+    expect(
+      formatWorkspaceLabel('/Users/xhd2015/Projects/xhd2015/working', {
+        mode: 'compact',
+        maxChars: 80,
+      }),
+    ).toBe('~/Projects/xhd2015/working')
+  })
+})
+
+describe('cleanWorkspacePath', () => {
+  it('strips trailing slashes but keeps absolute form', () => {
+    expect(cleanWorkspacePath('/Users/xhd2015/')).toBe('/Users/xhd2015')
+  })
+})
+
 describe('shortWorkspaceLabel', () => {
-  it('shows last two path segments for deep paths', () => {
-    expect(shortWorkspaceLabel('/Users/me/projects/agent-pro/src')).toBe('…/agent-pro/src')
+  it('delegates to compact format (basename cue)', () => {
+    expect(shortWorkspaceLabel('/Users/me/projects/agent-pro/src', '/Users/me')).toBe(
+      '~/projects/agent-pro/src',
+    )
   })
 })
 
@@ -59,8 +118,10 @@ describe('sessionWorkspaceLabel', () => {
     expect(sessionWorkspaceLabel('')).toBe('—')
   })
 
-  it('shortens present workspace paths', () => {
-    expect(sessionWorkspaceLabel('/Users/me/projects/agent-pro/src')).toBe('…/agent-pro/src')
+  it('shortens present workspace paths with home', () => {
+    expect(
+      sessionWorkspaceLabel('/Users/me/projects/agent-pro/src', '/Users/me'),
+    ).toBe('~/projects/agent-pro/src')
   })
 })
 
@@ -266,6 +327,25 @@ describe('sortSessionsOldestFirst', () => {
 
   it('uses session_id as tiebreaker', () => {
     const sorted = sortSessionsOldestFirst([
+      session({ session_id: 'z', updated_at: '2026-07-08T10:00:00Z' }),
+      session({ session_id: 'a', updated_at: '2026-07-08T10:00:00Z' }),
+    ])
+    expect(sorted.map((s) => s.session_id)).toEqual(['a', 'z'])
+  })
+})
+
+describe('sortSessionsNewestFirst', () => {
+  it('orders by updated_at descending', () => {
+    const sorted = sortSessionsNewestFirst([
+      session({ session_id: 'b', updated_at: '2026-07-08T10:00:00Z' }),
+      session({ session_id: 'a', updated_at: '2026-07-08T09:00:00Z' }),
+      session({ session_id: 'c', updated_at: '2026-07-08T11:00:00Z' }),
+    ])
+    expect(sorted.map((s) => s.session_id)).toEqual(['c', 'b', 'a'])
+  })
+
+  it('uses session_id as tiebreaker', () => {
+    const sorted = sortSessionsNewestFirst([
       session({ session_id: 'z', updated_at: '2026-07-08T10:00:00Z' }),
       session({ session_id: 'a', updated_at: '2026-07-08T10:00:00Z' }),
     ])

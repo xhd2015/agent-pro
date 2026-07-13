@@ -13,6 +13,10 @@ type Config struct {
 	DefaultAgentRunner string `json:"default_agent_runner"`
 	DefaultModel       string `json:"default_model"`
 	LastSession        string `json:"last_session"`
+	// SelectedWorkspace is the active workspace path for status + new sessions.
+	SelectedWorkspace string `json:"selected_workspace,omitempty"`
+	// RecentWorkspaces is an MRU list of workspace paths (newest first, max ~12).
+	RecentWorkspaces []string `json:"recent_workspaces,omitempty"`
 }
 
 // SessionMeta is stored in sessions/<session_id>/meta.json.

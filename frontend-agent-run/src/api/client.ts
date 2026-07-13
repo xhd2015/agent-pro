@@ -42,6 +42,9 @@ export async function fetchHealth(): Promise<number> {
 export type AgentRunStatus = {
   home: string
   workspace: string
+  process_cwd?: string
+  agent_run_home?: string
+  recent_workspaces?: string[]
 }
 
 export async function fetchStatus(): Promise<AgentRunStatus | null> {
@@ -50,6 +53,43 @@ export async function fetchStatus(): Promise<AgentRunStatus | null> {
     return null
   }
   return (await res.json()) as AgentRunStatus
+}
+
+export async function putWorkspace(path: string): Promise<AgentRunStatus | null> {
+  const res = await apiFetch('/api/agent-run/workspace', {
+    method: 'PUT',
+    body: JSON.stringify({ path }),
+  })
+  if (!res.ok) {
+    return null
+  }
+  return (await res.json()) as AgentRunStatus
+}
+
+export type FsListEntry = {
+  name: string
+  path: string
+  type: 'dir' | 'file' | string
+}
+
+export type FsListResponse = {
+  path: string
+  parent?: string
+  entries: FsListEntry[]
+}
+
+export async function fetchFsList(path: string): Promise<FsListResponse | null> {
+  const q = new URLSearchParams({ path })
+  const res = await apiFetch(`/api/agent-run/fs/list?${q.toString()}`)
+  if (!res.ok) {
+    return null
+  }
+  const data = (await res.json()) as FsListResponse
+  return {
+    path: data.path,
+    parent: data.parent,
+    entries: data.entries ?? [],
+  }
 }
 
 export type SessionSummary = {
@@ -64,16 +104,83 @@ export type SessionSummary = {
   updated_at?: string
 }
 
-export async function fetchSessions(): Promise<SessionSummary[] | null> {
-  const res = await apiFetch('/api/agent-run/sessions')
+export type SessionStatusFilterParam = 'all' | 'running' | 'done'
+
+export type SessionListCounts = {
+  all: number
+  running: number
+  done: number
+}
+
+export type SessionsPage = {
+  sessions: SessionSummary[]
+  total: number
+  limit: number
+  offset: number
+  has_more: boolean
+  counts: SessionListCounts
+}
+
+export type FetchSessionsPageParams = {
+  limit?: number
+  offset?: number
+  q?: string
+  status?: SessionStatusFilterParam | string
+}
+
+/** Paginated/filtered sessions list (newest-first on server). */
+export async function fetchSessionsPage(
+  params: FetchSessionsPageParams = {},
+): Promise<SessionsPage | null> {
+  const sp = new URLSearchParams()
+  if (params.limit != null && params.limit > 0) {
+    sp.set('limit', String(params.limit))
+  }
+  if (params.offset != null && params.offset > 0) {
+    sp.set('offset', String(params.offset))
+  }
+  const q = params.q?.trim()
+  if (q) {
+    sp.set('q', q)
+  }
+  const status = params.status?.trim()
+  if (status && status !== 'all') {
+    sp.set('status', status)
+  }
+  const qs = sp.toString()
+  const path = qs ? `/api/agent-run/sessions?${qs}` : '/api/agent-run/sessions'
+  const res = await apiFetch(path)
   if (res.status === 401) {
     throw new Error('unauthorized')
   }
   if (!res.ok) {
     return null
   }
-  const data = (await res.json()) as { sessions?: SessionSummary[] }
-  return data.sessions ?? []
+  const data = (await res.json()) as {
+    sessions?: SessionSummary[]
+    total?: number
+    limit?: number
+    offset?: number
+    has_more?: boolean
+    counts?: Partial<SessionListCounts>
+  }
+  const sessions = data.sessions ?? []
+  const total = typeof data.total === 'number' ? data.total : sessions.length
+  const limit = typeof data.limit === 'number' ? data.limit : 0
+  const offset = typeof data.offset === 'number' ? data.offset : 0
+  const has_more = typeof data.has_more === 'boolean' ? data.has_more : false
+  const counts: SessionListCounts = {
+    all: typeof data.counts?.all === 'number' ? data.counts.all : total,
+    running: typeof data.counts?.running === 'number' ? data.counts.running : 0,
+    done: typeof data.counts?.done === 'number' ? data.counts.done : 0,
+  }
+  return { sessions, total, limit, offset, has_more, counts }
+}
+
+/** Full sessions list (no limit) — compat helper. */
+export async function fetchSessions(): Promise<SessionSummary[] | null> {
+  const page = await fetchSessionsPage({})
+  return page?.sessions ?? null
 }
 
 export type RunnersResponse = {

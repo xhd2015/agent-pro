@@ -1,13 +1,13 @@
 ---
 label: chromium, slow
-explanation: Home poll refresh ~4s; follow-at-bottom distance checks
+explanation: Home poll refresh ~4s; follow-at-top (newest-first) distance checks
 ---
 
 ## Expected
 
 - Playwright exit code **0**.
-- Initial `distanceFromBottom <= 80` on `session-list`.
-- After poll refresh adds a 21st session, `distanceFromBottom` stays `<= 80`.
+- Initial `distanceFromTop <= 80` on `session-list`.
+- After poll refresh adds a 21st session, `distanceFromTop` stays `<= 80`.
 
 ## Exit Code
 

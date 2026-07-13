@@ -1,0 +1,24 @@
+---
+label: ui-automation
+explanation: Playwright home session list newest-first order
+---
+
+## Expected
+
+- `playwright-debug` exits **0**.
+- First `session-item` preview matches newest seed (`brand newest epsilon`).
+
+## Errors
+
+- Pre-impl: oldest-first sort puts alpha first (RED).
+
+```go
+import "testing"
+
+func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	assertPlaywrightOK(t, resp, err)
+	if req.Scenario != "newest-first-visible" {
+		t.Fatalf("expected scenario newest-first-visible, got %q", req.Scenario)
+	}
+}
+```

@@ -1,9 +1,9 @@
 # Scenario
 
-**Feature**: home follow mode — auto-scroll while user is at bottom during poll refresh
+**Feature**: home follow mode — auto-scroll while user is at top (newest-first) during poll refresh
 
 ```
-seed 20 home sessions → / at bottom → append 21st session dir → poll refresh → session-list stays at bottom
+seed 20 home sessions → / at top → append 21st session dir → poll refresh → session-list stays at top
 ```
 
 ## Preconditions
@@ -12,14 +12,15 @@ seed 20 home sessions → / at bottom → append 21st session dir → poll refre
 - Seeded 20 home sessions; `session-list` overflows mobile viewport.
 - Open API (`WebTokenMode=omit`).
 - 21st session dir appended after page load; home poll interval ~3s.
+- Home list is **newest-first**; follow/jump target is the **top**.
 
 ## Steps
 
-1. Seed 20 home sessions under `fake-codex`.
+1. Seed 20 home sessions under `fake-codex` (flat `sessions/<id>/`).
 2. Start web with open API; open `/`.
-3. Scroll `session-list` to bottom (`distanceFromBottom <= 80`).
+3. Ensure `session-list` at top (`distanceFromTop <= 80`).
 4. Schedule append of `home-sess-021` after page settles.
-5. Wait 4s for poll refresh; assert `session-list` remains at bottom.
+5. Wait 4s for poll refresh; assert `session-list` remains at top.
 
 ```go
 import (
@@ -46,8 +47,8 @@ func Setup(t *testing.T, req *Request) error {
 	scheduleAppendHomeSessionDir(t, req, runner, 21, 1500*time.Millisecond)
 
 	body := openHomePage(req.BaseURL) + waitForSessionListOverflow() +
-		scrollSessionListToBottom() + assertSessionListAtBottom() +
-		waitForHomePollRefresh() + assertSessionListAtBottom()
+		scrollSessionListToTop() + assertSessionListAtTop() +
+		waitForHomePollRefresh() + assertSessionListAtTop()
 
 	req.PlaywrightScript = mobileViewportScript(body)
 	return nil

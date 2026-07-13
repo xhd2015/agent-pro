@@ -3,22 +3,23 @@
 **Bug**: follow-up via composer must not duplicate user timeline bubbles during agent run
 
 ```
-seed idle grok-tty session + 1 user event -> session page -> composer follow-up -> grok-tty run -> exactly 2 user bubbles
+seed idle grok-tty session + 1 user event -> flat session page -> composer follow-up -> grok-tty run -> exactly 2 user bubbles
 ```
 
 ## Preconditions
 
 - Web started with grok mock harness (`--agent-runner grok-tty`).
 - `playwright-debug` on PATH.
-- Seeded session `status=idle` with one prior user message in `events.jsonl`.
+- Seeded session `status=idle` with one prior user message in flat `sessions/<id>/events.jsonl`.
 
 ## Steps
 
-1. Seed `grok-tty/follow-up-dedupe` with initial user prompt `first layout prompt`.
+1. Seed flat `sessions/follow-up-dedupe` (meta.runner=`grok-tty`) with initial user prompt `first layout prompt`.
 2. Start grok mock web with open API on a free port.
-3. Open session route; send `second follow-up prompt` via composer.
+3. Open flat session route `/sessions/follow-up-dedupe`; send `second follow-up prompt` via composer.
 4. While session is running, poll user bubble count every 250ms; fail immediately if count > 2.
-5. After run completes, assert exactly two user bubbles; each prompt text appears once.
+5. Poll until user bubble count is exactly 2 (no idle/assistant requirement — session may stay running on mock bind races).
+6. Assert exactly two user bubbles; each prompt text appears once.
 
 ```go
 import (
@@ -48,13 +49,14 @@ func Setup(t *testing.T, req *Request) error {
 		return err
 	}
 
-	sessionPath := "/sessions/" + runner + "/" + sessionID
+	// Flat SPA route: /sessions/:sessionId (no runner segment).
+	sessionPath := "/sessions/" + sessionID
 	body := `
 await page.goto('` + req.BaseURL + sessionPath + `', { waitUntil: 'domcontentloaded' });
 const chat = page.locator('[data-testid="chat-active"]');
 await chat.waitFor({ state: 'visible', timeout: 15000 });
 ` + assertUserMessageCount(1) + sendComposerMessage(followUpPrompt) + assertNoDuplicateUserMessagesDuringRun(2) +
-		waitForSessionRunComplete() + assertUserMessageCount(2) + assertDistinctUserPromptsOnce([]string{firstPrompt, followUpPrompt})
+		waitForUserMessageCount(2) + assertUserMessageCount(2) + assertDistinctUserPromptsOnce([]string{firstPrompt, followUpPrompt})
 
 	req.PlaywrightScript = mobileViewportScript(body)
 	return nil

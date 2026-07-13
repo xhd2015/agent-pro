@@ -1,0 +1,19 @@
+.runner-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #9aa0a6;
+}
+
+.runner-picker select {
+  padding: 8px 12px;
+  min-height: 36px;
+  border-radius: 10px;
+  border: 1px solid #3a4254;
+  background: #0f1115;
+  color: inherit;
+  font-size: 14px;
+  max-width: min(42vw, 160px);
+}

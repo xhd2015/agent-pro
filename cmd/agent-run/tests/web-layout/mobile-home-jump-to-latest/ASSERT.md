@@ -6,8 +6,8 @@ explanation: Home poll + jump chip visibility and tap ~8s
 ## Expected
 
 - Playwright exit code **0**.
-- While detached with poll-added session below viewport, `[data-testid="jump-to-latest"]` becomes visible.
-- After tap: `distanceFromBottom <= 80`; chip no longer visible.
+- While detached with poll-added session (newest above), `[data-testid="jump-to-latest"]` becomes visible.
+- After tap: `distanceFromTop <= 80`; chip no longer visible.
 
 ## Exit Code
 

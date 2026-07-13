@@ -59,9 +59,10 @@ agent-run run --agent-runner grok-tty --open ["prompt"]
   + fake TUI never paints banner/OpenReady, holds then exits
   -> exit 0; no "banner not detected"; session id after attach
 
-# non-open still hard-waits inject-ready
-agent-run run --agent-runner grok-tty "hi"
-  + delayed GROK_TTY_BANNER → inject after banner → exit 0
+# non-open new-session: argv only (no PTY re-inject; same policy as --open)
+agent-run run --agent-runner grok-tty "once-only"|"hi"
+  + banner (immediate or delayed) + argv/stdin probe
+  -> PROMPT_ARG set; STDIN_COUNT=0
 ```
 
 ## Version
@@ -94,8 +95,9 @@ cmd/agent-run/tests/run/open/
     │   ├── no-markers-empty-prompt/   # empty prompt; no banner/OpenReady → exit 0
     │   ├── no-markers-with-prompt/    # argv prompt; no banner error; session id
     │   └── no-double-inject/          # new-session prompt on argv only (no PTY re-inject)
-    └── non-open/                      # headless inject still hard-waits banner
-        └── delayed-banner-still-injects/  # delayed GROK_TTY_BANNER → inject succeeds
+    └── non-open/                      # headless: new-session no double-submit
+        ├── no-double-inject/          # argv only; STDIN_COUNT=0 (mirror open)
+        └── delayed-banner-still-injects/  # delayed banner; still no re-inject
 ```
 
 Parameter ranking (most → least significant):
@@ -106,6 +108,7 @@ Parameter ranking (most → least significant):
 4. **Lifecycle aspect** — silence | post-attach id | keep-alive registry | runner acceptance
 5. **Banner readiness policy** — open attach-first (no hard wait) vs non-open hard wait
 6. **Open prompt variant** — empty | with-prompt | no-double-inject
+7. **Non-open inject policy** — no-double-inject | delayed-banner no re-inject
 
 ## Test Index
 
@@ -122,8 +125,9 @@ Parameter ranking (most → least significant):
 | 9 | `tty-lifecycle/codex-tty-accepted` | `--open` + `codex-tty` not rejected as unknown/non-TTY |
 | 10 | `attach-without-banner/open/no-markers-empty-prompt` | `--open` empty; fake TUI never paints ready markers; **no INSTANT** → exit 0; no banner error |
 | 11 | `attach-without-banner/open/no-markers-with-prompt` | `--open` + prompt; no banner/OpenReady; **no INSTANT** → exit 0; session id; no banner error |
-| 12 | `attach-without-banner/open/no-double-inject` | New-session prompt on argv only; fake probe sees no PTY re-inject; no banner error |
-| 13 | `attach-without-banner/non-open/delayed-banner-still-injects` | Non-open delayed banner still injects (compat hard-wait); exit 0 |
+| 12 | `attach-without-banner/open/no-double-inject` | New-session `--open` prompt on argv only; fake probe sees no PTY re-inject; no banner error |
+| 13 | `attach-without-banner/non-open/no-double-inject` | New-session non-open: `PROMPT_ARG` set; `STDIN_COUNT=0` (no double-submit) |
+| 14 | `attach-without-banner/non-open/delayed-banner-still-injects` | Delayed banner still no re-inject for new-session; no banner timeout |
 
 Related external compat (not under this root): `cmd/agent-run/tests/grok-tty/run/waits-for-banner`.
 
@@ -139,15 +143,18 @@ doctest test -v ./cmd/agent-run/tests/run/open/prompt-policy/with-open-empty-all
 doctest test -v ./cmd/agent-run/tests/run/open/tty-lifecycle/silence-no-stream
 doctest test -v ./cmd/agent-run/tests/run/open/tty-lifecycle/prints-id-after-attach
 doctest test -v ./cmd/agent-run/tests/run/open/tty-lifecycle/keep-alive-registry
-# New attach-first leaves (expect RED until RunHeadless open path is attach-first)
+# attach-first + non-open no-double-inject (expect RED on non-open leaves until
+# RunHeadless skips PTY re-inject for new-session !NoSubmit)
 doctest test -v ./cmd/agent-run/tests/run/open/attach-without-banner
 doctest test -v ./cmd/agent-run/tests/run/open/attach-without-banner/open/no-markers-empty-prompt
 doctest test -v ./cmd/agent-run/tests/run/open/attach-without-banner/open/no-markers-with-prompt
 doctest test -v ./cmd/agent-run/tests/run/open/attach-without-banner/open/no-double-inject
+doctest test -v ./cmd/agent-run/tests/run/open/attach-without-banner/non-open/no-double-inject
 doctest test -v ./cmd/agent-run/tests/run/open/attach-without-banner/non-open/delayed-banner-still-injects
 # Existing INSTANT lifecycle (must stay green)
 doctest test ./cmd/agent-run/tests/run/open/tty-lifecycle
 ```
+
 
 ```go
 import (

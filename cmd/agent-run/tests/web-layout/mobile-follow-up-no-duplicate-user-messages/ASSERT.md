@@ -8,12 +8,12 @@ explanation: Playwright mobile follow-up; live grok-tty run ~60s
 - Playwright exit code **0**.
 - Viewport 390×844; no horizontal document scroll.
 - **During** the follow-up run (while `agent-running-card`, inline loading, or `running` status pill is visible), `[data-testid="message-item-user"]` count never exceeds **2** at any 250ms poll step.
-- After follow-up run completes, `[data-testid="message-item-user"]` count is **exactly 2**.
+- After follow-up, poll until `[data-testid="message-item-user"]` count is **exactly 2** (does **not** require session idle/finished or assistant bubbles).
 - Initial prompt `first layout prompt` and follow-up `second follow-up prompt` each appear in exactly one user bubble.
 
 ## Side Effects
 
-- Session files under `AGENT_RUN_HOME/sessions/grok-tty/follow-up-dedupe/`.
+- Session files under flat `AGENT_RUN_HOME/sessions/follow-up-dedupe/`.
 - Follow-up POST enqueues agent run via `grok-tty` mock harness.
 
 ## Exit Code

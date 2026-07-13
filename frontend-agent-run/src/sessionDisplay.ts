@@ -19,18 +19,99 @@ export function shortSessionId(sessionId: string): string {
   return `${id.slice(0, 10)}…${id.slice(-8)}`
 }
 
-export function shortWorkspaceLabel(workspace: string): string {
-  const trimmed = workspace.trim().replace(/\/+$/, '')
+/** Strip trailing slashes; keep a single leading slash for absolute Unix paths. */
+export function cleanWorkspacePath(workspace: string): string {
+  const trimmed = workspace.trim()
   if (!trimmed) return ''
-  const parts = trimmed.split(/[/\\]/).filter(Boolean)
-  if (parts.length === 0) return trimmed
-  if (parts.length <= 2) return parts.join('/')
-  return `…/${parts.slice(-2).join('/')}`
+  // Preserve root "/" ; strip trailing slashes on longer paths.
+  if (trimmed === '/' || trimmed === '\\') return trimmed
+  return trimmed.replace(/[/\\]+$/, '')
+}
+
+export type FormatWorkspaceLabelOpts = {
+  /** full = entire path (top bar); compact = card-friendly short form */
+  mode?: 'full' | 'compact'
+  /** User home from /api/agent-run/status — enables ~/ prefix */
+  home?: string
+  /** Max characters for compact labels (default 40) */
+  maxChars?: number
+}
+
+/**
+ * Infer a home prefix when API home is missing: /Users/<name> or /home/<name>.
+ */
+function inferHomePrefix(path: string): string {
+  const m = path.match(/^(\/(?:Users|home)\/[^/]+)/)
+  return m?.[1] ?? ''
+}
+
+function applyHomeTilde(path: string, home?: string): string {
+  const cleaned = cleanWorkspacePath(path)
+  if (!cleaned) return ''
+  const homeClean =
+    cleanWorkspacePath(home ?? '') || inferHomePrefix(cleaned)
+  if (!homeClean) return cleaned
+  if (cleaned === homeClean) return '~'
+  if (cleaned.startsWith(homeClean + '/')) {
+    return `~${cleaned.slice(homeClean.length)}`
+  }
+  return cleaned
+}
+
+/**
+ * Format a workspace path for UI.
+ * - full: absolute cleaned path (no forced 2-segment truncation)
+ * - compact: ~/…/basename style for session cards
+ */
+export function formatWorkspaceLabel(
+  workspace: string,
+  opts?: FormatWorkspaceLabelOpts,
+): string {
+  const mode = opts?.mode ?? 'compact'
+  const cleaned = cleanWorkspacePath(workspace)
+  if (!cleaned) return ''
+
+  if (mode === 'full') {
+    return cleaned
+  }
+
+  const maxChars = opts?.maxChars ?? 40
+  const display = applyHomeTilde(cleaned, opts?.home)
+  if (display.length <= maxChars) {
+    return display
+  }
+
+  const parts = display.split(/[/\\]/).filter(Boolean)
+  const base = parts[parts.length - 1] || display
+  const usesTilde = display.startsWith('~')
+
+  // ~/…/basename (keep home cue + leaf)
+  const withTildeTail = usesTilde ? `~/…/${base}` : `…/${base}`
+  if (withTildeTail.length <= maxChars) {
+    return withTildeTail
+  }
+
+  // Basename only, ellipsize if still too long
+  if (base.length <= maxChars) {
+    return base
+  }
+  return `…${base.slice(-(maxChars - 1))}`
+}
+
+/**
+ * Compact workspace label (session chips, workspace page list).
+ * Prefer formatWorkspaceLabel(..., { mode: 'compact' }) for new call sites.
+ */
+export function shortWorkspaceLabel(workspace: string, home?: string): string {
+  return formatWorkspaceLabel(workspace, { mode: 'compact', home })
 }
 
 /** Display label for session row workspace; em dash when absent. */
-export function sessionWorkspaceLabel(workspace: string | undefined): string {
-  const short = shortWorkspaceLabel(workspace ?? '')
+export function sessionWorkspaceLabel(
+  workspace: string | undefined,
+  home?: string,
+): string {
+  const short = formatWorkspaceLabel(workspace ?? '', { mode: 'compact', home })
   return short || '—'
 }
 
@@ -87,6 +168,16 @@ export function sortSessionsOldestFirst(sessions: SessionSummary[]): SessionSumm
     const aMs = parseRFC3339Ms(a.updated_at) ?? parseRFC3339Ms(a.created_at) ?? 0
     const bMs = parseRFC3339Ms(b.updated_at) ?? parseRFC3339Ms(b.created_at) ?? 0
     if (aMs !== bMs) return aMs - bMs
+    return a.session_id.localeCompare(b.session_id)
+  })
+}
+
+/** Newest first: updated_at desc, then created_at desc, then session_id asc. */
+export function sortSessionsNewestFirst(sessions: SessionSummary[]): SessionSummary[] {
+  return [...sessions].sort((a, b) => {
+    const aMs = parseRFC3339Ms(a.updated_at) ?? parseRFC3339Ms(a.created_at) ?? 0
+    const bMs = parseRFC3339Ms(b.updated_at) ?? parseRFC3339Ms(b.created_at) ?? 0
+    if (aMs !== bMs) return bMs - aMs
     return a.session_id.localeCompare(b.session_id)
   })
 }

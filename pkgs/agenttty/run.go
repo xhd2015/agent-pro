@@ -207,8 +207,11 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	case <-time.After(200 * time.Millisecond):
 	}
 
+	// New session already has prompt on argv (real Grok auto-submits).
+	// Re-injecting double-submits. Inject only for resume follow-up or NoSubmit.
 	// NoSubmit: inject without trailing Enter (suffixCR=false).
-	if promptText != "" {
+	shouldInject := promptText != "" && (isResume || opts.NoSubmit)
+	if shouldInject {
 		if err := ttywatch.SendMessage(listenAddr, sessionID, promptText, !opts.NoSubmit); err != nil {
 			return "", terminalSessionID, err
 		}
@@ -227,7 +230,8 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	var autoExitCancel context.CancelFunc
 	if isCodexProvider(provider.BannerProvider) || runnerID == "codex-tty" {
 		// NoSubmit must not force Enter via retry submit path.
-		if !opts.NoSubmit {
+		// Argv-only new sessions: do not force re-submit (would double-submit).
+		if shouldInject && !opts.NoSubmit {
 			go retryCodexSubmitRemote(ctx, listenAddr, sessionID, promptText)
 		}
 		if !opts.KeepTerminalAlive {

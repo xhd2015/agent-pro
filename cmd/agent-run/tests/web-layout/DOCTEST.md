@@ -28,6 +28,12 @@ Playwright scripts POST `{runner: "grok-tty", prompt: "…"}` — never
 `fake-codex` for live sessions. Seeded-only leaves keep static `fake-codex`
 fixture dirs unchanged.
 
+**Flat session store + SPA routes** (current product):
+
+- Disk: `AGENT_RUN_HOME/sessions/<session_id>/{meta.json,events.jsonl}` (runner is in `meta`, not a path segment).
+- SPA: `/sessions/:sessionId` only — **never** `/sessions/<runner>/<id>` for new leaves (extra segment → no route match → no `chat-active`).
+- API: `/api/agent-run/sessions/:sessionId/...` (flat).
+
 **Session scroll / follow mode** (session detail page):
 
 - `app-shell.session-page` uses `100dvh` with `overflow: hidden` — document must not scroll.
@@ -45,11 +51,29 @@ fixture dirs unchanged.
 - `app-shell.home-page` uses `100dvh` with `overflow: hidden` — document must not scroll.
 - Only `[data-testid="session-list"]` scrolls; `.top-bar-home` and
   `[data-testid="composer"]` stay fixed while the list moves.
-- **Follow mode**: auto-scroll when poll refresh (`fetchSessions` every 3s) adds sessions
-  only while `distanceFromBottom <= 80`.
-- Scrolling up past threshold enters **detached** — freeze `scrollTop` on poll growth.
+- Home list is **newest-first** (paginated); "latest" is at the **top**.
+- **Sessions-only adaptive poll** (not a full 3s triple poll of sessions+runners+status):
+  home refreshes **sessions** on ~**5s when any visible session is running**, else ~**15s idle**.
+  `GET /runners` and `GET /status` run on **bootstrap/reset** (and when returning home), **not**
+  on every poll tick — idle ~7s after bootstrap must show runnersΔ=0 and statusΔ=0.
+- **Follow mode**: auto-scroll when poll refresh adds sessions only while
+  `distanceFromTop = scrollTop <= 80`.
+- Scrolling **down** past threshold enters **detached** — freeze `scrollTop` on poll growth.
+- Multi-step user scroll A→B→C then settle must **not** snap back to B after poll/layout.
+- Enter session → **back** must restore `session-list` `scrollTop` (within ~60px).
 - Composer send while detached does **not** auto-scroll (navigation may follow separately).
-- `[data-testid="jump-to-latest"]` appears when detached and new sessions appear below viewport.
+- `[data-testid="jump-to-latest"]` appears when detached; tap scrolls to **top** and resumes follow.
+
+**Markdown message cards** (session detail):
+
+- Assistant body (`[data-testid="assistant-message"]`) renders markdown via `MarkdownBody`
+  (`strong` for `**bold**`, `pre`/`code` for fenced/inline code) — not raw markers only.
+- Thinking progress cards render think text as markdown (not plain pre-wrap with literal `**`).
+
+**Terminal mobile touch**:
+
+- Terminal modal `[data-testid="terminal-surface"]` maps touch pan → xterm `scrollLines`
+  so a vertical finger-down pan reveals older `LINE_*` scrollback.
 
 **Layout selectors** (implemented by `frontend-agent-run/`):
 
@@ -63,7 +87,7 @@ fixture dirs unchanged.
 | `[data-testid="message-list"]` | Scrollable transcript region (only vertical scroll on session page) |
 | `[data-testid="session-list"]` | Scrollable session list on home (only vertical scroll on home page) |
 | `[data-testid="home-active"]` | Home main panel when session list is shown (fixed chrome wrapper) |
-| `[data-testid="jump-to-latest"]` | Floating chip when detached with unseen content below |
+| `[data-testid="jump-to-latest"]` | Floating chip when detached (home: jump to top; session: jump to bottom) |
 | `.top-bar` | Session/home header chrome (fixed; no document scroll) |
 | `.top-bar-home` | Home-specific top bar (title, runner, workspace) |
 | `.session-header` | Session metadata block above transcript (fixed within panel) |
@@ -79,7 +103,7 @@ fixture dirs unchanged.
 
 ## Version
 
-0.0.2
+0.0.3
 
 ## Decision Tree
 
@@ -99,7 +123,8 @@ cmd/agent-run/tests/web-layout/
 ├── mobile-running-card-absent-when-idle/  # session status≠running → no running card
 ├── mobile-inline-assistant-loading/       # running + user only → inline loading bubble in list
 ├── mobile-streaming-assistant-bubble/     # live phased stream → assistant text length grows
-├── mobile-follow-up-no-duplicate-user-messages/  # idle seed + composer follow-up → exactly 2 user bubbles
+├── mobile-follow-up-no-duplicate-user-messages/  # idle flat seed + composer follow-up → exactly 2 user bubbles
+├── mobile-follow-up-message-card-order/   # seeded turn-1 + live follow-up; chronological users; no assistant-before-first-user
 ├── mobile-streaming-uses-sse-not-poll/    # live run → SSE tail; session-detail GET ≤3 in 8s window
 ├── mobile-sse-stays-connected-during-run/ # seeded running + no live writer → 1 SSE stream, 0 aborts in 8s idle gap
 ├── mobile-no-session-detail-poll-while-running/  # live fake-codex run; 15s passive watch → detail GET === 1, SSE === 1
@@ -110,21 +135,29 @@ cmd/agent-run/tests/web-layout/
 ├── mobile-session-jump-to-latest/           # detached + growth → chip visible; tap restores follow
 ├── mobile-session-send-no-auto-scroll/      # detached + composer send → scrollTop unchanged
 ├── mobile-home-sessions-only-scroll/        # seeded ≥20 sessions → document fixed; only session-list scrolls; chrome stable
-├── mobile-home-auto-follow-at-bottom/       # at bottom + poll adds session → scrollTop stays at bottom
-├── mobile-home-detach-on-scroll-up/         # scroll up + poll adds session → scrollTop frozen
-├── mobile-home-jump-to-latest/              # detached + poll growth → chip visible; tap restores follow
-└── mobile-home-send-no-auto-scroll/         # detached + composer send → scrollTop unchanged before navigation
+├── mobile-home-auto-follow-at-bottom/       # at top + poll adds session → scrollTop stays at top (newest-first)
+├── mobile-home-detach-on-scroll-up/         # scroll down from top + poll adds session → scrollTop frozen
+├── mobile-home-jump-to-latest/              # detached + poll growth → chip visible; tap → top
+├── mobile-home-send-no-auto-scroll/         # detached + composer send → scrollTop unchanged before navigation
+├── mobile-home-scroll-no-snap-back/         # multi-step A→B→C settle; no snap to B
+├── mobile-home-enter-session-preserves-scroll/  # enter session → back keeps scrollTop
+├── mobile-home-idle-no-meta-poll/           # idle ~7s: runners/status Δ=0 after bootstrap
+├── mobile-assistant-markdown-renders/       # assistant **bold** + fenced code → strong/pre/code
+├── mobile-thinking-markdown-renders/        # thinking card markdown structure
+└── mobile-terminal-touch-scroll-history/    # mobile touch pan reveals older LINE_* history
 ```
 
 Parameter ranking (most → least significant):
 
 1. **Route + screen** — home `/` vs session detail; empty vs auth vs chat vs running indicator
-2. **Scroll / follow** — fixed chrome vs list-only scroll (message-list or session-list); following vs detached; jump chip
+2. **Scroll / follow** — fixed chrome vs list-only scroll (message-list or session-list); following vs detached; jump chip; scroll preserve / no snap-back
 3. **Session status** — `running` (card visible) vs idle/finished (card absent)
-4. **API token mode** — open API vs explicit Bearer
-5. **Server cwd / workspace string length** — default vs deeply nested `WebWorkingDir` (home header)
-6. **Viewport** — fixed 390×844 (iPhone-class)
-7. **Layout invariants** — composer pinned bottom; `scrollWidth <= clientWidth`; runner picker within viewport width
+4. **Content render** — markdown on assistant/think; terminal touch scroll
+5. **API token mode** — open API vs explicit Bearer
+6. **Home poll hygiene** — sessions-only adaptive poll; no periodic runners/status
+7. **Server cwd / workspace string length** — default vs deeply nested `WebWorkingDir` (home header)
+8. **Viewport** — fixed 390×844 (iPhone-class)
+9. **Layout invariants** — composer pinned bottom; `scrollWidth <= clientWidth`; runner picker within viewport width
 
 ## Test Index
 
@@ -143,7 +176,8 @@ Parameter ranking (most → least significant):
 | 8 | `mobile-running-card-absent-when-idle` | Seeded `idle` session; `agent-running-card` not in DOM (negative control) |
 | 9 | `mobile-inline-assistant-loading` | Seeded `running` with user bubble only; inline `message-item-assistant-loading` visible |
 | 10 | `mobile-streaming-assistant-bubble` | Live `grok-tty` create-session run; assistant bubble text length increases over poll window |
-| 11 | `mobile-follow-up-no-duplicate-user-messages` | Seeded idle `grok-tty` session + 1 user event; composer follow-up; exactly 2 user bubbles after run |
+| 11 | `mobile-follow-up-no-duplicate-user-messages` | Flat idle `grok-tty` seed + 1 user event; `/sessions/<id>` follow-up; exactly 2 user bubbles after run |
+| 11a | `mobile-follow-up-message-card-order` | Flat seed turn-1 (`run ls` + assistant) + live follow-up `what did I say`; chronological users; no assistant before first user (live + reload) |
 | 12 | `mobile-streaming-uses-sse-not-poll` | Live `grok-tty` session; 8s network window: SSE used, session-detail GET ≤3 |
 | 13 | `mobile-sse-stays-connected-during-run` | Seeded `running` session (no live writer); 8s idle gap: exactly 1 SSE stream, 0 aborts, detail GET ≤3 |
 | 14 | `mobile-no-session-detail-poll-while-running` | Live `grok-tty` session; 15s passive watch: detail GET **=== 1**, SSE **=== 1**, 0 aborts (stricter than ≤3) |
@@ -153,10 +187,16 @@ Parameter ranking (most → least significant):
 | 18 | `mobile-session-jump-to-latest` | Detached + streaming growth → `jump-to-latest` visible; tap → bottom + chip hidden |
 | 19 | `mobile-session-send-no-auto-scroll` | Detached idle overflow session; composer send → `scrollTop` unchanged (±2px) |
 | 20 | `mobile-home-sessions-only-scroll` | Seeded ≥20 home sessions; no document scroll; only `session-list` overflows; top-bar-home + composer Y stable after list scroll |
-| 21 | `mobile-home-auto-follow-at-bottom` | At bottom on `/`; poll refresh adds 21st session; `distanceFromBottom <= 80` |
-| 22 | `mobile-home-detach-on-scroll-up` | Scroll up ≥250px on `/`; poll adds session; `scrollTop` frozen (±2px) |
-| 23 | `mobile-home-jump-to-latest` | Detached on `/` + poll growth → `jump-to-latest` visible; tap → bottom + chip hidden |
+| 21 | `mobile-home-auto-follow-at-bottom` | At top on `/` (newest-first); poll refresh adds 21st session; `distanceFromTop <= 80` |
+| 22 | `mobile-home-detach-on-scroll-up` | Scroll down ≥250px from top on `/`; poll adds session; `scrollTop` frozen (±2px) |
+| 23 | `mobile-home-jump-to-latest` | Detached on `/` + poll growth → `jump-to-latest` visible; tap → top + chip hidden |
 | 24 | `mobile-home-send-no-auto-scroll` | Detached on `/`; composer send → `scrollTop` unchanged (±2px) within 500ms |
+| 25 | `mobile-home-scroll-no-snap-back` | Multi-step scroll A→B→C; after ≥3.5s settle stay near C (not snap to B) |
+| 26 | `mobile-home-enter-session-preserves-scroll` | Mid-list scroll → open session → back; `scrollTop` within ~60px |
+| 27 | `mobile-home-idle-no-meta-poll` | Idle home ~7s after bootstrap: runners GET Δ=0, status GET Δ=0 |
+| 28 | `mobile-assistant-markdown-renders` | Seeded assistant with bold + fence → DOM `strong` and `pre`/`code` |
+| 29 | `mobile-thinking-markdown-renders` | Seeded think markdown → thinking card has `strong`/`code` structure |
+| 30 | `mobile-terminal-touch-scroll-history` | Fake PTY `LINE_*` scrollback; mobile touch pan decreases min visible LINE |
 
 ## How to Run
 
@@ -165,9 +205,11 @@ doctest vet ./cmd/agent-run/tests/web-layout
 doctest test -v ./cmd/agent-run/tests/web-layout
 doctest test -v ./cmd/agent-run/tests/web-layout/mobile-empty
 doctest test -v ./cmd/agent-run/tests/web-layout --label chromium
+doctest test --label ui-automation ./cmd/agent-run/tests/web-layout/...
 doctest test -v ./cmd/agent-run/tests/web-layout/mobile-running-status-card --label chromium
 doctest test -v ./cmd/agent-run/tests/web-layout/mobile-home-runner-visible-long-workspace --label chromium
 doctest test -v ./cmd/agent-run/tests/web-layout/mobile-follow-up-no-duplicate-user-messages --label chromium
+doctest test -v ./cmd/agent-run/tests/web-layout/mobile-follow-up-message-card-order --label 'chromium && slow'
 doctest test -v ./cmd/agent-run/tests/web-layout/mobile-streaming-uses-sse-not-poll --label 'chromium && slow'
 doctest test -v ./cmd/agent-run/tests/web-layout/mobile-sse-stays-connected-during-run --label 'chromium && slow'
 doctest test -v ./cmd/agent-run/tests/web-layout/mobile-no-session-detail-poll-while-running --label 'chromium && slow'
@@ -181,6 +223,12 @@ doctest test -v ./cmd/agent-run/tests/web-layout/mobile-home-auto-follow-at-bott
 doctest test -v ./cmd/agent-run/tests/web-layout/mobile-home-detach-on-scroll-up --label chromium
 doctest test -v ./cmd/agent-run/tests/web-layout/mobile-home-jump-to-latest --label chromium
 doctest test -v ./cmd/agent-run/tests/web-layout/mobile-home-send-no-auto-scroll --label chromium
+doctest test -v ./cmd/agent-run/tests/web-layout/mobile-home-scroll-no-snap-back --label ui-automation
+doctest test -v ./cmd/agent-run/tests/web-layout/mobile-home-enter-session-preserves-scroll --label ui-automation
+doctest test -v ./cmd/agent-run/tests/web-layout/mobile-home-idle-no-meta-poll --label 'ui-automation && slow'
+doctest test -v ./cmd/agent-run/tests/web-layout/mobile-assistant-markdown-renders --label ui-automation
+doctest test -v ./cmd/agent-run/tests/web-layout/mobile-thinking-markdown-renders --label ui-automation
+doctest test -v ./cmd/agent-run/tests/web-layout/mobile-terminal-touch-scroll-history --label ui-automation
 ```
 
 ```go
@@ -211,7 +259,7 @@ type Request struct {
 	WebTokenMode  string // "omit" | "explicit" | "auto" (default explicit)
 	BaseURL       string
 	Env        []string
-	Layout     string // empty | auth | chat-active | running-card | running-absent | home-long-workspace | follow-up-dedupe | sse-transport | sse-persistence | no-detail-poll | streaming-bubble | inline-loading | workspace-session | session-messages-only-scroll | session-auto-follow-at-bottom | session-detach-on-scroll-up | session-jump-to-latest | session-send-no-auto-scroll | home-sessions-only-scroll | home-auto-follow-at-bottom | home-detach-on-scroll-up | home-jump-to-latest | home-send-no-auto-scroll
+	Layout     string // empty | auth | chat-active | running-card | running-absent | home-long-workspace | follow-up-dedupe | follow-up-message-card-order | sse-transport | sse-persistence | no-detail-poll | streaming-bubble | inline-loading | workspace-session | session-messages-only-scroll | session-auto-follow-at-bottom | session-detach-on-scroll-up | session-jump-to-latest | session-send-no-auto-scroll | home-sessions-only-scroll | home-auto-follow-at-bottom | home-detach-on-scroll-up | home-jump-to-latest | home-send-no-auto-scroll | home-scroll-no-snap-back | home-enter-session-preserves-scroll | home-idle-no-meta-poll | assistant-markdown-renders | thinking-markdown-renders | terminal-touch-scroll-history
 	PlaywrightScript string
 	WebWorkingDir    string // optional process cwd for agent-run web (status.workspace)
 

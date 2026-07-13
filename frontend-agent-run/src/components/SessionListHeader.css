@@ -1,0 +1,128 @@
+.session-list-header {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 2px 12px;
+}
+
+.session-search-row {
+  display: flex;
+  min-width: 0;
+}
+
+.session-search {
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid #3a4254;
+  background: #151922;
+  color: #e8eaed;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+}
+
+.session-search::placeholder {
+  color: #6b7280;
+}
+
+.session-search:focus {
+  border-color: #8ab4f8;
+  box-shadow: 0 0 0 2px rgba(138, 180, 248, 0.2);
+}
+
+.session-list-header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.session-list-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: #c4c7c5;
+}
+
+.session-running-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #81c995;
+  background: rgba(45, 74, 34, 0.65);
+  border: 1px solid rgba(129, 201, 149, 0.35);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.session-running-badge:hover,
+.session-running-badge:active {
+  background: rgba(45, 74, 34, 0.85);
+  border-color: rgba(129, 201, 149, 0.55);
+}
+
+.session-list-refreshing {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #8ab4f8;
+  margin-left: auto;
+  animation: session-refresh-pulse 1s ease-in-out infinite;
+}
+
+@keyframes session-refresh-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.session-filter-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.session-filter-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.session-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid #3a4254;
+  background: #151922;
+  color: #9aa0a6;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.session-filter-chip--active {
+  color: #e8eaed;
+  border-color: #8ab4f8;
+  background: rgba(42, 74, 127, 0.45);
+}
+
+.session-filter-chip-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: inherit;
+  opacity: 0.85;
+}

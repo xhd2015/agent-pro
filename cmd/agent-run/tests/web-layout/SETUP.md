@@ -507,6 +507,31 @@ if (userCount !== %d) {
 `, expected, expected)
 }
 
+// waitForUserMessageCount polls until user bubble count equals expected (does not require idle/assistant).
+func waitForUserMessageCount(expected int) string {
+	return fmt.Sprintf(`
+{
+  const userBubbles = page.locator('[data-testid="message-item-user"]');
+  let ok = false;
+  for (let i = 0; i < 240; i++) {
+    const userCount = await userBubbles.count();
+    if (userCount === %d) {
+      ok = true;
+      break;
+    }
+    if (userCount > %d) {
+      throw new Error('user message count exceeded expected: count=' + userCount + ' expected=%d');
+    }
+    await page.waitForTimeout(250);
+  }
+  if (!ok) {
+    const finalCount = await userBubbles.count();
+    throw new Error('timed out waiting for %d user message bubbles, got ' + finalCount);
+  }
+}
+`, expected, expected, expected, expected)
+}
+
 func assertDistinctUserPromptsOnce(prompts []string) string {
 	var b strings.Builder
 	b.WriteString(`{
@@ -571,34 +596,81 @@ for (let i = 0; i < 120; i++) {
 `, maxExpected, maxExpected)
 }
 
+// sendComposerMessage is safe to concatenate multiple times (block-scoped bindings).
+// Waits for send enabled only after fill — empty draft keeps the button disabled.
 func sendComposerMessage(text string) string {
 	escaped := strings.ReplaceAll(text, `\`, `\\`)
 	escaped = strings.ReplaceAll(escaped, `'`, `\'`)
 	return fmt.Sprintf(`
-const composerInput = page.locator('[data-testid="composer-input"]');
-await composerInput.waitFor({ state: 'visible', timeout: 15000 });
-await composerInput.fill('%s');
-const sendBtn = page.locator('[data-testid="send-button"]');
-await sendBtn.waitFor({ state: 'visible', timeout: 15000 });
-await sendBtn.click();
+{
+  const composerInput = page.locator('[data-testid="composer-input"]');
+  await composerInput.waitFor({ state: 'visible', timeout: 15000 });
+  await composerInput.fill('%s');
+  const sendBtn = page.locator('[data-testid="send-button"]');
+  await sendBtn.waitFor({ state: 'visible', timeout: 15000 });
+  let enabled = false;
+  for (let i = 0; i < 40; i++) {
+    const disabled = await sendBtn.isDisabled().catch(() => true);
+    if (!disabled) {
+      enabled = true;
+      break;
+    }
+    await page.waitForTimeout(100);
+  }
+  if (!enabled) {
+    throw new Error('send-button stayed disabled after fill');
+  }
+  await sendBtn.click();
+}
 `, escaped)
 }
 
+// waitForSessionRunComplete is block-scoped so it can appear more than once in one script.
+// Complete when either:
+//   (1) not running and ≥1 assistant bubble (streaming success), or
+//   (2) not running (no running card / inline loading / status=running) after having
+//       observed a run start — covers follow-ups where mock bind never lands assistant text.
 func waitForSessionRunComplete() string {
 	return `
-const runningCard = page.locator('[data-testid="agent-running-card"]');
-let runDone = false;
-for (let i = 0; i < 120; i++) {
-  const cardVisible = await runningCard.isVisible().catch(() => false);
-  const assistantCount = await page.locator('[data-testid="message-item-assistant"]').count();
-  if (!cardVisible && assistantCount >= 1) {
-    runDone = true;
-    break;
+{
+  const runningCard = page.locator('[data-testid="agent-running-card"]');
+  const inlineLoading = page.locator('[data-testid="message-item-assistant-loading"]');
+  const statusPill = page.locator('.status-pill');
+  const layoutIsSessionRunning = async () => {
+    if (await runningCard.isVisible().catch(() => false)) return true;
+    if (await inlineLoading.isVisible().catch(() => false)) return true;
+    if (await statusPill.isVisible().catch(() => false)) {
+      const text = (await statusPill.innerText()).trim().toLowerCase();
+      if (text === 'running') return true;
+    }
+    return false;
+  };
+  let sawRunning = false;
+  let runDone = false;
+  for (let i = 0; i < 120; i++) {
+    const running = await layoutIsSessionRunning();
+    if (running) {
+      sawRunning = true;
+      await page.waitForTimeout(500);
+      continue;
+    }
+    const assistantCount = await page.locator('[data-testid="message-item-assistant"]').count();
+    // Success path: assistant present and idle.
+    if (assistantCount >= 1) {
+      runDone = true;
+      break;
+    }
+    // Idle after a run started (or never showed chrome but enough time elapsed with no running).
+    // Avoid false-complete on the first idle tick before the run begins.
+    if (sawRunning || i >= 6) {
+      runDone = true;
+      break;
+    }
+    await page.waitForTimeout(500);
   }
-  await page.waitForTimeout(500);
-}
-if (!runDone) {
-  throw new Error('session run did not complete within poll window');
+  if (!runDone) {
+    throw new Error('session run did not complete within poll window');
+  }
 }
 `
 }
@@ -801,9 +873,19 @@ func seedRunningSession(t *testing.T, home, runner, sessionID string, runningFor
 	return os.WriteFile(filepath.Join(sessDir, "events.jsonl"), []byte(eventsNDJSON), 0644)
 }
 
+// seedIdleSessionWithUserMessage writes flat sessions/<sessionID>/{meta.json,events.jsonl}
+// (store layout is flat; runner lives in meta only).
 func seedIdleSessionWithUserMessage(t *testing.T, home, runner, sessionID, userText string) error {
 	t.Helper()
-	sessDir := filepath.Join(home, "sessions", runner, sessionID)
+	return seedIdleSessionWithUserAndAssistant(t, home, runner, sessionID, userText, "")
+}
+
+// seedIdleSessionWithUserAndAssistant writes flat sessions/<sessionID> with one user message
+// and optional assistant reply (status=idle). Used for follow-up leaves that must not depend
+// on a live first-turn grok bind.
+func seedIdleSessionWithUserAndAssistant(t *testing.T, home, runner, sessionID, userText, assistantText string) error {
+	t.Helper()
+	sessDir := filepath.Join(home, "sessions", sessionID)
 	if err := os.MkdirAll(sessDir, 0755); err != nil {
 		return err
 	}
@@ -822,10 +904,21 @@ func seedIdleSessionWithUserMessage(t *testing.T, home, runner, sessionID, userT
 	if err := os.WriteFile(filepath.Join(sessDir, "meta.json"), metaBytes, 0644); err != nil {
 		return err
 	}
-	escaped := strings.ReplaceAll(userText, `\`, `\\`)
-	escaped = strings.ReplaceAll(escaped, `"`, `\"`)
-	eventsNDJSON := fmt.Sprintf("{\"type\":\"message\",\"role\":\"user\",\"text\":\"%s\"}\n", escaped)
-	return os.WriteFile(filepath.Join(sessDir, "events.jsonl"), []byte(eventsNDJSON), 0644)
+	escapeJSON := func(s string) string {
+		s = strings.ReplaceAll(s, `\`, `\\`)
+		s = strings.ReplaceAll(s, `"`, `\"`)
+		return s
+	}
+	userTS := time.Now().UTC().Add(-2 * time.Minute).UnixMilli()
+	assistantTS := userTS + 30_000
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("{\"type\":\"message\",\"role\":\"user\",\"text\":\"%s\",\"timestamp\":%d}\n",
+		escapeJSON(userText), userTS))
+	if strings.TrimSpace(assistantText) != "" {
+		b.WriteString(fmt.Sprintf("{\"type\":\"message\",\"role\":\"assistant\",\"text\":\"%s\",\"timestamp\":%d}\n",
+			escapeJSON(assistantText), assistantTS))
+	}
+	return os.WriteFile(filepath.Join(sessDir, "events.jsonl"), []byte(b.String()), 0644)
 }
 
 func seedIdleSessionForRunningCardNegative(t *testing.T, home, runner, sessionID string) error {
@@ -1065,31 +1158,260 @@ func openLiveGrokTTYSession(baseURL, prompt string) string {
 	escaped := strings.ReplaceAll(prompt, `\`, `\\`)
 	escaped = strings.ReplaceAll(escaped, `'`, `\'`)
 	base := strings.TrimRight(baseURL, "/")
+	// Flat SPA route: /sessions/:sessionId (no runner segment).
+	// Block-scoped so bindings never collide with later waitForChatActive / sendComposerMessage.
 	return fmt.Sprintf(`
-const res = await fetch('%s/api/agent-run/sessions', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ runner: 'grok-tty', prompt: '%s' }),
-});
-if (!res.ok && res.status !== 202) throw new Error('create session failed: ' + res.status);
-const data = await res.json();
-const sid = data.session.session_id;
-const runner = data.session.runner;
-if (runner !== 'grok-tty') throw new Error('expected grok-tty runner, got ' + runner);
-await page.goto('%s/sessions/' + runner + '/' + sid, { waitUntil: 'domcontentloaded' });
-const chat = page.locator('[data-testid="chat-active"]');
-await chat.waitFor({ state: 'visible', timeout: 15000 });
-const messages = page.locator('[data-testid="message-list"]');
-await messages.waitFor({ state: 'visible', timeout: 15000 });
+{
+  const res = await fetch('%s/api/agent-run/sessions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ runner: 'grok-tty', prompt: '%s' }),
+  });
+  if (!res.ok && res.status !== 202) throw new Error('create session failed: ' + res.status);
+  const data = await res.json();
+  const sid = data.session.session_id;
+  const runner = data.session.runner;
+  if (runner !== 'grok-tty') throw new Error('expected grok-tty runner, got ' + runner);
+  await page.goto('%s/sessions/' + encodeURIComponent(sid), { waitUntil: 'domcontentloaded' });
+  const chat = page.locator('[data-testid="chat-active"]');
+  await chat.waitFor({ state: 'visible', timeout: 15000 });
+  const messages = page.locator('[data-testid="message-list"]');
+  await messages.waitFor({ state: 'visible', timeout: 15000 });
+}
 `, base, escaped, base)
+}
+
+// openHomeWithComposer opens `/` and waits for composer + runner-select (empty or list chrome).
+func openHomeWithComposer(baseURL string) string {
+	base := strings.TrimRight(baseURL, "/")
+	return fmt.Sprintf(`
+{
+  await page.goto('%s/', { waitUntil: 'domcontentloaded' });
+  const composer = page.locator('[data-testid="composer"]');
+  await composer.waitFor({ state: 'visible', timeout: 15000 });
+  const runnerSelectHome = page.locator('[data-testid="runner-select"]');
+  await runnerSelectHome.waitFor({ state: 'visible', timeout: 15000 });
+}
+`, base)
+}
+
+// selectRunnerOption sets the home/session runner <select> to the given value.
+// Waits until the option exists (runners list hydrates from /api/agent-run/runners).
+func selectRunnerOption(runner string) string {
+	escaped := strings.ReplaceAll(runner, `\`, `\\`)
+	escaped = strings.ReplaceAll(escaped, `'`, `\'`)
+	return fmt.Sprintf(`
+{
+  const runnerSelect = page.locator('[data-testid="runner-select"]');
+  await runnerSelect.waitFor({ state: 'visible', timeout: 15000 });
+  const option = page.locator('[data-testid="runner-select"] option[value="%s"]');
+  let hasOption = false;
+  for (let i = 0; i < 60; i++) {
+    if (await option.count() > 0) {
+      hasOption = true;
+      break;
+    }
+    await page.waitForTimeout(250);
+  }
+  if (!hasOption) {
+    throw new Error('runner option never appeared: %s');
+  }
+  await runnerSelect.selectOption('%s').catch(async () => {
+    await page.evaluate((value) => {
+      const el = document.querySelector('[data-testid="runner-select"]');
+      if (!el) return;
+      el.value = value;
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    }, '%s');
+  });
+  const selected = await runnerSelect.inputValue().catch(() => '');
+  if (selected !== '%s') {
+    throw new Error('runner-select value=' + selected + ', expected %s');
+  }
+}
+`, escaped, escaped, escaped, escaped, escaped, escaped)
+}
+
+// waitForSendButtonEnabled polls until the composer send control is clickable.
+func waitForSendButtonEnabled() string {
+	return `
+{
+  const sendBtn = page.locator('[data-testid="send-button"]');
+  let enabled = false;
+  for (let i = 0; i < 80; i++) {
+    const disabled = await sendBtn.isDisabled().catch(() => true);
+    if (!disabled) {
+      enabled = true;
+      break;
+    }
+    await page.waitForTimeout(250);
+  }
+  if (!enabled) {
+    throw new Error('send-button stayed disabled');
+  }
+}
+`
+}
+
+// waitForSessionIdle polls until running card / inline loading / running status are gone.
+func waitForSessionIdle() string {
+	return `
+{
+  const runningCard = page.locator('[data-testid="agent-running-card"]');
+  const inlineLoading = page.locator('[data-testid="message-item-assistant-loading"]');
+  const statusPill = page.locator('.status-pill');
+  let idle = false;
+  for (let i = 0; i < 160; i++) {
+    const cardVisible = await runningCard.isVisible().catch(() => false);
+    const loadingVisible = await inlineLoading.isVisible().catch(() => false);
+    let statusRunning = false;
+    if (await statusPill.isVisible().catch(() => false)) {
+      const text = (await statusPill.innerText()).trim().toLowerCase();
+      statusRunning = text === 'running';
+    }
+    if (!cardVisible && !loadingVisible && !statusRunning) {
+      idle = true;
+      break;
+    }
+    await page.waitForTimeout(250);
+  }
+  if (!idle) {
+    throw new Error('session never became idle within poll window');
+  }
+}
+`
+}
+
+// assertLiveFollowUpMessageCardOrder polls the live timeline after a second user prompt.
+// Locks: chronological users (prompt1 then prompt2), each appears once, and no non-empty
+// assistant bubble appears before the first user (anti-regression for strip-all-users merge).
+// Optional reload checks the same order after full page refresh.
+func assertLiveFollowUpMessageCardOrder(prompt1, prompt2 string, includeReload bool) string {
+	p1 := strings.ReplaceAll(prompt1, `\`, `\\`)
+	p1 = strings.ReplaceAll(p1, `'`, `\'`)
+	p2 := strings.ReplaceAll(prompt2, `\`, `\\`)
+	p2 = strings.ReplaceAll(p2, `'`, `\'`)
+	reloadBlock := ""
+	if includeReload {
+		reloadBlock = `
+await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 });
+await page.locator('[data-testid="chat-active"]').waitFor({ state: 'visible', timeout: 20000 });
+{
+  let reloaded = false;
+  for (let i = 0; i < 40; i++) {
+    const tl = await readTimeline();
+    if (findUserIndex(tl, PROMPT1) >= 0 && findUserIndex(tl, PROMPT2) >= 0) {
+      assertHealthyOrder(tl, 'after reload');
+      reloaded = true;
+      break;
+    }
+    await page.waitForTimeout(500);
+  }
+  if (!reloaded) {
+    throw new Error('after reload: both user prompts never appeared');
+  }
+}
+`
+	}
+	return fmt.Sprintf(`
+{
+  const PROMPT1 = '%s';
+  const PROMPT2 = '%s';
+  const readTimeline = async () => page.evaluate(() => {
+    const nodes = Array.from(
+      document.querySelectorAll(
+        '[data-testid="message-item-user"], [data-testid="message-item-assistant"]',
+      ),
+    );
+    return nodes.map((el) => {
+      const testid = el.getAttribute('data-testid') || '';
+      const role = testid.includes('user') ? 'user' : 'assistant';
+      const text = (el.querySelector('.message-body')?.textContent || '').trim();
+      return { role, text };
+    });
+  });
+  const findUserIndex = (timeline, needle) =>
+    timeline.findIndex(
+      (e) => e.role === 'user' && (e.text.includes(needle) || needle.includes(e.text)),
+    );
+  const countUserHits = (timeline, needle) =>
+    timeline.filter(
+      (e) => e.role === 'user' && (e.text.includes(needle) || needle.includes(e.text)),
+    ).length;
+  const assertHealthyOrder = (timeline, phase) => {
+    const i1 = findUserIndex(timeline, PROMPT1);
+    const i2 = findUserIndex(timeline, PROMPT2);
+    if (i1 < 0) throw new Error(phase + ': missing user prompt ' + JSON.stringify(PROMPT1));
+    if (i2 < 0) throw new Error(phase + ': missing user prompt ' + JSON.stringify(PROMPT2));
+    if (i1 > i2) {
+      throw new Error(
+        phase + ': user order inverted: ' + JSON.stringify(PROMPT1) + ' at ' + i1 +
+        ' after ' + JSON.stringify(PROMPT2) + ' at ' + i2,
+      );
+    }
+    const hits1 = countUserHits(timeline, PROMPT1);
+    const hits2 = countUserHits(timeline, PROMPT2);
+    if (hits1 !== 1) {
+      throw new Error(phase + ': expected prompt once: ' + JSON.stringify(PROMPT1) + ' hits=' + hits1);
+    }
+    if (hits2 !== 1) {
+      throw new Error(phase + ': expected prompt once: ' + JSON.stringify(PROMPT2) + ' hits=' + hits2);
+    }
+    const firstAssistant = timeline.findIndex((e) => e.role === 'assistant' && e.text.length > 0);
+    if (firstAssistant >= 0 && firstAssistant < i1) {
+      throw new Error(
+        phase + ': assistant at ' + firstAssistant +
+        ' appears before first user ' + JSON.stringify(PROMPT1) + ' at ' + i1,
+      );
+    }
+  };
+
+  let sawSecondUser = false;
+  let healthyLive = false;
+  const pollDeadline = Date.now() + 60000;
+  while (Date.now() < pollDeadline) {
+    const tl = await readTimeline();
+    if (findUserIndex(tl, PROMPT2) >= 0) {
+      sawSecondUser = true;
+      assertHealthyOrder(tl, 'live');
+      healthyLive = true;
+      const runningCard = page.locator('[data-testid="agent-running-card"]');
+      const cardVisible = await runningCard.isVisible().catch(() => false);
+      const statusPill = page.locator('.status-pill');
+      let statusRunning = false;
+      if (await statusPill.isVisible().catch(() => false)) {
+        const text = (await statusPill.innerText()).trim().toLowerCase();
+        statusRunning = text === 'running';
+      }
+      // After both users visible with healthy order, prefer to settle once not running.
+      if (!cardVisible && !statusRunning) {
+        await page.waitForTimeout(800);
+        const settled = await readTimeline();
+        assertHealthyOrder(settled, 'live-settled');
+        break;
+      }
+    }
+    await page.waitForTimeout(250);
+  }
+  if (!sawSecondUser) {
+    throw new Error('second user prompt never appeared: ' + JSON.stringify(PROMPT2));
+  }
+  if (!healthyLive) {
+    throw new Error('live follow-up never reached healthy message-card order');
+  }
+  %s
+}
+`, p1, p2, reloadBlock)
 }
 
 func waitForChatActive() string {
 	return `
-const chat = page.locator('[data-testid="chat-active"]');
-await chat.waitFor({ state: 'visible', timeout: 15000 });
-const messages = page.locator('[data-testid="message-list"]');
-await messages.waitFor({ state: 'visible', timeout: 15000 });
+{
+  const chat = page.locator('[data-testid="chat-active"]');
+  await chat.waitFor({ state: 'visible', timeout: 15000 });
+  const messages = page.locator('[data-testid="message-list"]');
+  await messages.waitFor({ state: 'visible', timeout: 15000 });
+}
 `
 }
 
@@ -1425,7 +1747,7 @@ func homeSessionID(index int) string {
 }
 
 // seedManyHomeSessions creates count session dirs (home-sess-001 …) with distinct session_id
-// and staggered updated_at for stable list ordering (oldest first, newest last).
+// and staggered updated_at. Home list is newest-first: higher index = newer = closer to top.
 func seedManyHomeSessions(t *testing.T, home, runner string, count int) error {
 	t.Helper()
 	if count < 20 {
@@ -1440,21 +1762,23 @@ func seedManyHomeSessions(t *testing.T, home, runner string, count int) error {
 	return nil
 }
 
+// writeHomeSessionDir writes flat sessions/<session_id>/meta.json (store layout is flat).
 func writeHomeSessionDir(home, runner string, index int, updatedAt time.Time) error {
 	sessionID := homeSessionID(index)
-	sessDir := filepath.Join(home, "sessions", runner, sessionID)
+	sessDir := filepath.Join(home, "sessions", sessionID)
 	if err := os.MkdirAll(sessDir, 0755); err != nil {
 		return err
 	}
 	createdAt := updatedAt.Add(-2 * time.Minute).Format(time.RFC3339)
 	updatedAtStr := updatedAt.Format(time.RFC3339)
 	meta := map[string]any{
-		"runner":     runner,
-		"session_id": sessionID,
-		"status":     "idle",
-		"workspace":  "/tmp/home-scroll-workspace",
-		"created_at": createdAt,
-		"updated_at": updatedAtStr,
+		"runner":         runner,
+		"session_id":     sessionID,
+		"status":         "idle",
+		"initial_prompt": fmt.Sprintf("Home scroll seed session %d", index),
+		"workspace":      "/tmp/home-scroll-workspace",
+		"created_at":     createdAt,
+		"updated_at":     updatedAtStr,
 	}
 	metaBytes, err := json.Marshal(meta)
 	if err != nil {
@@ -1638,20 +1962,91 @@ func waitForSessionListOverflow() string {
 	return waitForScrollContainerOverflow(layoutScrollContainerSessionList)
 }
 
-func scrollSessionListToBottom() string {
-	return scrollContainerToBottom(layoutScrollContainerSessionList)
+// Home session-list is newest-first: "latest" is at the TOP. Session message-list
+// still uses bottom-follow helpers above; home wrappers use top-anchor semantics.
+
+func scrollSessionListToTop() string {
+	loc := scrollContainerLocator(layoutScrollContainerSessionList)
+	return fmt.Sprintf(`
+{
+  const list = page.locator('%s');
+  await list.evaluate((el) => { el.scrollTop = 0; });
+  await page.waitForTimeout(100);
+}
+`, loc)
 }
 
-func scrollSessionListUpFromBottom(minPx int) string {
-	return scrollContainerUpFromBottom(layoutScrollContainerSessionList, minPx)
+// scrollSessionListDownFromTop moves away from newest (top) to detach follow mode.
+// Uses real mouse wheel so React onWheel → markUserScrollIntent runs before scroll.
+func scrollSessionListDownFromTop(minPx int) string {
+	loc := scrollContainerLocator(layoutScrollContainerSessionList)
+	return fmt.Sprintf(`
+{
+  const list = page.locator('%s');
+  await list.scrollIntoViewIfNeeded();
+  const box = await list.boundingBox();
+  if (!box) throw new Error('session-list bounding box missing');
+  await page.mouse.move(box.x + box.width / 2, box.y + Math.min(40, box.height / 2));
+  // Wheel down = away from newest (top); may need multiple ticks on some engines.
+  let remaining = %d;
+  while (remaining > 0) {
+    const step = Math.min(remaining, 120);
+    await page.mouse.wheel(0, step);
+    remaining -= step;
+    await page.waitForTimeout(40);
+  }
+  // Ensure we landed far enough from top even if wheel delta was clamped.
+  await list.evaluate((el, minPx) => {
+    if (el.scrollTop < minPx) {
+      el.scrollTop = Math.min(Math.max(0, el.scrollHeight - el.clientHeight), minPx);
+    }
+  }, %d);
+  await page.waitForTimeout(150);
+  const distance = await list.evaluate((el) => el.scrollTop);
+  if (distance <= 80) {
+    throw new Error('scrollSessionListDownFromTop failed: still near top scrollTop=' + distance);
+  }
+}
+`, loc, minPx, minPx)
 }
 
-func assertSessionListAtBottom() string {
-	return assertScrollContainerAtBottom(layoutScrollContainerSessionList)
+func assertSessionListAtTop() string {
+	loc := scrollContainerLocator(layoutScrollContainerSessionList)
+	return fmt.Sprintf(`
+{
+  const list = page.locator('%s');
+  const distance = await list.evaluate((el) => el.scrollTop);
+  if (distance > %d) {
+    throw new Error('%s not at top: distanceFromTop=' + distance + ' threshold=%d');
+  }
+}
+`, loc, layoutBottomThresholdPx, layoutScrollContainerSessionList, layoutBottomThresholdPx)
 }
 
 func assertSessionListDetached() string {
-	return assertScrollContainerDetached(layoutScrollContainerSessionList)
+	loc := scrollContainerLocator(layoutScrollContainerSessionList)
+	return fmt.Sprintf(`
+{
+  const list = page.locator('%s');
+  const distance = await list.evaluate((el) => el.scrollTop);
+  if (distance <= %d) {
+    throw new Error('%s still at top after scroll-down: distanceFromTop=' + distance);
+  }
+}
+`, loc, layoutBottomThresholdPx, layoutScrollContainerSessionList)
+}
+
+// Deprecated aliases kept so older leaves compile if any still reference bottom helpers.
+func scrollSessionListToBottom() string {
+	return scrollSessionListToTop()
+}
+
+func scrollSessionListUpFromBottom(minPx int) string {
+	return scrollSessionListDownFromTop(minPx)
+}
+
+func assertSessionListAtBottom() string {
+	return assertSessionListAtTop()
 }
 
 func recordSessionListScrollTop(varName string) string {
@@ -1696,7 +2091,8 @@ func assertChromeFixedWhileSessionListScrolls() string {
 ` + assertComposerPinnedBottom()
 }
 
-// assertHomeJumpToLatestChipFlow waits for chip while detached + poll refresh, taps, asserts follow resumes.
+// assertHomeJumpToLatestChipFlow waits for chip while detached + poll refresh, taps,
+// asserts follow resumes at TOP (newest-first home list).
 func assertHomeJumpToLatestChipFlow() string {
 	return fmt.Sprintf(`
 {
@@ -1710,14 +2106,14 @@ func assertHomeJumpToLatestChipFlow() string {
     await page.waitForTimeout(250);
   }
   if (!chipVisible) {
-    throw new Error('jump-to-latest chip never became visible while detached with new sessions below');
+    throw new Error('jump-to-latest chip never became visible while detached with new sessions above');
   }
   await chip.click();
   await page.waitForTimeout(200);
   const list = page.locator('[data-testid="session-list"]');
-  const distance = await list.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight);
+  const distance = await list.evaluate((el) => el.scrollTop);
   if (distance > %d) {
-    throw new Error('jump-to-latest did not scroll session-list to bottom: distanceFromBottom=' + distance);
+    throw new Error('jump-to-latest did not scroll session-list to top: distanceFromTop=' + distance);
   }
   const stillVisible = await chip.isVisible().catch(() => false);
   if (stillVisible) {

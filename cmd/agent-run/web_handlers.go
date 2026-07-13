@@ -105,6 +105,109 @@ func webProcessWorkspace() (string, error) {
 	return canonicalWorkspacePath(wd), nil
 }
 
+// maxRecentWorkspaces is the MRU cap for config.recent_workspaces.
+const maxRecentWorkspaces = 12
+
+// osUserHome returns the OS user home directory ($HOME / user home), not AGENT_RUN_HOME.
+func osUserHome() string {
+	if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
+		return canonicalWorkspacePath(home)
+	}
+	if h := strings.TrimSpace(os.Getenv("HOME")); h != "" {
+		return canonicalWorkspacePath(h)
+	}
+	return ""
+}
+
+// isValidWorkspaceDir reports whether path is an absolute existing directory.
+func isValidWorkspaceDir(path string) bool {
+	path = strings.TrimSpace(path)
+	if path == "" || !filepath.IsAbs(path) {
+		return false
+	}
+	st, err := os.Stat(path)
+	return err == nil && st.IsDir()
+}
+
+// resolveSelectedWorkspace returns the active workspace for status and new sessions.
+// Order: valid config.selected_workspace → process cwd → OS user home.
+func resolveSelectedWorkspace(store agentstorage.Store) (string, error) {
+	cfg, err := store.Config()
+	if err == nil {
+		sel := strings.TrimSpace(cfg.SelectedWorkspace)
+		if sel != "" {
+			sel = canonicalWorkspacePath(sel)
+			if isValidWorkspaceDir(sel) {
+				return sel, nil
+			}
+		}
+	}
+	if cwd, err := webProcessWorkspace(); err == nil && cwd != "" {
+		return cwd, nil
+	}
+	if home := osUserHome(); home != "" {
+		return home, nil
+	}
+	return webProcessWorkspace()
+}
+
+// pushRecentWorkspace moves path to the front of the MRU list (dedupe, cap).
+func pushRecentWorkspace(recent []string, path string, capN int) []string {
+	path = canonicalWorkspacePath(strings.TrimSpace(path))
+	if path == "" {
+		return recent
+	}
+	if capN <= 0 {
+		capN = maxRecentWorkspaces
+	}
+	out := make([]string, 0, capN)
+	out = append(out, path)
+	for _, p := range recent {
+		p = canonicalWorkspacePath(strings.TrimSpace(p))
+		if p == "" || p == path {
+			continue
+		}
+		out = append(out, p)
+		if len(out) >= capN {
+			break
+		}
+	}
+	return out
+}
+
+// statusPayload builds the JSON body for GET /status and PUT /workspace responses.
+func statusPayload(store agentstorage.Store) (map[string]any, error) {
+	workspace, err := resolveSelectedWorkspace(store)
+	if err != nil {
+		return nil, err
+	}
+	processCWD, err := webProcessWorkspace()
+	if err != nil {
+		processCWD = ""
+	}
+	cfg, _ := store.Config()
+	recent := cfg.RecentWorkspaces
+	if recent == nil {
+		recent = []string{}
+	}
+	// Normalize recent paths for stable API output.
+	normRecent := make([]string, 0, len(recent))
+	for _, p := range recent {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		normRecent = append(normRecent, canonicalWorkspacePath(p))
+	}
+	return map[string]any{
+		"workspace":         workspace,
+		"process_cwd":       processCWD,
+		"home":              osUserHome(),
+		"agent_run_home":    store.Home(),
+		"recent_workspaces": normRecent,
+	}, nil
+}
+
 func sessionWorkspace(store agentstorage.Store, runner, sessionID string) (string, error) {
 	sess, err := store.GetSession(sessionID)
 	if err != nil {
@@ -113,7 +216,7 @@ func sessionWorkspace(store agentstorage.Store, runner, sessionID string) (strin
 	if strings.TrimSpace(sess.Meta.Workspace) != "" {
 		return sess.Meta.Workspace, nil
 	}
-	return webProcessWorkspace()
+	return resolveSelectedWorkspace(store)
 }
 
 func appendUserPromptEvent(store agentstorage.Store, runner, sessionID, text string) error {
@@ -305,7 +408,41 @@ func handleSessionsCollection(store agentstorage.Store, runCfg webRunConfig) htt
 			if list == nil {
 				list = []agentstorage.SessionMeta{}
 			}
-			writeJSON(w, http.StatusOK, map[string]any{"sessions": list})
+
+			q := r.URL.Query()
+			statusFilter := strings.TrimSpace(q.Get("status"))
+			searchQ := strings.TrimSpace(q.Get("q"))
+			limit := 0
+			offset := 0
+			if limStr := strings.TrimSpace(q.Get("limit")); limStr != "" {
+				if n, err := strconv.Atoi(limStr); err == nil {
+					limit = n
+				}
+			}
+			if offStr := strings.TrimSpace(q.Get("offset")); offStr != "" {
+				if n, err := strconv.Atoi(offStr); err == nil {
+					offset = n
+				}
+			}
+
+			// counts: full-store status buckets; independent of q (and of status filter).
+			counts := computeSessionListCounts(list)
+
+			// Pipeline: status → q → newest-first sort → total → page
+			filtered := filterSessionsByStatusFilter(list, statusFilter)
+			filtered = filterSessionsByQuery(filtered, searchQ)
+			sortSessionsNewestFirst(filtered)
+			total := len(filtered)
+			page, hasMore, outLimit, outOffset := pageSessions(filtered, limit, offset)
+
+			writeJSON(w, http.StatusOK, map[string]any{
+				"sessions": page,
+				"total":    total,
+				"limit":    outLimit,
+				"offset":   outOffset,
+				"has_more": hasMore,
+				"counts":   counts,
+			})
 		case http.MethodPost:
 			var req createSessionRequest
 			if err := readJSONBody(r, &req); err != nil {
@@ -329,7 +466,7 @@ func handleSessionsCollection(store agentstorage.Store, runCfg webRunConfig) htt
 			if sessionID == "" {
 				sessionID = newWebSessionID()
 			}
-			workspace, err := webProcessWorkspace()
+			workspace, err := resolveSelectedWorkspace(store)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return

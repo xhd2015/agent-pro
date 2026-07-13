@@ -1,9 +1,9 @@
 # Scenario
 
-**Feature**: home follow mode — detach when user scrolls up during poll refresh
+**Feature**: home follow mode — detach when user scrolls down (away from newest) during poll refresh
 
 ```
-seed 20 home sessions → scroll up to detach → append 21st session → poll → scrollTop frozen
+seed 20 home sessions → scroll down to detach → append 21st session → poll → scrollTop frozen
 ```
 
 ## Preconditions
@@ -12,12 +12,13 @@ seed 20 home sessions → scroll up to detach → append 21st session → poll �
 - Seeded 20 home sessions with overflow list.
 - Open API.
 - 21st session appended after detach; poll refresh must not move `scrollTop`.
+- Home list is **newest-first**; detach = scroll **down** from top.
 
 ## Steps
 
-1. Seed 20 home sessions under `fake-codex`.
+1. Seed 20 home sessions under `fake-codex` (flat layout).
 2. Open `/`; wait for `session-list` overflow.
-3. Scroll `session-list` up ≥250px from bottom; record `scrollTop`.
+3. Scroll `session-list` down ≥250px from top; record `scrollTop`.
 4. Schedule append of `home-sess-021`.
 5. Wait 4s for poll; assert `scrollTop` stable (±2px).
 
@@ -46,7 +47,7 @@ func Setup(t *testing.T, req *Request) error {
 	scheduleAppendHomeSessionDir(t, req, runner, 21, 1500*time.Millisecond)
 
 	body := openHomePage(req.BaseURL) + waitForSessionListOverflow() +
-		scrollSessionListUpFromBottom(250) + assertSessionListDetached() +
+		scrollSessionListDownFromTop(250) + assertSessionListDetached() +
 		recordSessionListScrollTop("FrozenScrollTop") + waitForHomePollRefresh() +
 		assertSessionListScrollTopEqualsVar("FrozenScrollTop")
 

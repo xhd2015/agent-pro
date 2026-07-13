@@ -1,22 +1,30 @@
 # Scenario
 
-**Feature**: non-open headless still hard-waits inject-ready banner before inject
+**Feature**: non-open headless — new-session prompt on argv only (no PTY re-inject);
+banner hard-wait still applies when inject-ready is needed
 
 ```
+# new-session normal submit: argv only (same inject policy as --open)
+agent-run run --agent-runner grok-tty "once-only"
+  + banner probe records ARGV + timed stdin
+  -> PROMPT_ARG=once-only; STDIN_COUNT=0
+
+# delayed banner: still no re-inject for new-session
 agent-run run --agent-runner grok-tty "hi"
   + delayed GROK_TTY_BANNER
-  -> wait banner → inject → exit 0
+  -> wait banner → no PTY re-inject → exit 0
 ```
 
 ## Preconditions
 
 - No `--open`; no INSTANT attach env (irrelevant for non-open attach).
-- Fake TUI delays banner then reads prompt (existing waits-for-banner style).
+- New-session `!NoSubmit`: do not re-inject (fix for real Grok double-submit).
+- Resume / NoSubmit still inject (covered under open / resume trees, not this group).
 
 ## Steps
 
 1. Grouping sets grok-tty non-open base args.
-2. Leaf installs delayed-banner fake TUI + prompt.
+2. Leaves install banner argv/stdin probe fixtures + prompt.
 
 ```go
 import "testing"

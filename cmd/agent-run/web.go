@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -217,24 +218,154 @@ func registerAPI(mux *http.ServeMux, store agentstorage.Store, token string, req
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
-	mux.HandleFunc("/api/agent-run/status", auth(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/agent-run/status", auth(handleStatus(store)))
+	mux.HandleFunc("/api/agent-run/workspace", auth(handleWorkspace(store)))
+	mux.HandleFunc("/api/agent-run/fs/list", auth(handleFSList()))
+	mux.HandleFunc("/api/agent-run/runners", auth(handleRunners(store, runCfg)))
+	mux.HandleFunc("/api/agent-run/sessions", auth(handleSessionsCollection(store, runCfg)))
+	mux.HandleFunc("/api/agent-run/sessions/", auth(handleSessionResource(store, runCfg)))
+}
+
+func handleStatus(store agentstorage.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		workspace, err := webProcessWorkspace()
+		payload, err := statusPayload(store)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"home":      store.Home(),
-			"workspace": workspace,
+		writeJSON(w, http.StatusOK, payload)
+	}
+}
+
+func handleWorkspace(store agentstorage.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			Path string `json:"path"`
+		}
+		if err := readJSONBody(r, &body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		path := strings.TrimSpace(body.Path)
+		if path == "" {
+			http.Error(w, "path is required", http.StatusBadRequest)
+			return
+		}
+		if !filepath.IsAbs(path) {
+			http.Error(w, "path must be absolute", http.StatusBadRequest)
+			return
+		}
+		path = canonicalWorkspacePath(path)
+		st, err := os.Stat(path)
+		if err != nil {
+			http.Error(w, "path does not exist", http.StatusBadRequest)
+			return
+		}
+		if !st.IsDir() {
+			http.Error(w, "path must be a directory", http.StatusBadRequest)
+			return
+		}
+		cfg, err := store.Config()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		cfg.SelectedWorkspace = path
+		cfg.RecentWorkspaces = pushRecentWorkspace(cfg.RecentWorkspaces, path, maxRecentWorkspaces)
+		if err := store.SaveConfig(cfg); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		payload, err := statusPayload(store)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, payload)
+	}
+}
+
+func handleFSList() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		path := strings.TrimSpace(r.URL.Query().Get("path"))
+		if path == "" {
+			http.Error(w, "path is required", http.StatusBadRequest)
+			return
+		}
+		if !filepath.IsAbs(path) {
+			http.Error(w, "path must be absolute", http.StatusBadRequest)
+			return
+		}
+		path = canonicalWorkspacePath(path)
+		st, err := os.Stat(path)
+		if err != nil {
+			http.Error(w, "path does not exist", http.StatusBadRequest)
+			return
+		}
+		if !st.IsDir() {
+			http.Error(w, "path must be a directory", http.StatusBadRequest)
+			return
+		}
+		entries, err := os.ReadDir(path)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		type fsEntry struct {
+			Name string `json:"name"`
+			Path string `json:"path"`
+			Type string `json:"type"`
+		}
+		out := make([]fsEntry, 0, len(entries))
+		for _, e := range entries {
+			name := e.Name()
+			// Include dot names (.git, .env, etc.) so the browser can navigate hidden dirs/files.
+			full := canonicalWorkspacePath(filepath.Join(path, name))
+			typ := "file"
+			if e.IsDir() {
+				typ = "dir"
+			} else if e.Type()&os.ModeSymlink != 0 {
+				// Resolve symlink for type classification.
+				if info, err := os.Stat(full); err == nil && info.IsDir() {
+					typ = "dir"
+				}
+			}
+			out = append(out, fsEntry{Name: name, Path: full, Type: typ})
+		}
+		// Dirs first, then files; case-insensitive name within each group.
+		sort.SliceStable(out, func(i, j int) bool {
+			iDir := out[i].Type == "dir"
+			jDir := out[j].Type == "dir"
+			if iDir != jDir {
+				return iDir // dirs before files
+			}
+			return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
 		})
-	}))
-	mux.HandleFunc("/api/agent-run/runners", auth(handleRunners(store, runCfg)))
-	mux.HandleFunc("/api/agent-run/sessions", auth(handleSessionsCollection(store, runCfg)))
-	mux.HandleFunc("/api/agent-run/sessions/", auth(handleSessionResource(store, runCfg)))
+		parent := filepath.Dir(path)
+		if parent == path {
+			// Root has no parent; omit or use empty.
+			parent = ""
+		} else {
+			parent = canonicalWorkspacePath(parent)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"path":    path,
+			"parent":  parent,
+			"entries": out,
+		})
+	}
 }
 
 

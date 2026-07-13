@@ -6,7 +6,7 @@ explanation: Home poll refresh ~4s; detach + frozen scrollTop checks
 ## Expected
 
 - Playwright exit code **0**.
-- After scroll-up, `distanceFromBottom > 80` (detached).
+- After scroll-down from top, `distanceFromTop > 80` (detached).
 - After poll refresh adds a 21st session, `session-list.scrollTop` unchanged (±2px).
 
 ## Exit Code

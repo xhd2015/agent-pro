@@ -45,7 +45,7 @@ agent-run run --agent-runner grok-tty --open ["prompt"]
    (INSTANT only for tty-lifecycle; attach-without-banner forces INSTANT off).
 4. `Run` executes `agent-run` with `req.Args` (optional registry post-read).
 5. Leaf `Assert` checks exit code, error text, silence, session id line, registry,
-   banner-policy, or inject probe.
+   banner-policy, or argv/stdin inject probe (no-double-inject).
 
 ## Context
 
@@ -152,6 +152,8 @@ func fakeTUIDelayedBanner() string {
 // writeFakeTUIDelayedBannerProbe delays banner, then records the first stdin line
 // (injected prompt) into probePath — proves non-open hard-wait inject without
 // relying on grok session discovery / capture streaming.
+// Prefer writeFakeTUIBannerArgvStdinProbe for new-session no-double-inject leaves
+// (argv + timed read so absence of inject can complete).
 func writeFakeTUIDelayedBannerProbe(t *testing.T, dir, probePath string) string {
 	t.Helper()
 	path := filepath.Join(dir, "fake-tui-delayed-banner-probe.sh")
@@ -167,6 +169,47 @@ fi
 `, probePath, probePath)
 	if err := os.WriteFile(path, []byte(script), 0755); err != nil {
 		t.Fatalf("write delayed-banner probe TUI: %v", err)
+	}
+	return path
+}
+
+// writeFakeTUIBannerArgvStdinProbe paints GROK_TTY_BANNER (optional delay), records
+// trailing argv / PROMPT_ARG, then timed-reads PTY stdin for inject proof.
+// Non-open new-session leaves use this so:
+//   - banner hard-wait can succeed
+//   - argv prompt is visible (PROMPT_ARG)
+//   - re-inject absence is visible (STDIN_COUNT=0) without blocking forever
+func writeFakeTUIBannerArgvStdinProbe(t *testing.T, dir, probePath string, delaySec float64, readTimeoutSec, holdAfterSec int) string {
+	t.Helper()
+	if readTimeoutSec <= 0 {
+		readTimeoutSec = 5
+	}
+	if holdAfterSec < 0 {
+		holdAfterSec = 0
+	}
+	if delaySec < 0 {
+		delaySec = 0
+	}
+	path := filepath.Join(dir, "fake-tui-banner-argv-stdin-probe.sh")
+	// delay via sleep; shell accepts fractional seconds on bash/sh used in CI.
+	script := fmt.Sprintf(`#!/bin/sh
+{
+  echo "ARGV=$*"
+  echo "PROMPT_ARG=${1-}"
+} > %q
+sleep %g
+printf "GROK_TTY_BANNER\nGrok › "
+if read -t %d line; then
+  echo "STDIN=$line" >> %q
+  echo "STDIN_COUNT=1" >> %q
+  echo "Response: $line"
+else
+  echo "STDIN_COUNT=0" >> %q
+fi
+sleep %d
+`, probePath, delaySec, readTimeoutSec, probePath, probePath, probePath, holdAfterSec)
+	if err := os.WriteFile(path, []byte(script), 0755); err != nil {
+		t.Fatalf("write banner argv/stdin probe TUI: %v", err)
 	}
 	return path
 }
