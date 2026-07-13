@@ -48,7 +48,7 @@ var (
 	weeklyLimitRe = regexp.MustCompile(`(?i)weekly\s*limit:\s*(\d+%)`)
 	// nextResetCandidates: ordered formats for "Next reset"; first match wins.
 	// Whitelist known TZs only (PT, UTC) — no catch-all [A-Z]{2,4} (matches junk like "Imag").
-	// No-timezone form is last and is normalized to default PT.
+	// No-timezone form is last; normalize keeps bare wall clock (interpreted as local by consumers).
 	nextResetCandidates = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)next\s*reset:\s*([A-Za-z]+\s*\d{1,2},\s*\d{1,2}:\d{2}\s*PT)`),
 		regexp.MustCompile(`(?i)next\s*reset:\s*([A-Za-z]+\s*\d{1,2},\s*\d{1,2}:\d{2}\s*UTC)`),
@@ -652,7 +652,7 @@ func usageCorpus(scrollback []byte) string {
 }
 
 // normalizeResetDate reformats Month Day, HH:MM [TZ] canonically.
-// Missing timezone defaults to PT (Grok 0.2.99 omits the suffix).
+// Missing timezone is left bare (local wall clock for consumers; Grok 0.2.99 omits TZ).
 func normalizeResetDate(raw string) string {
 	raw = strings.TrimSpace(raw)
 	compact := strings.ReplaceAll(raw, " ", "")
@@ -660,11 +660,12 @@ func normalizeResetDate(raw string) string {
 	if len(m) < 4 {
 		return raw
 	}
-	tz := "PT" // default when Grok omits timezone
 	if len(m) >= 5 && m[4] != "" {
-		tz = strings.ToUpper(m[4])
+		tz := strings.ToUpper(m[4])
+		return fmt.Sprintf("%s %s, %s %s", m[1], m[2], m[3], tz)
 	}
-	return fmt.Sprintf("%s %s, %s %s", m[1], m[2], m[3], tz)
+	// No timezone: bare local wall-clock time.
+	return fmt.Sprintf("%s %s, %s", m[1], m[2], m[3])
 }
 
 func timeoutErr(ctx context.Context) error {
