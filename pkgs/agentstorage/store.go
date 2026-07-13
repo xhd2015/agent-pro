@@ -17,6 +17,8 @@ type Store interface {
 	UpdateSessionStatus(sessionID, status string) error
 	UpdateSessionRunnerSessionID(sessionID, runnerSessionID string) error
 	UpdateSessionTerminalSessionID(sessionID, terminalSessionID string) error
+	// UpdateSessionWorkspace sets meta.workspace (e.g. after Grok session relocate).
+	UpdateSessionWorkspace(sessionID, workspace string) error
 	// UpdateSessionEnvConfig writes session-scoped TTY child env fields.
 	// prependPaths/env replace the stored lists; configHome replaces when non-empty.
 	UpdateSessionEnvConfig(sessionID string, prependPaths, env []string, configHome string) error

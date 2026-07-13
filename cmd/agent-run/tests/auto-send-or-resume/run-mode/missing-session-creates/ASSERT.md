@@ -25,11 +25,11 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 
 	if resp.MetaAfter == nil {
 		// Fall back to direct read if Mode enrichment missed.
-		path := metaJSONPath(req.Home, defaultRunner, req.SessionID)
+		path := metaJSONPath(req.Home, req.SessionID)
 		if !fileExists(path) {
 			t.Fatalf("expected meta.json created at %s\nstderr:\n%s\nstdout:\n%s", path, resp.Stderr, resp.Stdout)
 		}
-		resp.MetaAfter = readMetaJSON(t, req.Home, defaultRunner, req.SessionID)
+		resp.MetaAfter = readMetaJSON(t, req.Home, req.SessionID)
 	}
 	ws, _ := resp.MetaAfter["workspace"].(string)
 	if strings.TrimSpace(ws) == "" {

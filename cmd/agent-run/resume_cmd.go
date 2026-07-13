@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/xhd2015/agent-pro/agent/grok/sessions"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 	"github.com/xhd2015/agent-pro/pkgs/agentui"
@@ -34,6 +36,9 @@ Options:
   --open              open keep-alive TTY and attach interactively
   --no-submit         with --open: inject prompt without trailing Enter
   --dir DIR           workspace directory (default: session workspace or cwd)
+  --allow-relocate-resume-session-dir
+                      when --dir differs from grok session cwd, relocate the
+                      grok session and continue (grok-tty only)
   --agent-runner RUNNER   override runner (default: from session meta)
   --agent-runner-binary SPEC
                       agent executable: bare name/path or "binary flags..."
@@ -47,19 +52,20 @@ Options:
 
 // resumeRunConfig holds CLI options for the resume path (subcommand or auto).
 type resumeRunConfig struct {
-	jsonFlag              bool
-	model                 string
-	agentRunner           string
-	agentRunnerBinary     string
-	agentRunnerConfigHome string
-	prependPaths          []string // CLI appends only (absolute); merged with meta in resumeExistingSession
-	envEntries            []string // CLI appends only
-	keepTTY               bool
-	openFlag              bool
-	noSubmit              bool
-	dir                   string
-	prompt                string
-	defaultRunner         string
+	jsonFlag                      bool
+	model                         string
+	agentRunner                   string
+	agentRunnerBinary             string
+	agentRunnerConfigHome         string
+	prependPaths                  []string // CLI appends only (absolute); merged with meta in resumeExistingSession
+	envEntries                    []string // CLI appends only
+	keepTTY                       bool
+	openFlag                      bool
+	noSubmit                      bool
+	dir                           string
+	allowRelocateResumeSessionDir bool
+	prompt                        string
+	defaultRunner                 string
 }
 
 func runResume(args []string, defaultRunner string) error {
@@ -74,12 +80,14 @@ func runResume(args []string, defaultRunner string) error {
 	var openFlag bool
 	var noSubmit bool
 	var dir string
+	var allowRelocateResumeSessionDir bool
 	remaining, err := flags.Bool("--json", &jsonFlag).
 		String("--model", &model).
 		Bool("--keep-tty", &keepTTY).
 		Bool("--open", &openFlag).
 		Bool("--no-submit", &noSubmit).
 		String("--dir", &dir).
+		Bool("--allow-relocate-resume-session-dir", &allowRelocateResumeSessionDir).
 		String("--agent-runner", &agentRunner).
 		String("--agent-runner-binary", &agentRunnerBinary).
 		String("--agent-runner-config-home", &agentRunnerConfigHome).
@@ -126,19 +134,20 @@ func runResume(args []string, defaultRunner string) error {
 	}
 
 	return resumeExistingSession(store, meta, resumeRunConfig{
-		jsonFlag:              jsonFlag,
-		model:                 model,
-		agentRunner:           agentRunner,
-		agentRunnerBinary:     agentRunnerBinary,
-		agentRunnerConfigHome: absConfigHome,
-		prependPaths:          absPrepend,
-		envEntries:            envEntries,
-		keepTTY:               keepTTY,
-		openFlag:              openFlag,
-		noSubmit:              noSubmit,
-		dir:                   dir,
-		prompt:                prompt,
-		defaultRunner:         defaultRunner,
+		jsonFlag:                      jsonFlag,
+		model:                         model,
+		agentRunner:                   agentRunner,
+		agentRunnerBinary:             agentRunnerBinary,
+		agentRunnerConfigHome:         absConfigHome,
+		prependPaths:                  absPrepend,
+		envEntries:                    envEntries,
+		keepTTY:                       keepTTY,
+		openFlag:                      openFlag,
+		noSubmit:                      noSubmit,
+		dir:                           dir,
+		allowRelocateResumeSessionDir: allowRelocateResumeSessionDir,
+		prompt:                        prompt,
+		defaultRunner:                 defaultRunner,
 	})
 }
 
@@ -203,6 +212,14 @@ func resumeExistingSession(store agentstorage.Store, meta agentstorage.SessionMe
 	if err != nil {
 		return err
 	}
+	// When --dir is set and runner is grok-tty, compare to Grok session info.cwd.
+	// Mismatch without --allow-relocate-resume-session-dir is an error; with the
+	// flag, relocate the Grok session and update meta.workspace.
+	if strings.TrimSpace(cfg.dir) != "" {
+		if err := ensureGrokResumeDirMatchesCWD(store, meta, runner, cfg.dir, workspace, configHome, cfg.allowRelocateResumeSessionDir); err != nil {
+			return err
+		}
+	}
 	model := strings.TrimSpace(cfg.model)
 	if model == "" {
 		model = strings.TrimSpace(meta.Model)
@@ -239,8 +256,117 @@ func resumeExistingSession(store agentstorage.Store, meta agentstorage.SessionMe
 	})
 }
 
+// ensureGrokResumeDirMatchesCWD compares resolved --dir to the Grok session's
+// info.cwd for meta.runner_session_id. Non-grok-tty runners skip the check.
+// On mismatch: error unless allowRelocate, then RelocateCWD + update meta.workspace.
+//
+// dirFlag is the raw --dir value; resolvedDir is Abs+EvalSymlinks from resolveRunDir.
+// RelocateCWD receives Abs(dirFlag) without EvalSymlinks so Grok session keys
+// match url.PathEscape(filepath.Abs(cwd)) layout used by Grok/fixtures.
+func ensureGrokResumeDirMatchesCWD(store agentstorage.Store, meta agentstorage.SessionMeta, runner, dirFlag, resolvedDir, configHome string, allowRelocate bool) error {
+	runner = strings.TrimSpace(runner)
+	if runner != "grok-tty" {
+		return nil
+	}
+	compareDir := strings.TrimSpace(resolvedDir)
+	if compareDir == "" {
+		compareDir = strings.TrimSpace(dirFlag)
+	}
+	if compareDir == "" {
+		return nil
+	}
+	runnerSessionID := strings.TrimSpace(meta.RunnerSessionID)
+	if runnerSessionID == "" {
+		return fmt.Errorf("runner session not bound (missing runner_session_id); cannot compare grok session cwd")
+	}
+	grokHome := agenttty.GrokHomeForRunner(configHome)
+	sess, err := sessions.Find(grokHome, runnerSessionID)
+	if err != nil {
+		// Session not present under Grok home (common when fixtures omit Grok
+		// layout and only exercise agent-run meta.workspace / --dir). Skip the
+		// cwd gate so resume continues as before.
+		return nil
+	}
+	grokCWD := strings.TrimSpace(sess.CWD)
+	if grokCWD == "" {
+		// Found session but no cwd to compare — cannot gate safely.
+		return nil
+	}
+	if canonicalPathsEqual(compareDir, grokCWD) {
+		return nil
+	}
+	// Abs without EvalSymlinks — matches sessions.RelocateCWD / Grok layout encoding.
+	relocateTarget := compareDir
+	if abs, absErr := filepath.Abs(strings.TrimSpace(dirFlag)); absErr == nil && abs != "" {
+		relocateTarget = abs
+	}
+	if !allowRelocate {
+		return fmt.Errorf("--dir %s differs from grok session cwd %s (session %s); refusing to resume with a different workspace; pass --allow-relocate-resume-session-dir to relocate the grok session and continue",
+			relocateTarget, grokCWD, runnerSessionID)
+	}
+	fmt.Fprintf(os.Stderr, "warning: relocating grok session %s cwd from %s to %s\n", runnerSessionID, grokCWD, relocateTarget)
+	if _, err := sessions.RelocateCWD(runnerSessionID, relocateTarget, &sessions.RelocateCWDOptions{GrokHome: grokHome}); err != nil {
+		return fmt.Errorf("relocate grok session cwd: %w", err)
+	}
+	if err := store.UpdateSessionWorkspace(meta.SessionID, relocateTarget); err != nil {
+		return fmt.Errorf("update session workspace after relocate: %w", err)
+	}
+	return nil
+}
+
+// canonicalPathsEqual reports whether a and b refer to the same directory path
+// after Abs, EvalSymlinks, Clean, and /private prefix normalization.
+func canonicalPathsEqual(a, b string) bool {
+	na := normalizePathForCompare(a)
+	nb := normalizePathForCompare(b)
+	if na == "" || nb == "" {
+		return na == nb
+	}
+	if na == nb {
+		return true
+	}
+	// os.SameFile when both exist (covers remaining symlink /private cases).
+	infoA, errA := os.Stat(na)
+	infoB, errB := os.Stat(nb)
+	if errA == nil && errB == nil {
+		return os.SameFile(infoA, infoB)
+	}
+	return false
+}
+
+func normalizePathForCompare(p string) string {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return ""
+	}
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return filepath.Clean(p)
+	}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = resolved
+	}
+	abs = filepath.Clean(abs)
+	// macOS: /var → /private/var after EvalSymlinks; also accept the reverse.
+	if strings.HasPrefix(abs, "/private/") {
+		alt := strings.TrimPrefix(abs, "/private")
+		if alt != "" && alt[0] == '/' {
+			if a, errA := os.Lstat(abs); errA == nil {
+				if b, errB := os.Lstat(alt); errB == nil && os.SameFile(a, b) {
+					return filepath.Clean(alt)
+				}
+			}
+			// Prefer stripped form for string equality when both styles encode the same path.
+			return filepath.Clean(alt)
+		}
+	}
+	return abs
+}
+
 // resolveResumeWorkspace picks the provider cwd for resume:
-// 1) --dir if set (validated), 2) meta.workspace, 3) empty → process cwd (+ warn).
+// 1) --dir if set (validated), 2) meta.workspace (must exist as a directory),
+// 3) empty → process cwd (+ warn). Does not fall back to process cwd when
+// meta.workspace is set but missing or not a directory.
 func resolveResumeWorkspace(dir string, meta agentstorage.SessionMeta) (string, error) {
 	workspace, err := resolveRunDir(dir)
 	if err != nil {
@@ -251,7 +377,24 @@ func resolveResumeWorkspace(dir string, meta agentstorage.SessionMeta) (string, 
 	}
 	workspace = strings.TrimSpace(meta.Workspace)
 	if workspace != "" {
-		return workspace, nil
+		abs, err := filepath.Abs(workspace)
+		if err != nil {
+			return "", fmt.Errorf("session workspace: %w", err)
+		}
+		if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+			abs = resolved
+		}
+		info, err := os.Stat(abs)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return "", fmt.Errorf("session workspace does not exist: %s; pass --dir <existing-directory> to override", abs)
+			}
+			return "", fmt.Errorf("session workspace: %w", err)
+		}
+		if !info.IsDir() {
+			return "", fmt.Errorf("session workspace is not a directory: %s; pass --dir <existing-directory> to override", abs)
+		}
+		return abs, nil
 	}
 	fmt.Fprintln(os.Stderr, "warning: session has no workspace recorded; using process cwd")
 	return "", nil

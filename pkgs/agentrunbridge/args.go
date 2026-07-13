@@ -33,6 +33,9 @@ func BuildArgs(opts RunOpts) []string {
 	if dir := strings.TrimSpace(opts.WorkspaceDir); dir != "" {
 		args = append(args, "--dir="+dir)
 	}
+	if opts.AllowRelocateResumeSessionDir {
+		args = append(args, "--allow-relocate-resume-session-dir")
+	}
 	if opts.NoSubmit {
 		args = append(args, "--no-submit")
 	}

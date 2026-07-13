@@ -26,12 +26,13 @@ type agentOptions struct {
 // (SeaTalk parity). Capture is empty; TTY owns the session.
 func runAgentInteractiveOpen(prompt, sessionID string, opts agentOptions) error {
 	_, err := agentrunbridge.RunInteractiveOpen(agentrunbridge.InteractiveOpenOpts{
-		SessionID:        sessionID,
-		Prompt:           prompt,
-		Binary:           agentRunBinary(),
-		AgentRunner:      opts.Runner,
-		RunnerConfigHome: opts.RunnerConfigHome,
-		Env:              opts.Env,
+		SessionID:                     sessionID,
+		Prompt:                        prompt,
+		Binary:                        agentRunBinary(),
+		AgentRunner:                   opts.Runner,
+		RunnerConfigHome:              opts.RunnerConfigHome,
+		Env:                           opts.Env,
+		AllowRelocateResumeSessionDir: true,
 	})
 	return err
 }

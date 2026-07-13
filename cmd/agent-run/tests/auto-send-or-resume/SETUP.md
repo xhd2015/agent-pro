@@ -1,7 +1,8 @@
 # Scenario
 
-**Feature**: `run --auto-send-or-resume` three-way branch (run / send / resume)
-and resume workspace resolution (`meta.workspace` / `--dir` / cwd)
+**Feature**: `run --auto-send-or-resume` three-way branch (run / send / resume),
+resume workspace resolution (`meta.workspace` / `--dir` / cwd), and Grok
+resume `--dir` vs `info.cwd` relocate gate
 
 ```
 # validation
@@ -27,6 +28,12 @@ MODE=send + --new-terminal -> ignore; still send
 # workspace
 resume / auto→resume child cwd:
   --dir > meta.workspace > process cwd (+ warn)
+  missing meta.workspace (no --dir) → exit 1 + path + --dir hint
+
+# resume --dir vs Grok info.cwd (grok-tty; classic RED until implementer)
+  --dir set + grok-tty → compare to summary info.cwd under config-home
+  mismatch without --allow-relocate-resume-session-dir → exit 1
+  mismatch with allow → RelocateCWD + meta.workspace update + continue
 ```
 
 ## Preconditions
@@ -287,8 +294,9 @@ func seedSessionMeta(t *testing.T, req *Request) {
 		CreatedAt:         "2026-07-03T12:00:00Z",
 		UpdatedAt:         "2026-07-03T12:00:00Z",
 	}
-	if err := store.CreateSession(req.Runner, req.SessionID, meta); err != nil {
-		path := metaJSONPath(req.Home, req.Runner, req.SessionID)
+	// Flat layout: sessions/<session_id>/meta.json (runner is meta field only).
+	if err := store.CreateSession(req.SessionID, meta); err != nil {
+		path := metaJSONPath(req.Home, req.SessionID)
 		if err2 := os.MkdirAll(filepath.Dir(path), 0755); err2 != nil {
 			t.Fatalf("mkdir session dir: %v", err2)
 		}
@@ -303,13 +311,13 @@ func seedSessionMeta(t *testing.T, req *Request) {
 	}
 }
 
-func metaJSONPath(home, runner, sessionID string) string {
-	return filepath.Join(home, "sessions", runner, sessionID, "meta.json")
+func metaJSONPath(home, sessionID string) string {
+	return filepath.Join(home, "sessions", sessionID, "meta.json")
 }
 
-func readMetaJSON(t *testing.T, home, runner, sessionID string) map[string]any {
+func readMetaJSON(t *testing.T, home, sessionID string) map[string]any {
 	t.Helper()
-	path := metaJSONPath(home, runner, sessionID)
+	path := metaJSONPath(home, sessionID)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read meta.json %s: %v", path, err)
@@ -648,11 +656,7 @@ func enrichMetaAfter(req *Request, resp *Response) {
 	if req.SessionID == "" {
 		return
 	}
-	runner := req.Runner
-	if runner == "" {
-		runner = defaultRunner
-	}
-	path := metaJSONPath(req.Home, runner, req.SessionID)
+	path := metaJSONPath(req.Home, req.SessionID)
 	if data, rErr := os.ReadFile(path); rErr == nil {
 		var obj map[string]any
 		if json.Unmarshal(data, &obj) == nil {

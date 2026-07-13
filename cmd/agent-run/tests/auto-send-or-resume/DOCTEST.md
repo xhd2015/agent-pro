@@ -2,11 +2,13 @@
 
 Doc-style tests for `agent-run run --auto-send-or-resume --session-id <id>`
 branching (run / send / resume), resume workspace resolution
-(`meta.workspace` vs `--dir` vs process cwd), and `--new-terminal` (iTerm2
-ModeForceNew launcher that strips the flag and re-invokes `run` in a new
-window). Prefer stub fixtures (seeded meta, registry, fake ptywrap with inject
-APIs, argv/cwd-recording fake runner, `KOOL_ITERM2_*` script capture) over
-real grok / real iTerm2 UI.
+(`meta.workspace` vs `--dir` vs process cwd), Grok resume `--dir` vs session
+`info.cwd` relocate gate (`--allow-relocate-resume-session-dir`), and
+`--new-terminal` (iTerm2 ModeForceNew launcher that strips the flag and
+re-invokes `run` in a new window). Prefer stub fixtures (seeded meta, registry,
+fake ptywrap with inject APIs, argv/cwd-recording fake runner, fake Grok home
+under `--agent-runner-config-home`, `KOOL_ITERM2_*` script capture) over real
+grok / real iTerm2 UI.
 
 # DSN (Domain Specific Notion)
 
@@ -18,9 +20,10 @@ real grok / real iTerm2 UI.
   Optional `--new-terminal` is valid only with `--auto-send-or-resume`.
 - **agent-run CLI (`resume`)** — original subcommand; workspace must prefer
   `meta.workspace` when `--dir` is unset (same helper as auto→resume).
-- **Session storage** — `AGENT_RUN_HOME/sessions/<runner>/<session_id>/meta.json`
-  (`SessionMeta`: session_id, runner, runner_session_id, terminal_session_id,
-  status, **workspace**, model, …). Missing session is a valid auto path (→ run).
+- **Session storage** — `AGENT_RUN_HOME/sessions/<session_id>/meta.json` (flat;
+  runner is a field on `SessionMeta`: session_id, runner, runner_session_id,
+  terminal_session_id, status, **workspace**, model, …). Missing session is a
+  valid auto path (→ run).
 - **TTY registry** — `AGENT_RUN_HOME/grok-tty-registry/<terminal_session_id>.json`
   (`pid`, `listen_addr`). Live send and status layers depend on it.
 - **ptywrap / terminal** — TCP + WebSocket scrollback + HTTP inject
@@ -84,10 +87,33 @@ run --auto-send-or-resume --new-terminal --session-id ID [flags…] [prompt]
 
 # workspace (resume + auto→resume)
 1) --dir if set (exists, is dir) wins
-2) else non-empty meta.workspace
+2) else non-empty meta.workspace:
+   - if path exists and is a directory → child cwd = meta.workspace
+   - if path missing / not a dir → exit 1; clear session-workspace error naming
+     the path + hint to pass --dir <existing-directory>
+     (do NOT silently fall back to process cwd; do NOT present as missing
+     agent-run binary only / fork/exec without workspace context)
 3) else process cwd + stderr warning
 Child provider cwd must be that workspace (not CLI process cwd when different).
+
+# resume --dir vs Grok info.cwd (grok-tty only; resume + auto→resume)
+When --dir is explicitly set and runner is grok-tty:
+  resolve Grok home = --agent-runner-config-home | meta.agent_runner_config_home | default
+  read sessions/**/<meta.runner_session_id>/summary.json → info.cwd
+  path equality: Abs + EvalSymlinks + treat /private prefix variants as equal
+  --dir == grok cwd     → OK; no RelocateCWD
+  --dir ≠ grok cwd, no --allow-relocate-resume-session-dir
+                        → exit ≠0; stderr mismatch + flag name; session NOT moved
+  --dir ≠ grok cwd + --allow-relocate-resume-session-dir
+                        → stderr warning; sessions.RelocateCWD(runnerSessionID, dir,
+                          &RelocateCWDOptions{GrokHome}); update meta.workspace to --dir;
+                          continue resume
+  --dir unset / MODE=run / non-grok-tty → no Grok cwd check
+Flag exact name: --allow-relocate-resume-session-dir (on run + resume help)
+Grok layout fixture: $GROK_HOME/sessions/<url.PathEscape(abs_cwd)>/<id>/summary.json
+  (inactive: no active_sessions entry for id)
 ```
+
 
 ## Version
 
@@ -115,7 +141,15 @@ cmd/agent-run/tests/auto-send-or-resume/
 ├── workspace/                               # resume + auto→resume cwd
 │   ├── resume-meta-workspace/               # E1 resume uses meta.workspace
 │   ├── auto-resume-meta-workspace/          # E2 auto→resume uses meta.workspace
-│   └── dir-override/                        # E3 --dir wins over meta.workspace
+│   ├── dir-override/                        # E3 --dir wins over meta.workspace
+│   ├── missing-meta-workspace/              # E4 resume: missing meta.workspace → exit 1 + --dir hint
+│   ├── auto-missing-meta-workspace/         # E5 auto→resume: missing meta.workspace → exit 1 + --dir hint
+│   └── resume-dir-relocate/                 # E6+ --dir vs Grok info.cwd (classic RED)
+│       ├── dir-matches-grok-cwd/            # E6 --dir == grok cwd → OK; no move
+│       ├── dir-mismatch-errors/             # E7 resume --dir ≠ grok cwd → exit 1; no move
+│       ├── dir-mismatch-allow-relocates/    # E8 allow flag → RelocateCWD + meta.workspace
+│       ├── help-lists-flag/                 # E9 run -h + resume -h list allow flag
+│       └── auto-dir-mismatch-errors/        # E10 auto→resume same mismatch error as E7
 └── new-terminal/                            # --new-terminal + iTerm2 ModeForceNew
     ├── requires-auto-flag/                  # NT-V1 without --auto-send-or-resume → exit 1
     ├── run-help-lists-flag/                 # NT-V2 run -h documents --new-terminal
@@ -131,8 +165,9 @@ Parameter ranking (most → least significant):
 2. **Session lifecycle mode** — run (missing) | send (live) | resume (exited)
 3. **`--new-terminal` dispatch** — gate (requires auto) | ForceNew launcher (run/resume) | ignore (send)
 4. **Prompt / open flags within mode** — empty vs non-empty; dash-leading prompt; `--open` on live vs resume
-5. **Workspace source** — meta.workspace | auto path | `--dir` override
-6. **Fixtures** — argv probe, cwd probe, fake ptywrap inject, KOOL_ITERM2 script out
+5. **Workspace source** — meta.workspace | auto path | `--dir` override | missing meta.workspace error
+6. **Grok cwd relocate gate** — `--dir` vs summary `info.cwd`; allow flag; RelocateCWD
+7. **Fixtures** — argv probe, cwd probe, fake Grok home, fake ptywrap inject, KOOL_ITERM2 script out
 
 ## Test Index
 
@@ -150,12 +185,19 @@ Parameter ranking (most → least significant):
 | 10 | `workspace/resume-meta-workspace` | E1 | `resume` child cwd = meta.workspace (CLI cwd differs) |
 | 11 | `workspace/auto-resume-meta-workspace` | E2 | auto→resume child cwd = meta.workspace |
 | 12 | `workspace/dir-override` | E3 | resume `--dir` override wins; child cwd = override |
-| 13 | `new-terminal/requires-auto-flag` | NT-V1 | `--new-terminal` without auto → exit 1; requires `--auto-send-or-resume` |
-| 14 | `new-terminal/run-help-lists-flag` | NT-V2 | `run -h` documents `--new-terminal`; trailing `\n` |
-| 15 | `new-terminal/mode-run-opens-iterm` | NT-D1 | auto+new-terminal missing session → exit 0; ForceNew script; no `--new-terminal` in follow-up; no in-process provider |
-| 16 | `new-terminal/mode-resume-opens-iterm` | NT-D2 | auto+new-terminal bound+exited → exit 0; script; no parent argv probe spawn |
-| 17 | `new-terminal/mode-send-ignores` | NT-D3 | auto+new-terminal live → exit 0; no iTerm script; still `msg_N` |
-| 18 | `new-terminal/prompt-dash-separator` | NT-D4 | prompt like `-v explain` → follow-up has `--` then that prompt |
+| 13 | `workspace/missing-meta-workspace` | E4 | `resume` without `--dir` when meta.workspace missing → exit 1; path + workspace wording + `--dir` hint |
+| 14 | `workspace/auto-missing-meta-workspace` | E5 | auto→resume same missing-workspace contract as E4 |
+| 15 | `workspace/resume-dir-relocate/dir-matches-grok-cwd` | E6 | resume `--dir` == Grok `info.cwd` → exit 0; session not moved |
+| 16 | `workspace/resume-dir-relocate/dir-mismatch-errors` | E7 | resume `--dir` ≠ Grok cwd, no allow → exit 1; flag hint; session unmoved |
+| 17 | `workspace/resume-dir-relocate/dir-mismatch-allow-relocates` | E8 | allow flag → warning; RelocateCWD; meta.workspace=`--dir`; resume continues |
+| 18 | `workspace/resume-dir-relocate/help-lists-flag` | E9 | `run -h` and `resume -h` list `--allow-relocate-resume-session-dir` |
+| 19 | `workspace/resume-dir-relocate/auto-dir-mismatch-errors` | E10 | auto→resume same mismatch error as E7 |
+| 20 | `new-terminal/requires-auto-flag` | NT-V1 | `--new-terminal` without auto → exit 1; requires `--auto-send-or-resume` |
+| 21 | `new-terminal/run-help-lists-flag` | NT-V2 | `run -h` documents `--new-terminal`; trailing `\n` |
+| 22 | `new-terminal/mode-run-opens-iterm` | NT-D1 | auto+new-terminal missing session → exit 0; ForceNew script; no `--new-terminal` in follow-up; no in-process provider |
+| 23 | `new-terminal/mode-resume-opens-iterm` | NT-D2 | auto+new-terminal bound+exited → exit 0; script; no parent argv probe spawn |
+| 24 | `new-terminal/mode-send-ignores` | NT-D3 | auto+new-terminal live → exit 0; no iTerm script; still `msg_N` |
+| 25 | `new-terminal/prompt-dash-separator` | NT-D4 | prompt like `-v explain` → follow-up has `--` then that prompt |
 
 ## How to Run
 
@@ -180,6 +222,16 @@ doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/resume-mode/empty-prom
 doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/workspace/resume-meta-workspace
 doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/workspace/auto-resume-meta-workspace
 doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/workspace/dir-override
+doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/workspace/missing-meta-workspace
+doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/workspace/auto-missing-meta-workspace
+
+# resume --dir vs Grok info.cwd (relocate gate; classic RED until implementer)
+doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/workspace/resume-dir-relocate
+doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/workspace/resume-dir-relocate/dir-matches-grok-cwd
+doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/workspace/resume-dir-relocate/dir-mismatch-errors
+doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/workspace/resume-dir-relocate/dir-mismatch-allow-relocates
+doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/workspace/resume-dir-relocate/help-lists-flag
+doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/workspace/resume-dir-relocate/auto-dir-mismatch-errors
 
 # --new-terminal (iTerm2 ModeForceNew)
 doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/new-terminal
@@ -209,12 +261,12 @@ type Request struct {
 
 	// Mode selects post-exec enrichment in Run:
 	//   ""            — plain CLI exec
-	//   "read-meta"   — load sessions/<runner>/<session>/meta.json into MetaAfter
+	//   "read-meta"   — load sessions/<session>/meta.json into MetaAfter
 	//   "read-probes" — read ArgvProbePath / CwdProbePath into response fields
 	Mode        string
 	ExecTimeout time.Duration
 
-	// Session seed (meta.json under sessions/<Runner>/<SessionID>/)
+	// Session seed (meta.json under flat sessions/<SessionID>/)
 	SeedMeta          bool
 	Runner            string // default grok-tty
 	SessionID         string
@@ -246,6 +298,13 @@ type Request struct {
 	AgentRunnerBinary string
 	FollowupPrompt    string
 	DirOverride       string // --dir value when set in leaf Args
+
+	// Grok home / resume-dir-relocate fixtures (workspace/resume-dir-relocate/*).
+	// GrokHome is passed as --agent-runner-config-home. Seed sessions under
+	// sessions/<url.PathEscape(abs_cwd)>/<RunnerSessionID>/summary.json.
+	GrokHome       string
+	GrokSessionCwd string // seeded summary info.cwd (Abs)
+	GrokSessionDir string // pre-call session directory path
 
 	// iTerm2 test hooks (--new-terminal leaves). When set, Run/Setup env gets
 	// KOOL_ITERM2_INSTALLED=1 and KOOL_ITERM2_SCRIPT_OUT=<path>.

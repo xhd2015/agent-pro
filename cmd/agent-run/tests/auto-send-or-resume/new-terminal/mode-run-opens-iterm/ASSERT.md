@@ -70,7 +70,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	assertNoInProcessProviderSpawn(t, req, resp)
 
 	// Soft: launcher typically does not create meta (child in iTerm does).
-	metaPath := metaJSONPath(req.Home, defaultRunner, req.SessionID)
+	metaPath := metaJSONPath(req.Home, req.SessionID)
 	if fileExists(metaPath) {
 		t.Logf("meta.json present at launcher exit (acceptable if implementer creates early): %s", metaPath)
 	}

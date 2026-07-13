@@ -16,7 +16,6 @@ no meta for id
 
 ```go
 import (
-	"path/filepath"
 	"testing"
 	"time"
 )
@@ -37,9 +36,9 @@ func Setup(t *testing.T, req *Request) error {
 	}
 	req.Mode = "read-meta"
 	req.ExecTimeout = 60 * time.Second
-	// Sanity: meta must not pre-exist.
-	if fileExists(metaJSONPath(req.Home, defaultRunner, req.SessionID)) {
-		t.Fatalf("precondition: meta must not exist: %s", filepath.Join(req.Home, "sessions", defaultRunner, req.SessionID))
+	// Sanity: meta must not pre-exist (flat sessions/<id>/).
+	if fileExists(metaJSONPath(req.Home, req.SessionID)) {
+		t.Fatalf("precondition: meta must not exist: %s", metaJSONPath(req.Home, req.SessionID))
 	}
 	return nil
 }

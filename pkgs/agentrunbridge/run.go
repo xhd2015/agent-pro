@@ -18,9 +18,12 @@ const (
 type RunOpts struct {
 	Prompt, SessionID, Binary, AgentRunner, RunnerConfigHome, WorkspaceDir string
 	AutoSendOrResume, KeepTTY, NewTerminal, Open, NoSubmit, Stateless      bool
-	WaitReady                                                              bool
-	ReadyTimeout, ReadyPollInterval                                        time.Duration
-	CaptureStdout                                                          bool
+	// AllowRelocateResumeSessionDir maps to agent-run
+	// --allow-relocate-resume-session-dir (resume --dir vs grok session cwd).
+	AllowRelocateResumeSessionDir bool
+	WaitReady                     bool
+	ReadyTimeout, ReadyPollInterval time.Duration
+	CaptureStdout                 bool
 	// Env is a list of "KEY=VALUE" pairs passed to agent-run as repeatable -e flags.
 	Env        []string
 	LookPath   func(file string) (string, error)

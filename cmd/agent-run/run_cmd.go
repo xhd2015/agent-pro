@@ -35,6 +35,9 @@ Options:
   --no-submit         with --open: inject prompt into TTY without trailing Enter (no auto-submit);
                       with --auto-send-or-resume send path: inject without Enter
   --dir DIR           workspace directory (default: process cwd; resume uses session workspace)
+  --allow-relocate-resume-session-dir
+                      when resume --dir differs from grok session cwd, relocate the
+                      grok session and continue (grok-tty only; with --auto-send-or-resume)
   --agent-runner RUNNER   codex, codex-tty, grok-tty, opencode, fake-codex, ...
   --agent-runner-binary SPEC
                       agent executable: bare name/path or shell-style "binary flags..."
@@ -62,6 +65,7 @@ func runHeadless(args []string, defaultRunner string) error {
 	var openFlag bool
 	var noSubmit bool
 	var dir string
+	var allowRelocateResumeSessionDir bool
 	var recorded flags.Flags
 	remaining, err := flags.Bool("--json", &jsonFlag).
 		String("--model", &model).
@@ -73,6 +77,7 @@ func runHeadless(args []string, defaultRunner string) error {
 		Bool("--open", &openFlag).
 		Bool("--no-submit", &noSubmit).
 		String("--dir", &dir).
+		Bool("--allow-relocate-resume-session-dir", &allowRelocateResumeSessionDir).
 		String("--agent-runner", &agentRunner).
 		String("--agent-runner-binary", &agentRunnerBinary).
 		String("--agent-runner-config-home", &agentRunnerConfigHome).
@@ -105,23 +110,24 @@ func runHeadless(args []string, defaultRunner string) error {
 
 	if autoSendOrResume {
 		return runAutoSendOrResume(autoSendOrResumeOpts{
-			jsonFlag:              jsonFlag,
-			model:                 model,
-			sessionID:             sessionID,
-			sessionIDFromPrompt:   sessionIDFromPrompt,
-			agentRunner:           agentRunner,
-			agentRunnerBinary:     agentRunnerBinary,
-			agentRunnerConfigHome: absConfigHome,
-			prependPaths:          absPrepend,
-			envEntries:            envEntries,
-			keepTTY:               keepTTY,
-			openFlag:              openFlag,
-			noSubmit:              noSubmit,
-			dir:                   dir,
-			prompt:                prompt,
-			defaultRunner:         defaultRunner,
-			newTerminal:           newTerminal,
-			recorded:              recorded,
+			jsonFlag:                      jsonFlag,
+			model:                         model,
+			sessionID:                     sessionID,
+			sessionIDFromPrompt:           sessionIDFromPrompt,
+			agentRunner:                   agentRunner,
+			agentRunnerBinary:             agentRunnerBinary,
+			agentRunnerConfigHome:         absConfigHome,
+			prependPaths:                  absPrepend,
+			envEntries:                    envEntries,
+			keepTTY:                       keepTTY,
+			openFlag:                      openFlag,
+			noSubmit:                      noSubmit,
+			dir:                           dir,
+			allowRelocateResumeSessionDir: allowRelocateResumeSessionDir,
+			prompt:                        prompt,
+			defaultRunner:                 defaultRunner,
+			newTerminal:                   newTerminal,
+			recorded:                      recorded,
 		})
 	}
 
@@ -197,23 +203,24 @@ func resolveCLIRunner(flagRunner, defaultRunner string) string {
 }
 
 type autoSendOrResumeOpts struct {
-	jsonFlag              bool
-	model                 string
-	sessionID             string
-	sessionIDFromPrompt   bool
-	agentRunner           string
-	agentRunnerBinary     string
-	agentRunnerConfigHome string
-	prependPaths          []string
-	envEntries            []string
-	keepTTY               bool
-	openFlag              bool
-	noSubmit              bool
-	dir                   string
-	prompt                string
-	defaultRunner         string
-	newTerminal           bool
-	recorded              flags.Flags
+	jsonFlag                      bool
+	model                         string
+	sessionID                     string
+	sessionIDFromPrompt           bool
+	agentRunner                   string
+	agentRunnerBinary             string
+	agentRunnerConfigHome         string
+	prependPaths                  []string
+	envEntries                    []string
+	keepTTY                       bool
+	openFlag                      bool
+	noSubmit                      bool
+	dir                           string
+	allowRelocateResumeSessionDir bool
+	prompt                        string
+	defaultRunner                 string
+	newTerminal                   bool
+	recorded                      flags.Flags
 }
 
 // runAutoSendOrResume classifies a stable --session-id into MODE=run|send|resume
@@ -258,19 +265,20 @@ func runAutoSendOrResume(opts autoSendOrResumeOpts) error {
 			return openAutoInNewTerminal(opts, meta, found)
 		}
 		return resumeExistingSession(store, meta, resumeRunConfig{
-			jsonFlag:              opts.jsonFlag,
-			model:                 opts.model,
-			agentRunner:           opts.agentRunner,
-			agentRunnerBinary:     opts.agentRunnerBinary,
-			agentRunnerConfigHome: opts.agentRunnerConfigHome,
-			prependPaths:          opts.prependPaths,
-			envEntries:            opts.envEntries,
-			keepTTY:               opts.keepTTY,
-			openFlag:              opts.openFlag,
-			noSubmit:              opts.noSubmit,
-			dir:                   opts.dir,
-			prompt:                opts.prompt,
-			defaultRunner:         opts.defaultRunner,
+			jsonFlag:                      opts.jsonFlag,
+			model:                         opts.model,
+			agentRunner:                   opts.agentRunner,
+			agentRunnerBinary:             opts.agentRunnerBinary,
+			agentRunnerConfigHome:         opts.agentRunnerConfigHome,
+			prependPaths:                  opts.prependPaths,
+			envEntries:                    opts.envEntries,
+			keepTTY:                       opts.keepTTY,
+			openFlag:                      opts.openFlag,
+			noSubmit:                      opts.noSubmit,
+			dir:                           opts.dir,
+			allowRelocateResumeSessionDir: opts.allowRelocateResumeSessionDir,
+			prompt:                        opts.prompt,
+			defaultRunner:                 opts.defaultRunner,
 		})
 	default:
 		if opts.newTerminal {

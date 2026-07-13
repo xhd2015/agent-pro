@@ -1,20 +1,25 @@
 # Scenario
 
 **Feature**: resume (and auto→resume) spawn the provider in `meta.workspace`
-unless `--dir` overrides
+unless `--dir` overrides; missing `meta.workspace` errors with a `--dir` hint
 
 ```
 meta.workspace = /created/ws; CLI cwd ≠ that
   -> resume / auto → child cwd = meta.workspace
   -> resume --dir OVERRIDE → child cwd = OVERRIDE
+
+meta.workspace = /gone-ws (missing); no --dir
+  -> resume / auto → exit 1; session workspace missing + path + --dir hint
 ```
 
 ## Steps
 
 1. Create distinct created-ws and cli-cwd directories under TempDir.
-2. Seed exited meta with Workspace = created-ws.
+2. Seed exited meta with Workspace = created-ws (missing-workspace leaves override
+   Workspace to a never-created path under TempDir).
 3. Set `req.WorkDir` = cli-cwd so process cwd differs.
-4. Install argv+cwd recording runner.
+4. Install argv+cwd recording runner (happy-path leaves; error leaves still may
+   install for consistency).
 
 ```go
 import (

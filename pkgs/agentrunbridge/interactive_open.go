@@ -10,6 +10,9 @@ import (
 type InteractiveOpenOpts struct {
 	SessionID, Prompt, WorkspaceDir, Binary, AgentRunner, RunnerConfigHome string
 	NoSubmit                                                               bool
+	// AllowRelocateResumeSessionDir maps to agent-run
+	// --allow-relocate-resume-session-dir when resuming with a different --dir.
+	AllowRelocateResumeSessionDir bool
 	// Env is forwarded to RunOpts (each "KEY=VALUE" → agent-run -e KEY=VALUE).
 	Env []string
 	// ReadyTimeout / ReadyPollInterval optional; 0 → Run defaults (60s / 500ms).
@@ -34,24 +37,25 @@ func RunInteractiveOpen(opts InteractiveOpenOpts) (RunResult, error) {
 		runner = "grok-tty"
 	}
 	return Run(RunOpts{
-		Prompt:            opts.Prompt,
-		SessionID:         opts.SessionID,
-		Binary:            opts.Binary,
-		AgentRunner:       runner,
-		RunnerConfigHome:  opts.RunnerConfigHome,
-		WorkspaceDir:      opts.WorkspaceDir,
-		NoSubmit:          opts.NoSubmit,
-		AutoSendOrResume:  true,
-		NewTerminal:       true,
-		Open:              true,
-		WaitReady:         true,
-		CaptureStdout:     false,
-		Env:               opts.Env,
-		ReadyTimeout:      opts.ReadyTimeout,
-		ReadyPollInterval: opts.ReadyPollInterval,
-		LookPath:          opts.LookPath,
-		RunCommand:        opts.RunCommand,
-		RunOutput:         opts.RunOutput,
-		Logf:              opts.Logf,
+		Prompt:                        opts.Prompt,
+		SessionID:                     opts.SessionID,
+		Binary:                        opts.Binary,
+		AgentRunner:                   runner,
+		RunnerConfigHome:              opts.RunnerConfigHome,
+		WorkspaceDir:                  opts.WorkspaceDir,
+		NoSubmit:                      opts.NoSubmit,
+		AllowRelocateResumeSessionDir: opts.AllowRelocateResumeSessionDir,
+		AutoSendOrResume:              true,
+		NewTerminal:                   true,
+		Open:                          true,
+		WaitReady:                     true,
+		CaptureStdout:                 false,
+		Env:                           opts.Env,
+		ReadyTimeout:                  opts.ReadyTimeout,
+		ReadyPollInterval:             opts.ReadyPollInterval,
+		LookPath:                      opts.LookPath,
+		RunCommand:                    opts.RunCommand,
+		RunOutput:                     opts.RunOutput,
+		Logf:                          opts.Logf,
 	})
 }

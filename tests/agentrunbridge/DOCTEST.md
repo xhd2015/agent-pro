@@ -157,8 +157,10 @@ type Request struct {
 	NewTerminal      bool
 	Open             bool
 	NoSubmit         bool
-	Stateless        bool
-	WaitReady        bool
+	// AllowRelocateResumeSessionDir maps to agent-run --allow-relocate-resume-session-dir.
+	AllowRelocateResumeSessionDir bool
+	Stateless                     bool
+	WaitReady                     bool
 	ReadyTimeout     time.Duration
 	ReadyPollInterval time.Duration
 	CaptureStdout    bool
@@ -351,23 +353,24 @@ func makeHooks(req *Request, rec *hookBag) hookFns {
 
 func toRunOpts(req *Request, hooks *hookFns) agentrunbridge.RunOpts {
 	opts := agentrunbridge.RunOpts{
-		Prompt:            req.Prompt,
-		SessionID:         req.SessionID,
-		Binary:            req.Binary,
-		AgentRunner:       req.AgentRunner,
-		RunnerConfigHome:  req.RunnerConfigHome,
-		WorkspaceDir:      req.WorkspaceDir,
-		AutoSendOrResume:  req.AutoSendOrResume,
-		KeepTTY:           req.KeepTTY,
-		NewTerminal:       req.NewTerminal,
-		Open:              req.Open,
-		NoSubmit:          req.NoSubmit,
-		Stateless:         req.Stateless,
-		WaitReady:         req.WaitReady,
-		ReadyTimeout:      req.ReadyTimeout,
-		ReadyPollInterval: req.ReadyPollInterval,
-		CaptureStdout:     req.CaptureStdout,
-		Env:               append([]string(nil), req.Env...),
+		Prompt:                        req.Prompt,
+		SessionID:                     req.SessionID,
+		Binary:                        req.Binary,
+		AgentRunner:                   req.AgentRunner,
+		RunnerConfigHome:              req.RunnerConfigHome,
+		WorkspaceDir:                  req.WorkspaceDir,
+		AutoSendOrResume:              req.AutoSendOrResume,
+		KeepTTY:                       req.KeepTTY,
+		NewTerminal:                   req.NewTerminal,
+		Open:                          req.Open,
+		NoSubmit:                      req.NoSubmit,
+		AllowRelocateResumeSessionDir: req.AllowRelocateResumeSessionDir,
+		Stateless:                     req.Stateless,
+		WaitReady:                     req.WaitReady,
+		ReadyTimeout:                  req.ReadyTimeout,
+		ReadyPollInterval:             req.ReadyPollInterval,
+		CaptureStdout:                 req.CaptureStdout,
+		Env:                           append([]string(nil), req.Env...),
 	}
 	if hooks != nil {
 		opts.LookPath = hooks.LookPath
@@ -384,13 +387,14 @@ func toInteractiveOpts(req *Request, hooks *hookFns) agentrunbridge.InteractiveO
 	// ReadyTimeout / ReadyPollInterval live only on RunOpts; InteractiveOpen uses
 	// package defaults after fill (0 → 60s / 500ms). Short-timeout wait leaves use Mode=run.
 	opts := agentrunbridge.InteractiveOpenOpts{
-		SessionID:    req.SessionID,
-		Prompt:       req.Prompt,
-		WorkspaceDir: req.WorkspaceDir,
-		NoSubmit:     req.NoSubmit,
-		Binary:       req.Binary,
-		AgentRunner:  req.AgentRunner,
-		Env:          append([]string(nil), req.Env...),
+		SessionID:                     req.SessionID,
+		Prompt:                        req.Prompt,
+		WorkspaceDir:                  req.WorkspaceDir,
+		NoSubmit:                      req.NoSubmit,
+		AllowRelocateResumeSessionDir: req.AllowRelocateResumeSessionDir,
+		Binary:                        req.Binary,
+		AgentRunner:                   req.AgentRunner,
+		Env:                           append([]string(nil), req.Env...),
 	}
 	if hooks != nil {
 		opts.LookPath = hooks.LookPath
@@ -408,18 +412,19 @@ func filledInteractiveRunOpts(req *Request) agentrunbridge.RunOpts {
 		runner = "grok-tty"
 	}
 	return agentrunbridge.RunOpts{
-		Prompt:           req.Prompt,
-		SessionID:        req.SessionID,
-		Binary:           req.Binary,
-		AgentRunner:      runner,
-		WorkspaceDir:     req.WorkspaceDir,
-		NoSubmit:         req.NoSubmit,
-		AutoSendOrResume: true,
-		NewTerminal:      true,
-		Open:             true,
-		WaitReady:        true,
-		CaptureStdout:    false,
-		Env:              append([]string(nil), req.Env...),
+		Prompt:                        req.Prompt,
+		SessionID:                     req.SessionID,
+		Binary:                        req.Binary,
+		AgentRunner:                   runner,
+		WorkspaceDir:                  req.WorkspaceDir,
+		NoSubmit:                      req.NoSubmit,
+		AllowRelocateResumeSessionDir: req.AllowRelocateResumeSessionDir,
+		AutoSendOrResume:              true,
+		NewTerminal:                   true,
+		Open:                          true,
+		WaitReady:                     true,
+		CaptureStdout:                 false,
+		Env:                           append([]string(nil), req.Env...),
 	}
 }
 
