@@ -1,4 +1,4 @@
-# Followup Agent — Usage Reference
+# Followup Skill — Usage Reference
 
 ## When to use
 
@@ -13,9 +13,11 @@ Clarification-phase followup. Use when the user mentions followup to:
 - If the task is a new request that needs routing — use intent-route first
 - If the task needs codebase exploration — use explore
 - If the task is about reproducing a bug — use reproduce
+- If the topic needs full planning — use brainstorm
 
 ## Usage notes
 
-- The followup agent stays in clarification phase; it does not implement
+- Skill-only: load via `agent-pro skill followup show` or install to `.agents/skills/`
+- The parent agent follows the embedded prompt inline — no standalone binary
+- Stays in clarification phase; does not implement
 - Launch when the user wants to continue discussion on an existing topic
-- Prefixes the user prompt with the followup clarification instruction

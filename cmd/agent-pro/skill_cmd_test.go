@@ -76,6 +76,46 @@ func TestInvestigateSkillIsRegistered(t *testing.T) {
 	}
 }
 
+func TestBrainstormSkillIsRegistered(t *testing.T) {
+	names := knownSkillNames()
+	if !containsString(names, "brainstorm") {
+		t.Fatalf("knownSkillNames missing brainstorm: %v", names)
+	}
+	sk, ok := knownSkills["brainstorm"]
+	if !ok {
+		t.Fatal("knownSkills missing brainstorm")
+	}
+	if !strings.Contains(sk.Content, "name: brainstorm") {
+		t.Fatalf("skill content missing frontmatter name:\n%s", sk.Content)
+	}
+	if sk.Description == "" {
+		t.Fatal("brainstorm skill missing description")
+	}
+	if !strings.Contains(sk.Content, "CLI output examples") {
+		t.Fatal("brainstorm skill missing CLI output section")
+	}
+}
+
+func TestFollowupSkillIsRegistered(t *testing.T) {
+	names := knownSkillNames()
+	if !containsString(names, "followup") {
+		t.Fatalf("knownSkillNames missing followup: %v", names)
+	}
+	sk, ok := knownSkills["followup"]
+	if !ok {
+		t.Fatal("knownSkills missing followup")
+	}
+	if !strings.Contains(sk.Content, "name: followup") {
+		t.Fatalf("skill content missing frontmatter name:\n%s", sk.Content)
+	}
+	if sk.Description == "" {
+		t.Fatal("followup skill missing description")
+	}
+	if !strings.Contains(sk.Content, "clarification phase") {
+		t.Fatal("followup skill missing clarification phase instruction")
+	}
+}
+
 func TestEstablishALoopSkillIsRegistered(t *testing.T) {
 	names := knownSkillNames()
 	if !containsString(names, "establish-a-loop") {

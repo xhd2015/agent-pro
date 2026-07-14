@@ -24,7 +24,7 @@ skill needs persistent sessions, model calls, or a standalone executable.
 
 - Workflow is a prompt/guideline the parent agent follows inline
 - No dedicated session store or `agent-pro`-external binary required
-- Examples: `investigate`, `followup`, `verify-with-prototype`
+- Examples: `investigate`, `followup`, `brainstorm`, `verify-with-prototype`
 
 **Layout**
 
@@ -100,7 +100,10 @@ Follow `go-best-practice skill-cli` for `skill show` / `skill install` in
 `main.go`. Still register in `cmd/agent-pro/skill_cmd.go` so `agent-pro skills`
 lists the skill and `agent-pro skill <name> install` works without the binary.
 
-Examples with sub-agent binaries: `followup`, `brainstorm`, `reproduce`.
+Examples with sub-agent binaries: `reproduce`.
+
+Examples skill-only: `investigate`, `followup`, `brainstorm`,
+`verify-with-prototype`.
 
 ## Checklist for a new skill-only skill
 
