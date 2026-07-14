@@ -2,7 +2,7 @@
 
 - Exit code 0.
 - Stdout contains `Available skills:` header.
-- Stdout lists `loop-workflow` with non-empty description text (not name-only line).
+- Stdout lists `run-the-loop` with non-empty description text (not name-only line).
 
 ## Exit Code
 
@@ -24,17 +24,17 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	}
 	var foundWithDescription bool
 	for _, line := range strings.Split(resp.Stdout, "\n") {
-		if !strings.Contains(line, "loop-workflow") {
+		if !strings.Contains(line, "run-the-loop") {
 			continue
 		}
 		trimmed := strings.TrimSpace(line)
-		if len(trimmed) > len("loop-workflow") {
+		if len(trimmed) > len("run-the-loop") {
 			foundWithDescription = true
 			break
 		}
 	}
 	if !foundWithDescription {
-		t.Fatalf("loop-workflow missing from skills list or listed without description:\nstdout:\n%s\nstderr:\n%s", resp.Stdout, resp.Stderr)
+		t.Fatalf("run-the-loop missing from skills list or listed without description:\nstdout:\n%s\nstderr:\n%s", resp.Stdout, resp.Stderr)
 	}
 }
 ```

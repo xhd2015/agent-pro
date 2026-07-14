@@ -1,9 +1,9 @@
 # Scenario
 
-**Feature**: agent-pro skills lists loop-workflow with description
+**Feature**: agent-pro skills lists run-the-loop with description
 
 ```
-agent-pro skills -> Available skills listing includes loop-workflow + description
+agent-pro skills -> Available skills listing includes run-the-loop + description
 ```
 
 ## Steps

@@ -24,6 +24,8 @@ commands until the user explicitly confirms with **"go ahead"**.
 
 # Required output
 
+## If this is a feature request
+
 Explicitly tell the user:
 
 1. **Data models and storage layout** : What the underlying data models and storage layout(if any) are
@@ -36,8 +38,11 @@ correctness.
 If the user approved the plan, add running tests to your todo list when you
 later implement.
 
-NOTE: if purely doc changes, no test needed.
 NOTE: when the user mentioned doctest, prefer doctests instead of unit tests.
+
+## If this is a pure doc change
+
+No test needed, just analyse the given document, and propose your changes structurally and explain in detail.
 
 # CLI commands and sub-commands
 

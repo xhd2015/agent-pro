@@ -1,6 +1,6 @@
-# agent-pro loop-workflow Registration Tests
+# agent-pro run-the-loop Registration Tests
 
-Doc-style tests verifying `loop-workflow` is registered in `agent-pro skills`.
+Doc-style tests verifying `run-the-loop` is registered in `agent-pro skills`.
 This is a **nested DOCTEST root** — it builds `agent-pro` and exercises skill show/list
 paths (integration proxy for `knownSkills` registration).
 
@@ -12,9 +12,9 @@ prints that content; unknown names error with the available list.
 `agent-pro skills` (no args) lists every known skill with its frontmatter
 description.
 
-Registration of `loop-workflow` means `agent-pro skill loop-workflow show`
-succeeds and prints frontmatter `name: loop-workflow`; the skills list includes
-`loop-workflow` with description text.
+Registration of `run-the-loop` means `agent-pro skill run-the-loop show`
+succeeds and prints frontmatter `name: run-the-loop`; the skills list includes
+`run-the-loop` with description text.
 
 ## Version
 
@@ -26,22 +26,22 @@ succeeds and prints frontmatter `name: loop-workflow`; the skills list includes
 agent-pro/
 ├── DOCTEST.md
 ├── SETUP.md                           # build agent-pro binary
-├── register/                          # skill show succeeds for loop-workflow
-└── list/                              # agent-pro skills lists loop-workflow
+├── register/                          # skill show succeeds for run-the-loop
+└── list/                              # agent-pro skills lists run-the-loop
 ```
 
 ## Test Index
 
 | # | Leaf | Description |
 |---|------|-------------|
-| 1 | `register` | `agent-pro skill loop-workflow show` → contains `name: loop-workflow` |
-| 2 | `list` | `agent-pro skills` → lists `loop-workflow` with description |
+| 1 | `register` | `agent-pro skill run-the-loop show` → contains `name: run-the-loop` |
+| 2 | `list` | `agent-pro skills` → lists `run-the-loop` with description |
 
 ## How to Run
 
 ```sh
-doctest vet ./agents/loop-workflow/tests/agent-pro
-doctest test -v ./agents/loop-workflow/tests/agent-pro/...
+doctest vet ./agents/run-the-loop/tests/agent-pro
+doctest test -v ./agents/run-the-loop/tests/agent-pro/...
 ```
 
 ```go

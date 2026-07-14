@@ -57,7 +57,7 @@ budget. Failure appears only when multiple open-bind packages race together.
 ## Goal
 
 Steps 1–4 **reproduce** the parallel flake on command (**REPRO PASS**).
-Step 5 is fix guidance only during establishment; iterate with `/loop-workflow`
+Step 5 is fix guidance only during establishment; iterate with `/run-the-loop`
 until `go run ./script/debug/open-bind-parallel-flake --expect=healthy` is green.
 
 ## Surfaces
@@ -234,6 +234,6 @@ Related (different bug — soft bind unbound on real grok):
 
 - **Loop kind:** bug-repro  
 - **Dry-run status:** REPRO PASS  
-- **Next:** `/loop-workflow` fix open-bind parallel flake until  
+- **Next:** `/run-the-loop` fix open-bind parallel flake until  
   `go run ./script/debug/open-bind-parallel-flake --expect=healthy` exits 0  
   (optionally stress 3× and full `status-resume` suite).

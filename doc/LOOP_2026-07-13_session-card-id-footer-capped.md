@@ -176,7 +176,7 @@ Return to step 1 after product change.
 ## Handoff
 
 ```text
-/loop-workflow fix session card: hide or fix capped mid-ellipsis session-id footer under prompt
+/run-the-loop fix session card: hide or fix capped mid-ellipsis session-id footer under prompt
 ```
 
 GREEN:

@@ -65,7 +65,7 @@ go run ./script/debug/session-list-ux-enhance -url=http://127.0.0.1:8821
 ## Goal
 
 Steps 1–4 **reproduce** the three UX symptoms on command (**REPRO PASS**).
-Step 5 is fix guidance; iterate with `/loop-workflow` until:
+Step 5 is fix guidance; iterate with `/run-the-loop` until:
 
 ```sh
 go run ./script/debug/session-list-ux-enhance --expect=healthy
@@ -235,7 +235,7 @@ Return to step 1 after edits (rebuild embeds frontend).
 After **REPRO PASS**, run:
 
 ```text
-/loop-workflow fix session list UX: load-more at list end, no auto-load on scroll, lift state to App for scroll preserve
+/run-the-loop fix session list UX: load-more at list end, no auto-load on scroll, lift state to App for scroll preserve
 ```
 
 GREEN gate:

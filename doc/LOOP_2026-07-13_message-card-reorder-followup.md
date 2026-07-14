@@ -60,7 +60,7 @@ of the timeline (`mergeSessionEvents` + strip in `SessionPage` refresh).
 ## Goal
 
 Steps 1–4 **reproduce** the live reorder on command (**REPRO PASS**).
-Step 5 is fix guidance only during establishment; iterate with `/loop-workflow`
+Step 5 is fix guidance only during establishment; iterate with `/run-the-loop`
 until:
 
 ```sh
@@ -201,7 +201,7 @@ Likely product touch points (do **not** apply during establishment dry-run):
 - `frontend-agent-run/src/lib/timeline.ts` — `mergeSessionEvents` appends
   missing optimistic users at the **end** of the server list (causes jump).
 
-Sound fix direction (hypothesis for `/loop-workflow`, not applied here):
+Sound fix direction (hypothesis for `/run-the-loop`, not applied here):
 
 1. Stop stripping all user events on follow-up refresh; only suppress the
    in-flight duplicate of the last sent prompt until server confirms it.

@@ -78,7 +78,7 @@ go run ./script/debug/markdown-message-card-render \
 ## Goal
 
 Steps 1–4 **reproduce** raw-markdown-on-cards on command (**REPRO PASS**).
-Step 5 is fix guidance only during establishment; iterate with `/loop-workflow`
+Step 5 is fix guidance only during establishment; iterate with `/run-the-loop`
 until:
 
 ```sh
@@ -211,7 +211,7 @@ go run ./script/debug/markdown-message-card-render --expect=healthy -out="$OUT-v
 
 ## Step 5 — Fix (only after REPRO PASS; not during establishment)
 
-When iterating with `/loop-workflow`:
+When iterating with `/run-the-loop`:
 
 1. Add markdown renderer in `frontend-agent-run` (e.g. `react-markdown` + `remark-gfm`).
 2. Render **assistant** `.message-body` and **think** `.progress-card-body` via a shared `MarkdownBody`.

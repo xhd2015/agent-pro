@@ -136,9 +136,9 @@ func TestEstablishALoopSkillIsRegistered(t *testing.T) {
 	}
 	for _, needle := range []string{
 		"bug-repro",
-		"REPRO PASS",
-		"No remediation during audit",
-		"Baking the fix into Run",
+		"SYMPTOM CONFIRMED",
+		"run-the-loop",
+		"Derived operations",
 	} {
 		if !strings.Contains(sk.Content, needle) {
 			t.Fatalf("establish-a-loop skill missing %q:\n%s", needle, sk.Content)
@@ -146,20 +146,20 @@ func TestEstablishALoopSkillIsRegistered(t *testing.T) {
 	}
 }
 
-func TestLoopWorkflowSkillIsRegistered(t *testing.T) {
+func TestRunTheLoopSkillIsRegistered(t *testing.T) {
 	names := knownSkillNames()
-	if !containsString(names, "loop-workflow") {
-		t.Fatalf("knownSkillNames missing loop-workflow: %v", names)
+	if !containsString(names, "run-the-loop") {
+		t.Fatalf("knownSkillNames missing run-the-loop: %v", names)
 	}
-	sk, ok := knownSkills["loop-workflow"]
+	sk, ok := knownSkills["run-the-loop"]
 	if !ok {
-		t.Fatal("knownSkills missing loop-workflow")
+		t.Fatal("knownSkills missing run-the-loop")
 	}
-	if !strings.Contains(sk.Content, "name: loop-workflow") {
+	if !strings.Contains(sk.Content, "name: run-the-loop") {
 		t.Fatalf("skill content missing frontmatter name:\n%s", sk.Content)
 	}
 	if sk.Description == "" {
-		t.Fatal("loop-workflow skill missing description")
+		t.Fatal("run-the-loop skill missing description")
 	}
 }
 

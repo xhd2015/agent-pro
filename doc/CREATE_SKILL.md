@@ -131,6 +131,6 @@ Examples skill-only: `investigate`, `followup`, `brainstorm`,
 | `brainstorm` | Requirement + test plan approval |
 | `consolidate-code` | Map duplication → PR stack → shared packages |
 | `establish-a-loop` | Document and dry-run a build/deploy/run/inspect/fix loop (`LOOP_<date>_<slug>.md`) |
-| `loop-workflow` | Goal-driven iterate-until-done with inspect script |
+| `run-the-loop` | Goal-driven iterate-until-done with inspect script |
 | `sound-fix` | Evaluate fix soundness vs workarounds |
 | `doctest-tdd` | Sealed tests → implementation |

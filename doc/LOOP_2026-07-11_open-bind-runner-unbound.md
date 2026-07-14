@@ -54,7 +54,7 @@ deadline exceeded → silent unbound, exit 0.
 ## Goal
 
 Steps 1–4 **reproduce** unbound after `--open` on command (REPRO PASS).
-Step 5 is fix guidance only during establishment; full fix via `/loop-workflow`.
+Step 5 is fix guidance only during establishment; full fix via `/run-the-loop`.
 
 ## Surfaces
 
@@ -181,7 +181,7 @@ go run ./script/debug/open-bind-smoke --agent-run "$BIN" --expect=healthy
 
 ---
 
-## Step 5 — Fix (guidance for `/loop-workflow`; do not apply during establish)
+## Step 5 — Fix (guidance for `/run-the-loop`; do not apply during establish)
 
 When REPRO is reliable, fix candidates:
 

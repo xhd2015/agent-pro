@@ -1,16 +1,16 @@
 # Scenario
 
-**Feature**: agent-pro exposes loop-workflow via knownSkills registration
+**Feature**: agent-pro exposes run-the-loop via knownSkills registration
 
 ```
-go build cmd/agent-pro -> agent-pro skill loop-workflow show -> embedded SKILL.md
-agent-pro skills -> lists loop-workflow with description
+go build cmd/agent-pro -> agent-pro skill run-the-loop show -> embedded SKILL.md
+agent-pro skills -> lists run-the-loop with description
 ```
 
 ## Preconditions
 
-- `cmd/agent-pro/skill_cmd.go` registers `loop-workflow` in `knownSkills`.
-- `knownSkillNames()` includes `loop-workflow`.
+- `cmd/agent-pro/skill_cmd.go` registers `run-the-loop` in `knownSkills`.
+- `knownSkillNames()` includes `run-the-loop`.
 
 ## Steps
 

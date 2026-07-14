@@ -44,7 +44,7 @@ on `[data-testid="terminal-surface"]`. Symptom = visible min `LINE_xxx` does
 ## Goal
 
 Steps 1–4 **reproduce** broken mobile touch-scroll (**REPRO PASS**).
-Step 5 is fix guidance; iterate with `/loop-workflow` until:
+Step 5 is fix guidance; iterate with `/run-the-loop` until:
 
 ```sh
 go run ./script/debug/mobile-terminal-touch-scroll --expect=healthy
