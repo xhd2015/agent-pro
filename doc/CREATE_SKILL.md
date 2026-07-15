@@ -138,5 +138,5 @@ Examples skill-only: `investigate`, `followup`, `brainstorm`,
 | `run-the-loop` | Goal-driven iterate-until-done with inspect script |
 | `sound-fix` | Evaluate fix soundness vs workarounds |
 | `split-phases` | Break a large plan into dependency-ordered, independently verifiable phases |
-| `summarize-a-skill` | Distill session tries into a brief skill SKILL.md |
+| `summarize-a-skill` | Distill tries + accelerators into a skill; prefer update over create when user does not ask for a new file |
 | `doctest-tdd` | Sealed tests → implementation |
