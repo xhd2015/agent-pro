@@ -133,4 +133,5 @@ Examples skill-only: `investigate`, `followup`, `brainstorm`,
 | `establish-a-loop` | Document and dry-run a build/deploy/run/inspect/fix loop (`LOOP_<date>_<slug>.md`) |
 | `run-the-loop` | Goal-driven iterate-until-done with inspect script |
 | `sound-fix` | Evaluate fix soundness vs workarounds |
+| `summarize-a-skill` | Distill session tries into a brief skill SKILL.md |
 | `doctest-tdd` | Sealed tests → implementation |

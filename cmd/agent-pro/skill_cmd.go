@@ -16,6 +16,7 @@ import (
 	runtheloop_run "github.com/xhd2015/agent-pro/agents/run-the-loop/run"
 	reproduce_run "github.com/xhd2015/agent-pro/agents/reproduce/run"
 	soundfix_run "github.com/xhd2015/agent-pro/agents/sound-fix/run"
+	summarizeaskill_run "github.com/xhd2015/agent-pro/agents/summarize-a-skill/run"
 	verifywithprototype_run "github.com/xhd2015/agent-pro/agents/verify-with-prototype/run"
 	"github.com/xhd2015/less-gen/flags"
 	"github.com/xhd2015/skills/install"
@@ -88,6 +89,11 @@ var knownSkills = map[string]skillInfo{
 		Description: extractDescription(soundfix_run.SkillFile),
 		Content:     soundfix_run.SkillFile,
 	},
+	"summarize-a-skill": {
+		Name:        "summarize-a-skill",
+		Description: extractDescription(summarizeaskill_run.SkillFile),
+		Content:     summarizeaskill_run.SkillFile,
+	},
 	"verify-with-prototype": {
 		Name:        "verify-with-prototype",
 		Description: extractDescription(verifywithprototype_run.SkillFile),
@@ -138,10 +144,10 @@ func extractDescription(skillMD string) string {
 }
 
 func knownSkillNames() []string {
-	return []string{"brainstorm", "consolidate-code", "debug-with-user", "establish-a-loop", "explore", "followup", "git-resolve-conflicts", "intent-route", "investigate", "reproduce", "run-the-loop", "sound-fix", "verify-with-prototype"}
+	return []string{"brainstorm", "consolidate-code", "debug-with-user", "establish-a-loop", "explore", "followup", "git-resolve-conflicts", "intent-route", "investigate", "reproduce", "run-the-loop", "sound-fix", "summarize-a-skill", "verify-with-prototype"}
 }
 
-const knownSkillNamesText = "brainstorm, consolidate-code, debug-with-user, establish-a-loop, explore, followup, git-resolve-conflicts, intent-route, investigate, reproduce, run-the-loop, sound-fix, verify-with-prototype"
+const knownSkillNamesText = "brainstorm, consolidate-code, debug-with-user, establish-a-loop, explore, followup, git-resolve-conflicts, intent-route, investigate, reproduce, run-the-loop, sound-fix, summarize-a-skill, verify-with-prototype"
 
 const skillHelp = `
 Usage: agent-pro skill <command> [ARGS]
@@ -151,7 +157,7 @@ Commands:
   <name> show         print the SKILL.md content of a skill
   <name> install      install a skill to a skill directory
 
-Skill names: brainstorm, consolidate-code, debug-with-user, establish-a-loop, explore, followup, git-resolve-conflicts, intent-route, investigate, reproduce, run-the-loop, sound-fix, verify-with-prototype
+Skill names: brainstorm, consolidate-code, debug-with-user, establish-a-loop, explore, followup, git-resolve-conflicts, intent-route, investigate, reproduce, run-the-loop, sound-fix, summarize-a-skill, verify-with-prototype
 
 Run agent-pro skill <name> <command> --help for command-specific options.
 `
@@ -164,7 +170,7 @@ Commands (without arguments, lists all available skill names):
   <name> show         print the SKILL.md content of a skill
   <name> install      install a skill to a skill directory
 
-Skill names: brainstorm, consolidate-code, debug-with-user, establish-a-loop, explore, followup, git-resolve-conflicts, intent-route, investigate, reproduce, run-the-loop, sound-fix, verify-with-prototype
+Skill names: brainstorm, consolidate-code, debug-with-user, establish-a-loop, explore, followup, git-resolve-conflicts, intent-route, investigate, reproduce, run-the-loop, sound-fix, summarize-a-skill, verify-with-prototype
 
 Run agent-pro skills <name> <command> --help for command-specific options.
 `

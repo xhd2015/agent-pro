@@ -197,6 +197,29 @@ func TestGitResolveConflictsSkillIsRegistered(t *testing.T) {
 	}
 }
 
+func TestSummarizeASkillIsRegistered(t *testing.T) {
+	names := knownSkillNames()
+	if !containsString(names, "summarize-a-skill") {
+		t.Fatalf("knownSkillNames missing summarize-a-skill: %v", names)
+	}
+	sk, ok := knownSkills["summarize-a-skill"]
+	if !ok {
+		t.Fatal("knownSkills missing summarize-a-skill")
+	}
+	if !strings.Contains(sk.Content, "name: summarize-a-skill") {
+		t.Fatalf("skill content missing frontmatter name:\n%s", sk.Content)
+	}
+	if sk.Description == "" {
+		t.Fatal("summarize-a-skill skill missing description")
+	}
+	if !strings.Contains(sk.Content, "Output path resolution") {
+		t.Fatal("summarize-a-skill skill missing output path resolution section")
+	}
+	if !strings.Contains(sk.Content, "What works") {
+		t.Fatal("summarize-a-skill skill missing What works section")
+	}
+}
+
 func TestHandleSkillsHelpMentionsUpdate(t *testing.T) {
 	stdout := captureStdout(t, func() {
 		if err := handleSkills([]string{"--help"}); err != nil {
