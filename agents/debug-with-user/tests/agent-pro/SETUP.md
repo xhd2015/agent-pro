@@ -3,7 +3,7 @@
 **Feature**: agent-pro exposes debug-with-user via knownSkills registration
 
 ```
-go build cmd/agent-pro -> agent-pro skill debug-with-user show -> embedded SKILL.md
+go build cmd/agent-pro -> agent-pro skill debug-with-user --show -> embedded SKILL.md
 ```
 
 ## Preconditions

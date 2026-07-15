@@ -112,9 +112,9 @@ VPN passwordless sudo (`master-2026-07-06-vpn-no-password` work):
 # Related commands
 
 ```sh
-agent-pro skill investigate show
-agent-pro skill followup show
-agent-pro skill verify-with-prototype show
+agent-pro skill investigate --show
+agent-pro skill followup --show
+agent-pro skill verify-with-prototype --show
 ```
 
 Install locally:

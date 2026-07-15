@@ -3,7 +3,7 @@
 **Feature**: agent-pro exposes establish-a-loop via knownSkills registration
 
 ```
-go build cmd/agent-pro -> agent-pro skill establish-a-loop show -> embedded SKILL.md
+go build cmd/agent-pro -> agent-pro skill establish-a-loop --show -> embedded SKILL.md
 agent-pro skills -> lists establish-a-loop with description
 ```
 

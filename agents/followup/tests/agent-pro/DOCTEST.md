@@ -12,7 +12,7 @@ prints that content; unknown names error with the available list.
 `agent-pro skills` (no args) lists every known skill with its frontmatter
 description.
 
-Registration of `followup` means `agent-pro skill followup show`
+Registration of `followup` means `agent-pro skill followup --show`
 succeeds and prints frontmatter `name: followup` plus clarification-phase
 instruction; the skills list includes `followup` with description text.
 
@@ -34,7 +34,7 @@ agent-pro/
 
 | # | Leaf | Description |
 |---|------|-------------|
-| 1 | `register` | `agent-pro skill followup show` → `name: followup` + clarification phase |
+| 1 | `register` | `agent-pro skill followup --show` → `name: followup` + clarification phase |
 | 2 | `list` | `agent-pro skills` → lists `followup` with description |
 
 ## How to Run

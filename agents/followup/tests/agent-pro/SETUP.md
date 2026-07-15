@@ -3,7 +3,7 @@
 **Feature**: agent-pro exposes followup via knownSkills registration
 
 ```
-go build cmd/agent-pro -> agent-pro skill followup show -> embedded SKILL.md
+go build cmd/agent-pro -> agent-pro skill followup --show -> embedded SKILL.md
 agent-pro skills -> lists followup with description
 ```
 

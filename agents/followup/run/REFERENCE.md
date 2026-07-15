@@ -17,7 +17,7 @@ Clarification-phase followup. Use when the user mentions followup to:
 
 ## Usage notes
 
-- Skill-only: load via `agent-pro skill followup show` or install to `.agents/skills/`
+- Skill-only: load via `agent-pro skill followup --show` or install to `.agents/skills/`
 - The parent agent follows the embedded prompt inline — no standalone binary
 - Stays in clarification phase; does not implement
 - Launch when the user wants to continue discussion on an existing topic

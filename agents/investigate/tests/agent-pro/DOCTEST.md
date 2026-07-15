@@ -16,9 +16,9 @@ description.
 **intent-route** is another embedded skill whose SKILL.md classifies user input
 into categories and names a guideline command per category. After adding
 **Investigation**, its show output must reference `investigate` and
-`agent-pro skill investigate show`.
+`agent-pro skill investigate --show`.
 
-Registration of `investigate` means `agent-pro skill investigate show`
+Registration of `investigate` means `agent-pro skill investigate --show`
 succeeds and prints frontmatter `name: investigate`; the skills list includes
 `investigate` with description text; intent-route show mentions the
 Investigation category and the investigate guideline.
@@ -42,9 +42,9 @@ agent-pro/
 
 | # | Leaf | Description |
 |---|------|-------------|
-| 1 | `register` | `agent-pro skill investigate show` → contains `name: investigate` |
+| 1 | `register` | `agent-pro skill investigate --show` → contains `name: investigate` |
 | 2 | `list` | `agent-pro skills` → lists `investigate` with description |
-| 3 | `intent-route` | `agent-pro skill intent-route show` → Investigation category + investigate guideline |
+| 3 | `intent-route` | `agent-pro skill intent-route --show` → Investigation category + investigate guideline |
 
 ## How to Run
 

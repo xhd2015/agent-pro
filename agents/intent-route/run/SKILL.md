@@ -26,7 +26,7 @@ frames it as an idea, suggestion, or quick thought — not a full feature
 request. Keywords: "idea", "what if", "maybe we could", "thought", "quick
 thought", "small idea".
 
-**Guideline:** `agent-pro skill brainstorm show`
+**Guideline:** `agent-pro skill brainstorm --show`
 
 ## 3. Issue or Bug
 
@@ -34,7 +34,7 @@ Something is broken, not working, or behaving unexpectedly. Keywords:
 "broken", "crash", "error", "bug", "doesn't work", "fails", "not working",
 "issue".
 
-**Guideline:** `agent-pro skill reproduce show`
+**Guideline:** `agent-pro skill reproduce --show`
 
 ## 4. Investigation
 
@@ -42,7 +42,7 @@ Observed behavior or effect needs explanation — the user wants to understand
 *why* something happens, not necessarily fix it yet. Keywords: "investigate",
 "why does", "what causes", "explain why", "unexpected behavior".
 
-**Guideline:** `agent-pro skill investigate show`
+**Guideline:** `agent-pro skill investigate --show`
 
 ## 5. Ask Question
 

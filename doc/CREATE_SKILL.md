@@ -2,13 +2,13 @@
 
 This document describes how to add a new skill to **agent-pro**. The default
 and preferred shape is **skill-only** — an embedded `SKILL.md` prompt that
-agents load via `agent-pro skill <name> show` or `agent-pro skill <name> install`.
+agents load via `agent-pro skill --show <name>` or `agent-pro skill --install <name>`.
 
 ## Scope
 
 Skills created through this document are **always agent-pro skills**: embedded
 under `agents/<name>/`, registered in `cmd/agent-pro/skill_cmd.go`, and
-installed via `agent-pro skill <name> install` (typically to `.agents/skills/`).
+installed via `agent-pro skill --install <name>` (typically to `.agents/skills/`).
 
 Do **not** use Grok's `~/.grok/skills/` or project `.grok/skills/` for
 agent-pro workflow skills unless the user explicitly asks for a Grok-only skill.
@@ -71,9 +71,11 @@ var SkillFile string
 **Install / show (no separate binary)**
 
 ```sh
-agent-pro skill my-skill show
-agent-pro skill my-skill install              # → .agents/skills/my-skill/
-agent-pro skill my-skill install --cursor
+agent-pro skill --show my-skill
+agent-pro skill my-skill --show               # both flag orders work
+agent-pro skill --install my-skill            # → .agents/skills/my-skill/
+agent-pro skill my-skill --install --global
+agent-pro skill --install my-skill --cursor
 agent-pro skills update                       # refresh installed copies
 ```
 
@@ -88,7 +90,7 @@ agent-pro skills update                       # refresh installed copies
 
 ```
 agents/<skill-name>/
-├── main.go              # skill show | skill install + agent runner dispatch
+├── main.go              # skill --show | skill --install + agent runner dispatch
 ├── main_test.go
 └── run/
     ├── SKILL.md
@@ -96,9 +98,9 @@ agents/<skill-name>/
     └── ...
 ```
 
-Follow `go-best-practice skill-cli` for `skill show` / `skill install` in
+Follow `go-best-practice skill-cli` for `skill --show` / `skill --install` in
 `main.go`. Still register in `cmd/agent-pro/skill_cmd.go` so `agent-pro skills`
-lists the skill and `agent-pro skill <name> install` works without the binary.
+lists the skill and `agent-pro skill --install <name>` works without the binary.
 
 Examples with sub-agent binaries: `reproduce`.
 

@@ -2,7 +2,7 @@
 
 - Exit code 0.
 - Stdout contains `Flash Idea` category.
-- Stdout contains `brainstorm` and guideline `agent-pro skill brainstorm show`.
+- Stdout contains `brainstorm` and guideline `agent-pro skill brainstorm --show`.
 
 ## Exit Code
 
@@ -25,7 +25,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	if !strings.Contains(resp.Stdout, "brainstorm") {
 		t.Fatalf("intent-route missing brainstorm reference:\nstdout:\n%s\nstderr:\n%s", resp.Stdout, resp.Stderr)
 	}
-	if !strings.Contains(resp.Stdout, "agent-pro skill brainstorm show") {
+	if !strings.Contains(resp.Stdout, "agent-pro skill brainstorm --show") {
 		t.Fatalf("intent-route missing brainstorm guideline command:\nstdout:\n%s\nstderr:\n%s", resp.Stdout, resp.Stderr)
 	}
 }

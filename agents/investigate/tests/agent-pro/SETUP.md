@@ -3,9 +3,9 @@
 **Feature**: agent-pro exposes investigate via knownSkills registration
 
 ```
-go build cmd/agent-pro -> agent-pro skill investigate show -> embedded SKILL.md
+go build cmd/agent-pro -> agent-pro skill investigate --show -> embedded SKILL.md
 agent-pro skills -> lists investigate with description
-agent-pro skill intent-route show -> Investigation category references investigate
+agent-pro skill intent-route --show -> Investigation category references investigate
 ```
 
 ## Preconditions
@@ -13,7 +13,7 @@ agent-pro skill intent-route show -> Investigation category references investiga
 - `cmd/agent-pro/skill_cmd.go` registers `investigate` in `knownSkills`.
 - `knownSkillNames()` includes `investigate`.
 - `agents/intent-route/run/SKILL.md` includes Investigation category with
-  `agent-pro skill investigate show` guideline.
+  `agent-pro skill investigate --show` guideline.
 
 ## Steps
 

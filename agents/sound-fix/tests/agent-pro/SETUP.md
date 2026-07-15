@@ -3,7 +3,7 @@
 **Feature**: agent-pro exposes sound-fix via knownSkills registration
 
 ```
-go build cmd/agent-pro -> agent-pro skill sound-fix show -> embedded SKILL.md
+go build cmd/agent-pro -> agent-pro skill sound-fix --show -> embedded SKILL.md
 agent-pro skills -> lists sound-fix with description
 ```
 

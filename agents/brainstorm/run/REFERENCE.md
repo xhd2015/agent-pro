@@ -19,7 +19,7 @@ Brainstorming specialist. Use this before implementing any feature or fix when y
 
 ## Usage notes
 
-- Skill-only: load via `agent-pro skill brainstorm show` or install to `.agents/skills/`
+- Skill-only: load via `agent-pro skill brainstorm --show` or install to `.agents/skills/`
 - The parent agent follows the embedded prompt inline — no standalone binary
 - Once the user confirms with "go ahead", add implementation tasks to the todo list
 - For Go projects, always consider tests (doctests or unit tests) to verify correctness

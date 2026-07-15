@@ -152,10 +152,10 @@ Report: pass counts, lines removed per file, accepted test amendments (with rati
 # Commands
 
 ```sh
-agent-pro skill consolidate-code show
+agent-pro skill consolidate-code --show
 agent-pro skill consolidate-code install
-agent-pro skill investigate show
-agent-pro skill doctest-tdd show    # if installed in .agents/skills/
+agent-pro skill investigate --show
+agent-pro skill doctest-tdd --show    # if installed in .agents/skills/
 ```
 
 # Case study (dot-pkgs git stack)

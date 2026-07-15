@@ -10,7 +10,7 @@ skill show path (integration proxy for `knownSkills` registration).
 Each skill name maps to embedded SKILL.md content. `agent-pro skill <name> show`
 prints that content; unknown names error with the available list.
 
-Registration of `debug-with-user` means `agent-pro skill debug-with-user show`
+Registration of `debug-with-user` means `agent-pro skill debug-with-user --show`
 succeeds and prints frontmatter `name: debug-with-user`.
 
 ## Version
@@ -30,7 +30,7 @@ agent-pro/
 
 | # | Leaf | Description |
 |---|------|-------------|
-| 1 | `register` | `agent-pro skill debug-with-user show` → contains `name: debug-with-user` |
+| 1 | `register` | `agent-pro skill debug-with-user --show` → contains `name: debug-with-user` |
 
 ## How to Run
 

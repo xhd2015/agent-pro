@@ -3,7 +3,7 @@
 **Feature**: agent-pro exposes consolidate-code via knownSkills registration
 
 ```
-go build cmd/agent-pro -> agent-pro skill consolidate-code show -> embedded SKILL.md
+go build cmd/agent-pro -> agent-pro skill consolidate-code --show -> embedded SKILL.md
 agent-pro skills -> lists consolidate-code with description
 ```
 

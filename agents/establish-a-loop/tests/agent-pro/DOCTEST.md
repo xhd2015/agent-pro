@@ -12,7 +12,7 @@ prints that content; unknown names error with the available list.
 `agent-pro skills` (no args) lists every known skill with its frontmatter
 description.
 
-Registration of `establish-a-loop` means `agent-pro skill establish-a-loop show`
+Registration of `establish-a-loop` means `agent-pro skill establish-a-loop --show`
 succeeds and prints frontmatter `name: establish-a-loop`; the skills list includes
 `establish-a-loop` with description text. Skill content must include bug-repro
 loop kind, SYMPTOM CONFIRMED establishment status, and pairing with
@@ -36,7 +36,7 @@ agent-pro/
 
 | # | Leaf | Description |
 |---|------|-------------|
-| 1 | `register` | `agent-pro skill establish-a-loop show` → contains `name: establish-a-loop` |
+| 1 | `register` | `agent-pro skill establish-a-loop --show` → contains `name: establish-a-loop` |
 | 2 | `list` | `agent-pro skills` → lists `establish-a-loop` with description |
 
 ## How to Run

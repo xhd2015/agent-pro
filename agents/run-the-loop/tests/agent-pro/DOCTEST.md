@@ -12,7 +12,7 @@ prints that content; unknown names error with the available list.
 `agent-pro skills` (no args) lists every known skill with its frontmatter
 description.
 
-Registration of `run-the-loop` means `agent-pro skill run-the-loop show`
+Registration of `run-the-loop` means `agent-pro skill run-the-loop --show`
 succeeds and prints frontmatter `name: run-the-loop`; the skills list includes
 `run-the-loop` with description text.
 
@@ -34,7 +34,7 @@ agent-pro/
 
 | # | Leaf | Description |
 |---|------|-------------|
-| 1 | `register` | `agent-pro skill run-the-loop show` → contains `name: run-the-loop` |
+| 1 | `register` | `agent-pro skill run-the-loop --show` → contains `name: run-the-loop` |
 | 2 | `list` | `agent-pro skills` → lists `run-the-loop` with description |
 
 ## How to Run

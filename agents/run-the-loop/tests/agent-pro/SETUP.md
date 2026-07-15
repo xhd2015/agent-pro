@@ -3,7 +3,7 @@
 **Feature**: agent-pro exposes run-the-loop via knownSkills registration
 
 ```
-go build cmd/agent-pro -> agent-pro skill run-the-loop show -> embedded SKILL.md
+go build cmd/agent-pro -> agent-pro skill run-the-loop --show -> embedded SKILL.md
 agent-pro skills -> lists run-the-loop with description
 ```
 

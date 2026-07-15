@@ -12,7 +12,7 @@ prints that content; unknown names error with the available list.
 `agent-pro skills` (no args) lists every known skill with its frontmatter
 description.
 
-Registration of `sound-fix` means `agent-pro skill sound-fix show`
+Registration of `sound-fix` means `agent-pro skill sound-fix --show`
 succeeds and prints frontmatter `name: sound-fix`; the skills list includes
 `sound-fix` with description text.
 
@@ -34,7 +34,7 @@ agent-pro/
 
 | # | Leaf | Description |
 |---|------|-------------|
-| 1 | `register` | `agent-pro skill sound-fix show` → contains `name: sound-fix` |
+| 1 | `register` | `agent-pro skill sound-fix --show` → contains `name: sound-fix` |
 | 2 | `list` | `agent-pro skills` → lists `sound-fix` with description |
 
 ## How to Run

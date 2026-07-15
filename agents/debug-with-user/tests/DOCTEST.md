@@ -52,7 +52,7 @@ agents/debug-with-user/tests/
 │   │   └── non-mac/                   # no dry-run on non-darwin → exit 2
 │   └── skill-show/                    # skill show prints embedded SKILL.md
 └── agent-pro/                         # === nested DOCTEST root ===
-    └── register/                      # agent-pro skill debug-with-user show works
+    └── register/                      # agent-pro skill debug-with-user --show works
 ```
 
 ## Test Index
@@ -69,7 +69,7 @@ agents/debug-with-user/tests/
 | 8 | `cli/ask/dry-run/dismissed` | Dry-run cancel → exit 1, no success JSON |
 | 9 | `cli/ask/non-mac` | Without dry-run on non-darwin → exit 2, helpful macOS message |
 | 10 | `cli/skill-show` | `debug-with-user skill show` contains `name: debug-with-user` |
-| 11 | `agent-pro/register` | `agent-pro skill debug-with-user show` succeeds after registration |
+| 11 | `agent-pro/register` | `agent-pro skill debug-with-user --show` succeeds after registration |
 
 ## How to Run
 

@@ -18,8 +18,7 @@ import (
 	soundfix_run "github.com/xhd2015/agent-pro/agents/sound-fix/run"
 	summarizeaskill_run "github.com/xhd2015/agent-pro/agents/summarize-a-skill/run"
 	verifywithprototype_run "github.com/xhd2015/agent-pro/agents/verify-with-prototype/run"
-	"github.com/xhd2015/less-gen/flags"
-	"github.com/xhd2015/skills/install"
+	"github.com/xhd2015/skills/skillcmd"
 )
 
 type skillInfo struct {
@@ -150,75 +149,65 @@ func knownSkillNames() []string {
 const knownSkillNamesText = "brainstorm, consolidate-code, debug-with-user, establish-a-loop, explore, followup, git-resolve-conflicts, intent-route, investigate, reproduce, run-the-loop, sound-fix, summarize-a-skill, verify-with-prototype"
 
 const skillHelp = `
-Usage: agent-pro skill <command> [ARGS]
+Usage: agent-pro skill --list
+       agent-pro skill --show <name>
+       agent-pro skill <name> --show
+       agent-pro skill --install <name> [OPTIONS] [<dir>]
+       agent-pro skill <name> --install [OPTIONS] [<dir>]
 
-Commands:
+Actions (exactly one):
   --list, -l         list all available skill names
-  <name> show         print the SKILL.md content of a skill
-  <name> install      install a skill to a skill directory
+  --show             print the SKILL.md content of a skill
+  --install          install a skill to a skill directory
+  --header           with --show, print YAML frontmatter only
 
 Skill names: brainstorm, consolidate-code, debug-with-user, establish-a-loop, explore, followup, git-resolve-conflicts, intent-route, investigate, reproduce, run-the-loop, sound-fix, summarize-a-skill, verify-with-prototype
 
-Run agent-pro skill <name> <command> --help for command-specific options.
+Run agent-pro skill --install <name> --help for install options (--global, --cursor, …).
 `
 
 const skillsHelp = `
-Usage: agent-pro skills [<command>] [ARGS]
+Usage: agent-pro skills
+       agent-pro skills update [OPTIONS] [<dir>]
+       agent-pro skills --show <name>
+       agent-pro skills <name> --show
+       agent-pro skills --install <name> [OPTIONS] [<dir>]
+       agent-pro skills <name> --install [OPTIONS] [<dir>]
 
-Commands (without arguments, lists all available skill names):
-  update              update already-installed skills
-  <name> show         print the SKILL.md content of a skill
-  <name> install      install a skill to a skill directory
+With no arguments, list all available skills.
+skills update refreshes already-installed skills only.
+skills also accepts the same --show / --install flag actions as skill.
 
 Skill names: brainstorm, consolidate-code, debug-with-user, establish-a-loop, explore, followup, git-resolve-conflicts, intent-route, investigate, reproduce, run-the-loop, sound-fix, summarize-a-skill, verify-with-prototype
 
-Run agent-pro skills <name> <command> --help for command-specific options.
+Run agent-pro skills update --help for update options.
+Run agent-pro skill --help for skill actions.
 `
 
+// handleSkill implements Shape 2 multi-skill host actions as flags
+// (--show / --install / --list), both arg orders. See go-best-practice skill-cli.
 func handleSkill(args []string) error {
 	if len(args) == 0 {
 		fmt.Print(strings.TrimPrefix(skillHelp, "\n"))
 		return nil
 	}
 
-	// If first arg looks like a flag (starts with -), parse flags
-	if strings.HasPrefix(args[0], "-") {
-		var listFlag bool
-		remaining, err := flags.Bool("-l,--list", &listFlag).
-			Help("-h,--help", skillHelp).
-			Parse(args)
-		if err != nil {
-			return err
-		}
-		if listFlag {
-			return listSkills()
-		}
-		if len(remaining) > 0 {
-			return fmt.Errorf("unexpected argument: %s", remaining[0])
-		}
+	parsed, err := skillcmd.ParseSkillArgs(args)
+	if err != nil {
+		return err
+	}
+	switch parsed.Action {
+	case skillcmd.ActionHelp:
+		fmt.Print(strings.TrimPrefix(skillHelp, "\n"))
 		return nil
-	}
-
-	name := args[0]
-	sk, ok := knownSkills[name]
-	if !ok {
-		return fmt.Errorf("unknown skill: %s (available: %s)", name, knownSkillNamesText)
-	}
-
-	if len(args) == 1 {
-		return fmt.Errorf("expected show or install after skill name %q", name)
-	}
-
-	switch args[1] {
-	case "show":
-		return handleSkillShow(sk, args[2:])
-	case "install":
-		return handleSkillInstall(sk, args[2:])
-	case "-h", "--help":
-		printSkillSubHelp(name)
-		return nil
+	case skillcmd.ActionList:
+		return listSkills()
+	case skillcmd.ActionShow:
+		return handleSkillShow(parsed.Header, parsed.Rest)
+	case skillcmd.ActionInstall:
+		return handleSkillInstall(parsed.Rest)
 	default:
-		return fmt.Errorf("unknown skill command: %s (expected show or install)", args[1])
+		return fmt.Errorf("unknown action: %s", parsed.Action)
 	}
 }
 
@@ -233,14 +222,8 @@ func handleSkills(args []string) error {
 	if args[0] == "update" {
 		return handleSkillsUpdate(args[1:])
 	}
-
-	// If first arg is a skill name, delegate to handleSkill
-	name := args[0]
-	if _, ok := knownSkills[name]; ok {
-		return handleSkill(args)
-	}
-
-	return fmt.Errorf("unknown skills command: %s (expected update or one of: %s)", args[0], knownSkillNamesText)
+	// skills <name> --show / skills --install <name> … same as skill
+	return handleSkill(args)
 }
 
 func listSkills() error {
@@ -256,53 +239,52 @@ func listSkills() error {
 	return nil
 }
 
-func printSkillSubHelp(name string) {
-	fmt.Printf("Usage: agent-pro skill %s <command> [ARGS]\n\n", name)
-	fmt.Printf("Commands:\n")
-	fmt.Printf("  show                print the SKILL.md content\n")
-	fmt.Printf("  install [OPTIONS]   install the skill\n\n")
-	fmt.Printf("Install Options:\n")
-	fmt.Printf("  --cursor            install to .cursor/skills/%s/\n", name)
-	fmt.Printf("  --codex             install to .codex/skills/%s/\n", name)
-	fmt.Printf("  --opencode          install to .opencode/skills/%s/\n", name)
-	fmt.Printf("  --general-agents    install to .agents/skills/%s/\n", name)
-	fmt.Printf("  --global            install to ~/.<dir>/... instead of ./\n")
-	fmt.Printf("  --no-override       do not automatically overwrite existing\n")
-	fmt.Printf("  --dry-run           show what would be created\n")
-}
-
-func handleSkillShow(sk skillInfo, args []string) error {
-	_, err := flags.
-		Help("-h,--help", fmt.Sprintf(`
-Usage: agent-pro skill %s show
-
-Print the SKILL.md content of the %s skill.
-
-Options:
-  -h,--help     show help
-`, sk.Name, sk.Name)).
-		Parse(args)
-	if err != nil {
-		return err
+func handleSkillShow(header bool, rest []string) error {
+	if len(rest) == 0 {
+		return fmt.Errorf("expected skill name for --show (try --help)")
+	}
+	name := rest[0]
+	if len(rest) > 1 {
+		return fmt.Errorf("unexpected arguments: %v", rest[1:])
+	}
+	sk, ok := knownSkills[name]
+	if !ok {
+		return fmt.Errorf("unknown skill: %s (available: %s)", name, knownSkillNamesText)
+	}
+	if header {
+		out, err := skillcmd.FormatHeaderWithDelimiters(sk.Content)
+		if err != nil {
+			return err
+		}
+		fmt.Print(out)
+		return nil
 	}
 	fmt.Print(sk.Content)
 	return nil
 }
 
-func handleSkillInstall(sk skillInfo, args []string) error {
-	return install.HandleInstall(install.InstallOptions{
+func handleSkillInstall(rest []string) error {
+	if len(rest) == 0 {
+		return fmt.Errorf("expected skill name for --install (try --help)")
+	}
+	name := rest[0]
+	sk, ok := knownSkills[name]
+	if !ok {
+		return fmt.Errorf("unknown skill: %s (available: %s)", name, knownSkillNamesText)
+	}
+	return skillcmd.HandleInstall(skillcmd.InstallOptions{
 		SkillDirName: sk.Name,
 		SkillContent: sk.Content,
-		Usage:        fmt.Sprintf("agent-pro skill %s install", sk.Name),
-	}, args)
+		Usage:        fmt.Sprintf("agent-pro skill --install %s", sk.Name),
+	}, rest[1:])
 }
 
 func handleSkillsUpdate(args []string) error {
-	skills := make([]install.UpdateSkill, 0, len(knownSkills))
+	skills := make([]skillcmd.UpdateSkill, 0, len(knownSkills))
 	for _, name := range knownSkillNames() {
 		sk := knownSkills[name]
-		skills = append(skills, install.UpdateSkill{
-			InstallOptions: install.InstallOptions{
+		skills = append(skills, skillcmd.UpdateSkill{
+			InstallOptions: skillcmd.InstallOptions{
 				SkillDirName: sk.Name,
 				SkillContent: sk.Content,
 				Usage:        "agent-pro skills update",
@@ -310,5 +292,5 @@ func handleSkillsUpdate(args []string) error {
 			Name: name,
 		})
 	}
-	return install.HandleUpdateMany(skills, args)
+	return skillcmd.HandleUpdateMany(skills, args)
 }

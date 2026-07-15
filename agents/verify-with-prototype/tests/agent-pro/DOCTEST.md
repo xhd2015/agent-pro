@@ -12,7 +12,7 @@ prints that content; unknown names error with the available list.
 `agent-pro skills` (no args) lists every known skill with its frontmatter
 description.
 
-Registration of `verify-with-prototype` means `agent-pro skill verify-with-prototype show`
+Registration of `verify-with-prototype` means `agent-pro skill verify-with-prototype --show`
 succeeds and prints frontmatter `name: verify-with-prototype`; the skills list includes
 `verify-with-prototype` with description text.
 
@@ -34,7 +34,7 @@ agent-pro/
 
 | # | Leaf | Description |
 |---|------|-------------|
-| 1 | `register` | `agent-pro skill verify-with-prototype show` → contains `name: verify-with-prototype` |
+| 1 | `register` | `agent-pro skill verify-with-prototype --show` → contains `name: verify-with-prototype` |
 | 2 | `list` | `agent-pro skills` → lists `verify-with-prototype` with description |
 
 ## How to Run

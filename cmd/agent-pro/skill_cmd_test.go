@@ -233,8 +233,8 @@ func TestHandleSkillsHelpMentionsUpdate(t *testing.T) {
 
 func TestHandleSkillShowGitResolveConflicts(t *testing.T) {
 	stdout := captureStdout(t, func() {
-		if err := handleSkill([]string{"git-resolve-conflicts", "show"}); err != nil {
-			t.Fatalf("handleSkill(show): %v", err)
+		if err := handleSkill([]string{"git-resolve-conflicts", "--show"}); err != nil {
+			t.Fatalf("handleSkill(--show): %v", err)
 		}
 	})
 	if !strings.Contains(stdout, "name: git-resolve-conflicts") {
@@ -242,6 +242,53 @@ func TestHandleSkillShowGitResolveConflicts(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "git merge --continue") {
 		t.Fatalf("show output missing merge follow-up:\n%s", stdout)
+	}
+}
+
+func TestHandleSkillShowFlagBeforeName(t *testing.T) {
+	stdout := captureStdout(t, func() {
+		if err := handleSkill([]string{"--show", "summarize-a-skill"}); err != nil {
+			t.Fatalf("handleSkill(--show name): %v", err)
+		}
+	})
+	if !strings.Contains(stdout, "name: summarize-a-skill") {
+		t.Fatalf("show output missing frontmatter name:\n%s", stdout)
+	}
+}
+
+func TestHandleSkillsInstallFlagOrder(t *testing.T) {
+	tmp := t.TempDir()
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatalf("chdir temp: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(oldWD); err != nil {
+			t.Fatalf("restore cwd: %v", err)
+		}
+	}()
+
+	// skills <name> --install (the form that previously failed with --install as command)
+	stdout := captureStdout(t, func() {
+		if err := handleSkills([]string{"summarize-a-skill", "--install", "--dry-run"}); err != nil {
+			t.Fatalf("handleSkills(name --install): %v", err)
+		}
+	})
+	if !strings.Contains(stdout, "summarize-a-skill") {
+		t.Fatalf("install dry-run missing skill name:\n%s", stdout)
+	}
+
+	// skill --install <name>
+	stdout2 := captureStdout(t, func() {
+		if err := handleSkill([]string{"--install", "summarize-a-skill", "--dry-run"}); err != nil {
+			t.Fatalf("handleSkill(--install name): %v", err)
+		}
+	})
+	if !strings.Contains(stdout2, "summarize-a-skill") {
+		t.Fatalf("install dry-run missing skill name:\n%s", stdout2)
 	}
 }
 

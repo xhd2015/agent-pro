@@ -3,7 +3,7 @@
 **Feature**: agent-pro exposes brainstorm via knownSkills registration
 
 ```
-go build cmd/agent-pro -> agent-pro skill brainstorm show -> embedded SKILL.md
+go build cmd/agent-pro -> agent-pro skill brainstorm --show -> embedded SKILL.md
 agent-pro skills -> lists brainstorm with description
 ```
 

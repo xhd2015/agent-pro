@@ -35,12 +35,13 @@ Commands:
   crush             manage crush configuration
   codex             manage codex configuration
   grok              manage grok CLI sessions
-  skills            list available skills (explore, reproduce)
-  skill             show or install a skill
+  skills            list available skills; skills update refreshes installs
+  skill             show or install a skill (--show / --install)
   traces            view agent trace sessions (web viewer)
   show-agent-files  collect known agent files under ~/.agent-pro/agent-files-collection/
 
 Run agent-pro <command> --help for command-specific options.
+Run agent-pro skill --help and agent-pro skill --install --help for skill options.
 `
 
 const opencodeHelp = `

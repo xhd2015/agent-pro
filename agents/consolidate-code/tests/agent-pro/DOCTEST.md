@@ -12,7 +12,7 @@ prints that content; unknown names error with the available list.
 `agent-pro skills` (no args) lists every known skill with its frontmatter
 description.
 
-Registration of `consolidate-code` means `agent-pro skill consolidate-code show`
+Registration of `consolidate-code` means `agent-pro skill consolidate-code --show`
 succeeds and prints frontmatter `name: consolidate-code`; the skills list includes
 `consolidate-code` with description text.
 
@@ -34,7 +34,7 @@ agent-pro/
 
 | # | Leaf | Description |
 |---|------|-------------|
-| 1 | `register` | `agent-pro skill consolidate-code show` → contains `name: consolidate-code` |
+| 1 | `register` | `agent-pro skill consolidate-code --show` → contains `name: consolidate-code` |
 | 2 | `list` | `agent-pro skills` → lists `consolidate-code` with description |
 
 ## How to Run

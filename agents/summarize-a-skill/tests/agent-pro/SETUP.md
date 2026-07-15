@@ -3,7 +3,7 @@
 **Feature**: agent-pro exposes summarize-a-skill via knownSkills registration
 
 ```
-go build cmd/agent-pro -> agent-pro skill summarize-a-skill show -> embedded SKILL.md
+go build cmd/agent-pro -> agent-pro skill summarize-a-skill --show -> embedded SKILL.md
 agent-pro skills -> lists summarize-a-skill with description
 ```
 
