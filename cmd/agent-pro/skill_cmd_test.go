@@ -180,6 +180,29 @@ func TestSoundFixSkillIsRegistered(t *testing.T) {
 	}
 }
 
+func TestSplitPhasesSkillIsRegistered(t *testing.T) {
+	names := knownSkillNames()
+	if !containsString(names, "split-phases") {
+		t.Fatalf("knownSkillNames missing split-phases: %v", names)
+	}
+	sk, ok := knownSkills["split-phases"]
+	if !ok {
+		t.Fatal("knownSkills missing split-phases")
+	}
+	if !strings.Contains(sk.Content, "name: split-phases") {
+		t.Fatalf("skill content missing frontmatter name:\n%s", sk.Content)
+	}
+	if sk.Description == "" {
+		t.Fatal("split-phases skill missing description")
+	}
+	if !strings.Contains(sk.Content, "independently implementable") {
+		t.Fatal("split-phases skill missing independently implementable instruction")
+	}
+	if !strings.Contains(sk.Content, "dependency-ordered") && !strings.Contains(sk.Content, "Dependency-first") {
+		t.Fatal("split-phases skill missing dependency ordering guidance")
+	}
+}
+
 func TestGitResolveConflictsSkillIsRegistered(t *testing.T) {
 	names := knownSkillNames()
 	if !containsString(names, "git-resolve-conflicts") {
