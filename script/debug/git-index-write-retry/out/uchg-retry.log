@@ -1,0 +1,3 @@
+[main 79ba418] feat: recovered after index write fail
+ 1 file changed, 1 insertion(+)
+ create mode 100644 b.txt

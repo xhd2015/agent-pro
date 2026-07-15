@@ -1,0 +1,5 @@
+classifier accepts exact index-write error
+classifier accepts index.lock contention
+classifier rejects non-transient commit errors
+CommitWithRetry recovers from stale index.lock
+CommitWithRetry recovers after transient index write failure (uchg)

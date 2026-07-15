@@ -40,6 +40,8 @@ agent/commit_msg/tests/
 │   ├── background-git-loop/   agent spawns background git loop → --commit must succeed
 │   └── worktree-concurrent-git/
 │                               git worktree + background git loop → --commit must succeed
+│   # pure classifier + CommitWithRetry recovery (unable to write new index file,
+│   # stale lock, hook fail-fast) lives in agent/git_runner/tests/
 ├── no-verify/
 │   ├── requires-commit/       --no-verify without --commit → early error, no agent
 │   └── passes-to-git/         failing pre-commit hook + --commit --no-verify → commit succeeds

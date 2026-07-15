@@ -353,6 +353,9 @@ func RemoveStaleIndexLock(dir string) error {
 	return nil
 }
 
+// CommitWithRetry runs git commit, retrying on transient index write failures
+// (index.lock contention, "unable to write new index file", etc.).
+// Before each attempt it removes a leftover index.lock when present.
 func CommitWithRetry(dir, message string, maxAttempts int, noVerify bool) ([]byte, error) {
 	if maxAttempts < 1 {
 		maxAttempts = 1
@@ -361,6 +364,7 @@ func CommitWithRetry(dir, message string, maxAttempts int, noVerify bool) ([]byt
 	var lastErr error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if attempt > 0 {
+			// Back off slightly so concurrent writers (IDE, agent, hooks) can finish.
 			time.Sleep(time.Duration(attempt) * 50 * time.Millisecond)
 		}
 		_ = RemoveStaleIndexLock(dir)
@@ -370,19 +374,39 @@ func CommitWithRetry(dir, message string, maxAttempts int, noVerify bool) ([]byt
 		}
 		lastOutput = output
 		lastErr = err
-		if !isIndexLockContention(string(output), err) {
+		if !IsTransientIndexError(string(output), err) {
 			return output, err
+		}
+		// leave a breadcrumb on stderr when retrying (gen-commit-msg prints git output too)
+		if attempt+1 < maxAttempts {
+			fmt.Fprintf(os.Stderr, "warning: transient git index error (attempt %d/%d), retrying...\n", attempt+1, maxAttempts)
 		}
 	}
 	return lastOutput, lastErr
 }
 
-func isIndexLockContention(output string, err error) bool {
+// IsTransientIndexError reports whether a git failure looks like a transient
+// index write/lock race that is worth retrying.
+//
+// Matches both classic lock contention and the original production symptom:
+//
+//	fatal: unable to write new index file
+func IsTransientIndexError(output string, err error) bool {
 	combined := output
 	if err != nil {
 		combined += "\n" + err.Error()
 	}
-	return strings.Contains(combined, "index.lock")
+	lower := strings.ToLower(combined)
+	switch {
+	case strings.Contains(combined, "index.lock"):
+		return true
+	case strings.Contains(lower, "unable to write new index file"):
+		return true
+	case strings.Contains(lower, "unable to write index file"):
+		return true
+	default:
+		return false
+	}
 }
 
 func Diff(args ...string) *Command {

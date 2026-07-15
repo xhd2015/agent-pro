@@ -83,6 +83,47 @@ func TestBuildPreservesCustomAskPass(t *testing.T) {
 	}
 }
 
+func TestIsTransientIndexError(t *testing.T) {
+	cases := []struct {
+		name   string
+		output string
+		want   bool
+	}{
+		{
+			name:   "exact production symptom",
+			output: "fatal: unable to write new index file",
+			want:   true,
+		},
+		{
+			name:   "index.lock file exists",
+			output: "fatal: Unable to create '/repo/.git/index.lock': File exists.",
+			want:   true,
+		},
+		{
+			name:   "unable to write index file variant",
+			output: "error: Unable to write index file",
+			want:   true,
+		},
+		{
+			name:   "empty commit message is not transient",
+			output: "Aborting commit due to empty commit message.",
+			want:   false,
+		},
+		{
+			name:   "hook failure is not transient",
+			output: "husky - pre-commit hook exited with code 1",
+			want:   false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsTransientIndexError(tc.output, nil); got != tc.want {
+				t.Fatalf("IsTransientIndexError(%q) = %v, want %v", tc.output, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestRemoveStaleIndexLock_AllowsCommit(t *testing.T) {
 	dir := t.TempDir()
 	runGit(t, dir, "init", "--template=")
