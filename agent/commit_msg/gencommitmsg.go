@@ -217,7 +217,12 @@ Respond with ONLY a JSON object in this exact format (no other text):
 		return "", fmt.Errorf("failed to parse commit message from opencode output")
 	}
 
-	commitMessage := parseCommitMsgFromText(rawText)
+	// Post-parse sanitize choke point: strip anti-patterns; hard-fail if unusable.
+	sanitized, err := SanitizeOrError(rawText)
+	if err != nil {
+		return "", err
+	}
+	commitMessage := sanitized.format()
 	if commitMessage == "" {
 		return "", fmt.Errorf("failed to extract commit message from agent response")
 	}

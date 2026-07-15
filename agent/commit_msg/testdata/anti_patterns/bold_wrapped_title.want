@@ -1,0 +1,3 @@
+config: tighten default timeouts
+
+Avoid hanging agent runs

@@ -1,0 +1,3 @@
+feat: add dir upload with retry
+
+Stream tar upload and resume failed chunks
