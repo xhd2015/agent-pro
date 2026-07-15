@@ -1,0 +1,20 @@
+;; Optional strict sandbox profile for VERIFY_SANDBOX=strict
+;; Usage: sandbox-exec -f scripts/sandbox-verify.sb <command>
+;;
+;; Set SANDBOX_ROOT in environment before invoking.
+;; Allows read for system + repo; write only under ~/.sandbox
+
+(version 1)
+(deny default)
+
+(allow process*)
+(allow sysctl-read)
+(allow mach-lookup)
+(allow file-read*)
+
+;; Write only under sandbox root (expand at runtime via param - not supported in all profiles)
+;; Agent should substitute path or use env sandbox as default.
+(allow file-write*
+  (subpath (param "SANDBOX_ROOT")))
+
+(allow network-local*)

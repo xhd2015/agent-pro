@@ -59,6 +59,47 @@ func TestVerifyWithPrototypeSkillIsRegistered(t *testing.T) {
 	}
 }
 
+func TestVerifyOnBehalfOfUserSkillIsRegistered(t *testing.T) {
+	names := knownSkillNames()
+	if !containsString(names, "verify-on-behalf-of-user") {
+		t.Fatalf("knownSkillNames missing verify-on-behalf-of-user: %v", names)
+	}
+	sk, ok := knownSkills["verify-on-behalf-of-user"]
+	if !ok {
+		t.Fatal("knownSkills missing verify-on-behalf-of-user")
+	}
+	if !strings.Contains(sk.Content, "name: verify-on-behalf-of-user") {
+		t.Fatalf("skill content missing frontmatter name:\n%s", sk.Content)
+	}
+	if sk.Description == "" {
+		t.Fatal("verify-on-behalf-of-user skill missing description")
+	}
+	if !strings.Contains(sk.Content, "## Topics") {
+		t.Fatal("verify-on-behalf-of-user skill missing topic index")
+	}
+	if sk.TreeFS == nil {
+		t.Fatal("verify-on-behalf-of-user skill missing TreeFS")
+	}
+	if len(sk.ExtraFiles) == 0 {
+		t.Fatal("verify-on-behalf-of-user skill missing ExtraFiles for utility scripts")
+	}
+	var hasEnterSandbox, hasTranscriptTopic bool
+	for _, f := range sk.ExtraFiles {
+		if f.Path == "scripts/enter-sandbox.sh" && len(f.Content) > 0 {
+			hasEnterSandbox = true
+		}
+		if f.Path == "transcript/TOPIC.md" && strings.Contains(string(f.Content), "Transcript format rules") {
+			hasTranscriptTopic = true
+		}
+	}
+	if !hasEnterSandbox {
+		t.Fatal("verify-on-behalf-of-user ExtraFiles missing scripts/enter-sandbox.sh")
+	}
+	if !hasTranscriptTopic {
+		t.Fatal("verify-on-behalf-of-user ExtraFiles missing transcript/TOPIC.md")
+	}
+}
+
 func TestInvestigateSkillIsRegistered(t *testing.T) {
 	names := knownSkillNames()
 	if !containsString(names, "investigate") {

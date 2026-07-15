@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
+	"path"
 	"strings"
 
 	brainstorm_run "github.com/xhd2015/agent-pro/agents/brainstorm/run"
@@ -18,6 +20,7 @@ import (
 	soundfix_run "github.com/xhd2015/agent-pro/agents/sound-fix/run"
 	splitphases_run "github.com/xhd2015/agent-pro/agents/split-phases/run"
 	summarizeaskill_run "github.com/xhd2015/agent-pro/agents/summarize-a-skill/run"
+	verifyonbehalfofuser_run "github.com/xhd2015/agent-pro/agents/verify-on-behalf-of-user/run"
 	verifywithprototype_run "github.com/xhd2015/agent-pro/agents/verify-with-prototype/run"
 	"github.com/xhd2015/skills/skillcmd"
 )
@@ -26,7 +29,17 @@ type skillInfo struct {
 	Name        string
 	Description string
 	Content     string
+	TreeFS      fs.FS // optional nested path/TOPIC.md tree
+	ExtraFiles  []skillcmd.InstallFile
 }
+
+var verifyOnBehalfOfUserExtraFiles = func() []skillcmd.InstallFile {
+	files, err := verifyonbehalfofuser_run.InstallFiles()
+	if err != nil {
+		panic("verify-on-behalf-of-user InstallFiles: " + err.Error())
+	}
+	return files
+}()
 
 var knownSkills = map[string]skillInfo{
 	"brainstorm": {
@@ -99,6 +112,13 @@ var knownSkills = map[string]skillInfo{
 		Description: extractDescription(summarizeaskill_run.SkillFile),
 		Content:     summarizeaskill_run.SkillFile,
 	},
+	"verify-on-behalf-of-user": {
+		Name:        "verify-on-behalf-of-user",
+		Description: extractDescription(verifyonbehalfofuser_run.SkillFile),
+		Content:     verifyonbehalfofuser_run.SkillFile,
+		TreeFS:      verifyonbehalfofuser_run.SkillTree(),
+		ExtraFiles:  verifyOnBehalfOfUserExtraFiles,
+	},
 	"verify-with-prototype": {
 		Name:        "verify-with-prototype",
 		Description: extractDescription(verifywithprototype_run.SkillFile),
@@ -149,15 +169,16 @@ func extractDescription(skillMD string) string {
 }
 
 func knownSkillNames() []string {
-	return []string{"brainstorm", "consolidate-code", "debug-with-user", "establish-a-loop", "explore", "followup", "git-resolve-conflicts", "intent-route", "investigate", "reproduce", "run-the-loop", "sound-fix", "split-phases", "summarize-a-skill", "verify-with-prototype"}
+	return []string{"brainstorm", "consolidate-code", "debug-with-user", "establish-a-loop", "explore", "followup", "git-resolve-conflicts", "intent-route", "investigate", "reproduce", "run-the-loop", "sound-fix", "split-phases", "summarize-a-skill", "verify-on-behalf-of-user", "verify-with-prototype"}
 }
 
-const knownSkillNamesText = "brainstorm, consolidate-code, debug-with-user, establish-a-loop, explore, followup, git-resolve-conflicts, intent-route, investigate, reproduce, run-the-loop, sound-fix, split-phases, summarize-a-skill, verify-with-prototype"
+const knownSkillNamesText = "brainstorm, consolidate-code, debug-with-user, establish-a-loop, explore, followup, git-resolve-conflicts, intent-route, investigate, reproduce, run-the-loop, sound-fix, split-phases, summarize-a-skill, verify-on-behalf-of-user, verify-with-prototype"
 
 const skillHelp = `
 Usage: agent-pro skill --list
-       agent-pro skill --show <name>
-       agent-pro skill <name> --show
+       agent-pro skill --show <name> [<topic>]
+       agent-pro skill <name> [--show] [<topic>]
+       agent-pro skill --show <name>/<topic>
        agent-pro skill --install <name> [OPTIONS] [<dir>]
        agent-pro skill <name> --install [OPTIONS] [<dir>]
 
@@ -167,7 +188,7 @@ Actions (exactly one):
   --install          install a skill to a skill directory
   --header           with --show, print YAML frontmatter only
 
-Skill names: brainstorm, consolidate-code, debug-with-user, establish-a-loop, explore, followup, git-resolve-conflicts, intent-route, investigate, reproduce, run-the-loop, sound-fix, split-phases, summarize-a-skill, verify-with-prototype
+Skill names: brainstorm, consolidate-code, debug-with-user, establish-a-loop, explore, followup, git-resolve-conflicts, intent-route, investigate, reproduce, run-the-loop, sound-fix, split-phases, summarize-a-skill, verify-on-behalf-of-user, verify-with-prototype
 
 Run agent-pro skill --install <name> --help for install options (--global, --cursor, …).
 `
@@ -184,7 +205,7 @@ With no arguments, list all available skills.
 skills update refreshes already-installed skills only.
 skills also accepts the same --show / --install flag actions as skill.
 
-Skill names: brainstorm, consolidate-code, debug-with-user, establish-a-loop, explore, followup, git-resolve-conflicts, intent-route, investigate, reproduce, run-the-loop, sound-fix, split-phases, summarize-a-skill, verify-with-prototype
+Skill names: brainstorm, consolidate-code, debug-with-user, establish-a-loop, explore, followup, git-resolve-conflicts, intent-route, investigate, reproduce, run-the-loop, sound-fix, split-phases, summarize-a-skill, verify-on-behalf-of-user, verify-with-prototype
 
 Run agent-pro skills update --help for update options.
 Run agent-pro skill --help for skill actions.
@@ -246,27 +267,72 @@ func listSkills() error {
 }
 
 func handleSkillShow(header bool, rest []string) error {
-	if len(rest) == 0 {
-		return fmt.Errorf("expected skill name for --show (try --help)")
+	name, topicPath, extra, err := parseSkillShowArgs(rest)
+	if err != nil {
+		return err
 	}
-	name := rest[0]
-	if len(rest) > 1 {
-		return fmt.Errorf("unexpected arguments: %v", rest[1:])
+	if len(extra) > 0 {
+		return fmt.Errorf("unexpected arguments: %v", extra)
 	}
 	sk, ok := knownSkills[name]
 	if !ok {
 		return fmt.Errorf("unknown skill: %s (available: %s)", name, knownSkillNamesText)
 	}
+	content := sk.Content
+	if topicPath != "" {
+		if sk.TreeFS == nil {
+			return fmt.Errorf("unknown topic path: %s for skill %s", topicPath, name)
+		}
+		content, err = loadSkillTopicFromTree(sk.TreeFS, topicPath)
+		if err != nil {
+			return err
+		}
+	}
 	if header {
-		out, err := skillcmd.FormatHeaderWithDelimiters(sk.Content)
+		out, err := skillcmd.FormatHeaderWithDelimiters(content)
 		if err != nil {
 			return err
 		}
 		fmt.Print(out)
 		return nil
 	}
-	fmt.Print(sk.Content)
+	fmt.Print(content)
 	return nil
+}
+
+func parseSkillShowArgs(rest []string) (name, topicPath string, extra []string, err error) {
+	if len(rest) == 0 {
+		return "", "", nil, fmt.Errorf("expected skill name for --show (try --help)")
+	}
+	name = rest[0]
+	extra = rest[1:]
+	if i := strings.Index(name, "/"); i > 0 {
+		topicPath = name[i+1:]
+		name = name[:i]
+		return name, topicPath, extra, nil
+	}
+	if len(extra) > 0 {
+		topicPath = extra[0]
+		extra = extra[1:]
+	}
+	return name, topicPath, extra, nil
+}
+
+func loadSkillTopicFromTree(treeFS fs.FS, topicPath string) (string, error) {
+	topicPath = strings.Trim(topicPath, "/")
+	if topicPath == "" {
+		return "", fmt.Errorf("empty topic path")
+	}
+	for _, s := range strings.Split(topicPath, "/") {
+		if s == "" || s == "." || s == ".." {
+			return "", fmt.Errorf("invalid topic path segment: %q", s)
+		}
+	}
+	data, err := fs.ReadFile(treeFS, path.Join(topicPath, "TOPIC.md"))
+	if err != nil {
+		return "", fmt.Errorf("unknown topic: %s", topicPath)
+	}
+	return string(data), nil
 }
 
 func handleSkillInstall(rest []string) error {
@@ -281,6 +347,7 @@ func handleSkillInstall(rest []string) error {
 	return skillcmd.HandleInstall(skillcmd.InstallOptions{
 		SkillDirName: sk.Name,
 		SkillContent: sk.Content,
+		ExtraFiles:   sk.ExtraFiles,
 		Usage:        fmt.Sprintf("agent-pro skill --install %s", sk.Name),
 	}, rest[1:])
 }
@@ -293,6 +360,7 @@ func handleSkillsUpdate(args []string) error {
 			InstallOptions: skillcmd.InstallOptions{
 				SkillDirName: sk.Name,
 				SkillContent: sk.Content,
+				ExtraFiles:   sk.ExtraFiles,
 				Usage:        "agent-pro skills update",
 			},
 			Name: name,

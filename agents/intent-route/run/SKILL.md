@@ -79,6 +79,19 @@ match wins):
 5. **Question beats all** — If the user is clearly asking a simple factual
    question, answer directly regardless of topic.
 
+# Post-completion verify
+
+When the user asks to verify work as they would manually — "verify on my behalf",
+"verify like I would", "smoke verify before I commit", after an agent claimed
+done and tests passed:
+
+**Guideline:** `agent-pro skill verify-on-behalf-of-user --show` (index);
+load `workflow` and `sandbox` topics as needed.
+
+This is not an initial routing category; use it when the conversation is clearly
+post-implementation verification, not bug reproduction (`reproduce`) or design
+clarification (`followup`).
+
 # Response Template
 
 Before taking action, always reply with:

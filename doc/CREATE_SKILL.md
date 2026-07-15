@@ -105,7 +105,8 @@ lists the skill and `agent-pro skill --install <name>` works without the binary.
 Examples with sub-agent binaries: `reproduce`.
 
 Examples skill-only: `investigate`, `followup`, `brainstorm`,
-`verify-with-prototype`.
+`verify-with-prototype`, `verify-on-behalf-of-user` (bundles utility scripts via
+`ExtraFiles` on install).
 
 ## Checklist for a new skill-only skill
 
@@ -130,6 +131,7 @@ Examples skill-only: `investigate`, `followup`, `brainstorm`,
 | `investigate` | Explain why (symptom → cause) |
 | `followup` | Clarify design before coding |
 | `verify-with-prototype` | POC script before full implementation |
+| `verify-on-behalf-of-user` | Sandbox smoke verify + markdown transcript for user |
 | `brainstorm` | Requirement + test plan approval |
 | `consolidate-code` | Map duplication → PR stack → shared packages |
 | `establish-a-loop` | Document and dry-run a build/deploy/run/inspect/fix loop (`LOOP_<date>_<slug>.md`) |
