@@ -1,9 +1,10 @@
 # Scenario
 
-**Feature**: `resume --help` lists `--open` and session-id / followup
+**Feature**: `resume --help` lists `--open`, session-id / followup, and
+`--grok-session-id`
 
 ```
-agent-run resume --help -> --open, session-id
+agent-run resume --help -> --open, session-id, --grok-session-id
 ```
 
 ## Steps

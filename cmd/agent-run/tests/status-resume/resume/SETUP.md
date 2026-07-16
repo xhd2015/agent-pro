@@ -3,11 +3,11 @@
 **Feature**: `agent-run resume` — gate checks then run shortcut with provider `--resume`
 
 ```
-seed meta -> agent-run resume [flags] <session-id> ["followup"]
+seed meta -> agent-run resume [flags] (<session-id> | --grok-session-id ID) ["followup"]
   denied: not exited (hint send, not already-in-use)
          | unbound | missing session
          | --no-submit without --open
-  ready + dead terminal: headless followup / --open accepted
+  ready + dead terminal: headless followup / --open accepted / by-grok-session-id
   ready + zombie registry: reclaim terminal id then reserve (not already-in-use)
 ```
 

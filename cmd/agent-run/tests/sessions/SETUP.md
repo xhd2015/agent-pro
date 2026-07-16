@@ -6,9 +6,10 @@
 agent-run sessions [--json] [--limit N] -> list under AGENT_RUN_HOME/sessions (flat)
 # human UPDATED: FormatRelativeAge; --json: absolute timestamps
 agent-run sessions <session_id> --print -> read meta + events.jsonl -> FormatState trace
-# bare session id only; runner/id refs rejected (Q5)
+agent-run sessions --print --grok-session-id ID -> meta-only resolve (grok|grok-tty)
+# bare session id only for positional; runner/id refs rejected (Q5)
+# --grok-session-id mutually exclusive with positional <session_id>
 ```
-
 ## Preconditions
 
 - `agent-run` binary is built (inherited from root `SETUP.md`).
@@ -58,10 +59,17 @@ func seedSessionMeta(t *testing.T, store agentstorage.Store, sessionID, status s
 
 func seedSessionMetaRunner(t *testing.T, store agentstorage.Store, runner, sessionID, status string) {
 	t.Helper()
+	seedSessionMetaRunnerSessionID(t, store, runner, sessionID, status, "")
+}
+
+// seedSessionMetaRunnerSessionID seeds flat meta with optional provider runner_session_id.
+func seedSessionMetaRunnerSessionID(t *testing.T, store agentstorage.Store, runner, sessionID, status, runnerSessionID string) {
+	t.Helper()
 	meta := agentstorage.SessionMeta{
-		Runner:    runner,
-		SessionID: sessionID,
-		Status:    status,
+		Runner:          runner,
+		SessionID:       sessionID,
+		Status:          status,
+		RunnerSessionID: runnerSessionID,
 	}
 	if err := store.CreateSession(sessionID, meta); err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -154,6 +162,16 @@ func listUpdatedCell(row []string) string {
 		return ""
 	}
 	return strings.Join(row[3:], " ")
+}
+
+func assertContainsAny(t *testing.T, got string, wants ...string) {
+	t.Helper()
+	for _, w := range wants {
+		if strings.Contains(got, w) {
+			return
+		}
+	}
+	t.Fatalf("none of %v found in:\n%s", wants, got)
 }
 ```
 

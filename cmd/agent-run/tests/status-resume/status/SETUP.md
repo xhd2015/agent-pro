@@ -5,6 +5,7 @@
 ```
 agent-run status -> home: <path>
 agent-run status <session-id|runner/session> [--json] -> multi-layer probe
+agent-run status --grok-session-id ID [--json] -> meta-only resolve then probe
 ```
 
 ## Steps

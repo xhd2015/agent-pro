@@ -18,17 +18,20 @@ import (
 
 const statusHelp = `
 Usage: agent-run status [OPTIONS] [<session-id>]
+       agent-run status [OPTIONS] --grok-session-id ID
 
 Show agent-run home (bare) or multi-layer session status.
 
 With no arguments, prints the agent-run home path.
 
-With a bare session id, probes storage, process,
+With a bare session id or --grok-session-id, probes storage, process,
 terminal, runner (bound + exited), and resume readiness.
 
 Options:
-  --json       output multi-layer status as JSON
-  -h, --help   show help
+  --json                 output multi-layer status as JSON
+  --grok-session-id ID   resolve by provider runner_session_id (meta.runner grok|grok-tty only);
+                         mutually exclusive with positional <session-id>
+  -h, --help             show help
 `
 
 // sessionStatusReport is the multi-layer probe result for status / resume gates.
@@ -71,7 +74,9 @@ type resumeLayerReport struct {
 
 func runStatus(args []string) error {
 	var jsonFlag bool
+	var grokSessionID *string
 	remaining, err := flags.Bool("--json", &jsonFlag).
+		String("--grok-session-id", &grokSessionID).
 		Help("-h,--help", statusHelp).
 		Parse(args)
 	if err != nil {
@@ -81,16 +86,18 @@ func runStatus(args []string) error {
 	if err != nil {
 		return err
 	}
-	if len(remaining) == 0 {
+	var bareRef string
+	if len(remaining) > 0 {
+		if len(remaining) > 1 {
+			return fmt.Errorf("status accepts at most one positional <session-id>")
+		}
+		bareRef = strings.TrimSpace(remaining[0])
+	}
+	if grokSessionID == nil && bareRef == "" {
 		fmt.Printf("home: %s\n", store.Home())
 		return nil
 	}
-	ref := strings.TrimSpace(remaining[0])
-	if ref == "" {
-		fmt.Printf("home: %s\n", store.Home())
-		return nil
-	}
-	meta, err := resolveSessionMeta(store, ref)
+	meta, err := resolveSessionRef(store, bareRef, grokSessionID)
 	if err != nil {
 		return err
 	}
@@ -106,6 +113,60 @@ func runStatus(args []string) error {
 	}
 	printSessionStatusHuman(report)
 	return nil
+}
+
+// resolveSessionRef resolves by bare agent-run session id or --grok-session-id (mutex).
+// grokSessionID nil means the flag was not provided; non-nil empty is invalid.
+func resolveSessionRef(store agentstorage.Store, bareID string, grokSessionID *string) (agentstorage.SessionMeta, error) {
+	bareID = strings.TrimSpace(bareID)
+	if grokSessionID != nil && bareID != "" {
+		return agentstorage.SessionMeta{}, fmt.Errorf("--grok-session-id and positional <session-id> are mutually exclusive; cannot use both")
+	}
+	if grokSessionID != nil {
+		return resolveSessionMetaByGrokSessionID(store, *grokSessionID)
+	}
+	return resolveSessionMeta(store, bareID)
+}
+
+// isGrokRunner reports whether meta.runner is exactly grok or grok-tty.
+func isGrokRunner(runner string) bool {
+	r := strings.TrimSpace(runner)
+	return r == "grok" || r == "grok-tty"
+}
+
+// resolveSessionMetaByGrokSessionID finds a session by meta.runner_session_id where
+// meta.runner is exactly "grok" or "grok-tty". CLI --agent-runner is ignored.
+// Cardinality: 0 → not found; 1 → resolve; 2+ → ambiguous.
+func resolveSessionMetaByGrokSessionID(store agentstorage.Store, id string) (agentstorage.SessionMeta, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return agentstorage.SessionMeta{}, fmt.Errorf("--grok-session-id requires a non-empty value")
+	}
+	list, err := store.ListSessions()
+	if err != nil {
+		return agentstorage.SessionMeta{}, err
+	}
+	var matches []agentstorage.SessionMeta
+	for _, m := range list {
+		if !isGrokRunner(m.Runner) {
+			continue
+		}
+		if strings.TrimSpace(m.RunnerSessionID) == id {
+			matches = append(matches, m)
+		}
+	}
+	switch len(matches) {
+	case 0:
+		return agentstorage.SessionMeta{}, fmt.Errorf("session not found: no grok session with runner_session_id %s", id)
+	case 1:
+		return matches[0], nil
+	default:
+		ids := make([]string, 0, len(matches))
+		for _, m := range matches {
+			ids = append(ids, m.SessionID)
+		}
+		return agentstorage.SessionMeta{}, fmt.Errorf("ambiguous grok-session-id %s: multiple matches: %s", id, strings.Join(ids, ", "))
+	}
 }
 
 // resolveSessionMeta resolves a bare <session-id>. Compound runner/id refs are rejected (Q5).

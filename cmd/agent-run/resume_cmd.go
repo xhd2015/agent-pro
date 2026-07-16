@@ -17,6 +17,7 @@ import (
 
 const resumeHelp = `
 Usage: agent-run resume [OPTIONS] <session-id> ["followup…"]
+       agent-run resume [OPTIONS] --grok-session-id ID ["followup…"]
 
 Resume a finished agent-run session by re-invoking the runner with the
 bound provider session id (grok --resume <runner_session_id>).
@@ -26,7 +27,7 @@ to be bound and the runner to have exited. If the runner is still live,
 use send instead.
 
 Arguments:
-  <session-id>   agent-run session id (or runner/session_id)
+  <session-id>   agent-run bare session id (mutually exclusive with --grok-session-id)
   followup       optional follow-up prompt (resume + send); omit to only resume
 
 Options:
@@ -42,6 +43,9 @@ Options:
   --allow-relocate-resume-session-dir
                       when --dir differs from grok session cwd, relocate the
                       grok session and continue (grok-tty only)
+  --grok-session-id ID
+                      resolve session by provider runner_session_id (meta.runner grok|grok-tty);
+                      mutually exclusive with positional <session-id>
   --agent-runner RUNNER   override runner (default: from session meta)
   --agent-runner-binary SPEC
                       agent executable: bare name/path or "binary flags..."
@@ -86,6 +90,7 @@ func runResume(args []string, defaultRunner string) error {
 	var noSubmit bool
 	var dir string
 	var allowRelocateResumeSessionDir bool
+	var grokSessionID *string
 	remaining, err := flags.Bool("--json", &jsonFlag).
 		String("--model", &model).
 		Bool("--keep-tty", &keepTTY).
@@ -94,6 +99,7 @@ func runResume(args []string, defaultRunner string) error {
 		Bool("--no-submit", &noSubmit).
 		String("--dir", &dir).
 		Bool("--allow-relocate-resume-session-dir", &allowRelocateResumeSessionDir).
+		String("--grok-session-id", &grokSessionID).
 		String("--agent-runner", &agentRunner).
 		String("--agent-runner-binary", &agentRunnerBinary).
 		String("--agent-runner-config-home", &agentRunnerConfigHome).
@@ -104,11 +110,20 @@ func runResume(args []string, defaultRunner string) error {
 	if err != nil {
 		return err
 	}
-	if len(remaining) == 0 {
-		return fmt.Errorf("resume requires <session-id>")
+
+	// With --grok-session-id, all remaining args are the optional followup prompt.
+	// With positional <session-id>, remaining[0] is the id and the rest is followup.
+	var sessionRef string
+	var prompt string
+	if grokSessionID != nil {
+		prompt = strings.TrimSpace(strings.Join(remaining, " "))
+	} else {
+		if len(remaining) == 0 {
+			return fmt.Errorf("resume requires <session-id> or --grok-session-id")
+		}
+		sessionRef = strings.TrimSpace(remaining[0])
+		prompt = strings.TrimSpace(strings.Join(remaining[1:], " "))
 	}
-	sessionRef := strings.TrimSpace(remaining[0])
-	prompt := strings.TrimSpace(strings.Join(remaining[1:], " "))
 
 	if err := validateEnvFlags(envEntries); err != nil {
 		return err
@@ -140,7 +155,7 @@ func runResume(args []string, defaultRunner string) error {
 	if err != nil {
 		return err
 	}
-	meta, err := resolveSessionMeta(store, sessionRef)
+	meta, err := resolveSessionRef(store, sessionRef, grokSessionID)
 	if err != nil {
 		return err
 	}

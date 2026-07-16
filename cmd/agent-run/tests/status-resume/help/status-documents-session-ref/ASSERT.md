@@ -4,6 +4,7 @@
 - Stdout documents session status usage (session id and/or `runner/session` ref).
 - Mentions multi-layer concepts when documented (session / process / terminal /
   runner / resume) — at least session id or session-ref wording is required.
+- Stdout documents `--grok-session-id`.
 - Stdout ends with trailing newline `\n`.
 
 ## Exit Code
@@ -31,6 +32,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 		"<session",
 		"runner/",
 	)
+	assertContains(t, resp.Stdout, "--grok-session-id")
 	assertTrailingNewline(t, resp.Stdout, "status help stdout")
 }
 ```

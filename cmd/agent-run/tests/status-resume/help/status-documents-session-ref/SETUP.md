@@ -1,9 +1,10 @@
 # Scenario
 
-**Feature**: `status --help` documents session-ref and multi-layer probe
+**Feature**: `status --help` documents session-ref, multi-layer probe, and
+`--grok-session-id`
 
 ```
-agent-run status --help -> mentions session id / layers (or session-ref)
+agent-run status --help -> session id / layers; --grok-session-id
 ```
 
 ## Steps

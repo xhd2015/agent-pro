@@ -3,6 +3,7 @@
 - Exit code 0 (help is success, even if resume is newly added).
 - Stdout contains `--open`.
 - Stdout mentions session id / followup positional usage.
+- Stdout documents `--grok-session-id`.
 - Stdout ends with trailing newline `\n`.
 
 ## Exit Code
@@ -28,6 +29,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 		"session id",
 		"<session",
 	)
+	assertContains(t, resp.Stdout, "--grok-session-id")
 	assertTrailingNewline(t, resp.Stdout, "resume help stdout")
 }
 ```

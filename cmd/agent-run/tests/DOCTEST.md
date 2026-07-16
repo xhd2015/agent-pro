@@ -17,6 +17,7 @@ agent-run run "prompt" [--json] [--model M] [--session ID] [--session-id-from-pr
 agent-run attach <session-id>
 agent-run sessions [--json] [--limit N]
 agent-run sessions <session_id> --print
+agent-run sessions --print --grok-session-id ID
 agent-run status
 ```
 
@@ -60,6 +61,10 @@ file store (bare id only — compound `runner/id` is rejected). Formats events w
 `print.FormatState`. When `meta.status` is `running`, the CLI prints existing
 events then tails `events.jsonl` until status is no longer `running`. Missing
 sessions exit 1; a session positional without `--print` is rejected.
+
+**`sessions --print --grok-session-id ID`** resolves a stored session by
+`meta.runner_session_id` when `meta.runner` is exactly `grok` or `grok-tty`
+(meta-only; mutually exclusive with positional `<session_id>`).
 
 Each test sets `AGENT_RUN_HOME=filepath.Join(t.TempDir(), ".agent-run")` and
 builds `agent-run` + `fake-codex` binaries into the temp `bin/` directory.
@@ -126,7 +131,9 @@ cmd/agent-run/tests/
 │   └── grok-mock-config/            nested: --grok-home + --grok-tty-runner-binary (see grok-mock-config/DOCTEST.md)
 ├── home/
 │   └── agent-run-home-isolation/    no files outside AGENT_RUN_HOME after run
-├── sessions/                        split: list vs print (flat bare id)
+├── sessions/                        split: list vs print (flat bare id) + help
+│   ├── help/
+│   │   └── documents-grok-session-id/  sessions --help lists --grok-session-id
 │   ├── list/
 │   │   ├── empty-human/             human list empty home
 │   │   ├── json-empty/              sessions --json when empty
@@ -139,13 +146,15 @@ cmd/agent-run/tests/
 │   │   ├── human-updated-relative/  UPDATED cells are relative ages
 │   │   ├── human-updated-missing-dash/  missing times → "-"
 │   │   └── json-updated-absolute/   --json keeps absolute updated_at
-│   └── print/                       sessions <session_id> --print
+│   └── print/                       sessions <session_id> --print | --grok-session-id
 │       ├── finished-with-events/    status=finished; formatted trace stdout
 │       ├── no-events/               meta only; "(no events yet)" + Done footer
 │       ├── unknown-session/         missing bare id → exit 1
 │       ├── missing-print-flag/      session ref without --print → exit 1
 │       ├── reject-compound-ref/     runner/id rejected (Q5)
-│       └── follow-running-appends/  status=running; tail until finished
+│       ├── follow-running-appends/  status=running; tail until finished
+│       ├── by-grok-session-id/      --print --grok-session-id UUID → same trace
+│       └── mutex-with-positional/   flag + positional → exit 1 exclusive
 ├── status/
 │   └── exits-zero/                  status exits 0
 ├── grok-tty/                        nested root: grok-tty runner + attach (see grok-tty/DOCTEST.md)
@@ -210,6 +219,9 @@ cmd/agent-run/tests/
 | 25 | `sessions/print/missing-print-flag` | `sessions <id>` without `--print` → exit 1 |
 | 26 | `sessions/print/reject-compound-ref` | `sessions runner/id --print` → exit 1 invalid ref (Q5) |
 | 27 | `sessions/print/follow-running-appends` | running session follows new events until status finished |
+| 27a | `sessions/print/by-grok-session-id` | `--print --grok-session-id UUID` → formatted trace for grok-tty |
+| 27b | `sessions/print/mutex-with-positional` | flag + positional → exit 1 mutually exclusive |
+| 27c | `sessions/help/documents-grok-session-id` | `sessions --help` documents `--grok-session-id` |
 | 17 | `status/exits-zero` | `status` exits 0 |
 | 18 | `web/timeline/session-detail-includes-user-prompt` | POST session → GET detail events include `role=user` prompt |
 | 19 | `web/timeline/follow-up-message-includes-user-prompt` | POST `.../messages` → GET detail includes user follow-up |

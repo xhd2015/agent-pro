@@ -286,7 +286,8 @@ func seedSessionMeta(t *testing.T, req *Request) {
 		CreatedAt:         "2026-07-03T12:00:00Z",
 		UpdatedAt:         "2026-07-03T12:00:00Z",
 	}
-	if err := store.CreateSession(req.Runner, req.SessionID, meta); err != nil {
+	// Flat layout: sessions/<session_id>/meta.json (runner is meta field only).
+	if err := store.CreateSession(req.SessionID, meta); err != nil {
 		// Allow overwrite for re-seed patterns
 		path := metaJSONPath(req.Home, req.Runner, req.SessionID)
 		if err2 := os.MkdirAll(filepath.Dir(path), 0755); err2 != nil {
@@ -303,8 +304,53 @@ func seedSessionMeta(t *testing.T, req *Request) {
 	}
 }
 
+// seedExtraSessionMeta writes an additional flat session without mutating req identity fields.
+// Used for ambiguous / multi-session lookup fixtures (e.g. two metas share runner_session_id).
+func seedExtraSessionMeta(t *testing.T, req *Request, sessionID, runner, runnerSessionID, metaStatus, terminalID, prompt string) {
+	t.Helper()
+	ensureDefaults(req)
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		t.Fatal("seedExtraSessionMeta requires sessionID")
+	}
+	if runner == "" {
+		runner = defaultRunner
+	}
+	if metaStatus == "" {
+		metaStatus = "finished"
+	}
+	store := openAgentStore(t, req)
+	meta := agentstorage.SessionMeta{
+		Runner:            runner,
+		SessionID:         sessionID,
+		Status:            metaStatus,
+		RunnerSessionID:   runnerSessionID,
+		TerminalSessionID: terminalID,
+		Workspace:         req.Workspace,
+		Model:             req.Model,
+		InitialPrompt:     prompt,
+		CreatedAt:         "2026-07-03T12:00:00Z",
+		UpdatedAt:         "2026-07-03T12:00:00Z",
+	}
+	if err := store.CreateSession(sessionID, meta); err != nil {
+		path := metaJSONPath(req.Home, runner, sessionID)
+		if err2 := os.MkdirAll(filepath.Dir(path), 0755); err2 != nil {
+			t.Fatalf("mkdir session dir: %v", err2)
+		}
+		b, mErr := json.MarshalIndent(meta, "", "  ")
+		if mErr != nil {
+			t.Fatalf("marshal meta: %v", mErr)
+		}
+		if wErr := os.WriteFile(path, b, 0644); wErr != nil {
+			t.Fatalf("write meta.json: %v (create: %v)", wErr, err)
+		}
+	}
+}
+
 func metaJSONPath(home, runner, sessionID string) string {
-	return filepath.Join(home, "sessions", runner, sessionID, "meta.json")
+	// Flat layout: sessions/<session_id>/meta.json. runner kept for call-site compat.
+	_ = runner
+	return filepath.Join(home, "sessions", sessionID, "meta.json")
 }
 
 func readMetaJSON(t *testing.T, home, runner, sessionID string) map[string]any {
@@ -709,11 +755,12 @@ func scheduleDelayedGrokMaterialize(t *testing.T, req *Request) {
 	}()
 }
 
-// findMetaRunnerSessionID walks sessions/<runner> for meta.json whose
+// findMetaRunnerSessionID walks flat sessions/<id>/ for meta.json whose
 // runner_session_id equals want (or any non-empty id when want == "").
+// When runner is non-empty, only metas with meta.runner == runner match.
 func findMetaRunnerSessionID(t *testing.T, home, runner, want string) (metaPath, gotID string, ok bool) {
 	t.Helper()
-	root := filepath.Join(home, "sessions", runner)
+	root := filepath.Join(home, "sessions")
 	_ = filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil || info == nil || info.IsDir() {
 			return nil
@@ -728,6 +775,11 @@ func findMetaRunnerSessionID(t *testing.T, home, runner, want string) (metaPath,
 		var meta map[string]any
 		if json.Unmarshal(data, &meta) != nil {
 			return nil
+		}
+		if runner != "" {
+			if r, _ := meta["runner"].(string); strings.TrimSpace(r) != runner {
+				return nil
+			}
 		}
 		id, _ := meta["runner_session_id"].(string)
 		id = strings.TrimSpace(id)

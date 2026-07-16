@@ -15,13 +15,16 @@ const sessionsHelp = `
 Usage: agent-run sessions [--json] [--limit N]
        agent-run sessions --clear
        agent-run sessions <session_id> --print
+       agent-run sessions --print --grok-session-id ID
 
 Options:
-  --json      list sessions as JSON (list mode only)
-  --limit N   max sessions to show (default 10; 0 = all)
-  --clear     delete all stored sessions under agent-run home
-  --print     print formatted session events (required with <session_id>)
-  -h, --help  show help
+  --json               list sessions as JSON (list mode only)
+  --limit N            max sessions to show (default 10; 0 = all)
+  --clear              delete all stored sessions under agent-run home
+  --print              print formatted session events (required with <session_id> or --grok-session-id)
+  --grok-session-id ID resolve print target by provider runner_session_id (meta.runner grok|grok-tty);
+                       mutually exclusive with positional <session_id>; requires --print
+  -h, --help           show help
 `
 
 const defaultSessionsListLimit = 10
@@ -30,11 +33,13 @@ func runSessions(args []string) error {
 	var jsonFlag bool
 	var printFlag bool
 	var clearFlag bool
+	var grokSessionID *string
 	limit := defaultSessionsListLimit
 	remaining, err := flags.Bool("--json", &jsonFlag).
 		Bool("--print", &printFlag).
 		Bool("--clear", &clearFlag).
 		Int("--limit", &limit).
+		String("--grok-session-id", &grokSessionID).
 		Help("-h,--help", sessionsHelp).
 		Parse(args)
 	if err != nil {
@@ -54,7 +59,23 @@ func runSessions(args []string) error {
 		if jsonFlag {
 			return fmt.Errorf("--clear cannot be used with --json")
 		}
+		if grokSessionID != nil {
+			return fmt.Errorf("--clear cannot be used with --grok-session-id")
+		}
 		return store.ClearAllSessions()
+	}
+	if grokSessionID != nil {
+		if len(remaining) > 0 {
+			return fmt.Errorf("--grok-session-id and positional <session-id> are mutually exclusive; cannot use both")
+		}
+		if !printFlag {
+			return fmt.Errorf("--grok-session-id requires --print")
+		}
+		meta, err := resolveSessionMetaByGrokSessionID(store, *grokSessionID)
+		if err != nil {
+			return err
+		}
+		return runSessionsPrint(store, meta.SessionID)
 	}
 	if len(remaining) > 0 {
 		if len(remaining) != 1 {
@@ -70,7 +91,7 @@ func runSessions(args []string) error {
 		return runSessionsPrint(store, sessionID)
 	}
 	if printFlag {
-		return fmt.Errorf("--print requires a session id")
+		return fmt.Errorf("--print requires a session id or --grok-session-id")
 	}
 	list, err := listAllSessions(store)
 	if err != nil {

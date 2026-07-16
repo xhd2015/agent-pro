@@ -13,11 +13,12 @@ Doc-style tests for session-level `agent-run status <session-id>`,
 - **agent-run CLI** — dispatches `status`, `resume`, and `run --open`. Status is
   a multi-layer probe (not a meta dump only). Resume is a **shortcut of `run`**
   that reuses session meta and injects provider resume (`grok --resume <id>`).
-- **Session storage** — `AGENT_RUN_HOME/sessions/<runner>/<session_id>/meta.json`
+- **Session storage** — flat `AGENT_RUN_HOME/sessions/<session_id>/meta.json`
   (`SessionMeta`: runner, session_id, runner_session_id, terminal_session_id,
   status, workspace, model, …). Optional durable bind progress (e.g.
   `bind.json` with `in_progress|ok|failed`) so concurrent status can observe
-  mid-open binding.
+  mid-open binding. Secondary lookup by explicit `--grok-session-id` matches
+  `meta.runner_session_id` when `meta.runner` is exactly `grok` or `grok-tty`.
 - **TTY registry** — `AGENT_RUN_HOME/grok-tty-registry/<terminal_session_id>.json`
   (`pid`, `listen_addr`, `created_at`). Absent or unreachable ⇒ process/terminal
   dead layers.
@@ -47,13 +48,16 @@ Doc-style tests for session-level `agent-run status <session-id>`,
 ```
 # help
 agent-run --help -> lists resume
-agent-run status --help -> documents session-ref / multi-layer probe
-agent-run resume --help -> lists --open, session-id, followup
+agent-run status --help -> documents session-ref / multi-layer probe / --grok-session-id
+agent-run resume --help -> lists --open, session-id, followup, --grok-session-id
 
 # status
 agent-run status -> home: <path>\n  (compat bare)
 agent-run status <session-id> -> multi-layer probe
-agent-run status <runner>/<session_id> -> unambiguous resolve
+agent-run status <runner>/<session_id> -> unambiguous resolve (legacy leaf)
+agent-run status --grok-session-id ID -> meta-only resolve (runner grok|grok-tty)
+  # mutex with positional; 0 matches not found; 2+ ambiguous; non-grok never match
+  # CLI --agent-runner ignored for this lookup
 agent-run status --json <ref> -> JSON mirror (runner.exited, resume.ready)
 
 # layers (human + JSON)
@@ -74,9 +78,11 @@ resume ready ⇔ runner_session_id non-empty ∧ runner.exited == true
 
 # resume ≡ run shortcut
 agent-run resume [flags] <session-id> ["followup"]
+agent-run resume [flags] --grok-session-id ID ["followup"]
   ≡ agent-run run [flags] --session-id=<id> --agent-runner=<meta.runner> …
     with ResumeSessionID = meta.runner_session_id
     argv includes grok --resume <id> (when not overridden by TTY command hook)
+  # --grok-session-id and positional session-id are mutually exclusive
 
 # resume + zombie terminal registry (after /exit keep-alive still holds id)
 bound+exited + registry live (zombie serve / exit scrollback):
@@ -119,13 +125,21 @@ cmd/agent-run/tests/status-resume/
 ├── SETUP.md                                    # build agent-run, seed meta/registry, fake ptywrap
 ├── help/                                       # command discovery
 │   ├── top-level-lists-resume/                 # H1 agent-run --help lists resume
-│   ├── status-documents-session-ref/           # H2 status --help session-ref / layers
-│   └── resume-lists-open/                      # H3 resume --help lists --open + session-id
+│   ├── status-documents-session-ref/           # H2 status --help session-ref / layers / --grok-session-id
+│   └── resume-lists-open/                      # H3 resume --help lists --open + session-id + --grok-session-id
 ├── status/                                     # agent-run status [ref]
 │   ├── bare-home/                              # S0 bare status → home path
 │   ├── missing-session/                        # S1 unknown id → exit 1
 │   ├── session-ref/
-│   │   └── runner-slash-id/                    # S6 runner/session resolves uniquely
+│   │   ├── runner-slash-id/                    # S6 runner/session resolves uniquely
+│   │   └── grok-session-id/                    # explicit --grok-session-id meta-only lookup
+│   │       ├── found-grok-tty/                 # G1 resolve grok-tty (+ --agent-runner ignored)
+│   │       ├── found-runner-grok/              # G2 resolve runner=grok
+│   │       ├── missing/                        # G3 0 matches → not found
+│   │       ├── ambiguous/                      # G4 2+ matches → ambiguous + both ids
+│   │       ├── ignores-non-grok/               # G5 codex-tty UUID must not resolve
+│   │       ├── mutex-with-positional/          # G6 flag + positional exclusive
+│   │       └── empty-flag/                     # G7 empty --grok-session-id= → exit ≠ 0
 │   └── layers/                                 # multi-layer probe outcomes
 │       ├── bound-exited-resume-ready/          # S2 dead/missing terminal + bound + exited → ready
 │       ├── zombie-serve-exited-resume-ready/   # E1 CRITICAL RED: reachable zombie serve → exited true
@@ -144,6 +158,7 @@ cmd/agent-run/tests/status-resume/
 │   │   ├── open-hello/                         # R2 CRITICAL: resume --open "hello" reclaims
 │   │   └── headless-followup/                  # R1 headless followup reclaims + --resume argv
 │   ├── headless-followup-when-exited/          # dead terminal; --resume in argv
+│   ├── by-grok-session-id/                     # G8 resume via --grok-session-id (no positional)
 │   └── open-flag-accepted/                     # --open known (not unknown-flag)
 ├── run-open-post-exit/                         # run --open post-attach finalize (B5 regression)
 │   ├── prints-grok-session-when-resolved/      # O1 bind + stderr + meta persist
@@ -161,13 +176,14 @@ Parameter ranking (most → least significant):
 
 1. **Command surface** — help | status | resume | run-open-post-exit | run-open-background-bind
 2. **Status invocation** — bare home | missing | session-ref form | multi-layer state
-3. **Runner/resume state** — bound+exited (dead term) | zombie serve exited | live not-exited | unbound | JSON format
-4. **Resume outcome** — denied reason | zombie reclaim (open / headless) | clean-term success | `--open` flag
-5. **Resume flag gates** — `--no-submit` requires `--open`; live deny steers to send
-6. **Open discovery outcome** — resolved vs unresolved (post-exit finalize)
-7. **Background-bind timing vs detach** — preseeded success | detach-before-bind wait |
+3. **Session-ref form** — compound `runner/id` | `--grok-session-id` (match cardinality / runner allowlist / mutex / empty)
+4. **Runner/resume state** — bound+exited (dead term) | zombie serve exited | live not-exited | unbound | JSON format
+5. **Resume outcome** — denied reason | zombie reclaim (open / headless) | clean-term success | by-grok-session-id | `--open` flag
+6. **Resume flag gates** — `--no-submit` requires `--open`; live deny steers to send
+7. **Open discovery outcome** — resolved vs unresolved (post-exit finalize)
+8. **Background-bind timing vs detach** — preseeded success | detach-before-bind wait |
    hard fail after wait | concurrent status binding
-8. **Hard-require trigger / discovery key** — non-empty prompt without GROK_HOME env (O1) |
+9. **Hard-require trigger / discovery key** — non-empty prompt without GROK_HOME env (O1) |
    prompt-only match when session cwd ≠ agent-run workspace (O3)
 
 ## Test Index
@@ -175,11 +191,18 @@ Parameter ranking (most → least significant):
 | # | Leaf | Req | Description |
 |---|------|-----|-------------|
 | 1 | `help/top-level-lists-resume` | H1 | `agent-run --help` stdout contains `resume` |
-| 2 | `help/status-documents-session-ref` | H2 | `status --help` mentions session id / layers |
-| 3 | `help/resume-lists-open` | H3 | `resume --help` lists `--open` and session-id |
+| 2 | `help/status-documents-session-ref` | H2 | `status --help` mentions session id / layers / `--grok-session-id` |
+| 3 | `help/resume-lists-open` | H3 | `resume --help` lists `--open`, session-id, `--grok-session-id` |
 | 4 | `status/bare-home` | S0 | bare `status` → exit 0, `home: …\n` |
 | 5 | `status/missing-session` | S1 | unknown session → exit 1, not found |
 | 6 | `status/session-ref/runner-slash-id` | S6 | `grok-tty/<id>` resolves same session as bare id |
+| 6a | `status/session-ref/grok-session-id/found-grok-tty` | G1 | `--grok-session-id` resolves `grok-tty`; CLI `--agent-runner` ignored |
+| 6b | `status/session-ref/grok-session-id/found-runner-grok` | G2 | `--grok-session-id` resolves exact `runner=grok` |
+| 6c | `status/session-ref/grok-session-id/missing` | G3 | no matching meta → exit 1 not found |
+| 6d | `status/session-ref/grok-session-id/ambiguous` | G4 | two matches → exit 1; both agent-run ids listed |
+| 6e | `status/session-ref/grok-session-id/ignores-non-grok` | G5 | `codex-tty` UUID must not resolve |
+| 6f | `status/session-ref/grok-session-id/mutex-with-positional` | G6 | flag + positional → exit 1 exclusive |
+| 6g | `status/session-ref/grok-session-id/empty-flag` | G7 | empty `--grok-session-id=` → exit ≠ 0 |
 | 7 | `status/layers/bound-exited-resume-ready` | S2/E3 | bound + exited + dead/missing terminal → `resume.ready: yes` |
 | 8 | `status/layers/zombie-serve-exited-resume-ready` | E1 | **CRITICAL RED**: zombie serve (alive+reachable+exit scrollback) → `exited: true`, resume ready |
 | 9 | `status/layers/zombie-serve-json` | E1 | zombie serve `--json` → `runner.exited` true + `resume.ready` true while process alive |
@@ -194,6 +217,7 @@ Parameter ranking (most → least significant):
 | 18 | `resume/zombie-reclaim/open-hello` | R2 | **CRITICAL RED**: zombie registry + `resume --open id "hello"` → reclaim, not already-in-use |
 | 19 | `resume/zombie-reclaim/headless-followup` | R1 | zombie registry + headless followup → reclaim + `--resume` in argv |
 | 20 | `resume/headless-followup-when-exited` | clean | dead terminal + followup → run path with `--resume <id>` |
+| 20a | `resume/by-grok-session-id` | G8 | `resume --grok-session-id` headless followup; argv has `--resume` UUID |
 | 21 | `resume/open-flag-accepted` | open-flag | `resume --open …` not rejected as unknown flag |
 | 22 | `run-open-post-exit/prints-grok-session-when-resolved` | O1/B5 | after attach, stderr grok session + meta.runner_session_id |
 | 23 | `run-open-post-exit/errors-when-unresolved` | O2/B5 | discovery fail → exit ≠ 0, not resolved error |
@@ -219,6 +243,7 @@ doctest test -v ./cmd/agent-run/tests/status-resume/help/resume-lists-open
 doctest test -v ./cmd/agent-run/tests/status-resume/status/bare-home
 doctest test -v ./cmd/agent-run/tests/status-resume/status/missing-session
 doctest test -v ./cmd/agent-run/tests/status-resume/status/session-ref/runner-slash-id
+doctest test -v ./cmd/agent-run/tests/status-resume/status/session-ref/grok-session-id
 doctest test -v ./cmd/agent-run/tests/status-resume/status/layers/bound-exited-resume-ready
 doctest test -v ./cmd/agent-run/tests/status-resume/status/layers/zombie-serve-exited-resume-ready
 doctest test -v ./cmd/agent-run/tests/status-resume/status/layers/zombie-serve-json
@@ -235,6 +260,7 @@ doctest test -v ./cmd/agent-run/tests/status-resume/resume/denied/no-submit-with
 doctest test -v ./cmd/agent-run/tests/status-resume/resume/zombie-reclaim/open-hello
 doctest test -v ./cmd/agent-run/tests/status-resume/resume/zombie-reclaim/headless-followup
 doctest test -v ./cmd/agent-run/tests/status-resume/resume/headless-followup-when-exited
+doctest test -v ./cmd/agent-run/tests/status-resume/resume/by-grok-session-id
 doctest test -v ./cmd/agent-run/tests/status-resume/resume/open-flag-accepted
 
 # run --open post-exit (regression)
@@ -267,17 +293,17 @@ type Request struct {
 	// Mode selects post-exec enrichment in Run:
 	//   ""                — plain CLI exec
 	//   "status-json"     — parse stdout as JSON into Response.JSONBody
-	//   "read-meta"       — after CLI, load sessions/<runner>/<session>/meta.json
+	//   "read-meta"       — after CLI, load sessions/<session>/meta.json
 	//   "open-status-mid" — start open async, probe status mid-flight, wait open
 	Mode        string
 	ExecTimeout time.Duration
 
-	// Session seed (meta.json under sessions/<Runner>/<SessionID>/)
+	// Session seed (meta.json under flat sessions/<SessionID>/; Runner is meta field)
 	SeedMeta          bool
 	Runner            string // default grok-tty
 	SessionID         string
 	MetaStatus        string // running | finished | error
-	RunnerSessionID   string // provider (grok) session id — resume key
+	RunnerSessionID   string // provider (grok) session id — resume key / --grok-session-id
 	TerminalSessionID string
 	Workspace         string
 	Model             string
