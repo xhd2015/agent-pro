@@ -96,7 +96,8 @@ cmd/agent-run/tests/
 │   ├── open/                        nested: run --open TTY silent attach (see open/DOCTEST.md)
 │   ├── detach/                      nested: run/resume --detach keep-alive daemon (see detach/DOCTEST.md)
 │   ├── agent-runner-binary/         nested: --agent-runner-binary SPEC (see agent-runner-binary/DOCTEST.md)
-│   └── agent-runner-config-home/    nested: --agent-runner-config-home PATH (see agent-runner-config-home/DOCTEST.md)
+│   ├── agent-runner-config-home/    nested: --agent-runner-config-home PATH (see agent-runner-config-home/DOCTEST.md)
+│   └── resume-from-grok-session/    nested: --resume-from-grok-session P1 validation (see resume-from-grok-session/DOCTEST.md)
 ├── web/                             split: token mode (omit | explicit | auto)
 │   ├── timeline/                    session detail events (role, timestamps)
 │   │   ├── session-detail-includes-user-prompt/
@@ -271,6 +272,25 @@ doctest vet ./cmd/agent-run/tests/run/agent-runner-binary
 doctest vet ./cmd/agent-run/tests/run/agent-runner-config-home
 doctest test ./cmd/agent-run/tests/run/agent-runner-binary
 doctest test ./cmd/agent-run/tests/run/agent-runner-config-home
+```
+
+## Nested: run --resume-from-grok-session (P1–P3)
+
+Import-by-Grok-session tests live at
+`cmd/agent-run/tests/run/resume-from-grok-session/` (**nested DOCTEST root**).
+
+- **P1** — validation error matrix (empty id, missing Grok session, wrong runners,
+  already-mapped meta, `--dir` ≠ Grok `info.cwd`).
+- **P2** — headless create + pre-bind + argv `--resume <uuid>`
+  (`headless-resume-argv`, `creates-session-meta`, `session-id-already-exists`).
+- **P3** — help, `--detach` import, `--open` import (instant attach), mutex with
+  `--auto-send-or-resume`.
+
+```sh
+doctest vet ./cmd/agent-run/tests/run/resume-from-grok-session
+doctest test ./cmd/agent-run/tests/run/resume-from-grok-session
+doctest test ./cmd/agent-run/tests/run/resume-from-grok-session/detach-import
+doctest test ./cmd/agent-run/tests/run/resume-from-grok-session/open-import
 ```
 
 ## Nested: web grok-mock-config

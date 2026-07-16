@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xhd2015/agent-pro/agent/grok/sessions"
 	"github.com/xhd2015/agent-pro/pkgs/agentsend"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
@@ -41,6 +42,9 @@ Options:
   --allow-relocate-resume-session-dir
                       when resume --dir differs from grok session cwd, relocate the
                       grok session and continue (grok-tty only; with --auto-send-or-resume)
+  --resume-from-grok-session ID
+                      import an external Grok CLI session by provider id (grok-tty only);
+                      validates id / runner / GROK_HOME presence / not already mapped / --dir vs cwd
   --agent-runner RUNNER   codex, codex-tty, grok-tty, opencode, fake-codex, ...
   --agent-runner-binary SPEC
                       agent executable: bare name/path or shell-style "binary flags..."
@@ -70,6 +74,7 @@ func runHeadless(args []string, defaultRunner string) error {
 	var noSubmit bool
 	var dir string
 	var allowRelocateResumeSessionDir bool
+	var resumeFromGrokSession *string
 	var recorded flags.Flags
 	remaining, err := flags.Bool("--json", &jsonFlag).
 		String("--model", &model).
@@ -83,6 +88,7 @@ func runHeadless(args []string, defaultRunner string) error {
 		Bool("--no-submit", &noSubmit).
 		String("--dir", &dir).
 		Bool("--allow-relocate-resume-session-dir", &allowRelocateResumeSessionDir).
+		String("--resume-from-grok-session", &resumeFromGrokSession).
 		String("--agent-runner", &agentRunner).
 		String("--agent-runner-binary", &agentRunnerBinary).
 		String("--agent-runner-config-home", &agentRunnerConfigHome).
@@ -108,6 +114,34 @@ func runHeadless(args []string, defaultRunner string) error {
 		return err
 	}
 	envEntries = normalizeEnvEntries(envEntries)
+
+	// Import external Grok session: P1 validation + P2 create/pre-bind + P3 open/detach.
+	// Note: global `agent-run --agent-runner X run ...` strips the flag in main
+	// into defaultRunner; subcommand `run --agent-runner X` is also stripped the
+	// same way when the flag appears after `run` (main consumes it). Use both.
+	if resumeFromGrokSession != nil {
+		if autoSendOrResume {
+			return fmt.Errorf("--resume-from-grok-session and --auto-send-or-resume are mutually exclusive; cannot use both")
+		}
+		return runResumeFromGrokSession(resumeFromGrokOpts{
+			grokSessionID:     *resumeFromGrokSession,
+			agentRunner:       agentRunner,
+			defaultRunner:     defaultRunner,
+			configHome:        absConfigHome,
+			dir:               dir,
+			sessionID:         sessionID,
+			prompt:            prompt,
+			model:             model,
+			agentRunnerBinary: agentRunnerBinary,
+			prependPaths:      absPrepend,
+			envEntries:        envEntries,
+			jsonFlag:          jsonFlag,
+			keepTTY:           keepTTY,
+			openFlag:          openFlag,
+			detachFlag:        detachFlag,
+			noSubmit:          noSubmit,
+		})
+	}
 
 	if newTerminal && !autoSendOrResume {
 		return fmt.Errorf("--new-terminal requires --auto-send-or-resume")
@@ -216,6 +250,185 @@ func resolveCLIRunner(flagRunner, defaultRunner string) string {
 		return r
 	}
 	return "grok-tty"
+}
+
+// resumeFromGrokOpts carries CLI inputs for run --resume-from-grok-session.
+type resumeFromGrokOpts struct {
+	grokSessionID     string
+	agentRunner       string
+	defaultRunner     string
+	configHome        string
+	dir               string
+	sessionID         string
+	prompt            string
+	model             string
+	agentRunnerBinary string
+	prependPaths      []string
+	envEntries        []string
+	jsonFlag          bool
+	keepTTY           bool
+	openFlag          bool
+	detachFlag        bool
+	noSubmit          bool
+}
+
+// runResumeFromGrokSession validates (P1), CreateSession-pre-binds the Grok UUID
+// on a new agent-run session (P2), then launches via agentui.Run (headless / open /
+// detach) so meta.RunnerSessionID drives ResumeSessionID → provider argv
+// `--resume <uuid>`.
+func runResumeFromGrokSession(opts resumeFromGrokOpts) error {
+	id := strings.TrimSpace(opts.grokSessionID)
+	if id == "" {
+		return fmt.Errorf("--resume-from-grok-session requires a non-empty value")
+	}
+	// Same mutual-exclusion rules as normal run for open/detach/json/no-submit.
+	if opts.detachFlag && opts.openFlag {
+		return fmt.Errorf("--detach and --open are mutually exclusive; cannot use both")
+	}
+	if opts.detachFlag && opts.jsonFlag {
+		return fmt.Errorf("--detach and --json are mutually exclusive; cannot use both")
+	}
+	if opts.openFlag && opts.jsonFlag {
+		return fmt.Errorf("--open and --json are mutually exclusive; cannot use both")
+	}
+	if opts.noSubmit && !opts.openFlag {
+		return fmt.Errorf("--no-submit requires --open")
+	}
+
+	// Prefer explicit run-flag runner, then global/default (main often strips
+	// --agent-runner before the subcommand sees it). Omitted → grok-tty.
+	runner := strings.TrimSpace(opts.agentRunner)
+	if runner == "" {
+		runner = strings.TrimSpace(opts.defaultRunner)
+	}
+	if runner == "" {
+		runner = "grok-tty"
+	}
+	if runner != "grok-tty" {
+		return fmt.Errorf("--resume-from-grok-session requires grok-tty (got %s); only grok-tty is allowed when --agent-runner is set", runner)
+	}
+	if opts.openFlag && !agenttty.IsTTYRunner(runner) {
+		return fmt.Errorf("--open requires a TTY runner (got %s); non-TTY runners like fake-codex are not supported", runner)
+	}
+	if opts.detachFlag && !agenttty.IsTTYRunner(runner) {
+		return fmt.Errorf("--detach requires a TTY runner (got %s); non-TTY runners like fake-codex are not supported", runner)
+	}
+	if err := requireTTYForSessionEnv(runner, opts.prependPaths, opts.envEntries); err != nil {
+		return err
+	}
+
+	grokHome := agenttty.GrokHomeForRunner(opts.configHome)
+	grokSess, err := sessions.Find(grokHome, id)
+	if err != nil {
+		return err
+	}
+
+	store, err := openStore()
+	if err != nil {
+		return err
+	}
+	list, err := store.ListSessions()
+	if err != nil {
+		return err
+	}
+	for _, m := range list {
+		if !isGrokRunner(m.Runner) {
+			continue
+		}
+		if strings.TrimSpace(m.RunnerSessionID) == id {
+			return fmt.Errorf("grok session %s is already mapped to agent-run session %s; use resume --grok-session-id %s",
+				id, m.SessionID, id)
+		}
+	}
+
+	// Workspace: default Grok info.cwd; --dir allowed only when it matches (no relocate).
+	workspace := strings.TrimSpace(grokSess.CWD)
+	if workspace != "" {
+		if abs, absErr := filepath.Abs(workspace); absErr == nil {
+			workspace = abs
+		}
+	}
+	if strings.TrimSpace(opts.dir) != "" {
+		dirWS, err := resolveRunDir(opts.dir)
+		if err != nil {
+			return err
+		}
+		if workspace != "" && !canonicalPathsEqual(dirWS, workspace) {
+			absDir := dirWS
+			if a, absErr := filepath.Abs(strings.TrimSpace(opts.dir)); absErr == nil && a != "" {
+				absDir = a
+			}
+			return fmt.Errorf("--dir %s differs from grok session cwd %s (session %s); resume-from-grok-session does not relocate workspace",
+				absDir, workspace, id)
+		}
+		workspace = dirWS
+	}
+	if workspace == "" {
+		// Fallback when summary has no cwd (should be rare after Find).
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		workspace = wd
+	}
+
+	// Resolve agent-run session id: --session/--session-id or auto-generate.
+	sessionID := strings.TrimSpace(opts.sessionID)
+	if sessionID == "" {
+		sessionID, err = generateAutoSessionID(opts.prompt, runner, store.Home())
+		if err != nil {
+			return err
+		}
+	}
+	// Collision on agent-run id (distinct from provider already-mapped).
+	if _, err := store.GetSession(sessionID); err == nil {
+		return fmt.Errorf("session already exists: %s", sessionID)
+	}
+
+	// Empty prompt is allowed for --open / --detach (like normal run). Enforce
+	// after P1/P2 validation gates so error leaves keep their specific messages.
+	if strings.TrimSpace(opts.prompt) == "" && !opts.openFlag && !opts.detachFlag {
+		return fmt.Errorf("prompt is required")
+	}
+
+	meta := agentstorage.SessionMeta{
+		Runner:                runner,
+		SessionID:             sessionID,
+		Status:                "running",
+		Model:                 opts.model,
+		InitialPrompt:         strings.TrimSpace(opts.prompt),
+		RunnerSessionID:       id,
+		Workspace:             workspace,
+		PrependPaths:          append([]string(nil), opts.prependPaths...),
+		Env:                   append([]string(nil), opts.envEntries...),
+		AgentRunnerConfigHome: strings.TrimSpace(opts.configHome),
+	}
+	if err := store.CreateSession(sessionID, meta); err != nil {
+		return err
+	}
+
+	// Existing session with RunnerSessionID → agentui.Run loads it as ResumeSessionID.
+	// Open/Detach/KeepTTY match normal run so --detach prints ids and returns early
+	// and --open uses the interactive attach path (tests use instant-attach hook).
+	return agentui.Run(context.Background(), agentui.RunOptions{
+		Prompt:                opts.prompt,
+		Runner:                runner,
+		Model:                 opts.model,
+		SessionID:             sessionID,
+		AgentRunnerBinary:     opts.agentRunnerBinary,
+		AgentRunnerConfigHome: opts.configHome,
+		PrependPaths:          opts.prependPaths,
+		Env:                   opts.envEntries,
+		JSON:                  opts.jsonFlag,
+		Workspace:             workspace,
+		KeepTerminalAlive:     opts.keepTTY || opts.openFlag || opts.detachFlag,
+		Open:                  opts.openFlag,
+		Detach:                opts.detachFlag,
+		NoSubmit:              opts.noSubmit,
+		Store:                 store,
+		Stdout:                os.Stdout,
+		Stderr:                os.Stderr,
+	})
 }
 
 type autoSendOrResumeOpts struct {
