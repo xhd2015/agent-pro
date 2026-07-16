@@ -69,6 +69,9 @@ func bannerDetectedConfig(scrollback []byte, provider string, markers []string) 
 			return true
 		}
 	}
+	if provider == "commandcode" {
+		return strings.TrimSpace(plain) != ""
+	}
 	for _, marker := range markers {
 		if marker != "" && strings.Contains(plain, marker) {
 			return true
@@ -228,6 +231,13 @@ func persistentTurnComplete(scrollback []byte, prompt, promptCompact string, cfg
 			return true
 		}
 		return codexTurnCompleteForExit(scrollback, promptCompact)
+	}
+	if cfg.runnerID == "commandcode-tty" {
+		// commandcode-tty: headless uses -p which exits cleanly.
+		// Wait for scrollback content stability rather than text length.
+		// The keep-alive serve stays up but we exit the wait loop here.
+		captured := strings.TrimSpace(extractAssistantTextForProvider(scrollback, prompt, cfg.bannerMarkers, cfg.bannerProvider))
+		return captured != ""
 	}
 	return strings.TrimSpace(extractAssistantTextForProvider(scrollback, prompt, cfg.bannerMarkers, cfg.bannerProvider)) != ""
 }

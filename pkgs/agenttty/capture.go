@@ -33,6 +33,9 @@ func extractAssistantTextForProvider(scrollback []byte, prompt string, markers [
 	if isCodexProvider(provider) {
 		return cleanCodexScrollbackFallback(scrollback, prompt, markers)
 	}
+	if provider == "commandcode" {
+		return cleanCommandcodeScrollback(scrollback, prompt)
+	}
 
 	lines := strings.Split(plain, "\n")
 	var kept []string
@@ -171,6 +174,97 @@ func skipCodexFallbackLine(line, prompt string, markers []string) bool {
 		strings.Contains(lower, "running userpromptsubmit hook") ||
 		strings.HasPrefix(lower, "working") {
 		return true
+	}
+	return false
+}
+
+func cleanCommandcodeScrollback(scrollback []byte, prompt string) string {
+	plain := strings.TrimSpace(stripPlain(scrollback))
+	lines := strings.Split(plain, "\n")
+	var kept []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if skipCommandcodeTuiLine(line, prompt) {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	if len(kept) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(strings.Join(kept, "\n"))
+}
+
+func skipCommandcodeTuiLine(line, prompt string) bool {
+	lower := strings.ToLower(line)
+	if strings.HasPrefix(line, "# ") || strings.HasPrefix(line, "#") {
+		return true
+	}
+	if strings.Contains(line, "\u2588") {
+		return true
+	}
+	if strings.Contains(line, "v0.") && strings.Contains(lower, "command") {
+		return true
+	}
+	if strings.Trim(line, "\u2500\u2014\u2015") == "" {
+		return true
+	}
+	if strings.TrimSpace(line) == strings.TrimRight(strings.TrimSpace(line), "\u2500") {
+		dashes := strings.Count(line, "\u2500")
+		if dashes >= 10 {
+			return true
+		}
+	}
+	switch {
+	case strings.HasPrefix(line, "\u203a") && strings.Contains(line, "\u2039"):
+		return true
+	case strings.HasPrefix(line, "\u203a ") || strings.HasPrefix(line, "❯ "):
+		return true
+	case strings.HasPrefix(lower, "\u203a ask") || strings.Contains(lower, "ask your question"):
+		return true
+	case strings.HasPrefix(line, "\u00bb") || strings.HasPrefix(line, "»"):
+		return true
+	case strings.HasPrefix(line, "? ") || strings.HasPrefix(line, "\\u003f "):
+		return true
+	}
+	if strings.EqualFold(strings.TrimPrefix(line, "\u203a "), prompt) {
+		return true
+	}
+	if strings.EqualFold(line, prompt) {
+		return true
+	}
+	if strings.Contains(line, "\u2022") {
+		if strings.Contains(lower, "esc") || strings.Contains(lower, "interrupt") ||
+			strings.Contains(lower, "ctrl+t") || strings.Contains(lower, "taste") ||
+			strings.Contains(lower, "shift+tab") || strings.Contains(lower, "reviewing") ||
+			strings.Contains(lower, "concept") || strings.Contains(lower, "bypass") {
+			return true
+		}
+	}
+	if strings.Contains(lower, "retrying") || strings.Contains(lower, "connection issue") || strings.Contains(lower, "attempt") {
+		return true
+	}
+	if strings.Contains(lower, "permission bypass") || strings.Contains(lower, "for shortcuts") {
+		return true
+	}
+	if strings.HasPrefix(line, "[") && strings.Contains(line, "Terminal exited") {
+		return true
+	}
+	// Horizontal separator lines (all same repeating char).
+	if len(line) >= 10 {
+		allSame := true
+		for _, r := range line {
+			if r != rune(line[0]) {
+				allSame = false
+				break
+			}
+		}
+		if allSame && (line[0] == '-' || line[0] == '_' || line[0] == '=') {
+			return true
+		}
 	}
 	return false
 }

@@ -65,6 +65,16 @@ func init() {
 		DetectScreenStatus: detectCodexScreenStatus,
 		CheckWritable:      checkCodexWritable,
 	})
+	_ = Register(Provider{
+		ID:                 "commandcode-tty",
+		RegistryDir:        "commandcode-tty-registry",
+		BannerProvider:     "commandcode",
+		BannerMarkers:      []string{"COMMANDCODE_TTY_BANNER"},
+		DisableTail:        true,
+		BuildArgv:          BuildCommandcodeCommandArgv,
+		DetectScreenStatus: detectCommandcodeScreenStatus,
+		CheckWritable:      checkCommandcodeWritable,
+	})
 	if os.Getenv("AGENT_RUN_ENABLE_STUB_TTY") == "1" {
 		registerStubProvider()
 	}

@@ -172,6 +172,11 @@ func main() {
 	registerHandler(mux, "/v1/messages", handler.handleMessages, httpLog)
 	registerHandler(mux, "/v1/models", handler.handleModels, httpLog)
 	registerHandler(mux, "/admin/requests", handler.handleAdminRequests, httpLog)
+	// Alpha endpoints for Command Code sandbox mode
+	registerHandler(mux, "/alpha/generate", handler.handleAlphaGenerate, httpLog)
+	registerHandler(mux, "/alpha/whoami", handler.handleAlphaWhoami, httpLog)
+	registerHandler(mux, "/alpha/lifecycle-events", handler.handleAlphaLifecycleEvents, httpLog)
+	registerHandler(mux, "/alpha/fingerprint/record", handler.handleAlphaFingerprintRecord, httpLog)
 
 	// Port fallback: try port, port+1, ..., port+99
 	var listener net.Listener
@@ -213,6 +218,236 @@ func printMainHelp() {
 	fmt.Print(strings.TrimPrefix(mainHelp, "\n"))
 }
 
+// alphaGenerateRequest mirrors the JSON shape Command Code sends to /alpha/generate.
+type alphaGenerateRequest struct {
+	Config   map[string]any        `json:"config"`
+	Memory   string                `json:"memory"`
+	Taste    any                   `json:"taste"`
+	Skills   string                `json:"skills"`
+	Params   alphaGenerateParams   `json:"params"`
+	ThreadID string                `json:"threadId"`
+}
+
+type alphaGenerateParams struct {
+	Tools       []map[string]any `json:"tools"`
+	Stream      bool             `json:"stream"`
+	MaxTokens   int              `json:"max_tokens"`
+	Temperature float64          `json:"temperature"`
+	Messages    []alphaMessage   `json:"messages"`
+	Model       string           `json:"model"`
+}
+
+type alphaMessage struct {
+	Role    string          `json:"role"`
+	Content json.RawMessage `json:"content"`
+}
+
+// handleAlphaWhoami returns a minimal auth response so cmd passes the auth check.
+func (h *mockHandler) handleAlphaWhoami(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]any{
+		"success": true,
+		"user": map[string]any{
+			"id":       "mock-user-id",
+			"name":     "mock-user",
+			"email":    "mock@example.com",
+			"userName": "mock-user",
+		},
+		"org": nil,
+	})
+}
+
+// extractAlphaContentText extracts text from an alpha message content field.
+// Content can be a plain string (print mode) or an array of content blocks (interactive mode).
+func extractAlphaContentText(raw json.RawMessage) string {
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return s
+	}
+	var blocks []map[string]any
+	if err := json.Unmarshal(raw, &blocks); err != nil {
+		return ""
+	}
+	var parts []string
+	for _, block := range blocks {
+		text, _ := block["text"].(string)
+		if text != "" {
+			parts = append(parts, text)
+		}
+	}
+	return strings.Join(parts, "")
+}// handleAlphaLifecycleEvents accepts lifecycle events (no-op).
+func (h *mockHandler) handleAlphaLifecycleEvents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
+}
+
+// handleAlphaFingerprintRecord accepts fingerprint submissions (no-op).
+func (h *mockHandler) handleAlphaFingerprintRecord(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
+}
+
+// handleAlphaGenerate handles the Command Code /alpha/generate endpoint.
+// Streams newline-delimited JSON (NDJSON) with cc-format event types.
+func (h *mockHandler) handleAlphaGenerate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	var req alphaGenerateRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeError(w, "invalid request JSON", "invalid_request", http.StatusBadRequest)
+		return
+	}
+
+	h.mu.Lock()
+	h.requests = append(h.requests, RecordedRequest{
+		Index:  len(h.requests),
+		Method: r.Method,
+		Path:   r.URL.Path,
+		Body:   map[string]any{"model": req.Params.Model, "messages": len(req.Params.Messages)},
+	})
+	h.mu.Unlock()
+
+	model := req.Params.Model
+	if model == "" {
+		model = "claude-sonnet-5"
+	}
+
+	var chatMsgs []openai.ChatCompletionMessageParamUnion
+	for _, msg := range req.Params.Messages {
+		text := extractAlphaContentText(msg.Content)
+		switch msg.Role {
+		case "user":
+			chatMsgs = append(chatMsgs, openai.ChatCompletionMessageParamUnion{
+				OfUser: &openai.ChatCompletionUserMessageParam{
+					Content: openai.ChatCompletionUserMessageParamContentUnion{
+						OfString: openai.String(text),
+					},
+				},
+			})
+		case "assistant":
+			chatMsgs = append(chatMsgs, openai.ChatCompletionMessageParamUnion{
+				OfAssistant: &openai.ChatCompletionAssistantMessageParam{
+					Content: openai.ChatCompletionAssistantMessageParamContentUnion{
+						OfString: openai.String(text),
+					},
+				},
+			})
+		}
+	}
+
+	serve, ok := h.findMatch(chatMsgs)
+	if !ok {
+		writeAlphaFallbackNDJSON(w, model, "Hello from llm-mock!")
+		return
+	}
+	h.writeAgentEvents(serve.agentEvents)
+
+	if serve.fromLegacy {
+		text := ""
+		if serve.legacy.Response.Content != nil {
+			text = *serve.legacy.Response.Content
+		}
+		writeAlphaFallbackNDJSON(w, model, text)
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(http.StatusOK)
+
+	// Emit think events
+	for _, evt := range serve.batch.PrefixThink {
+		if evt.Text != "" {
+			fmt.Fprintf(w, "%s\n", encodeAlphaEvent("text-delta", map[string]any{"text": evt.Text}))
+		}
+	}
+
+	if serve.batch.Breakpoint.Type == types.ActionToolCall {
+		tcID := serve.batch.Breakpoint.ID
+		if tcID == "" {
+			tcID = openaienc.GenFuncCallID()
+		}
+		input := serve.batch.Breakpoint.ToolInput
+		if input == nil {
+			input = map[string]any{}
+		}
+		fmt.Fprintf(w, "%s\n", encodeAlphaEvent("tool-use", map[string]any{
+			"tool_call_id": tcID,
+			"tool_name":    serve.batch.Breakpoint.Tool,
+		}))
+		inputJSON, _ := json.Marshal(input)
+		fmt.Fprintf(w, "%s\n", encodeAlphaEvent("tool-delta", map[string]any{
+			"text": string(inputJSON),
+		}))
+	} else {
+		text := serve.batch.Breakpoint.Text
+		fmt.Fprintf(w, "%s\n", encodeAlphaEvent("text-delta", map[string]any{"text": text}))
+	}
+
+	fmt.Fprintf(w, "%s\n", encodeAlphaEvent("finish", map[string]any{
+		"finish_reason": "end_turn",
+		"total_usage":   map[string]any{"input_tokens": 0, "output_tokens": 0},
+	}))
+	flusher.Flush()
+}
+
+func writeAlphaFallbackNDJSON(w http.ResponseWriter, model, text string) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, "%s\n", encodeAlphaEvent("text-delta", map[string]any{"text": text}))
+	fmt.Fprintf(w, "%s\n", encodeAlphaEvent("finish", map[string]any{
+		"finish_reason": "end_turn",
+		"total_usage":   map[string]any{"input_tokens": 0, "output_tokens": 0},
+	}))
+	flusher.Flush()
+}
+
+func encodeAlphaEvent(typ string, extra map[string]any) string {
+	event := map[string]any{"type": typ}
+	for k, v := range extra {
+		event[k] = v
+	}
+	data, _ := json.Marshal(event)
+	return string(data)
+}
+
 func handleRunCommand(args []string) error {
 	args = runpkg.PrependRunFlagsFromEnv(args)
 	opts, remain, err := runpkg.ParseRunFlags(args)
@@ -244,8 +479,14 @@ func handleRunCommand(args []string) error {
 			LogEventsPath:    opts.LogEventsPath,
 			LogHTTPPath:      opts.LogHTTPPath,
 		})
+	case "commandcode":
+		return runpkg.RunCommandCode(remain[1:], runpkg.RunCommandCodeOptions{
+			MockEventsPreset: opts.MockEventsPreset,
+			LogEventsPath:    opts.LogEventsPath,
+			LogHTTPPath:      opts.LogHTTPPath,
+		})
 	default:
-		return fmt.Errorf("usage: llm-mock run [--mock-events-preset NAME] [--log-events FILE] [--log-http FILE] (grok|codex|opencode) [agent-args...]\n(hint: llm-mock run --help)")
+		return fmt.Errorf("usage: llm-mock run [--mock-events-preset NAME] [--log-events FILE] [--log-http FILE] (grok|codex|opencode|commandcode) [agent-args...]\n(hint: llm-mock run --help)")
 	}
 }
 

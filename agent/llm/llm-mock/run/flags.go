@@ -11,10 +11,11 @@ const RunFlagsEnvVar = "LLM_MOCK_RUN_FLAGS"
 
 // RunCommandHelp documents llm-mock run flags and environment variables.
 const RunCommandHelp = `
-Usage: llm-mock run [--mock-events-preset NAME] [--log-events FILE] [--log-http FILE] (grok|codex|opencode) [agent-args...]
+Usage: llm-mock run [--mock-events-preset NAME] [--log-events FILE] [--log-http FILE] (grok|codex|opencode|commandcode) [agent-args...]
 
 Start a background llm-mock HTTP server, configure an isolated agent home pointing
-at the mock, and run grok, codex, or opencode in the foreground. The mock stops when the agent exits.
+at the mock, and run grok, codex, opencode, or commandcode in the foreground.
+The mock stops when the agent exits.
 
 Options:
   --mock-events-preset NAME
@@ -45,6 +46,13 @@ Environment (orchestrator, opencode):
   LLM_MOCK_RUN_OPENCODE_COMMAND           Replace opencode executable (tests/plumbing)
   LLM_MOCK_RUN_OPENCODE_DEBUG=1           Verbose opencode orchestrator stderr debug logs
 
+Environment (orchestrator, commandcode):
+  LLM_MOCK_RUN_COMMANDCODE_COMMAND        Replace cmd executable (tests/plumbing)
+  LLM_MOCK_RUN_COMMANDCODE_DEBUG=1        Verbose commandcode orchestrator stderr debug logs
+  HOME is set to an isolated temp dir so ~/.commandcode from real usage is not touched.
+  COMMANDCODE_SANDBOX=true and COMMAND_CODE_API_KEY=sk-mock are always injected.
+  LLM_MOCK_RUN_FLAGS="--help" ...         Show llm-mock flags (when using llm-mock-run-commandcode shortcut)
+
 Shared environment:
   LLM_MOCK_CONFIG_FILE, LLM_MOCK_CONFIG   Mock exchange config JSON path
   LLM_MOCK_EVENTS_FILE                    Optional input exchanges JSONL (appended)
@@ -57,11 +65,13 @@ Examples:
   llm-mock run --mock-events-preset=list
   llm-mock run grok
   llm-mock run codex
+  llm-mock run commandcode "explain this code"
   llm-mock run --mock-events-preset=think-message grok
   llm-mock run --log-events session.jsonl codex exec -m mock-model "hi"
   llm-mock run --log-http http.jsonl grok
   llm-mock run --log-events session.jsonl --log-http http.jsonl grok -p hello --always-approve
   llm-mock run opencode run "hi" --model llm-mock/mock-model
+  llm-mock run --mock-events-preset think-tool-message commandcode "list files"
 
   -h, --help
         Show this help

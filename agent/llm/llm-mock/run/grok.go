@@ -342,7 +342,7 @@ func mockServerExecutable() (string, error) {
 	}
 	dir := filepath.Dir(exe)
 	base := filepath.Base(exe)
-	if base == "llm-mock-run-grok" || base == "llm-mock-run-codex" || base == "llm-mock-run-opencode" {
+	if base == "llm-mock-run-grok" || base == "llm-mock-run-codex" || base == "llm-mock-run-opencode" || base == "llm-mock-run-commandcode" {
 		sibling := filepath.Join(dir, "llm-mock")
 		if _, err := os.Stat(sibling); err == nil {
 			return sibling, nil

@@ -27,3 +27,5 @@ node_modules
 # debug secret configs (tokens, keys etc). Do not commit.
 slack-config.json
 script/debug/**/slack-config.json
+
+/bin

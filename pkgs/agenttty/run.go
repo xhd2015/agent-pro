@@ -62,6 +62,12 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	if opts.Open {
 		opts.KeepTerminalAlive = true
 	}
+	// commandcode-tty: always keep PTY alive so snapshot/attach work after run.
+	// Headless mode injects -p (non-interactive) so cmd exits cleanly while the
+	// serve persists the scrollback. Open mode omits -p for interactive use.
+	if runnerID == "commandcode-tty" {
+		opts.KeepTerminalAlive = true
+	}
 	// Empty prompt OK for open / keep-alive reopen (e.g. resume without followup).
 	if strings.TrimSpace(opts.Prompt) == "" && !opts.Open && !opts.KeepTerminalAlive {
 		return "", "", fmt.Errorf("prompt is required")
@@ -92,9 +98,15 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	// (grok [PROMPT]). Resume follow-ups stay inject-only so argv keeps --resume.
 	// NoSubmit: never put draft on argv (real Grok auto-submits positional PROMPT).
 	// Headless still injects after banner for turn completion with fake TUI scripts.
+	// commandcode-tty headless: inject -p so cmd runs in non-interactive print mode
+	// and works with the mock server; open mode omits -p for interactive use.
 	if strings.TrimSpace(opts.ResumeSessionID) == "" && !opts.NoSubmit {
 		if p := strings.TrimSpace(opts.Prompt); p != "" {
-			argv = append(argv, p)
+			if runnerID == "commandcode-tty" && !opts.Open {
+				argv = append(argv, "-p", p)
+			} else {
+				argv = append(argv, p)
+			}
 		}
 	}
 
@@ -239,6 +251,9 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 			autoExitCancel = cancel
 			go autoExitCodexAfterTurnRemote(autoExitCtx, listenAddr, sessionID, promptText)
 		}
+	}
+	if runnerID == "commandcode-tty" && !opts.KeepTerminalAlive && !opts.Open {
+		// cmd -p exits non-interactively; auto-exit not needed.
 	}
 
 	var tailState struct {
@@ -393,8 +408,6 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	var waitErr error
 	if opts.KeepTerminalAlive {
 		if strings.TrimSpace(promptText) == "" {
-			// Reopen-only (e.g. resume without followup): banner already waited;
-			// no user turn to complete. Leave PTY alive and return.
 			waitErr = nil
 		} else {
 			var extraComplete func() bool
@@ -437,8 +450,10 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	streamed := tailState.streamed
 	tailState.Unlock()
 
-	if !streamed && opts.Emit != nil && runnerID == "codex-tty" {
-		fmt.Fprintf(opts.Stderr, "codex-tty: codex transcript not found; falling back to scrollback capture\n")
+	if !streamed && opts.Emit != nil && (runnerID == "codex-tty" || runnerID == "commandcode-tty") {
+		if runnerID == "codex-tty" {
+			fmt.Fprintf(opts.Stderr, "codex-tty: codex transcript not found; falling back to scrollback capture\n")
+		}
 		text := strings.TrimSpace(captured)
 		if text != "" {
 			if emitErr := opts.Emit(types.AgentEvent{
