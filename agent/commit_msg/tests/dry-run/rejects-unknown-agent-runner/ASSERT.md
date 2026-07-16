@@ -1,6 +1,7 @@
 ## Expected
 - gen-commit-msg returns an error for unsupported agent runner under `--dry-run`.
-- Error mentions unsupported runner / `codex` / supported `opencode` (existing pattern).
+- Error mentions unsupported runner / `codex`.
+- Error's supported list includes both `opencode` and `commandcode`.
 
 ## Side Effects
 - Mock success path is not taken (stdout is not mock B alone as success).
@@ -31,6 +32,10 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	}
 	if !strings.Contains(errMsg, "opencode") {
 		t.Fatalf("error should mention supported opencode, got: %v", resp.Err)
+	}
+	if !strings.Contains(errMsg, "commandcode") {
+		// Classic TDD RED until supported list expands to include commandcode.
+		t.Fatalf("error should mention supported commandcode, got: %v", resp.Err)
 	}
 	AssertNoAgentInvoked(t, resp)
 }

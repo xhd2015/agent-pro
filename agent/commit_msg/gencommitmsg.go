@@ -1,6 +1,7 @@
 package commit_msg
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/xhd2015/agent-pro/agent/exec/tool_exec"
 	"github.com/xhd2015/agent-pro/agent/git_runner"
 	"github.com/xhd2015/agent-pro/agent/opencode/models"
 	"github.com/xhd2015/agent-pro/agent/opencode/run"
@@ -29,7 +31,7 @@ Options:
   --model MODEL
               Model to use for generation
   --agent-runner RUNNER
-              Agent runner to use (opencode, default: opencode)
+              Agent runner to use (opencode|commandcode, default: opencode)
   --agent-runner-binary PATH
               Override the agent runner executable path
   --commit     Run git commit with the generated message after printing it
@@ -70,8 +72,8 @@ func RunGenCommitMsg(args []string) error {
 	if agentRunner == "" {
 		agentRunner = "opencode"
 	}
-	if agentRunner != "opencode" {
-		return fmt.Errorf("unsupported agent runner: %s (supported: opencode)", agentRunner)
+	if agentRunner != "opencode" && agentRunner != "commandcode" {
+		return fmt.Errorf("unsupported agent runner: %s (supported: opencode, commandcode)", agentRunner)
 	}
 
 	inside, err := git.IsInsideGit(dir)
@@ -231,46 +233,66 @@ Git diff:
 Respond with ONLY a JSON object in this exact format (no other text):
 {"title": "<short title>", "description": "<optional short description>"}`, stagedDiff)
 
-	logger.Log("$ opencode models")
-	freeModels, preferredModel, err := models.ListFree()
-	if err != nil {
-		logger.Log(fmt.Sprintf("Warning: Could not get free models: %v", err))
-	} else {
-		logger.Log(fmt.Sprintf("Free models: %s", strings.Join(freeModels, ", ")))
-		if preferredModel != "" && optionModel == "" {
-			logger.Log(fmt.Sprintf("Free model suggestion: %s", preferredModel))
+	runner := options.AgentRunner
+	if runner == "" {
+		runner = "opencode"
+	}
+
+	var rawText string
+	switch runner {
+	case "commandcode":
+		out, err := runCommandCodeAgent(dir, options, commitPrompt, fileCount, len(stagedDiff))
+		if err != nil {
+			return "", err
 		}
-	}
+		rawText = strings.TrimSpace(out)
+		if rawText == "" {
+			return "", fmt.Errorf("failed to parse commit message from commandcode output")
+		}
+	case "opencode":
+		logger.Log("$ opencode models")
+		freeModels, preferredModel, err := models.ListFree()
+		if err != nil {
+			logger.Log(fmt.Sprintf("Warning: Could not get free models: %v", err))
+		} else {
+			logger.Log(fmt.Sprintf("Free models: %s", strings.Join(freeModels, ", ")))
+			if preferredModel != "" && optionModel == "" {
+				logger.Log(fmt.Sprintf("Free model suggestion: %s", preferredModel))
+			}
+		}
 
-	actualModel := preferredModel
-	if optionModel != "" {
-		actualModel = optionModel
-	}
-	logger.Log(fmt.Sprintf("Using model: %s", actualModel))
+		actualModel := preferredModel
+		if optionModel != "" {
+			actualModel = optionModel
+		}
+		logger.Log(fmt.Sprintf("Using model: %s", actualModel))
 
-	logger.Log(fmt.Sprintf("$ opencode run  [prompt: Generate brief git commit message for %d staged file(s), %d chars]", fileCount, len(stagedDiff)))
-	logger.Log("Running agent...")
+		logger.Log(fmt.Sprintf("$ opencode run  [prompt: Generate brief git commit message for %d staged file(s), %d chars]", fileCount, len(stagedDiff)))
+		logger.Log("Running agent...")
 
-	ctx := context.Background()
-	output, sessionID, err := run.Run(ctx, run.Options{
-		Dir:       dir,
-		Model:     actualModel,
-		Prompt:    commitPrompt,
-		Logger:    logger,
-		AgentPath: options.AgentRunnerBinary,
-		Env:       options.AgentEnv,
-	})
-	_ = sessionID
-	if err != nil {
-		return "", fmt.Errorf("agent failed: %w", err)
-	}
+		ctx := context.Background()
+		output, sessionID, err := run.Run(ctx, run.Options{
+			Dir:       dir,
+			Model:     actualModel,
+			Prompt:    commitPrompt,
+			Logger:    logger,
+			AgentPath: options.AgentRunnerBinary,
+			Env:       options.AgentEnv,
+		})
+		_ = sessionID
+		if err != nil {
+			return "", fmt.Errorf("agent failed: %w", err)
+		}
 
-	rawText := parseOpencodeJSONOutput(output)
-	if rawText == "" {
-		rawText = strings.TrimSpace(output)
-	}
-	if rawText == "" {
-		return "", fmt.Errorf("failed to parse commit message from opencode output")
+		rawText = parseOpencodeJSONOutput(output)
+		if rawText == "" {
+			rawText = strings.TrimSpace(output)
+		}
+		if rawText == "" {
+			return "", fmt.Errorf("failed to parse commit message from opencode output")
+		}
+	default:
+		return "", fmt.Errorf("unsupported agent runner: %s (supported: opencode, commandcode)", runner)
 	}
 
 	// Post-parse sanitize choke point: strip anti-patterns; hard-fail if unusable.
@@ -284,6 +306,53 @@ Respond with ONLY a JSON object in this exact format (no other text):
 	}
 
 	return commitMessage, nil
+}
+
+// runCommandCodeAgent invokes Command Code (`cmd` on PATH, or AgentRunnerBinary override).
+// Argv: -p <prompt> --skip-onboarding --yolo --max-turns 1 [-m <model>]
+// Full stdout is returned (no opencode NDJSON parse).
+func runCommandCodeAgent(dir string, options GenerateOptions, commitPrompt string, fileCount, stagedDiffLen int) (string, error) {
+	logger := options.Logger
+
+	// Skip models.ListFree for commandcode; only honor an explicit --model.
+	if options.Model != "" {
+		logger.Log(fmt.Sprintf("Using model: %s", options.Model))
+	}
+
+	args := []string{"-p", commitPrompt, "--skip-onboarding", "--yolo", "--max-turns", "1"}
+	if options.Model != "" {
+		args = append(args, "-m", options.Model)
+	}
+
+	binLabel := "cmd"
+	if options.AgentRunnerBinary != "" {
+		binLabel = filepath.Base(options.AgentRunnerBinary)
+	}
+	logger.Log(fmt.Sprintf("$ %s -p …  [prompt: Generate brief git commit message for %d staged file(s), %d chars]", binLabel, fileCount, stagedDiffLen))
+	logger.Log("Running agent...")
+
+	cmd, err := tool_exec.New("cmd", args, &tool_exec.Options{
+		Dir:        dir,
+		CustomPath: options.AgentRunnerBinary,
+		Env:        options.AgentEnv,
+	})
+	if err != nil {
+		return "", fmt.Errorf("agent failed: %w", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if se := strings.TrimSpace(stderr.String()); se != "" {
+			logger.Log(se)
+		}
+		return "", fmt.Errorf("agent failed: %w", err)
+	}
+	if se := strings.TrimSpace(stderr.String()); se != "" {
+		logger.Log(se)
+	}
+	return stdout.String(), nil
 }
 
 type unstagedItem struct {

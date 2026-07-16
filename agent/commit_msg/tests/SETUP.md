@@ -1,21 +1,27 @@
 # Scenario
 
-**Feature**: gen-commit-msg generates commit messages via fake-opencode and optionally commits
+**Feature**: gen-commit-msg generates commit messages via agent runners and optionally commits
 
 ```
-git repo with staged diff -> gen-commit-msg -> fake-opencode mock events -> parsed message
+# opencode path (default)
+git repo with staged diff -> gen-commit-msg --agent-runner opencode -> fake-opencode mock events -> parsed message
+
+# commandcode path
+git repo with staged diff -> gen-commit-msg --agent-runner commandcode -> llm-mock-run-commandcode (+ hook) -> full stdout JSON
+
 optional --commit -> git commit (must not race with concurrent git from agent)
 ```
 
 ## Preconditions
-- The repository contains `cmd/fake-opencode` and `agent/commit_msg`.
-- Tests build `fake-opencode` and call `commit_msg.RunGenCommitMsg` or `commit_msg.Generate`.
+- The repository contains `cmd/fake-opencode`, `cmd/gen-commit-msg`, `agent/commit_msg`,
+  and `agent/llm/llm-mock/llm-mock-run-commandcode`.
+- Tests build agent mocks and call `commit_msg.RunGenCommitMsg` (or CLI `-h` subprocess).
 
 ## Steps
-1. Build `fake-opencode` into the temp directory.
+1. Build `fake-opencode` into the temp directory (default agent binary).
 2. Initialize an isolated git repository (optionally with a worktree).
-3. Write a leaf-specific mock config when needed.
-4. Run gen-commit-msg with `--agent-runner=opencode` and `--agent-runner-binary`.
+3. Write a leaf-specific mock config / commandcode hook when needed.
+4. Run gen-commit-msg with `--agent-runner` and optional `--agent-runner-binary`.
 
 ```go
 import (
@@ -36,6 +42,7 @@ func Setup(t *testing.T, req *Request) error {
 	_ = WriteMockConfig
 	_ = WriteFile
 	_ = captureRunGenCommitMsg
+	_ = captureGenCommitMsgHelp
 	req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../.."))
 	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
 		return fmt.Errorf("repo root not found: %w", err)
@@ -129,6 +136,13 @@ func WriteMockConfig(t *testing.T, req *Request, body string) {
 
 func captureRunGenCommitMsg(t *testing.T, req *Request) (*Response, error) {
 	t.Helper()
+
+	// -h/--help calls os.Exit(0) in less-flags unless HelpNoExit; run the CLI binary
+	// in a subprocess so the test process is not terminated.
+	if req.Help {
+		return captureGenCommitMsgHelp(t, req)
+	}
+
 	gitDir := req.GitDir
 	if gitDir == "" {
 		gitDir = filepath.Join(req.TempDir, "repo")
@@ -153,10 +167,14 @@ func captureRunGenCommitMsg(t *testing.T, req *Request) (*Response, error) {
 	_ = os.MkdirAll(opencodeConfigDir, 0755)
 	oldMockConfig := os.Getenv("FAKE_OPENCODE_MOCK_CONFIG")
 	oldOpencodeConfigDir := os.Getenv("OPENCODE_CONFIG_DIR")
+	oldCommandCodeHook := os.Getenv("LLM_MOCK_RUN_COMMANDCODE_COMMAND")
 	if req.MockConfigPath != "" {
 		os.Setenv("FAKE_OPENCODE_MOCK_CONFIG", req.MockConfigPath)
 	}
 	os.Setenv("OPENCODE_CONFIG_DIR", opencodeConfigDir)
+	if req.CommandCodeHook != "" {
+		os.Setenv("LLM_MOCK_RUN_COMMANDCODE_COMMAND", req.CommandCodeHook)
+	}
 	defer func() {
 		if oldMockConfig == "" {
 			os.Unsetenv("FAKE_OPENCODE_MOCK_CONFIG")
@@ -167,6 +185,11 @@ func captureRunGenCommitMsg(t *testing.T, req *Request) (*Response, error) {
 			os.Unsetenv("OPENCODE_CONFIG_DIR")
 		} else {
 			os.Setenv("OPENCODE_CONFIG_DIR", oldOpencodeConfigDir)
+		}
+		if oldCommandCodeHook == "" {
+			os.Unsetenv("LLM_MOCK_RUN_COMMANDCODE_COMMAND")
+		} else {
+			os.Setenv("LLM_MOCK_RUN_COMMANDCODE_COMMAND", oldCommandCodeHook)
 		}
 	}()
 
@@ -208,6 +231,42 @@ func captureRunGenCommitMsg(t *testing.T, req *Request) (*Response, error) {
 	lines := strings.Split(strings.TrimSpace(resp.Stdout), "\n")
 	if len(lines) > 0 && lines[0] != "" {
 		resp.Message = lines[0]
+	}
+	return resp, nil
+}
+
+// captureGenCommitMsgHelp runs cmd/gen-commit-msg -h in a subprocess.
+func captureGenCommitMsgHelp(t *testing.T, req *Request) (*Response, error) {
+	t.Helper()
+	bin := req.GenCommitMsgBin
+	if bin == "" {
+		if req.TempDir == "" {
+			return nil, fmt.Errorf("help capture requires TempDir or GenCommitMsgBin")
+		}
+		bin = filepath.Join(req.TempDir, "gen-commit-msg")
+		build := exec.Command("go", "build", "-o", bin, "./cmd/gen-commit-msg")
+		build.Dir = req.RepoRoot
+		if out, err := build.CombinedOutput(); err != nil {
+			return nil, fmt.Errorf("build gen-commit-msg: %w\n%s", err, string(out))
+		}
+		req.GenCommitMsgBin = bin
+	}
+	cmd := exec.Command(bin, "-h")
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+	runErr := cmd.Run()
+	resp := &Response{
+		Stdout: stdoutBuf.String(),
+		Stderr: stderrBuf.String(),
+		Err:    runErr,
+	}
+	if runErr != nil {
+		if ee, ok := runErr.(*exec.ExitError); ok {
+			resp.ExitCode = ee.ExitCode()
+		} else {
+			resp.ExitCode = 1
+		}
 	}
 	return resp, nil
 }

@@ -9,7 +9,7 @@ staged set -> gen-commit-msg --dry-run -> stdout mock B (N files)
   # --commit would: git commit on stderr only
 
 # validation still applies under dry-run
---agent-runner unknown -> unsupported runner error (before mock success)
+--agent-runner unknown -> unsupported runner error (supported: opencode, commandcode)
 empty index -> no staged changes error
 ```
 
@@ -17,7 +17,7 @@ empty index -> no staged changes error
 - Root harness from `agent/commit_msg/tests/SETUP.md` has initialized `req.TempDir`.
 - Pure dry-run success paths do not require a real agent binary (leaves may point
   `--agent-runner-binary` at a non-existent path to prove the agent is not invoked).
-- `--dry-run` is not implemented yet (classic TDD: leaves assert intended behavior → RED).
+- Supported agent runners under dry-run validation: `opencode`, `commandcode`.
 
 ## Steps
 1. Inherit harness from root SETUP.md.

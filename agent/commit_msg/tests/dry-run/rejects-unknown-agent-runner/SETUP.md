@@ -5,7 +5,7 @@
 ```
 # validation before pure-plan success
 gen-commit-msg --dry-run --agent-runner codex
-  -> error: unsupported agent runner: codex (supported: opencode)
+  -> error: unsupported agent runner: codex (supported: opencode, commandcode)
 ```
 
 ## Preconditions
