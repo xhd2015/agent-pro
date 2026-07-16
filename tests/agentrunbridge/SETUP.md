@@ -1,6 +1,6 @@
 # Scenario
 
-**Feature**: shared agent-run bridge library (`Run` + `RunInteractiveOpen`)
+**Feature**: shared agent-run bridge library (`Run` + `RunInteractiveOpen` + `RunInteractiveDetach`)
 
 ```
 # pure argv
@@ -11,7 +11,9 @@ tty status stdout -> ParseTTYStatus / IsSessionReady -> ready?
 
 # exec with fakes
 LookPath + RunCommand + RunOutput hooks
-  -> Run(RunOpts) | RunInteractiveOpen(InteractiveOpenOpts)
+  -> Run(RunOpts)
+  |  RunInteractiveOpen(InteractiveOpenOpts)
+  |  RunInteractiveDetach(InteractiveOpenOpts)
   -> optional wait-ready poll loop
   -> RunResult | error
 ```
@@ -21,17 +23,22 @@ LookPath + RunCommand + RunOutput hooks
 - Package `github.com/xhd2015/agent-pro/pkgs/agentrunbridge` exports:
   - `Run(opts RunOpts) (RunResult, error)`
   - `RunInteractiveOpen(opts InteractiveOpenOpts) (RunResult, error)`
+  - `RunInteractiveDetach(opts InteractiveOpenOpts) (RunResult, error)`
   - `BuildArgs(opts RunOpts) []string`
   - `ParseTTYStatus(stdout string) (screen, sendable string)`
   - `IsSessionReady(stdout string) bool`
 - Types: `RunOpts`, `RunResult`, `InteractiveOpenOpts` with fields per REQUIREMENT-DESIGN
-  (including `Env []string` for agent-run `-e KEY=VALUE`).
+  (including `Env []string` for agent-run `-e KEY=VALUE`, and `Detach bool` on
+  `RunOpts` → `--detach`).
 - Test hooks on opts: `LookPath`, `RunCommand`, `RunOutput` (and optional
   `ReadyTimeout` / `ReadyPollInterval` on interactive opts for short timeouts).
 - **No real `agent-run` binary, PATH, or iTerm** — all unit leaves use fakes.
 - Argv uses equals form: `--session-id=`, `--agent-runner=`, `--dir=`.
 - `Env` entries emit two tokens each: `-e`, `KEY=VALUE`, after other flags, before `--`.
 - `BuildArgs` returns args **without** the binary name (first element is `run`).
+- Detach profile: when `Detach` true, emit `--detach` and place prompt after `--`
+  (same prompt shape as `Open`); never emit `--open` / `--new-terminal` from
+  `RunInteractiveDetach` fill.
 
 ## Steps
 

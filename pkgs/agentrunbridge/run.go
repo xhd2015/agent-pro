@@ -17,7 +17,7 @@ const (
 // RunOpts is the full-config entrypoint for launching agent-run.
 type RunOpts struct {
 	Prompt, SessionID, Binary, AgentRunner, RunnerConfigHome, WorkspaceDir string
-	AutoSendOrResume, KeepTTY, NewTerminal, Open, NoSubmit, Stateless      bool
+	AutoSendOrResume, KeepTTY, NewTerminal, Open, Detach, NoSubmit, Stateless bool
 	// AllowRelocateResumeSessionDir maps to agent-run
 	// --allow-relocate-resume-session-dir (resume --dir vs grok session cwd).
 	AllowRelocateResumeSessionDir bool

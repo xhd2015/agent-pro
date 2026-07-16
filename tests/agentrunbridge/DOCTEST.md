@@ -1,8 +1,9 @@
-# agentrunbridge — `Run` + `RunInteractiveOpen`
+# agentrunbridge — `Run` + `RunInteractiveOpen` + `RunInteractiveDetach`
 
 Doc-style tests for `github.com/xhd2015/agent-pro/pkgs/agentrunbridge`, a shared
 library that maps structured options to `agent-run` CLI argv, optionally polls
-`tty status` until ready, and exposes a thin interactive `--open` profile.
+`tty status` until ready, and exposes thin interactive profiles:
+`--open` (`RunInteractiveOpen`) and `--detach` (`RunInteractiveDetach`).
 
 # DSN (Domain Specific Notion)
 
@@ -10,8 +11,10 @@ library that maps structured options to `agent-run` CLI argv, optionally polls
 
 - **`Run`** — full-config entrypoint. Maps `RunOpts` → argv, resolves binary,
   invokes `agent-run` via hooks or real exec, optionally waits until session ready.
-- **`RunInteractiveOpen`** — minimal interactive profile. Fills assumed
+- **`RunInteractiveOpen`** — minimal interactive **open** profile. Fills assumed
   `RunOpts` flags and **only** calls `Run` (no second exec path).
+- **`RunInteractiveDetach`** — minimal interactive **detach** profile. Fills
+  assumed `RunOpts` flags and **only** calls `Run` (same single exec path).
 - **`BuildArgs`** — pure function: `RunOpts` → CLI args after the binary name
   (starts with `run`). Preferred for argv leaves without exec.
 - **`ParseTTYStatus` / `IsSessionReady`** — pure parse of human
@@ -29,26 +32,42 @@ library that maps structured options to `agent-run` CLI argv, optionally polls
 - Prompt required non-empty after trim; empty → error, no exec.
 - Session mode: `--session-id=<id>` (equals form) when not `Stateless`.
 - `Stateless`: `run` + optional runner flags + prompt; no session id.
-- Empty `AgentRunner` in `Run` omits `--agent-runner`; `RunInteractiveOpen`
-  defaults it to `grok-tty`.
-- Interactive open mapping: `AutoSendOrResume`, `NewTerminal`, `Open`,
-  `WaitReady` true; `CaptureStdout` false.
+- Empty `AgentRunner` in `Run` omits `--agent-runner`; interactive profiles
+  (`RunInteractiveOpen` / `RunInteractiveDetach`) default it to `grok-tty`.
+- Interactive **open** mapping: `AutoSendOrResume`, `NewTerminal`, `Open`,
+  `WaitReady` true; `CaptureStdout` false; `Detach` false.
+- Interactive **detach** mapping: `AutoSendOrResume`, `Detach`, `WaitReady`
+  true; `NewTerminal`, `Open`, `CaptureStdout` false.
+- `Detach` on `RunOpts` → argv token `--detach`. Preferred mutual exclusion:
+  `Open` and `Detach` must not both be true (implementer may error in `Run` or
+  refuse to emit both flags).
+- When `Detach` is true, prompt placement matches open profile: `--` separator
+  then prompt (SeaTalk parity for detach local-bot logs).
 - `Env []string` on `RunOpts` / `InteractiveOpenOpts`: each `"KEY=VALUE"` emits
   repeatable `-e KEY=VALUE` (two argv tokens: `-e` then `KEY=VALUE`) **after**
-  other flags and **before** `--` / open prompt.
+  other flags and **before** `--` / prompt.
 - Ready when `EqualFold(screen,"banner") && EqualFold(sendable,"yes")`.
 - Defaults: `ReadyTimeout` 0 → 60s; `ReadyPollInterval` 0 → 500ms.
 - `CaptureStdout` true → `RunResult.Stdout` is trimmed launch stdout.
 - No durable storage; no real agent-run / iTerm in these unit leaves.
 
-**Locked argv form (SeaTalk parity)**
+**Locked argv form (SeaTalk open parity)**
 
 ```text
 <binary> run --session-id=<id> --agent-runner=<runner> \
   --auto-send-or-resume --new-terminal [--dir=<ws>] [--no-submit] --open -- <prompt>
 ```
 
+**Locked argv form (detach profile)**
+
+```text
+<binary> run --session-id=<id> --agent-runner=<runner> \
+  --auto-send-or-resume [--dir=<ws>] [--allow-relocate-resume-session-dir] \
+  --detach -- <prompt>
+```
+
 Equals-form flags (`--session-id=value`, `--agent-runner=value`, `--dir=value`).
+Detach profile: **no** `--open`, **no** `--new-terminal`.
 
 ## Version
 
@@ -63,6 +82,9 @@ tests/agentrunbridge/
 ├── build-args/                         # pure BuildArgs(RunOpts)
 │   ├── interactive-open-defaults/      # open profile flags + grok-tty + prompt
 │   ├── interactive-open-dir-nosubmit/  # + --dir + --no-submit
+│   ├── allow-relocate-resume-session-dir/ # + allow-relocate flag
+│   ├── detach-auto-send/               # Detach+AutoSend; no open/new-terminal
+│   ├── detach-dir/                     # detach + dir + allow-relocate
 │   ├── keep-tty-session/               # --keep-tty, session, no --open
 │   ├── auto-send-no-open/              # --auto-send-or-resume, Open false
 │   ├── stateless/                      # run + prompt; no session id
@@ -78,19 +100,24 @@ tests/agentrunbridge/
 │   ├── capture-stdout/                 # CaptureStdout → Result.Stdout trimmed
 │   ├── wait-ready-success/             # not-ready then ready → ok
 │   └── wait-ready-timeout/             # always not-ready + short timeout → error
-└── interactive-open/                   # RunInteractiveOpen → fills RunOpts → Run
-    ├── defaults-wait-ready/            # minimal opts + wait success
-    ├── dir-nosubmit/                   # WorkspaceDir + NoSubmit in argv
+├── interactive-open/                   # RunInteractiveOpen → fills RunOpts → Run
+│   ├── defaults-wait-ready/            # minimal opts + wait success
+│   ├── dir-nosubmit/                   # WorkspaceDir + NoSubmit in argv
+│   ├── runner-default-grok-tty/        # empty AgentRunner injects grok-tty
+│   ├── same-argv-as-run-fill/          # spy: same argv as equivalent RunOpts fill
+│   └── env-forwarded/                  # InteractiveOpenOpts.Env → -e in launch argv
+└── interactive-detach/                 # RunInteractiveDetach → fills RunOpts → Run
+    ├── defaults-wait-ready/            # AutoSend+Detach+WaitReady; no open/new-terminal
+    ├── dir-relocate/                   # WorkspaceDir + allow-relocate in argv
     ├── runner-default-grok-tty/        # empty AgentRunner injects grok-tty
-    ├── same-argv-as-run-fill/          # spy: same argv as equivalent RunOpts fill
-    └── env-forwarded/                  # InteractiveOpenOpts.Env → -e in launch argv
+    └── same-argv-as-run-fill/          # spy: same argv as filled detach RunOpts
 ```
 
 Parameter ranking (most → least significant):
 
-1. **API / concern** — pure args, pure status, `Run` exec path, interactive open profile
+1. **API / concern** — pure args, pure status, `Run` exec path, interactive open vs detach profile
 2. **Validation vs exec vs wait** — empty prompt / binary / capture / poll outcomes
-3. **Flag profile** — open defaults, dir/nosubmit, keep-tty, stateless, runner defaults, Env
+3. **Flag profile** — open/detach defaults, dir/nosubmit/relocate, keep-tty, stateless, runner defaults, Env
 
 ## Test Index
 
@@ -98,6 +125,9 @@ Parameter ranking (most → least significant):
 |---|------|-------------|
 | 1 | `build-args/interactive-open-defaults` | Open-profile `RunOpts` → argv with session, grok-tty, auto-send, new-terminal, open, `--`, prompt |
 | 2 | `build-args/interactive-open-dir-nosubmit` | Also `--dir=` and `--no-submit` |
+| 2a | `build-args/allow-relocate-resume-session-dir` | Open profile + `--allow-relocate-resume-session-dir` |
+| 2b | `build-args/detach-auto-send` | Detach profile: auto-send + `--detach`; no `--open` / `--new-terminal` |
+| 2c | `build-args/detach-dir` | Detach + `--dir=` + `--allow-relocate-resume-session-dir` |
 | 3 | `build-args/keep-tty-session` | `--keep-tty` + session; no `--open` |
 | 4 | `build-args/auto-send-no-open` | `--auto-send-or-resume` present; no `--open` |
 | 5 | `build-args/stateless` | `run` + prompt only; no session id flag |
@@ -116,6 +146,10 @@ Parameter ranking (most → least significant):
 | 17 | `interactive-open/runner-default-grok-tty` | Empty runner → `--agent-runner=grok-tty` |
 | 18 | `interactive-open/same-argv-as-run-fill` | Launch argv equals `BuildArgs` of filled `RunOpts` |
 | 19 | `interactive-open/env-forwarded` | `InteractiveOpenOpts.Env` forwarded as `-e` in launch argv |
+| 20 | `interactive-detach/defaults-wait-ready` | Minimal InteractiveDetach + wait; detach argv |
+| 21 | `interactive-detach/dir-relocate` | Dir + allow-relocate in detach launch argv |
+| 22 | `interactive-detach/runner-default-grok-tty` | Empty runner → `--agent-runner=grok-tty` |
+| 23 | `interactive-detach/same-argv-as-run-fill` | Launch argv equals `BuildArgs` of filled detach `RunOpts` |
 
 ## How to Run
 
@@ -124,8 +158,12 @@ doctest vet ./tests/agentrunbridge
 doctest test ./tests/agentrunbridge
 
 doctest test -v ./tests/agentrunbridge/build-args/interactive-open-defaults
+doctest test -v ./tests/agentrunbridge/build-args/detach-auto-send
+doctest test -v ./tests/agentrunbridge/build-args/detach-dir
 doctest test -v ./tests/agentrunbridge/run/wait-ready-timeout
 doctest test -v ./tests/agentrunbridge/interactive-open/same-argv-as-run-fill
+doctest test -v ./tests/agentrunbridge/interactive-detach/defaults-wait-ready
+doctest test -v ./tests/agentrunbridge/interactive-detach/same-argv-as-run-fill
 doctest test -v ./tests/agentrunbridge/build-args/env-flags
 doctest test -v ./tests/agentrunbridge/interactive-open/env-forwarded
 ```
@@ -143,7 +181,7 @@ import (
 
 // Request drives one leaf via Mode. Leaves set Mode in Setup (root→leaf chain).
 type Request struct {
-	Mode string // build_args | status | run | interactive_open | interactive_open_vs_run
+	Mode string // build_args | status | run | interactive_open | interactive_open_vs_run | interactive_detach | interactive_detach_vs_run
 
 	// Shared option fields (mapped into RunOpts or InteractiveOpenOpts).
 	Prompt           string
@@ -156,20 +194,22 @@ type Request struct {
 	KeepTTY          bool
 	NewTerminal      bool
 	Open             bool
-	NoSubmit         bool
+	// Detach maps to agent-run --detach (RunInteractiveDetach profile).
+	Detach   bool
+	NoSubmit bool
 	// AllowRelocateResumeSessionDir maps to agent-run --allow-relocate-resume-session-dir.
 	AllowRelocateResumeSessionDir bool
 	Stateless                     bool
 	WaitReady                     bool
-	ReadyTimeout     time.Duration
-	ReadyPollInterval time.Duration
-	CaptureStdout    bool
-	Env              []string // each "KEY=VALUE" → agent-run -e KEY=VALUE
+	ReadyTimeout                  time.Duration
+	ReadyPollInterval             time.Duration
+	CaptureStdout                 bool
+	Env                           []string // each "KEY=VALUE" → agent-run -e KEY=VALUE
 
 	// status mode
 	StatusStdout string
 
-	// Scripted hooks for run / interactive_open modes.
+	// Scripted hooks for run / interactive_* modes.
 	LookPathFail    bool
 	LookPathBin     string // returned path when LookPath succeeds; default "/fake/agent-run"
 	LaunchStdout    string // stdout returned when CaptureStdout path uses RunOutput for launch
@@ -198,7 +238,7 @@ type Response struct {
 	LaunchCalls     int
 	StatusPollCalls int
 
-	// ExpectedArgs is filled in interactive_open_vs_run (BuildArgs of filled RunOpts).
+	// ExpectedArgs is filled in interactive_*_vs_run (BuildArgs of filled RunOpts).
 	ExpectedArgs []string
 }
 
@@ -220,17 +260,28 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 		return resp, nil
 
 	case "run":
-		return runPackage(t, req, resp, false)
+		return runPackage(t, req, resp, "run")
 
 	case "interactive_open":
-		return runPackage(t, req, resp, true)
+		return runPackage(t, req, resp, "interactive_open")
 
 	case "interactive_open_vs_run":
 		// Capture launch argv from RunInteractiveOpen, compare to BuildArgs of filled opts.
 		filled := filledInteractiveRunOpts(req)
 		resp.ExpectedArgs = agentrunbridge.BuildArgs(filled)
-		if _, err := runPackage(t, req, resp, true); err != nil && resp.ErrString == "" {
+		if _, err := runPackage(t, req, resp, "interactive_open"); err != nil && resp.ErrString == "" {
 			// runPackage already stores API errors on resp; only surface harness errors.
+			return resp, err
+		}
+		return resp, nil
+
+	case "interactive_detach":
+		return runPackage(t, req, resp, "interactive_detach")
+
+	case "interactive_detach_vs_run":
+		filled := filledInteractiveDetachRunOpts(req)
+		resp.ExpectedArgs = agentrunbridge.BuildArgs(filled)
+		if _, err := runPackage(t, req, resp, "interactive_detach"); err != nil && resp.ErrString == "" {
 			return resp, err
 		}
 		return resp, nil
@@ -240,7 +291,7 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 	}
 }
 
-// hookBag holds recorded exec traffic for one Run / RunInteractiveOpen call.
+// hookBag holds recorded exec traffic for one Run / interactive profile call.
 type hookBag struct {
 	mu sync.Mutex
 
@@ -253,7 +304,9 @@ type hookBag struct {
 	launchArgs     []string
 }
 
-func runPackage(t *testing.T, req *Request, resp *Response, interactive bool) (*Response, error) {
+// profile selects which package entrypoint to call.
+// "run" | "interactive_open" | "interactive_detach"
+func runPackage(t *testing.T, req *Request, resp *Response, profile string) (*Response, error) {
 	t.Helper()
 	rec := &hookBag{}
 	optsHooks := makeHooks(req, rec)
@@ -262,9 +315,13 @@ func runPackage(t *testing.T, req *Request, resp *Response, interactive bool) (*
 		result agentrunbridge.RunResult
 		err    error
 	)
-	if interactive {
+	switch profile {
+	case "interactive_open":
 		result, err = agentrunbridge.RunInteractiveOpen(toInteractiveOpts(req, &optsHooks))
-	} else {
+	case "interactive_detach":
+		// Classic RED until RunInteractiveDetach exists.
+		result, err = agentrunbridge.RunInteractiveDetach(toInteractiveOpts(req, &optsHooks))
+	default:
 		result, err = agentrunbridge.Run(toRunOpts(req, &optsHooks))
 	}
 
@@ -363,6 +420,7 @@ func toRunOpts(req *Request, hooks *hookFns) agentrunbridge.RunOpts {
 		KeepTTY:                       req.KeepTTY,
 		NewTerminal:                   req.NewTerminal,
 		Open:                          req.Open,
+		Detach:                        req.Detach,
 		NoSubmit:                      req.NoSubmit,
 		AllowRelocateResumeSessionDir: req.AllowRelocateResumeSessionDir,
 		Stateless:                     req.Stateless,
@@ -381,11 +439,8 @@ func toRunOpts(req *Request, hooks *hookFns) agentrunbridge.RunOpts {
 }
 
 func toInteractiveOpts(req *Request, hooks *hookFns) agentrunbridge.InteractiveOpenOpts {
-	// InteractiveOpenOpts fields per requirement: SessionID, Prompt, WorkspaceDir,
-	// NoSubmit, Binary, AgentRunner, Env, Logf, plus optional test hooks (LookPath,
-	// RunCommand, RunOutput) forwarded into the filled RunOpts.
-	// ReadyTimeout / ReadyPollInterval live only on RunOpts; InteractiveOpen uses
-	// package defaults after fill (0 → 60s / 500ms). Short-timeout wait leaves use Mode=run.
+	// InteractiveOpenOpts is shared by RunInteractiveOpen and RunInteractiveDetach
+	// (minimal session/prompt/dir hooks). Profile fill differs inside each wrapper.
 	opts := agentrunbridge.InteractiveOpenOpts{
 		SessionID:                     req.SessionID,
 		Prompt:                        req.Prompt,
@@ -422,6 +477,31 @@ func filledInteractiveRunOpts(req *Request) agentrunbridge.RunOpts {
 		AutoSendOrResume:              true,
 		NewTerminal:                   true,
 		Open:                          true,
+		Detach:                        false,
+		WaitReady:                     true,
+		CaptureStdout:                 false,
+		Env:                           append([]string(nil), req.Env...),
+	}
+}
+
+// filledInteractiveDetachRunOpts mirrors RunInteractiveDetach → RunOpts mapping.
+func filledInteractiveDetachRunOpts(req *Request) agentrunbridge.RunOpts {
+	runner := strings.TrimSpace(req.AgentRunner)
+	if runner == "" {
+		runner = "grok-tty"
+	}
+	return agentrunbridge.RunOpts{
+		Prompt:                        req.Prompt,
+		SessionID:                     req.SessionID,
+		Binary:                        req.Binary,
+		AgentRunner:                   runner,
+		WorkspaceDir:                  req.WorkspaceDir,
+		NoSubmit:                      req.NoSubmit,
+		AllowRelocateResumeSessionDir: req.AllowRelocateResumeSessionDir,
+		AutoSendOrResume:              true,
+		NewTerminal:                   false,
+		Open:                          false,
+		Detach:                        true,
 		WaitReady:                     true,
 		CaptureStdout:                 false,
 		Env:                           append([]string(nil), req.Env...),

@@ -42,6 +42,9 @@ func BuildArgs(opts RunOpts) []string {
 	if opts.Open {
 		args = append(args, "--open")
 	}
+	if opts.Detach {
+		args = append(args, "--detach")
+	}
 
 	// Env pairs after other flags and before "--" / prompt (agent-run StringSlice).
 	for _, e := range opts.Env {
@@ -53,11 +56,11 @@ func BuildArgs(opts RunOpts) []string {
 	}
 
 	prompt := strings.TrimSpace(opts.Prompt)
-	if opts.Open {
-		// Open profile: prompt after "--" separator (SeaTalk parity).
+	if opts.Open || opts.Detach {
+		// Open/detach profile: prompt after "--" separator (SeaTalk parity).
 		args = append(args, "--", prompt)
 	} else {
-		// Keep-tty / non-open / stateless: prompt as last arg (no required "--").
+		// Keep-tty / non-open / non-detach / stateless: prompt as last arg (no required "--").
 		args = append(args, prompt)
 	}
 	return args
