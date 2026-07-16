@@ -15,7 +15,7 @@ Verification runs in a **persistent sandbox** that does not touch real user data
 |------|---------|
 | `~/.sandbox/default-home` | `HOME` during verify (`.tsk`, `.config`, etc.) |
 | `~/.sandbox/bin` | Built binaries — **never** `~/go/bin` |
-| `~/.sandbox/transcripts/` | Markdown transcripts (primary deliverable) |
+| `~/.sandbox/transcripts/` | Markdown transcripts (primary on-disk deliverable) |
 
 ## enter-sandbox.sh
 
@@ -39,7 +39,7 @@ to keep prior sandbox state.
 
 - Writing to real `~/.tsk`, `~/.config`, or `~/go/bin`
 - `go install` without `-o "$SANDBOX_BIN/..."`
-- Smoke commands without sourcing `enter-sandbox.sh` first
+- Scenario or smoke commands without sourcing `enter-sandbox.sh` first
 
 ## Optional strict mode
 

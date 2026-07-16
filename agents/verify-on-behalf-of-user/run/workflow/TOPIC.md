@@ -1,25 +1,35 @@
 ---
 name: verify-on-behalf-of-user/workflow
 description: >-
-  Six-phase verify workflow: scope, git sanity, sandbox build, smoke commands,
-  browser/logs, optional doctest spot-check, then transcript.
+  Verify workflow: scope and depth, git sanity, sandbox build, runtime bring-up,
+  scenario execution (CLI and/or browser-agent), evidence and teardown, then
+  write transcript and inline its full contents.
 ---
 
 # Workflow
 
 Run every phase **after** sourcing `enter-sandbox.sh` (see `sandbox` topic).
+Read `scenario` for depth labels, surface gate, and browser-agent rules.
 
-## Phase 0 — Scope
+## Phase 0 — Scope, surface, depth
 
 From conversation, requirement files, or user focus:
 
 1. What was claimed done?
 2. Which binaries/packages?
-3. Which smoke commands?
-4. Server or browser needed?
+3. **Surface** — classify: CLI-only, server/HTTP, frontend/UI, session lifecycle, multi-binary
+4. **Depth** — choose `smoke` \| `scenario` \| `full` and **always label it** with a one-line reason
+5. Which scenarios (user journeys)?
+6. Server or browser needed?
 
 If unclear, ask once. Read a **project recipe** when it exists (e.g.
 `docs/verify-recipes/<feature>.md` in the consumer repo).
+
+**Surface → depth rules** (see `scenario` topic):
+
+- Server, frontend/UI, or session lifecycle → depth ≥ **scenario** (runtime + real journey required)
+- Frontend/UI → **browser-agent** required; if unusable → **FAIL**
+- CLI-only may use **smoke** only when labeled and justified
 
 ## Phase 1 — Git sanity
 
@@ -46,32 +56,51 @@ $ go build -o "$SANDBOX_BIN/<binary>" <build-target>
 
 Capture exit codes and relevant stdout/stderr in the transcript.
 
-## Phase 3 — Smoke commands
+## Phase 3 — Runtime bring-up (required when surface needs it)
 
-Run commands from the project recipe. Rules:
+When server, web UI, or multi-process runtime is in scope:
+
+1. Start processes under sandbox env (`HOME`, isolated data homes as needed)
+2. **Wait for ready** (port listen / HTTP health) — do not only sleep
+3. Record in transcript: PID(s), base URL, log path, ready-check command + result
+
+Skip only for pure CLI-only surface at depth `smoke` (must still be labeled).
+
+## Phase 4 — Scenario execution
+
+Run **user journeys** from the recipe or from the claim — not only help/version.
+
+Rules:
 
 - All commands run **after** `enter-sandbox.sh`
 - Use `TSK_HOME="$HOME/.tsk"`, `TSK_USER`, `TSK_DATE` as needed
-- Assert exit code, stdout, stderr, on-disk artifacts
+- Assert exit code, stdout, stderr, HTTP, on-disk artifacts
+- **UI:** use **browser-agent only** (`session new` → open app URL → eval/screenshot).
+  Do **not** use `playwright-debug` here.
+- Prefer a project recipe’s scenario steps when present
 - Truncate huge output: `... (N lines omitted)`
+- Label each scenario (S1, S2, …) with expected observables and ✓/✗
 
-## Phase 4 — Browser / logs (if applicable)
+**Smoke depth:** still run the minimal real command that backs the claim; never
+leave depth unlabeled.
 
-For UI or server work, record in transcript:
+## Phase 5 — Evidence & teardown
 
-- URL opened (e.g. `http://localhost:8008/...`)
-- Tool used (browser-agent, DevTools, `tail` on server log)
-- Screenshot path if captured
+Record:
 
-Skip when the change is CLI-only.
+- Screenshot paths (UI), log tails, status dumps
+- Teardown: kill leftover PIDs, note sandbox data left for inspection
 
-## Phase 5 — Optional doctest spot-check
+If UI was required and browser-agent/Chrome/session failed → verdict **FAIL**.
 
-If cheap, re-run a small subset and record in transcript. Do not substitute for Phase 3.
+## Phase 6 — Optional doctest spot-check
 
-## Phase 6 — Write transcript
+If cheap, re-run a small subset and record in transcript. Do not substitute for Phase 3–4.
 
-See the `transcript` topic for format rules and the installed template at
-`templates/transcript.md`.
+## Phase 7 — Write transcript and inline full content
 
-**On FAIL:** stop at first failure, still save partial transcript.
+1. Write `~/.sandbox/transcripts/<ISO8601>-<slug>.md` (see `transcript` topic)
+2. **Print the full file body** in the agent reply (same content as on disk)
+3. Lead with path + verdict + labeled depth
+
+**On FAIL:** stop at first hard failure, still save partial transcript and **inline it**.

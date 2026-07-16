@@ -3,6 +3,9 @@
 | Field | Value |
 |-------|-------|
 | Scope | {{SCOPE}} |
+| Depth | **{{DEPTH}}** |
+| Depth reason | {{DEPTH_REASON}} |
+| Surface | {{SURFACE}} |
 | Started | {{STARTED}} |
 | Sandbox HOME | ~/.sandbox/default-home |
 | Sandbox bin | ~/.sandbox/bin |
@@ -45,41 +48,64 @@ $ go build -o "$SANDBOX_BIN/{{BINARY}}" {{BUILD_TARGET}}
 
 ---
 
-## 3. Smoke commands
+## 3. Runtime bring-up
 
-> **Annotation:** {{SMOKE_ANNOTATION}}
+> **Annotation:** {{RUNTIME_ANNOTATION}}
 
 ```sh
-{{SMOKE_COMMANDS}}
+{{RUNTIME_COMMANDS}}
 ```
 
-> **Check:** {{SMOKE_CHECK}}
+> **Check:** {{RUNTIME_CHECK}}
 
 ---
 
-## 4. On-disk / artifacts (optional)
+## 4. Scenarios
+
+> **Annotation:** {{SCENARIO_ANNOTATION}}
+> Depth is **{{DEPTH}}** — smoke is only a labeled downgrade when justified.
+
+### S1 — {{S1_TITLE}}
 
 ```sh
-{{ARTIFACT_COMMANDS}}
+{{S1_COMMANDS}}
 ```
 
-> **Check:** {{ARTIFACT_CHECK}}
+> **Check:** {{S1_CHECK}}
+
+### S2 — {{S2_TITLE}} (optional)
+
+```sh
+{{S2_COMMANDS}}
+```
+
+> **Check:** {{S2_CHECK}}
 
 ---
 
-## 5. Browser / logs (optional)
-
-> **Annotation:** {{BROWSER_ANNOTATION}}
+## 5. Evidence & teardown
 
 ```sh
-{{BROWSER_OR_LOGS}}
+{{EVIDENCE_AND_TEARDOWN}}
+```
+
+> **Check:** {{EVIDENCE_CHECK}}
+
+---
+
+## 6. Browser-agent (UI surfaces)
+
+> **Annotation:** UI verify uses **browser-agent only** (not playwright-debug). Missing UI path → **FAIL**.
+
+```sh
+{{BROWSER_AGENT_COMMANDS}}
 ```
 
 > **Check:** {{BROWSER_CHECK}}
 
 ---
 
-## 6. Doctest spot-check (optional)
+## 7. Doctest spot-check (optional)
 
 ```sh
 {{DOCTEST_COMMANDS}}
@@ -93,6 +119,13 @@ $ go build -o "$SANDBOX_BIN/{{BINARY}}" {{BUILD_TARGET}}
 
 {{SUMMARY}}
 
-Transcript file: `{{TRANSCRIPT_PATH}}`
+| Meta | Value |
+|------|-------|
+| Depth | {{DEPTH}} ({{DEPTH_REASON}}) |
+| Surface | {{SURFACE}} |
+| Verdict | **{{VERDICT}}** |
+| Transcript file | `{{TRANSCRIPT_PATH}}` |
 
 Sandbox data (inspect after verify): `~/.sandbox/default-home`
+
+**Agent:** after saving this file, print its **full contents** in the reply for direct review.

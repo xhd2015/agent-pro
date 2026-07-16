@@ -1,17 +1,19 @@
 # agent-pro verify-on-behalf-of-user Registration Tests
 
 Doc-style tests verifying `verify-on-behalf-of-user` is registered in
-`agent-pro skills`, exposes embedded SKILL.md, and installs utility scripts.
+`agent-pro skills`, exposes embedded SKILL.md and nested topics (including
+scenario), and installs utility scripts.
 
 # DSN (Domain Specific Notion)
 
 **agent-pro** `knownSkills` includes `verify-on-behalf-of-user` with embedded
-SKILL.md and `ExtraFiles` (scripts, templates). `agent-pro skill --install`
-writes SKILL.md plus bundled files under `.agents/skills/verify-on-behalf-of-user/`.
+SKILL.md and `ExtraFiles` (scripts, templates, nested topics). `agent-pro skill
+--install` writes SKILL.md plus bundled files under
+`.agents/skills/verify-on-behalf-of-user/`.
 
 ## Version
 
-0.0.1
+0.0.2
 
 ## Decision Tree
 
@@ -21,16 +23,18 @@ agent-pro/
 ├── SETUP.md
 ├── register/
 ├── list/
-└── install/
+├── install/
+└── scenario-topic/
 ```
 
 ## Test Index
 
 | # | Leaf | Description |
 |---|------|-------------|
-| 1 | `register` | `--show` prints `name: verify-on-behalf-of-user` + transcript section |
+| 1 | `register` | `--show` transcript topic + format rules; skill is registered |
 | 2 | `list` | `agent-pro skills` lists skill with description |
-| 3 | `install` | `--install` writes `scripts/enter-sandbox.sh` |
+| 3 | `install` | `--install` writes scripts, templates, scenario + transcript topics |
+| 4 | `scenario-topic` | `--show` scenario topic: depth labels, browser-agent, FAIL rules |
 
 ## How to Run
 
