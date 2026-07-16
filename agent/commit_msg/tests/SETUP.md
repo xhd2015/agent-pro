@@ -182,6 +182,9 @@ func captureRunGenCommitMsg(t *testing.T, req *Request) (*Response, error) {
 	if req.NoVerify {
 		args = append(args, "--no-verify")
 	}
+	if req.DryRun {
+		args = append(args, "--dry-run")
+	}
 
 	runErr := commit_msg.RunGenCommitMsg(args)
 

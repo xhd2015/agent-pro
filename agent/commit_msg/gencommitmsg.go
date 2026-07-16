@@ -1,7 +1,6 @@
 package commit_msg
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,6 +14,8 @@ import (
 	"github.com/xhd2015/agent-pro/agent/opencode/run"
 	"github.com/xhd2015/dot-pkgs/go-pkgs/file/detect"
 	"github.com/xhd2015/dot-pkgs/go-pkgs/git/submodule"
+	"github.com/xhd2015/gitops/git"
+	"github.com/xhd2015/gitops/gitwrite"
 	"github.com/xhd2015/less-gen/flags"
 )
 
@@ -33,6 +34,7 @@ Options:
               Override the agent runner executable path
   --commit     Run git commit with the generated message after printing it
   --no-verify  Skip git commit hooks (requires --commit)
+  --dry-run    Pure plan: inspect staged set, print mock message; no agent, no unstage, no commit
   -h, --help   Show this help message
 `
 
@@ -43,6 +45,7 @@ func RunGenCommitMsg(args []string) error {
 	var agentRunnerBinary string
 	var commit bool
 	var noVerify bool
+	var dryRun bool
 	_, err := flags.
 		String("--dir", &dir).
 		String("--model", &model).
@@ -50,6 +53,7 @@ func RunGenCommitMsg(args []string) error {
 		String("--agent-runner-binary", &agentRunnerBinary).
 		Bool("--commit", &commit).
 		Bool("--no-verify", &noVerify).
+		Bool("--dry-run", &dryRun).
 		Help("-h,--help", genCommitMsgHelp).
 		Parse(args)
 	if err != nil {
@@ -70,11 +74,23 @@ func RunGenCommitMsg(args []string) error {
 		return fmt.Errorf("unsupported agent runner: %s (supported: opencode)", agentRunner)
 	}
 
+	inside, err := git.IsInsideGit(dir)
+	if err != nil {
+		return err
+	}
+	if !inside {
+		return fmt.Errorf("not a git repository: %s", dir)
+	}
+
+	if dryRun {
+		return runGenCommitMsgDryRun(dir, commit, noVerify)
+	}
+
 	msg, err := Generate(dir, GenerateOptions{
-		Model:              model,
-		AgentRunner:        agentRunner,
-		AgentRunnerBinary:  agentRunnerBinary,
-		Logger:             &stderrLogger{},
+		Model:             model,
+		AgentRunner:       agentRunner,
+		AgentRunnerBinary: agentRunnerBinary,
+		Logger:            &stderrLogger{},
 	})
 	if err != nil {
 		return err
@@ -99,6 +115,50 @@ func RunGenCommitMsg(args []string) error {
 		if err != nil {
 			return fmt.Errorf("git commit failed: %w", err)
 		}
+	}
+
+	return nil
+}
+
+// runGenCommitMsgDryRun implements pure-plan --dry-run: inspect staged set, print
+// mock message B, plan would-unstage / would-commit on stderr, never call agent
+// or mutate the index/HEAD.
+func runGenCommitMsgDryRun(dir string, commit, noVerify bool) error {
+	stagedFiles, err := git.GetStagedFiles(dir)
+	if err != nil {
+		return fmt.Errorf("failed to list staged files: %w", err)
+	}
+	if len(stagedFiles) == 0 {
+		return fmt.Errorf("no staged changes to generate commit message for")
+	}
+
+	// Plan binary/submodule unstage without mutating the index.
+	binaries, subModuleDirs, err := detectUnstageCandidates(dir, stagedFiles)
+	if err != nil {
+		return fmt.Errorf("auto unstage failed: %w", err)
+	}
+	for _, b := range binaries {
+		if b.desc != "" {
+			fmt.Fprintf(os.Stderr, "would: unstage %s (%s)\n", b.path, b.desc)
+		} else {
+			fmt.Fprintf(os.Stderr, "would: unstage %s\n", b.path)
+		}
+	}
+	for _, sm := range subModuleDirs {
+		fmt.Fprintf(os.Stderr, "would: unstage %s/\n", sm)
+	}
+
+	n := len(stagedFiles)
+	fmt.Printf("dry-run: would generate commit message for %d staged file(s)\n", n)
+
+	if commit {
+		// Plan commit using the mock message as the planned -m payload.
+		mockMsg := fmt.Sprintf("dry-run: would generate commit message for %d staged file(s)", n)
+		commitCmd := "git commit -m " + shellQuote(mockMsg)
+		if noVerify {
+			commitCmd += " --no-verify"
+		}
+		fmt.Fprintf(os.Stderr, "would: %s\n", commitCmd)
 	}
 
 	return nil
@@ -144,26 +204,22 @@ func Generate(dir string, options GenerateOptions) (string, error) {
 	}
 
 	logger.Log("$ git diff --cached")
-	stagedDiffOutput, err := git_runner.DiffCached().Dir(dir).Output()
+	diff, err := git.DiffCached(dir)
 	if err != nil {
+		var pe *git.DiffCachedParseError
+		if errors.As(err, &pe) {
+			logger.Log(fmt.Sprintf("DiffCached parse error (raw length: %d chars): %v", len(pe.Raw), err))
+		}
 		return "", fmt.Errorf("failed to get staged diff: %w", err)
 	}
-
-	stagedDiff := string(stagedDiffOutput)
-	if stagedDiff == "" {
+	if diff == nil {
 		return "", fmt.Errorf("no staged changes to generate commit message for")
 	}
 
-	fileCount := strings.Count(stagedDiff, "diff --git")
-	if fileCount == 0 && len(stagedDiff) > 0 {
-		fileCount = 1
-	}
+	fileCount := diff.FileCount()
+	stagedDiff := diff.UnifiedTruncated(24)
 
-	logger.Log(fmt.Sprintf("Staged files: %d, Diff length: %d chars", fileCount, len(stagedDiff)))
-
-	const maxLinesPerFile = 24
-	stagedDiff = truncateDiffPerFile(stagedDiff, maxLinesPerFile)
-
+	logger.Log(fmt.Sprintf("Staged files: %d, Diff length: %d chars", fileCount, len(diff.Raw)))
 	logger.Log(fmt.Sprintf("Truncated diff length: %d chars", len(stagedDiff)))
 	logger.Log("Passing diff to agent...")
 
@@ -235,48 +291,40 @@ type unstagedItem struct {
 	desc string
 }
 
-func detectAndUnstage(dir string, logger Logger) error {
+// detectUnstageCandidates finds staged binaries and submodule paths that would
+// be auto-unstaged. stagedFiles may be nil to list ACMRT-filtered staged paths.
+// Paths are evaluated from the repo root (same chdir semantics as detectAndUnstage).
+func detectUnstageCandidates(dir string, stagedFiles []string) (binaries []unstagedItem, subModuleDirs []string, err error) {
 	dir = filepath.Clean(dir)
 
-	repoRootOut, err := git_runner.RevParse("--show-toplevel").Dir(dir).Output()
+	repoRoot, err := git.ShowToplevel(dir)
 	if err != nil {
-		return fmt.Errorf("failed to resolve git toplevel: %w", err)
+		return nil, nil, fmt.Errorf("failed to resolve git toplevel: %w", err)
 	}
-	repoRoot := strings.TrimSpace(string(repoRootOut))
 	if repoRoot == "" {
-		return fmt.Errorf("empty git toplevel")
+		return nil, nil, fmt.Errorf("empty git toplevel")
 	}
 
 	origDir, err := os.Getwd()
 	if err != nil {
-		return fmt.Errorf("getwd: %w", err)
+		return nil, nil, fmt.Errorf("getwd: %w", err)
 	}
 	if err := os.Chdir(repoRoot); err != nil {
-		return fmt.Errorf("chdir %s: %w", repoRoot, err)
+		return nil, nil, fmt.Errorf("chdir %s: %w", repoRoot, err)
 	}
 	defer os.Chdir(origDir)
 
-	output, err := git_runner.NewCommand("diff", "--cached", "--name-only", "--diff-filter=ACMRT", "--").Dir(dir).Output()
-	if err != nil {
-		return fmt.Errorf("failed to list staged files: %w", err)
-	}
-
-	var stagedFiles []string
-	scanner := bufio.NewScanner(strings.NewReader(string(output)))
-	for scanner.Scan() {
-		name := strings.TrimSpace(scanner.Text())
-		if name != "" {
-			stagedFiles = append(stagedFiles, name)
+	if stagedFiles == nil {
+		stagedFiles, err = git.GetStagedFiles(dir)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to list staged files: %w", err)
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("failed to scan staged files: %w", err)
-	}
 	if len(stagedFiles) == 0 {
-		return nil
+		return nil, nil, nil
 	}
 
-	subModuleDirs := submodule.DetectSubModules(stagedFiles)
+	subModuleDirs = submodule.DetectSubModules(stagedFiles)
 
 	isInSubmodule := func(f string) bool {
 		for _, smDir := range subModuleDirs {
@@ -287,7 +335,6 @@ func detectAndUnstage(dir string, logger Logger) error {
 		return false
 	}
 
-	var binaries []unstagedItem
 	for _, f := range stagedFiles {
 		if isInSubmodule(f) {
 			continue
@@ -297,7 +344,7 @@ func detectAndUnstage(dir string, logger Logger) error {
 			if errors.Is(err, os.ErrNotExist) {
 				continue
 			}
-			return fmt.Errorf("stat %s: %w", f, err)
+			return nil, nil, fmt.Errorf("stat %s: %w", f, err)
 		}
 		if info.IsDir() {
 			continue
@@ -307,11 +354,36 @@ func detectAndUnstage(dir string, logger Logger) error {
 			if errors.Is(err, os.ErrNotExist) {
 				continue
 			}
-			return fmt.Errorf("detect %s: %w", f, err)
+			return nil, nil, fmt.Errorf("detect %s: %w", f, err)
 		}
 		if isBin {
 			binaries = append(binaries, unstagedItem{path: f, desc: desc})
 		}
+	}
+
+	return binaries, subModuleDirs, nil
+}
+
+func detectAndUnstage(dir string, logger Logger) error {
+	binaries, subModuleDirs, err := detectUnstageCandidates(dir, nil)
+	if err != nil {
+		return err
+	}
+
+	// Rebuild toUnstage list (binaries + any staged path under a submodule).
+	// Re-list ACMRT staged files for submodule file paths.
+	stagedFiles, err := git.GetStagedFiles(dir)
+	if err != nil {
+		return fmt.Errorf("failed to list staged files: %w", err)
+	}
+
+	isInSubmodule := func(f string) bool {
+		for _, smDir := range subModuleDirs {
+			if strings.HasPrefix(f, smDir+string(filepath.Separator)) || f == smDir {
+				return true
+			}
+		}
+		return false
 	}
 
 	var toUnstage []string
@@ -350,22 +422,10 @@ func detectAndUnstage(dir string, logger Logger) error {
 	}
 
 	logger.Log("Unstaging binary/submodule entries...")
-	if err := unstageFiles(dir, toUnstage); err != nil {
+	if err := gitwrite.RestoreStaged(dir, toUnstage...); err != nil {
 		return err
 	}
 
-	return nil
-}
-
-func unstageFiles(dir string, files []string) error {
-	if len(files) == 0 {
-		return nil
-	}
-	args := append([]string{"restore", "--staged", "--"}, files...)
-	output, err := git_runner.NewCommand(args...).Dir(dir).Run()
-	if err != nil {
-		return fmt.Errorf("git restore --staged failed: %s: %w", string(output), err)
-	}
 	return nil
 }
 
@@ -479,29 +539,4 @@ func parseOpencodeJSONOutput(output string) string {
 	}
 
 	return strings.TrimSpace(lastStopText)
-}
-
-func truncateDiffPerFile(diff string, maxLines int) string {
-	parts := strings.Split("\n"+diff, "\ndiff --git ")
-	var b strings.Builder
-	first := true
-	for _, part := range parts {
-		if part == "" {
-			continue
-		}
-		section := "diff --git " + part
-		if !first {
-			b.WriteByte('\n')
-		}
-		first = false
-
-		lines := strings.Split(strings.TrimRight(section, "\n"), "\n")
-		if len(lines) <= maxLines {
-			b.WriteString(strings.Join(lines, "\n"))
-		} else {
-			b.WriteString(strings.Join(lines[:maxLines], "\n"))
-			b.WriteString(fmt.Sprintf("\n...(%d more lines omitted)", len(lines)-maxLines))
-		}
-	}
-	return b.String()
 }

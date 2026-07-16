@@ -7,6 +7,7 @@ require (
 	github.com/coder/websocket v1.8.14
 	github.com/tidwall/jsonc v0.3.3
 	github.com/xhd2015/dot-pkgs/go-pkgs v0.0.72
+	github.com/xhd2015/gitops v0.0.25
 	github.com/xhd2015/less-gen v0.0.19
 	github.com/xhd2015/xgo v1.2.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -27,13 +28,13 @@ require (
 )
 
 require (
-	github.com/kr/pretty v0.3.0 // indirect
 	github.com/rogpeppe/go-internal v1.15.0 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
-	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
+	github.com/xhd2015/go-coverage v1.0.41 // indirect
+	github.com/xhd2015/go-inspect v0.0.49 // indirect
 )
 
 require (

@@ -2,18 +2,27 @@
 
 Doc-style tests for `github.com/xhd2015/agent-pro/agent/commit_msg`, covering
 AI commit message generation with `fake-opencode`, the `--commit` git commit path,
-and post-parse sanitize of commit-message anti-patterns.
+post-parse sanitize of commit-message anti-patterns, and pure-plan `--dry-run`.
 
 # DSN (Domain Specific Notion)
 
-`gen-commit-msg` stages a diff, calls an opencode-compatible agent runner to
-produce a JSON commit message, optionally runs `git commit`. Tests use
-`fake-opencode` via `--agent-runner-binary` and `FAKE_OPENCODE_MOCK_CONFIG` to
-emit deterministic `step_start` / `text` / `step_finish` events. Race tests
-spawn a background `git status` loop during the agent phase to reproduce
-`index.lock` contention at commit time. The `--no-verify` flag forwards to
-`git commit --no-verify` when used with `--commit`; alone it must fail before
-the agent runs.
+`gen-commit-msg` inspects the staged set, optionally auto-unstages binaries and
+submodules, calls an opencode-compatible agent runner to produce a JSON commit
+message, optionally runs `git commit`. Tests use `fake-opencode` via
+`--agent-runner-binary` and `FAKE_OPENCODE_MOCK_CONFIG` to emit deterministic
+`step_start` / `text` / `step_finish` events. Race tests spawn a background
+`git status` loop during the agent phase to reproduce `index.lock` contention
+at commit time. The `--no-verify` flag forwards to `git commit --no-verify`
+when used with `--commit`; alone it must fail before the agent runs.
+
+**`--dry-run` pure plan**: inspect staged files only; do **not** call the agent
+or mutate the index/HEAD. Stdout is the fixed mock message B
+(`dry-run: would generate commit message for N staged file(s)`). When binaries
+or submodules would normally auto-unstage, print `would: unstage …` on stderr
+instead of unstaging. With `--commit`, print `would: git commit -m '…'` on
+stderr (append ` --no-verify` when that flag is set) and do not commit.
+`--agent-runner` is still validated (unknown runners error even under dry-run).
+`--model` is accepted but unused.
 
 After the agent text is parsed into a commit message, a **post-parse sanitize**
 step strips real-world anti-patterns (outer backticks, markdown title meta,
@@ -32,6 +41,7 @@ and must not create a commit. Shared fixtures live under
 agent/commit_msg/tests/
 ├── DOCTEST.md
 ├── SETUP.md
+├── not-a-git-repo/            non-git --dir → early error: not a git repository
 ├── auto-unstage/
 │   └── subdir-repo-root-paths/ nested --dir + repo-root staged paths → auto unstage succeeds
 ├── commit-with-fake-opencode/
@@ -45,45 +55,63 @@ agent/commit_msg/tests/
 ├── no-verify/
 │   ├── requires-commit/       --no-verify without --commit → early error, no agent
 │   └── passes-to-git/         failing pre-commit hook + --commit --no-verify → commit succeeds
-└── sanitize/                  post-parse anti-pattern cleanup (classic TDD RED)
-    ├── accepted/              dirty/clean agent text → usable sanitized message
-    │   ├── dirty-json-title-backticks/  JSON title outer `...` → clean; --commit subject clean
-    │   ├── md-title-meta/               **Title (N chars):** `...` → clean title
-    │   ├── git-commit-m-wrapper/        `git commit -m "…"` → inner title
-    │   ├── git-commit-m-double/         multi -m → title + body paragraphs
-    │   ├── raw-json-subject/            bare JSON object → formatted message
-    │   ├── clean-passthrough/           clean JSON unchanged
-    │   └── inner-backticks-preserved/   legitimate inner ` code spans kept
-    ├── rejected/
-    │   └── todowrite-garbage/           tool noise → hard fail; HEAD unchanged with --commit
-    └── fixtures-corpus/                 walk testdata/anti_patterns full table
+├── sanitize/                  post-parse anti-pattern cleanup
+│   ├── accepted/              dirty/clean agent text → usable sanitized message
+│   │   ├── dirty-json-title-backticks/  JSON title outer `...` → clean; --commit subject clean
+│   │   ├── md-title-meta/               **Title (N chars):** `...` → clean title
+│   │   ├── git-commit-m-wrapper/        `git commit -m "…"` → inner title
+│   │   ├── git-commit-m-double/         multi -m → title + body paragraphs
+│   │   ├── raw-json-subject/            bare JSON object → formatted message
+│   │   ├── clean-passthrough/           clean JSON unchanged
+│   │   └── inner-backticks-preserved/   legitimate inner ` code spans kept
+│   ├── rejected/
+│   │   └── todowrite-garbage/           tool noise → hard fail; HEAD unchanged with --commit
+│   └── fixtures-corpus/                 walk testdata/anti_patterns full table
+└── dry-run/                   pure-plan --dry-run (classic TDD RED until implemented)
+    ├── mock-message-count/    staged N files → mock B on stdout; no agent
+    ├── no-unstage-binary/     binary+text staged → would unstage; index unchanged; N before unstage
+    ├── with-commit-no-mutate/ --dry-run --commit → would: git commit; HEAD unchanged
+    ├── with-commit-no-verify-plan/ --dry-run --commit --no-verify → would-line has --no-verify
+    ├── rejects-unknown-agent-runner/ --agent-runner codex → unsupported runner error
+    ├── accepts-model-no-agent/ --model set → success mock; no agent call
+    └── no-staged-errors/      empty index → no staged changes error
 ```
 
 ## Test Index
 
 | # | Leaf | Description |
 |---|------|-------------|
-| 1 | `auto-unstage/subdir-repo-root-paths` | Nested `--dir` with repo-root staged paths must not fail auto unstage |
-| 2 | `commit-with-fake-opencode/succeeds` | fake-opencode mock returns commit JSON; generation succeeds |
-| 3 | `commit-race/background-git-loop` | Background git status loop during agent run must not break `--commit` |
-| 4 | `commit-race/worktree-concurrent-git` | Same race reproduced from a linked git worktree |
-| 5 | `no-verify/requires-commit` | `--no-verify` without `--commit` errors before agent |
-| 6 | `no-verify/passes-to-git` | `--commit --no-verify` skips failing pre-commit hook |
-| 7 | `sanitize/accepted/dirty-json-title-backticks` | Outer-backticked JSON title cleaned; git subject clean with `--commit` |
-| 8 | `sanitize/accepted/md-title-meta` | Markdown `**Title (N chars):**` meta stripped |
-| 9 | `sanitize/accepted/git-commit-m-wrapper` | Single `git commit -m` wrapper → inner title |
-| 10 | `sanitize/accepted/git-commit-m-double` | Multi `-m` → title + `\n\n`-joined body |
-| 11 | `sanitize/accepted/raw-json-subject` | Raw JSON object → formatted title/description |
-| 12 | `sanitize/accepted/clean-passthrough` | Clean JSON passes sanitize unchanged |
-| 13 | `sanitize/accepted/inner-backticks-preserved` | Inner code-span backticks preserved |
-| 14 | `sanitize/rejected/todowrite-garbage` | Tool noise hard-fails; no commit |
-| 15 | `sanitize/fixtures-corpus` | Full `testdata/anti_patterns` table (all `.in` / `.want` / `.want_err`) |
+| 1 | `not-a-git-repo` | Non-git `--dir` → early error containing `not a git repository` |
+| 2 | `auto-unstage/subdir-repo-root-paths` | Nested `--dir` with repo-root staged paths must not fail auto unstage |
+| 3 | `commit-with-fake-opencode/succeeds` | fake-opencode mock returns commit JSON; generation succeeds |
+| 4 | `commit-race/background-git-loop` | Background git status loop during agent run must not break `--commit` |
+| 5 | `commit-race/worktree-concurrent-git` | Same race reproduced from a linked git worktree |
+| 6 | `no-verify/requires-commit` | `--no-verify` without `--commit` errors before agent |
+| 7 | `no-verify/passes-to-git` | `--commit --no-verify` skips failing pre-commit hook |
+| 8 | `sanitize/accepted/dirty-json-title-backticks` | Outer-backticked JSON title cleaned; git subject clean with `--commit` |
+| 9 | `sanitize/accepted/md-title-meta` | Markdown `**Title (N chars):**` meta stripped |
+| 10 | `sanitize/accepted/git-commit-m-wrapper` | Single `git commit -m` wrapper → inner title |
+| 11 | `sanitize/accepted/git-commit-m-double` | Multi `-m` → title + `\n\n`-joined body |
+| 12 | `sanitize/accepted/raw-json-subject` | Raw JSON object → formatted title/description |
+| 13 | `sanitize/accepted/clean-passthrough` | Clean JSON passes sanitize unchanged |
+| 14 | `sanitize/accepted/inner-backticks-preserved` | Inner code-span backticks preserved |
+| 15 | `sanitize/rejected/todowrite-garbage` | Tool noise hard-fails; no commit |
+| 16 | `sanitize/fixtures-corpus` | Full `testdata/anti_patterns` table (all `.in` / `.want` / `.want_err`) |
+| 17 | `dry-run/mock-message-count` | `--dry-run` prints exact mock B with correct staged file count; no agent |
+| 18 | `dry-run/no-unstage-binary` | Dry-run plans binary unstage on stderr; binary stays staged; N includes it |
+| 19 | `dry-run/with-commit-no-mutate` | `--dry-run --commit` would-line only; HEAD subject unchanged |
+| 20 | `dry-run/with-commit-no-verify-plan` | Would commit line includes `--no-verify`; HEAD unchanged |
+| 21 | `dry-run/rejects-unknown-agent-runner` | `--dry-run --agent-runner codex` → unsupported runner error |
+| 22 | `dry-run/accepts-model-no-agent` | `--dry-run --model` accepted; mock success without agent |
+| 23 | `dry-run/no-staged-errors` | Dry-run with empty index → no staged changes error |
 
 ## How to Run
 
 ```sh
 doctest vet ./agent/commit_msg/tests
 doctest test -v ./agent/commit_msg/tests
+doctest test -v ./agent/commit_msg/tests/not-a-git-repo
+doctest test -v ./agent/commit_msg/tests/dry-run
 doctest test -v ./agent/commit_msg/tests/sanitize
 doctest test -v ./agent/commit_msg/tests/sanitize/accepted/dirty-json-title-backticks
 doctest test -v ./agent/commit_msg/tests/commit-race/background-git-loop
@@ -104,6 +132,7 @@ type Request struct {
 	Model             string
 	Commit            bool
 	NoVerify          bool
+	DryRun            bool
 	Operation         string
 	AgentRunner       string
 	AgentRunnerBinary string
