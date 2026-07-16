@@ -11,6 +11,11 @@ jobs:
       image: golang:1.25.0
     steps:
       - uses: actions/checkout@v4
+      - name: Placeholder frontend dist for go:embed
+        run: |
+          mkdir -p frontend/dist frontend-agent-run/dist
+          printf '%s\n' '<!doctype html><title>placeholder</title>' > frontend/dist/index.html
+          printf '%s\n' '<!doctype html><title>placeholder</title>' > frontend-agent-run/dist/index.html
       - name: Go test
         run: go test -v ./...
 

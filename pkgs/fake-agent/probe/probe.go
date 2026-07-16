@@ -43,12 +43,13 @@ var patterns = []pattern{
 	{KindSearch, regexp.MustCompile(`(?i)\bgrep\s+(\S.+)`), 1},
 }
 
+// defaultSuggestions must stay cheap: GenerateSession executes tool/search
+// probes for real (bash/grep). Avoid repo-wide commands like go test, git, or
+// grep -rn TODO . which hang CI for many minutes.
 var defaultSuggestions = []Suggestion{
-	{KindToolCall, "ls -la"},
-	{KindToolCall, "git status"},
-	{KindToolCall, "go test ./..."},
-	{KindFileRead, "README.md"},
-	{KindSearch, "TODO"},
+	{KindToolCall, "echo ok"},
+	{KindToolCall, "echo status"},
+	{KindToolCall, "true"},
 }
 
 func DefaultSuggestions() []Suggestion {

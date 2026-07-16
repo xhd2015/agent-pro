@@ -2,9 +2,11 @@ package faketoolexec
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 )
@@ -13,8 +15,14 @@ type MockConfig = types.MockConfig
 
 type FileChange = types.FileChange
 
+// probeCmdTimeout bounds real tool probes so GenerateSession cannot hang CI
+// on expensive accidental commands (e.g. repo-wide grep/go test).
+const probeCmdTimeout = 2 * time.Second
+
 func ExecuteBash(command string, workDir string, env []string) (stdout string, stderr string, exitCode int, err error) {
-	cmd := exec.Command("bash", "-c", command)
+	ctx, cancel := context.WithTimeout(context.Background(), probeCmdTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "bash", "-c", command)
 	if workDir != "" {
 		cmd.Dir = workDir
 	}
@@ -71,7 +79,9 @@ func ExecuteWriteMock() {
 }
 
 func ExecuteGrep(pattern string, searchPath string) (output string, exitCode int, err error) {
-	cmd := exec.Command("grep", "-rn", pattern, searchPath)
+	ctx, cancel := context.WithTimeout(context.Background(), probeCmdTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "grep", "-rn", "--max-count=20", pattern, searchPath)
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
