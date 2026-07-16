@@ -14,15 +14,14 @@ jobs:
       - name: Placeholder frontend dist for go:embed
         run: |
           mkdir -p frontend/dist frontend-agent-run/dist
-          printf '%s\n' '<!doctype html><title>placeholder</title>' > frontend/dist/index.html
-          printf '%s\n' '<!doctype html><title>placeholder</title>' > frontend-agent-run/dist/index.html
+          # Minimal shell so Static(PrepareFrontendHTML) tests keep working without a full Vite build.
+          printf '%s\n' '<!doctype html><html><body><div id="root"></div></body></html>' > frontend/dist/index.html
+          printf '%s\n' '<!doctype html><html><body><div id="root"></div></body></html>' > frontend-agent-run/dist/index.html
       - name: Go test
         run: go test -v ./...
 
       - name: Install doctest
-        run: |
-          if ! command -v doctest >/dev/null 2>&1; then
-            go install github.com/xhd2015/doctest/cmd/doctest@latest
-          fi
+        # Pin to the cross-device rename fix branch until it lands on @latest.
+        run: go install github.com/xhd2015/doctest/cmd/doctest@master-2026-07-16-fix-cross-device-rename-version
       - name: Doctest
         run: doctest test -v ./...
