@@ -47,19 +47,19 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 		}
 	}
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
-slack-msg session history: print local session message history.
+slack-msg session history: print local session message history\.
 
 Usage:
-  slack-msg session history [options]
+  slack-msg session history \[options\]
 
 Options:
-  --session-id ID     Session id (env: SLACK_MSG_SESSION_ID)
+  --session-id ID     Session id \(env: SLACK_MSG_SESSION_ID\)
   --after-msg-id ID   Only messages after this id
   --limit N           Max messages
   --json              JSON output
-  --config PATH       Config file (env: SLACK_MSG_CONFIG)
+  --config PATH       Config file \(env: SLACK_MSG_CONFIG\)
   -h, --help          Show help
 `)
 }

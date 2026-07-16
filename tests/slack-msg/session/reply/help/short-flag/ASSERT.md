@@ -45,16 +45,16 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 		}
 	}
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
-slack-msg session reply: post a channel-level reply for a bound Slack session.
+slack-msg session reply: post a channel-level reply for a bound Slack session\.
 
 Usage:
-  slack-msg session reply [options] MESSAGE
+  slack-msg session reply \[options\] MESSAGE
 
 Options:
-  --session-id ID   Session id (env: SLACK_MSG_SESSION_ID)
-  --config PATH     Config file (env: SLACK_MSG_CONFIG)
+  --session-id ID   Session id \(env: SLACK_MSG_SESSION_ID\)
+  --config PATH     Config file \(env: SLACK_MSG_CONFIG\)
   --token TOKEN     Bot token override
   -h, --help        Show help
 `)

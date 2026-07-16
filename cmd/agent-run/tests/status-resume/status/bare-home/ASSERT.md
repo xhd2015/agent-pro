@@ -2,7 +2,7 @@
 
 ```
 ---
-version: 2
+version: 3
 __HOME__: type=string, example=/tmp/.../.agent-run, isolated AGENT_RUN_HOME
 ---
 home: __HOME__
@@ -30,7 +30,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	}
 	assertSuccess(t, resp)
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 __HOME__: type=string, example=/tmp/x/.agent-run, isolated AGENT_RUN_HOME
 ---
 home: __HOME__

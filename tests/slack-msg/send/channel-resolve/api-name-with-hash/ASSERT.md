@@ -29,11 +29,11 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 		t.Fatalf("expected empty stderr, got:\n%s", resp.Stderr)
 	}
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 __TS__: type=number, example=1783398010.628649, message timestamp
 ---
 Sending to channel=C0ALE44K5J6: "resolve hash"
-Using config from: (none)
+Using config from: \(none\)
 OK ts=__TS__ channel=C0ALE44K5J6
 `)
 }

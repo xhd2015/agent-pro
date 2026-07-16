@@ -4,7 +4,7 @@ Stderr ends with a single prefixed registry session id (no pre-attach chatter).
 
 ```
 ---
-version: 2
+version: 3
 __ID__: type=string, example=session-1, terminal session id
 ---
 grok-tty: __ID__

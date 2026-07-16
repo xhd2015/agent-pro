@@ -36,10 +36,10 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 		t.Fatalf("expected empty stderr, got:\n%s", resp.Stderr)
 	}
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
-[1710000002.000200] U_NEWER: second message
-[1710000003.000300] U_NEWEST: third message
+\[1710000002\.000200\] U_NEWER: second message
+\[1710000003\.000300\] U_NEWEST: third message
 `)
 }
 ```

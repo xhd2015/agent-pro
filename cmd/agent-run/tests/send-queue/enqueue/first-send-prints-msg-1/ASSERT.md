@@ -19,7 +19,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	assertNoError(t, err)
 	assertSuccess(t, resp)
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
 msg_1
 `)

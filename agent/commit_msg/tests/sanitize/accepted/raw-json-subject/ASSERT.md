@@ -5,7 +5,7 @@
 
 ```
 ---
-version: 2
+version: 3
 ---
 feat: add dir upload with retry
 
@@ -30,7 +30,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	want := ReadAntiPatternWant(t, "json_raw_subject")
 	AssertStdoutMessage(t, resp.Stdout, want)
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
 feat: add dir upload with retry
 

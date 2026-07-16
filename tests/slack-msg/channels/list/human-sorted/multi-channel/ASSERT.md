@@ -45,7 +45,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 		t.Fatalf("archived channel must be excluded by default:\n%s", resp.Stdout)
 	}
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
 C0AGENTDBG1  #agent-pro-debug  private  -
 C0ALE44K5J6  #general  public  member

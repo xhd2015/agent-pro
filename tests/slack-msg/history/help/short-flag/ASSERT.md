@@ -42,17 +42,17 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 		t.Fatalf("expected empty stderr, got:\n%s", resp.Stderr)
 	}
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
-slack-msg history: fetch conversation history or thread replies.
+slack-msg history: fetch conversation history or thread replies\.
 
 Usage:
-  slack-msg history [options] [CHANNEL]
+  slack-msg history \[options\] \[CHANNEL\]
 
 Options:
-  --token TOKEN     Bot token (env: SLACK_BOT_TOKEN)
-  --channel CHANNEL Channel ID or name (env: SLACK_CHANNEL)
-  --config PATH     JSON config file (env: SLACK_CONFIG)
+  --token TOKEN     Bot token \(env: SLACK_BOT_TOKEN\)
+  --channel CHANNEL Channel ID or name \(env: SLACK_CHANNEL\)
+  --config PATH     JSON config file \(env: SLACK_CONFIG\)
   --limit N         Max messages to fetch
   --thread TS       Fetch thread replies for TS
   --json            Structured JSON output

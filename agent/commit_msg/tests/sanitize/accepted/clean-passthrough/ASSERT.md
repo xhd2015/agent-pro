@@ -5,7 +5,7 @@
 
 ```
 ---
-version: 2
+version: 3
 ---
 feat: keep clean messages intact
 
@@ -29,7 +29,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	want := ReadAntiPatternWant(t, "clean_json_unchanged")
 	AssertStdoutMessage(t, resp.Stdout, want)
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
 feat: keep clean messages intact
 

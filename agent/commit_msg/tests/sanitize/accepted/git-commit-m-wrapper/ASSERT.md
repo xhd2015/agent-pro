@@ -6,7 +6,7 @@
 
 ```
 ---
-version: 2
+version: 3
 ---
 feat: extract message from git commit -m wrapper
 ```
@@ -29,7 +29,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	want := ReadAntiPatternWant(t, "git_commit_m_wrapper")
 	AssertStdoutMessage(t, resp.Stdout, want)
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
 feat: extract message from git commit -m wrapper
 `)

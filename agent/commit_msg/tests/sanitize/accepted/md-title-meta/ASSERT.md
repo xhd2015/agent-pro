@@ -5,7 +5,7 @@
 
 ```
 ---
-version: 2
+version: 3
 ---
 feat: improve commit message parsing
 ```
@@ -28,7 +28,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	want := ReadAntiPatternWant(t, "md_title_char_annotation")
 	AssertStdoutMessage(t, resp.Stdout, want)
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
 feat: improve commit message parsing
 `)

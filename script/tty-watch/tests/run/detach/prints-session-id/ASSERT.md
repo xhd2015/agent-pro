@@ -30,7 +30,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	}
 	firstLine := strings.TrimSpace(strings.Split(resp.Stdout, "\n")[0])
 	assert.Output(t, firstLine, `---
-version: 2
+version: 3
 __SESSION_ID__: type=string, example=session-1, reserved registry id
 ---
 session-id: __SESSION_ID__`)

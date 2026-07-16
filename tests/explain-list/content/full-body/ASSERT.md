@@ -2,9 +2,9 @@
 
 ```
 ---
-version: 2
+version: 3
 ---
-Recent explain sessions (1 shown of 1, limit 10)
+Recent explain sessions \(1 shown of 1, limit 10\)
 
 ── 1 ──  2026-07-13 10:00:00  ·  opencode / deepseek-chat  ·  1 turn
    Q  short q
@@ -33,6 +33,7 @@ Recent explain sessions (1 shown of 1, limit 10)
 
 ```go
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -53,15 +54,16 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 
 	// Build template without embedding 200 x in a raw string (readability).
 	// Trailing "" in Join yields the final \n required for CLI stdout.
+	lineTS := regexp.QuoteMeta("── 1 ──  2026-07-13 10:00:00  ·  opencode / deepseek-chat  ·  1 turn")
 	template := strings.Join([]string{
 		"---",
-		"version: 2",
+		"version: 3",
 		"---",
-		"Recent explain sessions (1 shown of 1, limit 10)",
+		regexp.QuoteMeta("Recent explain sessions (1 shown of 1, limit 10)"),
 		"",
-		"── 1 ──  2026-07-13 10:00:00  ·  opencode / deepseek-chat  ·  1 turn",
+		lineTS,
 		"   Q  short q",
-		"   A  " + full,
+		"   A  " + regexp.QuoteMeta(full),
 		"",
 	}, "\n")
 	assert.Output(t, resp.Stdout, template)

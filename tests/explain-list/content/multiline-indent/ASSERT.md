@@ -2,9 +2,9 @@
 
 ```
 ---
-version: 2
+version: 3
 ---
-Recent explain sessions (1 shown of 1, limit 10)
+Recent explain sessions \(1 shown of 1, limit 10\)
 
 ── 1 ──  2026-07-13 11:00:00  ·  opencode / deepseek-chat  ·  1 turn
    Q  hello
@@ -66,9 +66,9 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	}
 
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
-Recent explain sessions (1 shown of 1, limit 10)
+Recent explain sessions \(1 shown of 1, limit 10\)
 
 ── 1 ──  2026-07-13 11:00:00  ·  opencode / deepseek-chat  ·  1 turn
    Q  hello

@@ -23,7 +23,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 		t.Fatalf("expected exit 0, got %d stderr=%q", resp.ExitCode, resp.Stderr)
 	}
 	assert.Output(t, strings.TrimSpace(resp.Stdout), `---
-version: 2
+version: 3
 ---
 session-id: my-job`)
 	if resp.SessionID != "my-job" {

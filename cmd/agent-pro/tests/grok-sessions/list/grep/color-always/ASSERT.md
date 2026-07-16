@@ -72,7 +72,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 		t.Fatalf("missing summary.json title hit line in:\n%s", resp.Output)
 	}
 	assert.Output(t, hitLine+"\n", `---
-version: 2
+version: 3
 ---
   <ansi-color #35>summary.json</ansi-color>:<ansi-color green>1</ansi-color>:<ansi-color green>title</ansi-color>: Enable <ansi-color bold red>GREP_COLOR_TOKEN</ansi-color> highlighting
 `)

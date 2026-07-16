@@ -4,7 +4,7 @@ Stdout includes both labeled id lines (order: session-id then terminal-id prefer
 
 ```
 ---
-version: 2
+version: 3
 __SESSION_ID__: type=string, example=sess-1, agent storage session id
 __TERMINAL_ID__: type=string, example=term-1, tty registry session id
 ---

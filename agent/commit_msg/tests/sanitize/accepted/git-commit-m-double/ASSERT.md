@@ -5,13 +5,13 @@
 
 ```
 ---
-version: 2
+version: 3
 ---
 feat: split multi -m into title and body
 
-First paragraph of description.
+First paragraph of description\.
 
-Second paragraph of description.
+Second paragraph of description\.
 ```
 
 ```go
@@ -32,13 +32,13 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	want := ReadAntiPatternWant(t, "git_commit_m_double")
 	AssertStdoutMessage(t, resp.Stdout, want)
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
 feat: split multi -m into title and body
 
-First paragraph of description.
+First paragraph of description\.
 
-Second paragraph of description.
+Second paragraph of description\.
 `)
 	if strings.Contains(resp.Stdout, "git commit") {
 		t.Fatalf("git commit wrapper leaked into stdout:\n%s", resp.Stdout)

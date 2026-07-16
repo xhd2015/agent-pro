@@ -62,13 +62,13 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 		t.Fatalf("help missing --topic usage:\n%s", resp.Stdout)
 	}
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
-slack-msg: Slack messaging CLI.
+slack-msg: Slack messaging CLI\.
 
 Usage:
-  slack-msg <command> [options]
-  slack-msg --help [--topic TOPIC]
+  slack-msg <command> \[options\]
+  slack-msg --help \[--topic TOPIC\]
 
 Commands:
   send      Post a message via Slack Web API
@@ -79,7 +79,7 @@ Commands:
   session   Session-bound reply and history
 
 Help topics:
-  add-missing-scope  How to grant missing OAuth scopes (e.g. groups:read)
+  add-missing-scope  How to grant missing OAuth scopes \(e\.g\. groups:read\)
 
 Options:
   -h, --help     Show help

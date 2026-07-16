@@ -35,7 +35,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	first := strings.TrimSpace(strings.Split(out, "\n")[0])
 	if first == "msg_1" {
 		assert.Output(t, first+"\n", `---
-version: 2
+version: 3
 ---
 msg_1
 `)

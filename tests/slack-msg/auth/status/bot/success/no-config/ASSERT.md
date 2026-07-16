@@ -47,16 +47,16 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 		t.Fatalf("stdout must not contain raw bot token %q:\n%s", slackTestToken, resp.Stdout)
 	}
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
-Using config from: (none)
+Using config from: \(none\)
 kind: bot
 ok: true
-team: SlackTest Team (T024BE7LD)
-user: Egon Spengler (W012A3CDE)
+team: SlackTest Team \(T024BE7LD\)
+user: Egon Spengler \(W012A3CDE\)
 bot_id: B0TESTBOTID
-url: https://localhost.localdomain/
-token: xoxb-...oken
+url: https://localhost\.localdomain/
+token: xoxb-\.\.\.oken
 `)
 }
 ```
