@@ -208,6 +208,9 @@ func captureRunGenCommitMsg(t *testing.T, req *Request) (*Response, error) {
 	if req.DryRun {
 		args = append(args, "--dry-run")
 	}
+	if req.AddAll {
+		args = append(args, "--add-all")
+	}
 
 	runErr := commit_msg.RunGenCommitMsg(args)
 

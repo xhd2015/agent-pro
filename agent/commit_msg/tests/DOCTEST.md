@@ -3,7 +3,7 @@
 Doc-style tests for `github.com/xhd2015/agent-pro/agent/commit_msg`, covering
 AI commit message generation with `fake-opencode` and `llm-mock-run-commandcode`,
 the `--commit` git commit path, post-parse sanitize of commit-message anti-patterns,
-and pure-plan `--dry-run`.
+pure-plan `--dry-run`, and optional `--add-all` staging (`git add -A` before generate).
 
 # DSN (Domain Specific Notion)
 
@@ -32,6 +32,16 @@ stderr (append ` --no-verify` when that flag is set) and do not commit.
 `--agent-runner` is still validated (unknown runners error even under dry-run;
 supported list is `opencode, commandcode`). `--model` is accepted but unused
 under dry-run.
+
+**`--add-all`**: before the generate pipeline, stage like `git add -A` via
+`gitwrite.AddAll`. Does **not** require `--commit`.
+
+- **Real (non-dry-run)**: log `$ git add -A` on stderr (non-silent), then
+  `gitwrite.AddAll(dir)`, then the existing pipeline (auto-unstage binaries →
+  generate → optional `--commit`).
+- **Dry-run**: print `would: git add -A` on stderr; **do not** mutate the index;
+  staged-file count and empty-index checks use the **current** index only (so an
+  empty index still yields `no staged changes` after the would-line).
 
 After the agent text is parsed into a commit message, a **post-parse sanitize**
 step strips real-world anti-patterns (outer backticks, markdown title meta,
@@ -84,14 +94,19 @@ agent/commit_msg/tests/
 │   ├── rejected/
 │   │   └── todowrite-garbage/           tool noise → hard fail; HEAD unchanged with --commit
 │   └── fixtures-corpus/                 walk testdata/anti_patterns full table
-└── dry-run/                   pure-plan --dry-run
-    ├── mock-message-count/    staged N files → mock B on stdout; no agent
-    ├── no-unstage-binary/     binary+text staged → would unstage; index unchanged; N before unstage
-    ├── with-commit-no-mutate/ --dry-run --commit → would: git commit; HEAD unchanged
-    ├── with-commit-no-verify-plan/ --dry-run --commit --no-verify → would-line has --no-verify
-    ├── rejects-unknown-agent-runner/ --agent-runner codex → unsupported; supported includes commandcode
-    ├── accepts-model-no-agent/ --model set → success mock; no agent call
-    └── no-staged-errors/      empty index → no staged changes error
+├── dry-run/                   pure-plan --dry-run
+│   ├── mock-message-count/    staged N files → mock B on stdout; no agent
+│   ├── no-unstage-binary/     binary+text staged → would unstage; index unchanged; N before unstage
+│   ├── with-commit-no-mutate/ --dry-run --commit → would: git commit; HEAD unchanged
+│   ├── with-commit-no-verify-plan/ --dry-run --commit --no-verify → would-line has --no-verify
+│   ├── rejects-unknown-agent-runner/ --agent-runner codex → unsupported; supported includes commandcode
+│   ├── accepts-model-no-agent/ --model set → success mock; no agent call
+│   └── no-staged-errors/      empty index → no staged changes error
+└── add-all/                   --add-all stages like git add -A (classic TDD RED until implemented)
+    ├── dry-run-would-line/    --add-all --dry-run → would: git add -A; index unchanged
+    ├── stages-untracked/      --add-all real → $ git add -A; untracked becomes staged; no --commit
+    ├── with-commit/           --add-all --commit → stages then commits; HEAD advances
+    └── help-mentions-add-all/ -h help text documents --add-all
 ```
 
 ## Test Index
@@ -125,6 +140,10 @@ agent/commit_msg/tests/
 | 25 | `dry-run/rejects-unknown-agent-runner` | `--dry-run --agent-runner codex` → unsupported; supported list includes `commandcode` |
 | 26 | `dry-run/accepts-model-no-agent` | `--dry-run --model` accepted; mock success without agent |
 | 27 | `dry-run/no-staged-errors` | Dry-run with empty index → no staged changes error |
+| 28 | `add-all/dry-run-would-line` | `--add-all --dry-run` → `would: git add -A`; index unchanged (honest empty-index error OK) |
+| 29 | `add-all/stages-untracked` | Real `--add-all` logs `$ git add -A`, stages untracked; HEAD unchanged without `--commit` |
+| 30 | `add-all/with-commit` | `--add-all --commit` stages untracked then creates commit with mock subject |
+| 31 | `add-all/help-mentions-add-all` | `-h` help text mentions `--add-all` |
 
 ## How to Run
 
@@ -134,6 +153,7 @@ doctest test -v ./agent/commit_msg/tests
 doctest test -v ./agent/commit_msg/tests/not-a-git-repo
 doctest test -v ./agent/commit_msg/tests/commandcode
 doctest test -v ./agent/commit_msg/tests/dry-run
+doctest test -v ./agent/commit_msg/tests/add-all
 doctest test -v ./agent/commit_msg/tests/sanitize
 doctest test -v ./agent/commit_msg/tests/sanitize/accepted/dirty-json-title-backticks
 doctest test -v ./agent/commit_msg/tests/commit-race/background-git-loop
@@ -155,6 +175,8 @@ type Request struct {
 	Commit            bool
 	NoVerify          bool
 	DryRun            bool
+	// AddAll requests --add-all (stage like git add -A before generate).
+	AddAll            bool
 	Help              bool
 	Operation         string
 	AgentRunner       string

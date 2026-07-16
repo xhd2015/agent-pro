@@ -34,6 +34,7 @@ Options:
               Agent runner to use (opencode|commandcode, default: opencode)
   --agent-runner-binary PATH
               Override the agent runner executable path
+  --add-all    Stage all changes (git add -A) before generate; dry-run prints would: git add -A
   --commit     Run git commit with the generated message after printing it
   --no-verify  Skip git commit hooks (requires --commit)
   --dry-run    Pure plan: inspect staged set, print mock message; no agent, no unstage, no commit
@@ -45,6 +46,7 @@ func RunGenCommitMsg(args []string) error {
 	var model string
 	var agentRunner string
 	var agentRunnerBinary string
+	var addAll bool
 	var commit bool
 	var noVerify bool
 	var dryRun bool
@@ -53,6 +55,7 @@ func RunGenCommitMsg(args []string) error {
 		String("--model", &model).
 		String("--agent-runner", &agentRunner).
 		String("--agent-runner-binary", &agentRunnerBinary).
+		Bool("--add-all", &addAll).
 		Bool("--commit", &commit).
 		Bool("--no-verify", &noVerify).
 		Bool("--dry-run", &dryRun).
@@ -82,6 +85,19 @@ func RunGenCommitMsg(args []string) error {
 	}
 	if !inside {
 		return fmt.Errorf("not a git repository: %s", dir)
+	}
+
+	// --add-all: stage like git add -A before generate (or plan-only under dry-run).
+	// Order: add-all → existing auto-unstage inside Generate → generate → optional commit.
+	if addAll {
+		if dryRun {
+			fmt.Fprintf(os.Stderr, "would: git add -A\n")
+		} else {
+			fmt.Fprintf(os.Stderr, "$ git add -A\n")
+			if err := gitwrite.AddAll(dir); err != nil {
+				return fmt.Errorf("git add -A failed: %w", err)
+			}
+		}
 	}
 
 	if dryRun {
