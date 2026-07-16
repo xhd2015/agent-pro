@@ -37,6 +37,9 @@ type RunOptions struct {
 	KeepTerminalAlive bool
 	// Open is run --open: silent start, optional inject, auto-attach, no pre-attach id print.
 	Open bool
+	// Detach is run/resume --detach: keep-alive daemon, no attach, no stream tail;
+	// caller prints session-id/terminal-id on stdout after return.
+	Detach bool
 	// NoSubmit injects the prompt without trailing Enter (suffixCR=false). Used with Open.
 	NoSubmit            bool
 	GrokSyncOwnsEvents  bool
@@ -49,6 +52,8 @@ type RunOptions struct {
 // agent events, and waits for the child to exit unless KeepTerminalAlive is set.
 // When Open is set, starts keep-alive, injects only if prompt non-empty, auto-attaches,
 // and returns after attach without printing the session id (caller prints after).
+// When Detach is set, starts keep-alive, optional inject for resume follow-up, and
+// returns immediately without attach or event stream (caller prints both ids).
 func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, terminalSessionID string, err error) {
 	ensureStubRegistered()
 	runnerID := strings.TrimSpace(opts.RunnerID)
@@ -59,7 +64,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	if !ok {
 		return "", "", fmt.Errorf("unknown TTY runner: %s", runnerID)
 	}
-	if opts.Open {
+	if opts.Open || opts.Detach {
 		opts.KeepTerminalAlive = true
 	}
 	// commandcode-tty: always keep PTY alive so snapshot/attach work after run.
@@ -68,8 +73,8 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	if runnerID == "commandcode-tty" {
 		opts.KeepTerminalAlive = true
 	}
-	// Empty prompt OK for open / keep-alive reopen (e.g. resume without followup).
-	if strings.TrimSpace(opts.Prompt) == "" && !opts.Open && !opts.KeepTerminalAlive {
+	// Empty prompt OK for open / detach / keep-alive reopen (e.g. resume without followup).
+	if strings.TrimSpace(opts.Prompt) == "" && !opts.Open && !opts.Detach && !opts.KeepTerminalAlive {
 		return "", "", fmt.Errorf("prompt is required")
 	}
 	if opts.Stderr == nil {
@@ -148,14 +153,53 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 		go dualWriteAfterRegistry(opts.Home, runnerID, opts.AgentSessionID, sessionID, provider)
 	}
 
-	// Open mode prints the id only after attach returns (caller responsibility).
-	if !opts.Open {
+	// Open/Detach: caller prints ids (open after attach; detach immediately on stdout).
+	if !opts.Open && !opts.Detach {
 		fmt.Fprintf(opts.Stderr, "%s: %s\n", runnerID, sessionID)
 	}
 
 	runStart := time.Now()
 	promptText := strings.TrimSpace(opts.Prompt)
 	isResume := strings.TrimSpace(opts.ResumeSessionID) != ""
+
+	// --detach: keep-alive daemon only — no attach, no event stream, no wait for turn.
+	// Prompt on argv for new sessions when non-empty and not NoSubmit (same as non-open).
+	// Resume follow-up injects after soft banner wait; empty prompt is reopen-only.
+	if opts.Detach {
+		if promptText != "" && (isResume || opts.NoSubmit) {
+			if readyErr := waitForBannerRemote(ctx, listenAddr, sessionID, provider.BannerProvider, provider.BannerMarkers); readyErr != nil {
+				if ctx.Err() != nil {
+					return "", terminalSessionID, ctx.Err()
+				}
+				// Soft: skip inject on banner timeout; still leave daemon alive.
+			} else if err := ttywatch.SendMessage(listenAddr, sessionID, promptText, !opts.NoSubmit); err != nil {
+				return "", terminalSessionID, err
+			}
+		} else {
+			// Brief soft ready so registry/PTY is fully up before parent exits.
+			_ = waitForOpenReady(ctx, listenAddr, sessionID, 3*time.Second)
+			select {
+			case <-ctx.Done():
+				return "", terminalSessionID, ctx.Err()
+			case <-time.After(200 * time.Millisecond):
+			}
+		}
+
+		if terminalSessionID != "" && opts.AgentSessionID != "" && result.Entry != nil {
+			_ = WriteTTYJSON(opts.Home, TTYSnapshot{
+				RunnerID:          runnerID,
+				AgentSessionID:    opts.AgentSessionID,
+				TerminalSessionID: terminalSessionID,
+				ListenAddr:        result.Entry.ListenAddr,
+				PID:               result.Entry.PID,
+				CreatedAt:         result.Entry.CreatedAt,
+				ScreenStatus:      "unknown",
+				Alive:             true,
+			})
+		}
+		// Leave PTY/registry alive for later attach/send; return immediately.
+		return "", terminalSessionID, nil
+	}
 
 	// --open is attach-first: banner/OpenReady is inject-readiness, not attach readiness.
 	// Soft-wait for any scrollback content; never fail open on ready-marker timeout.

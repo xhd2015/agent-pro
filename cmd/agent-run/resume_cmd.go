@@ -34,6 +34,9 @@ Options:
   --model MODEL       model name
   --keep-tty          keep TTY session alive after run completes
   --open              open keep-alive TTY and attach interactively
+  --detach            start keep-alive TTY daemon and exit after registry (+ soft grok bind);
+                      prints session-id and terminal-id on stdout; no attach / no stream;
+                      exclusive with --open and --json; TTY only
   --no-submit         with --open: inject prompt without trailing Enter
   --dir DIR           workspace directory (default: session workspace or cwd)
   --allow-relocate-resume-session-dir
@@ -61,6 +64,7 @@ type resumeRunConfig struct {
 	envEntries                    []string // CLI appends only
 	keepTTY                       bool
 	openFlag                      bool
+	detachFlag                    bool
 	noSubmit                      bool
 	dir                           string
 	allowRelocateResumeSessionDir bool
@@ -78,6 +82,7 @@ func runResume(args []string, defaultRunner string) error {
 	var envEntries []string
 	var keepTTY bool
 	var openFlag bool
+	var detachFlag bool
 	var noSubmit bool
 	var dir string
 	var allowRelocateResumeSessionDir bool
@@ -85,6 +90,7 @@ func runResume(args []string, defaultRunner string) error {
 		String("--model", &model).
 		Bool("--keep-tty", &keepTTY).
 		Bool("--open", &openFlag).
+		Bool("--detach", &detachFlag).
 		Bool("--no-submit", &noSubmit).
 		String("--dir", &dir).
 		Bool("--allow-relocate-resume-session-dir", &allowRelocateResumeSessionDir).
@@ -117,6 +123,12 @@ func runResume(args []string, defaultRunner string) error {
 	}
 	envEntries = normalizeEnvEntries(envEntries)
 
+	if detachFlag && openFlag {
+		return fmt.Errorf("--detach and --open are mutually exclusive; cannot use both")
+	}
+	if detachFlag && jsonFlag {
+		return fmt.Errorf("--detach and --json are mutually exclusive; cannot use both")
+	}
 	if openFlag && jsonFlag {
 		return fmt.Errorf("--open and --json are mutually exclusive; cannot use both")
 	}
@@ -143,6 +155,7 @@ func runResume(args []string, defaultRunner string) error {
 		envEntries:                    envEntries,
 		keepTTY:                       keepTTY,
 		openFlag:                      openFlag,
+		detachFlag:                    detachFlag,
 		noSubmit:                      noSubmit,
 		dir:                           dir,
 		allowRelocateResumeSessionDir: allowRelocateResumeSessionDir,
@@ -158,12 +171,19 @@ func resumeExistingSession(store agentstorage.Store, meta agentstorage.SessionMe
 	prompt := strings.TrimSpace(cfg.prompt)
 	keepTTY := cfg.keepTTY
 	openFlag := cfg.openFlag
+	detachFlag := cfg.detachFlag
 	// Empty followup is allowed: resume reopens the provider session
 	// (grok --resume <id>) without sending a new turn. A followup is
-	// resume + inject (like send after reopen). Without --open, keep the
+	// resume + inject (like send after reopen). Without --open/--detach, keep the
 	// TTY alive so the session can be attached/sent to after resume.
-	if prompt == "" && !openFlag {
+	if prompt == "" && !openFlag && !detachFlag {
 		keepTTY = true
+	}
+	if detachFlag && openFlag {
+		return fmt.Errorf("--detach and --open are mutually exclusive; cannot use both")
+	}
+	if detachFlag && cfg.jsonFlag {
+		return fmt.Errorf("--detach and --json are mutually exclusive; cannot use both")
 	}
 	if openFlag && cfg.jsonFlag {
 		return fmt.Errorf("--open and --json are mutually exclusive; cannot use both")
@@ -193,6 +213,9 @@ func resumeExistingSession(store agentstorage.Store, meta agentstorage.SessionMe
 	}
 	if openFlag && !agenttty.IsTTYRunner(runner) {
 		return fmt.Errorf("--open requires a TTY runner (got %s); non-TTY runners like fake-codex are not supported", runner)
+	}
+	if detachFlag && !agenttty.IsTTYRunner(runner) {
+		return fmt.Errorf("--detach requires a TTY runner (got %s); non-TTY runners like fake-codex are not supported", runner)
 	}
 	// CLI session-env flags only: stored values reapply without re-checking TTY.
 	if err := requireTTYForSessionEnv(runner, cfg.prependPaths, cfg.envEntries); err != nil {
@@ -247,8 +270,9 @@ func resumeExistingSession(store agentstorage.Store, meta agentstorage.SessionMe
 		Env:                   effectiveEnv,
 		JSON:                  cfg.jsonFlag,
 		Workspace:             workspace,
-		KeepTerminalAlive:     keepTTY || openFlag,
+		KeepTerminalAlive:     keepTTY || openFlag || detachFlag,
 		Open:                  openFlag,
+		Detach:                detachFlag,
 		NoSubmit:              cfg.noSubmit,
 		Store:                 store,
 		Stdout:                os.Stdout,

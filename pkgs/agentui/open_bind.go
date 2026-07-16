@@ -84,6 +84,14 @@ const openGrokBindPostDetachGrace = 20 * time.Second
 // openGrokBindSoftTimeout is the full budget for empty-prompt / soft open only.
 const openGrokBindSoftTimeout = 750 * time.Millisecond
 
+// detachGrokBindTimeout is the product soft discovery budget for --detach
+// when a real grok provider session is expected (miss → exit 0).
+const detachGrokBindTimeout = 1 * time.Minute
+
+// detachGrokBindSoftMissTimeout is a short soft budget when discovery is not
+// expected to succeed (fake TUI override without GROK_HOME / empty prompt).
+const detachGrokBindSoftMissTimeout = openGrokBindSoftTimeout
+
 // startOpenGrokBindWorker begins background discovery and marks bind state
 // in_progress immediately so concurrent status can report "binding".
 //
@@ -117,6 +125,72 @@ func startOpenGrokBindWorker(opts RunOptions, runner, sessionID, workspace, prom
 	return &openGrokBindWorker{done: done, cancel: cancel}
 }
 
+// detachGrokBindBudget returns how long --detach should soft-wait for grok discovery.
+// Product max is detachGrokBindTimeout when a real provider session is expected;
+// fake-TUI / empty-prompt paths soft-miss quickly (still exit 0).
+func detachGrokBindBudget(opts RunOptions) time.Duration {
+	if detachUsesFullGrokBindBudget(opts) {
+		return detachGrokBindTimeout
+	}
+	// Empty prompt + no hook: skip meaningful wait (reopen-only).
+	if strings.TrimSpace(opts.Prompt) == "" && strings.TrimSpace(os.Getenv("AGENT_RUN_GROK_TTY_GROK_SESSION_ID")) == "" {
+		return 0
+	}
+	return detachGrokBindSoftMissTimeout
+}
+
+// detachUsesFullGrokBindBudget reports whether detach soft-bind should use the
+// full 1-minute product budget (real grok is expected to write sessions).
+func detachUsesFullGrokBindBudget(opts RunOptions) bool {
+	if strings.TrimSpace(opts.AgentRunnerConfigHome) != "" {
+		return true
+	}
+	if strings.TrimSpace(os.Getenv("GROK_HOME")) != "" {
+		return true
+	}
+	if strings.TrimSpace(os.Getenv("AGENT_RUNNER_CONFIG_HOME")) != "" {
+		return true
+	}
+	if strings.TrimSpace(os.Getenv("AGENT_RUN_GROK_TTY_GROK_SESSION_ID")) != "" {
+		return true
+	}
+	// No fake TUI command override → real grok binary path; allow full soft budget.
+	if strings.TrimSpace(os.Getenv("AGENT_RUN_GROK_TTY_COMMAND")) == "" {
+		return true
+	}
+	return false
+}
+
+// startDetachGrokBindWorker begins soft-only discovery for --detach.
+// Never hard-fails on miss (requireBind=false). Returns nil when budget is 0
+// (empty-prompt skip). Miss still exit 0 at the caller.
+func startDetachGrokBindWorker(opts RunOptions, runner, sessionID, workspace, prompt string, runStart time.Time, knownID string) *openGrokBindWorker {
+	budget := detachGrokBindBudget(opts)
+	if budget <= 0 {
+		return nil
+	}
+	// Soft-only: miss always exits 0 for detach.
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	const requireBind = false
+
+	done := make(chan openGrokBindResult, 1)
+	startedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	_ = writeOpenGrokBindState(opts.Store, runner, sessionID, OpenGrokBindState{
+		State:     "in_progress",
+		StartedAt: startedAt,
+	})
+
+	go func() {
+		defer cancel()
+		res := runOpenGrokBind(ctx, opts, runner, sessionID, workspace, prompt, runStart, knownID, requireBind, startedAt)
+		// Detach never surfaces hard bind errors.
+		res.err = nil
+		res.requireBind = false
+		done <- res
+	}()
+	return &openGrokBindWorker{done: done, cancel: cancel}
+}
+
 // Wait joins the worker. If discovery is still running (hard path during a long
 // attach), keeps waiting up to openGrokBindPostDetachGrace after this call,
 // then cancels and returns the final result.
@@ -131,6 +205,15 @@ func (w *openGrokBindWorker) Wait() openGrokBindResult {
 		w.Cancel()
 		return <-w.done
 	}
+}
+
+// WaitDone joins the worker until it finishes (ctx timeout/cancel already set).
+// Used by --detach so the full soft budget can elapse without the open grace cancel.
+func (w *openGrokBindWorker) WaitDone() openGrokBindResult {
+	if w == nil {
+		return openGrokBindResult{}
+	}
+	return <-w.done
 }
 
 func (w *openGrokBindWorker) Cancel() {

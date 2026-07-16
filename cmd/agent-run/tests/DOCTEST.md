@@ -89,6 +89,7 @@ cmd/agent-run/tests/
 │   │   └── without-dir/defaults-to-process-cwd/
 │   ├── session-id-from-prompt/             nested: --session-id-from-prompt + same-id TTY policy (see session-id-from-prompt/DOCTEST.md)
 │   ├── open/                        nested: run --open TTY silent attach (see open/DOCTEST.md)
+│   ├── detach/                      nested: run/resume --detach keep-alive daemon (see detach/DOCTEST.md)
 │   ├── agent-runner-binary/         nested: --agent-runner-binary SPEC (see agent-runner-binary/DOCTEST.md)
 │   └── agent-runner-config-home/    nested: --agent-runner-config-home PATH (see agent-runner-config-home/DOCTEST.md)
 ├── web/                             split: token mode (omit | explicit | auto)

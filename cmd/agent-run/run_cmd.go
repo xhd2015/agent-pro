@@ -32,6 +32,9 @@ Options:
   --keep-tty          keep TTY session alive after run completes
   --open              open keep-alive TTY and attach interactively (silent until detach; prints session id after);
                       with --auto-send-or-resume: required shape for create/resume; ignored when live (send only)
+  --detach            start keep-alive TTY daemon and exit after registry (+ soft grok bind);
+                      prints session-id and terminal-id on stdout; no attach / no stream;
+                      exclusive with --open and --json; TTY only; empty prompt OK
   --no-submit         with --open: inject prompt into TTY without trailing Enter (no auto-submit);
                       with --auto-send-or-resume send path: inject without Enter
   --dir DIR           workspace directory (default: process cwd; resume uses session workspace)
@@ -63,6 +66,7 @@ func runHeadless(args []string, defaultRunner string) error {
 	var envEntries []string
 	var keepTTY bool
 	var openFlag bool
+	var detachFlag bool
 	var noSubmit bool
 	var dir string
 	var allowRelocateResumeSessionDir bool
@@ -75,6 +79,7 @@ func runHeadless(args []string, defaultRunner string) error {
 		Bool("--new-terminal", &newTerminal).
 		Bool("--keep-tty", &keepTTY).
 		Bool("--open", &openFlag).
+		Bool("--detach", &detachFlag).
 		Bool("--no-submit", &noSubmit).
 		String("--dir", &dir).
 		Bool("--allow-relocate-resume-session-dir", &allowRelocateResumeSessionDir).
@@ -121,6 +126,7 @@ func runHeadless(args []string, defaultRunner string) error {
 			envEntries:                    envEntries,
 			keepTTY:                       keepTTY,
 			openFlag:                      openFlag,
+			detachFlag:                    detachFlag,
 			noSubmit:                      noSubmit,
 			dir:                           dir,
 			allowRelocateResumeSessionDir: allowRelocateResumeSessionDir,
@@ -131,17 +137,23 @@ func runHeadless(args []string, defaultRunner string) error {
 		})
 	}
 
-	if prompt == "" && !openFlag {
-		return fmt.Errorf("prompt is required")
+	if detachFlag && openFlag {
+		return fmt.Errorf("--detach and --open are mutually exclusive; cannot use both")
 	}
-	if sessionIDFromPrompt && strings.TrimSpace(sessionID) != "" {
-		return fmt.Errorf("--session/--session-id and --session-id-from-prompt are mutually exclusive; cannot use both")
+	if detachFlag && jsonFlag {
+		return fmt.Errorf("--detach and --json are mutually exclusive; cannot use both")
 	}
 	if openFlag && jsonFlag {
 		return fmt.Errorf("--open and --json are mutually exclusive; cannot use both")
 	}
 	if noSubmit && !openFlag {
 		return fmt.Errorf("--no-submit requires --open")
+	}
+	if prompt == "" && !openFlag && !detachFlag {
+		return fmt.Errorf("prompt is required")
+	}
+	if sessionIDFromPrompt && strings.TrimSpace(sessionID) != "" {
+		return fmt.Errorf("--session/--session-id and --session-id-from-prompt are mutually exclusive; cannot use both")
 	}
 	workspace, err := resolveRunDir(dir)
 	if err != nil {
@@ -153,6 +165,9 @@ func runHeadless(args []string, defaultRunner string) error {
 	}
 	if openFlag && !agenttty.IsTTYRunner(runner) {
 		return fmt.Errorf("--open requires a TTY runner (got %s); non-TTY runners like fake-codex are not supported", runner)
+	}
+	if detachFlag && !agenttty.IsTTYRunner(runner) {
+		return fmt.Errorf("--detach requires a TTY runner (got %s); non-TTY runners like fake-codex are not supported", runner)
 	}
 	if err := requireTTYForSessionEnv(runner, absPrepend, envEntries); err != nil {
 		return err
@@ -179,8 +194,9 @@ func runHeadless(args []string, defaultRunner string) error {
 		Env:                   envEntries,
 		JSON:                  jsonFlag,
 		Workspace:             workspace,
-		KeepTerminalAlive:     keepTTY || openFlag,
+		KeepTerminalAlive:     keepTTY || openFlag || detachFlag,
 		Open:                  openFlag,
+		Detach:                detachFlag,
 		NoSubmit:              noSubmit,
 		Store:                 store,
 		Stdout:                os.Stdout,
@@ -214,6 +230,7 @@ type autoSendOrResumeOpts struct {
 	envEntries                    []string
 	keepTTY                       bool
 	openFlag                      bool
+	detachFlag                    bool
 	noSubmit                      bool
 	dir                           string
 	allowRelocateResumeSessionDir bool
@@ -232,6 +249,12 @@ func runAutoSendOrResume(opts autoSendOrResumeOpts) error {
 	sessionID := strings.TrimSpace(opts.sessionID)
 	if sessionID == "" {
 		return fmt.Errorf("--auto-send-or-resume requires --session-id")
+	}
+	if opts.detachFlag && opts.openFlag {
+		return fmt.Errorf("--detach and --open are mutually exclusive; cannot use both")
+	}
+	if opts.detachFlag && opts.jsonFlag {
+		return fmt.Errorf("--detach and --json are mutually exclusive; cannot use both")
 	}
 	if opts.openFlag && opts.jsonFlag {
 		return fmt.Errorf("--open and --json are mutually exclusive; cannot use both")
@@ -274,6 +297,7 @@ func runAutoSendOrResume(opts autoSendOrResumeOpts) error {
 			envEntries:                    opts.envEntries,
 			keepTTY:                       opts.keepTTY,
 			openFlag:                      opts.openFlag,
+			detachFlag:                    opts.detachFlag,
 			noSubmit:                      opts.noSubmit,
 			dir:                           opts.dir,
 			allowRelocateResumeSessionDir: opts.allowRelocateResumeSessionDir,
@@ -371,10 +395,13 @@ func resolveNewTerminalDir(dir string, meta agentstorage.SessionMeta, found bool
 }
 
 func autoSendLive(store agentstorage.Store, meta agentstorage.SessionMeta, opts autoSendOrResumeOpts) error {
-	// --open is accepted but ignored while live: callers (e.g. local-bot) always pass
-	// the same CLI for run/send/resume. Live work is enqueue + wait delivery only.
+	// --open/--detach are accepted but ignored while live: callers (e.g. local-bot)
+	// always pass the same CLI for run/send/resume. Live work is enqueue + wait delivery only.
 	if opts.openFlag {
 		fmt.Fprintln(os.Stderr, "note: --open ignored while session is live; sending follow-up")
+	}
+	if opts.detachFlag {
+		fmt.Fprintln(os.Stderr, "note: --detach ignored while session is live; sending follow-up")
 	}
 	if opts.newTerminal {
 		fmt.Fprintln(os.Stderr, "note: --new-terminal ignored while session is live; sending follow-up")
@@ -429,7 +456,13 @@ func autoSendLive(store agentstorage.Store, meta agentstorage.SessionMeta, opts 
 }
 
 func autoRunCreate(store agentstorage.Store, sessionID string, opts autoSendOrResumeOpts) error {
-	if opts.prompt == "" && !opts.openFlag {
+	if opts.detachFlag && opts.openFlag {
+		return fmt.Errorf("--detach and --open are mutually exclusive; cannot use both")
+	}
+	if opts.detachFlag && opts.jsonFlag {
+		return fmt.Errorf("--detach and --json are mutually exclusive; cannot use both")
+	}
+	if opts.prompt == "" && !opts.openFlag && !opts.detachFlag {
 		return fmt.Errorf("prompt is required")
 	}
 	if opts.noSubmit && !opts.openFlag {
@@ -446,6 +479,9 @@ func autoRunCreate(store agentstorage.Store, sessionID string, opts autoSendOrRe
 	if opts.openFlag && !agenttty.IsTTYRunner(runner) {
 		return fmt.Errorf("--open requires a TTY runner (got %s); non-TTY runners like fake-codex are not supported", runner)
 	}
+	if opts.detachFlag && !agenttty.IsTTYRunner(runner) {
+		return fmt.Errorf("--detach requires a TTY runner (got %s); non-TTY runners like fake-codex are not supported", runner)
+	}
 	if err := requireTTYForSessionEnv(runner, opts.prependPaths, opts.envEntries); err != nil {
 		return err
 	}
@@ -460,8 +496,9 @@ func autoRunCreate(store agentstorage.Store, sessionID string, opts autoSendOrRe
 		Env:                   opts.envEntries,
 		JSON:                  opts.jsonFlag,
 		Workspace:             workspace,
-		KeepTerminalAlive:     opts.keepTTY || opts.openFlag,
+		KeepTerminalAlive:     opts.keepTTY || opts.openFlag || opts.detachFlag,
 		Open:                  opts.openFlag,
+		Detach:                opts.detachFlag,
 		NoSubmit:              opts.noSubmit,
 		Store:                 store,
 		Stdout:                os.Stdout,

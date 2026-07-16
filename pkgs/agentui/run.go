@@ -55,6 +55,9 @@ type RunOptions struct {
 	KeepTerminalAlive bool
 	// Open is run --open: silent keep-alive TTY start, auto-attach, print id after detach.
 	Open bool
+	// Detach is run/resume --detach: silent keep-alive TTY daemon, soft grok bind,
+	// print session-id + terminal-id on stdout, no attach / no event stream.
+	Detach bool
 	// NoSubmit is run --no-submit: with Open, inject prompt without trailing Enter.
 	NoSubmit bool
 	// WebManagedGrokSync skips in-process grok sync; caller runs agentsync.EnsureGrokSync.
@@ -66,12 +69,12 @@ func Run(ctx context.Context, opts RunOptions) error {
 	if opts.Store == nil {
 		return fmt.Errorf("store is required")
 	}
-	if opts.Open {
+	if opts.Open || opts.Detach {
 		opts.KeepTerminalAlive = true
 	}
-	// Empty prompt is allowed for --open / keep-alive reopen (resume without
-	// followup). Headless one-shot still requires a prompt.
-	if strings.TrimSpace(opts.Prompt) == "" && !opts.Open && !opts.KeepTerminalAlive {
+	// Empty prompt is allowed for --open / --detach / keep-alive reopen (resume
+	// without followup). Headless one-shot still requires a prompt.
+	if strings.TrimSpace(opts.Prompt) == "" && !opts.Open && !opts.Detach && !opts.KeepTerminalAlive {
 		return fmt.Errorf("prompt is required")
 	}
 	runStart := time.Now()
@@ -152,8 +155,8 @@ func Run(ctx context.Context, opts RunOptions) error {
 		if err := opts.Store.AppendEvent(sessionID, ev); err != nil {
 			return err
 		}
-		// --open stays silent: persist only, no human/JSON stream to the screen.
-		if opts.Open {
+		// --open / --detach stay silent: persist only, no human/JSON stream to the screen.
+		if opts.Open || opts.Detach {
 			return nil
 		}
 		line, err := json.Marshal(ev)
@@ -187,11 +190,11 @@ func Run(ctx context.Context, opts RunOptions) error {
 		_ = opts.Store.UpdateSessionTerminalSessionID(sessionID, id)
 	}
 	webGrokManaged := runner == "grok-tty" && opts.WebManagedGrokSync
-	// Open mode does not wait on discovery; skip in-process grok sync screen noise.
-	grokSyncOwnsEvents := runner == "grok-tty" && opts.KeepTerminalAlive && !opts.WebManagedGrokSync && !opts.Open
+	// Open/Detach modes do not wait on discovery stream; skip in-process grok sync screen noise.
+	grokSyncOwnsEvents := runner == "grok-tty" && opts.KeepTerminalAlive && !opts.WebManagedGrokSync && !opts.Open && !opts.Detach
 	// Web-managed sync uses agentsync.EnsureGrokSync only; disable agenttty inline grok tail.
-	// For Open, pass true so agenttty also skips inline discovery tails.
-	ttyGrokSyncOwnsEvents := grokSyncOwnsEvents || webGrokManaged || opts.Open
+	// For Open/Detach, pass true so agenttty also skips inline discovery tails.
+	ttyGrokSyncOwnsEvents := grokSyncOwnsEvents || webGrokManaged || opts.Open || opts.Detach
 	if grokSyncOwnsEvents {
 		startGrokSyncPoller(ctx, opts, emit)
 		_ = ensureGrokSyncForSession(context.Background(), opts, resolveGrokSessionID(opts.Store, runner, sessionID), emit)
@@ -199,22 +202,61 @@ func Run(ctx context.Context, opts RunOptions) error {
 
 	// Open + grok-tty: start bind worker early (before/alongside attach) so
 	// discovery runs for the whole open lifetime and mid-open status can report
-	// "binding". Use the original user prompt for matching (not continuation).
+	// "binding". Detach uses a separate soft-only worker (1 minute, miss OK).
+	// Use the original user prompt for matching (not continuation).
 	var openBind *openGrokBindWorker
-	if opts.Open && runner == "grok-tty" {
+	if runner == "grok-tty" {
 		bindPrompt := strings.TrimSpace(opts.Prompt)
 		if bindPrompt == "" {
 			bindPrompt = runnerPrompt
 		}
-		openBind = startOpenGrokBindWorker(opts, runner, sessionID, workspace, bindPrompt, runStart, runnerSessionID)
+		if opts.Open {
+			openBind = startOpenGrokBindWorker(opts, runner, sessionID, workspace, bindPrompt, runStart, runnerSessionID)
+		} else if opts.Detach {
+			openBind = startDetachGrokBindWorker(opts, runner, sessionID, workspace, bindPrompt, runStart, runnerSessionID)
+		}
 	}
 
-	newRunnerSessionID, newTerminalSessionID, runErr := streamRunner(ctx, runner, opts.Store.Home(), workspace, env, runnerPrompt, opts.Model, opts.AgentRunnerBinary, opts.AgentRunnerConfigHome, opts.PrependPaths, opts.Env, runnerSessionID, sessionID, ttySessionID, opts.StreamPhases, opts.KeepTerminalAlive, opts.Open, opts.NoSubmit, ttyGrokSyncOwnsEvents, persistTerminalSessionID, emit, stderr)
+	newRunnerSessionID, newTerminalSessionID, runErr := streamRunner(ctx, runner, opts.Store.Home(), workspace, env, runnerPrompt, opts.Model, opts.AgentRunnerBinary, opts.AgentRunnerConfigHome, opts.PrependPaths, opts.Env, runnerSessionID, sessionID, ttySessionID, opts.StreamPhases, opts.KeepTerminalAlive, opts.Open, opts.Detach, opts.NoSubmit, ttyGrokSyncOwnsEvents, persistTerminalSessionID, emit, stderr)
 	if strings.TrimSpace(newRunnerSessionID) != "" {
 		_ = opts.Store.UpdateSessionRunnerSessionID(sessionID, newRunnerSessionID)
 	}
 	if strings.TrimSpace(newTerminalSessionID) != "" {
 		_ = opts.Store.UpdateSessionTerminalSessionID(sessionID, newTerminalSessionID)
+	}
+	if opts.Detach {
+		if runErr != nil {
+			if openBind != nil {
+				openBind.Cancel()
+				_ = openBind.WaitDone()
+			}
+			_ = opts.Store.UpdateSessionStatus(sessionID, "error")
+			return runErr
+		}
+		// Soft bind: wait full detach budget (miss still exit 0). Status stays running.
+		if openBind != nil {
+			res := openBind.WaitDone()
+			// Prefer streamRunner-discovered id if worker soft-missed.
+			if strings.TrimSpace(res.id) == "" && strings.TrimSpace(newRunnerSessionID) != "" && res.err == nil {
+				_ = opts.Store.UpdateSessionRunnerSessionID(sessionID, strings.TrimSpace(newRunnerSessionID))
+				res.id = strings.TrimSpace(newRunnerSessionID)
+			}
+			// Soft only: ignore hard errors from unexpected paths; print lines on hit.
+			_ = printOpenGrokBindResult(openGrokBindResult{
+				id:          res.id,
+				updatesPath: res.updatesPath,
+				err:         nil, // detach never hard-fails on bind miss
+				requireBind: false,
+			}, stderr)
+		}
+		termID := strings.TrimSpace(newTerminalSessionID)
+		if termID == "" {
+			termID = strings.TrimSpace(ttySessionID)
+		}
+		_, _ = fmt.Fprintf(stdout, "session-id: %s\n", sessionID)
+		_, _ = fmt.Fprintf(stdout, "terminal-id: %s\n", termID)
+		// Leave meta.status = running (do not emit ActionDone / finished).
+		return nil
 	}
 	if opts.Open {
 		if runErr != nil {
@@ -356,8 +398,9 @@ func openGrokDiscoveryRequired(opts RunOptions) bool {
 // soft unbound on miss so attach-first --open (fake TUI / production path without
 // an explicit grok home) can exit 0 after printing the terminal session id.
 // NoSubmit always soft-unbounds: draft-only open never starts a provider turn.
+// Detach always soft-unbounds: miss exits 0 after printing both ids.
 func openGrokHardFailOnUnresolved(opts RunOptions) bool {
-	if opts.NoSubmit {
+	if opts.Detach || opts.NoSubmit {
 		return false
 	}
 	if strings.TrimSpace(opts.AgentRunnerConfigHome) != "" {
@@ -390,7 +433,7 @@ func resolveTTYSessionID(opts RunOptions, userSessionID string) string {
 
 // streamRunner runs the selected agent. ttySessionID is the custom terminal
 // registry id (from --session / --session-id-from-prompt); empty keeps session-N.
-func streamRunner(ctx context.Context, runner, home, workspace string, env *agentexec.Env, prompt, model, agentRunnerBinary, agentRunnerConfigHome string, prependPaths, envEntries []string, runnerSessionID, agentSessionID, ttySessionID string, streamPhases, keepTerminalAlive, open, noSubmit, grokSyncOwnsEvents bool, onTerminalSessionID func(string), emit func(types.AgentEvent) error, stderr io.Writer) (string, string, error) {
+func streamRunner(ctx context.Context, runner, home, workspace string, env *agentexec.Env, prompt, model, agentRunnerBinary, agentRunnerConfigHome string, prependPaths, envEntries []string, runnerSessionID, agentSessionID, ttySessionID string, streamPhases, keepTerminalAlive, open, detach, noSubmit, grokSyncOwnsEvents bool, onTerminalSessionID func(string), emit func(types.AgentEvent) error, stderr io.Writer) (string, string, error) {
 	if agenttty.IsTTYRunner(runner) {
 		terminalSessionID := ""
 		onID := func(id string) {
@@ -412,8 +455,9 @@ func streamRunner(ctx context.Context, runner, home, workspace string, env *agen
 			AgentRunnerConfigHome: agentRunnerConfigHome,
 			PrependPaths:          prependPaths,
 			Env:                   envEntries,
-			KeepTerminalAlive:     keepTerminalAlive || open,
+			KeepTerminalAlive:     keepTerminalAlive || open || detach,
 			Open:                  open,
+			Detach:                detach,
 			NoSubmit:              noSubmit,
 			GrokSyncOwnsEvents:    grokSyncOwnsEvents,
 			Stderr:                stderr,
