@@ -11,6 +11,8 @@ jobs:
       image: golang:1.25.0
     steps:
       - uses: actions/checkout@v4
+      - name: Go test cmd
+        run: go -C cmd test -v ./...
       - name: Go test
         run: go test -v ./...
 

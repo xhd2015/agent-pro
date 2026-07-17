@@ -1,0 +1,11 @@
+agent-pro frontend-agent-run embed placeholder
+
+This tree is incomplete in git / module zip so bare `go install` compiles.
+Stage a full SPA via:
+
+  go run ./script/agent-run/build-frontend
+  # or
+  go run ./script/agent-run/install
+
+At runtime, thin embeds hydrate from GitHub Releases when
+AGENT_PRO_ASSET_BASE_URL is set (see doc/assets-hydrate.md).

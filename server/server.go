@@ -21,6 +21,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/xhd2015/agent-pro/frontend"
+	"github.com/xhd2015/agent-pro/pkgs/assets"
 	"github.com/xhd2015/agent-pro/trace"
 )
 
@@ -237,13 +239,33 @@ func Static(mux *http.ServeMux, opts StaticOptions) error {
 	routePrefix := NormalizeRoutePrefix(opts.RoutePrefix)
 	reactFileSystem, err := reactDistFS()
 	if err != nil {
-		return fmt.Errorf("failed to create react file system: %v", err)
+		// A1: incomplete assets — serve minimal shell; do not fail server start.
+		shell := prepareFrontendHTML([]byte(a1IncompleteHTMLAgentPro()), routePrefix, false)
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			if opts.IndexHtml != "" {
+				_, _ = w.Write(prepareFrontendHTML([]byte(opts.IndexHtml), routePrefix, true))
+				return
+			}
+			_, _ = w.Write(shell)
+		})
+		return nil
 	}
 
 	// Create sub-filesystem for assets
 	assetsFileSystem, err := fs.Sub(reactFileSystem, "assets")
 	if err != nil {
-		return fmt.Errorf("failed to create assets file system: %v", err)
+		// Thin tree without assets/ — A1 shell rather than hard-fail.
+		shell := prepareFrontendHTML([]byte(a1IncompleteHTMLAgentPro()), routePrefix, false)
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			if opts.IndexHtml != "" {
+				_, _ = w.Write(prepareFrontendHTML([]byte(opts.IndexHtml), routePrefix, true))
+				return
+			}
+			_, _ = w.Write(shell)
+		})
+		return nil
 	}
 
 	// Serve React assets from /assets/ path with proper MIME types
@@ -270,7 +292,7 @@ func Static(mux *http.ServeMux, opts StaticOptions) error {
 			return
 		}
 
-		// Otherwise, serve embedded index.html
+		// Otherwise, serve resolved index.html
 		indexFile, err := reactFileSystem.Open("index.html")
 		if err != nil {
 			http.Error(w, "Failed to load index.html", http.StatusInternalServerError)
@@ -289,21 +311,104 @@ func Static(mux *http.ServeMux, opts StaticOptions) error {
 	return nil
 }
 
+// reactDistFS resolves a complete SPA root for agent-pro:
+// local --static dir → complete embed → complete cache → EnsureAsset → error (A1 in Static).
 func reactDistFS() (fs.FS, error) {
 	if frontendDistDir != "" {
 		if _, err := os.Stat(filepath.Join(frontendDistDir, "index.html")); err == nil {
 			return os.DirFS(frontendDistDir), nil
 		}
 	}
-	for _, root := range []string{"frontend/dist", "dist"} {
-		sub, err := fs.Sub(distFS, root)
-		if err == nil {
+
+	// Prefer complete fat embed (DistComplete), not merely a placeholder index.html.
+	if frontend.DistComplete() {
+		for _, root := range []string{"frontend/dist", "dist"} {
+			sub, err := fs.Sub(distFS, root)
+			if err == nil {
+				if _, statErr := fs.Stat(sub, "index.html"); statErr == nil {
+					return sub, nil
+				}
+			}
+		}
+		// Init may have been given DistFS with "dist/" prefix; still complete.
+		if sub, err := fs.Sub(distFS, "dist"); err == nil {
 			if _, statErr := fs.Stat(sub, "index.html"); statErr == nil {
 				return sub, nil
 			}
 		}
 	}
-	return nil, fmt.Errorf("embedded frontend dist not found")
+
+	version := assets.ClientVersion()
+	product := assets.ProductAgentPro
+	kind := assets.KindFrontend
+
+	if assets.CacheComplete(product, version, kind) {
+		dir, err := assets.AssetCacheDir(product, version, kind)
+		if err == nil {
+			return os.DirFS(dir), nil
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	dir, err := assets.EnsureAsset(ctx, product, version, kind, assets.EnsureConfig{})
+	if err == nil {
+		return os.DirFS(dir), nil
+	}
+
+	// Last resort: any embed with index.html (legacy thin/fat without DistComplete import path).
+	for _, root := range []string{"frontend/dist", "dist"} {
+		sub, subErr := fs.Sub(distFS, root)
+		if subErr == nil {
+			if _, statErr := fs.Stat(sub, "index.html"); statErr == nil {
+				// Incomplete placeholder still surfaces as usable only if assets exist.
+				if _, aerr := fs.Stat(sub, "assets"); aerr == nil {
+					return sub, nil
+				}
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("frontend assets incomplete: %w", err)
+}
+
+func a1IncompleteHTMLAgentPro() string {
+	version := assets.ClientVersion()
+	env := assets.EnvAssetBaseURL
+	return fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>agent-pro — frontend assets incomplete</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; color: #1a1a1a; }
+    code { background: #f4f4f4; padding: 0.1em 0.35em; border-radius: 4px; }
+    pre { background: #f4f4f4; padding: 0.75rem 1rem; border-radius: 6px; overflow-x: auto; }
+    h1 { font-size: 1.25rem; }
+  </style>
+</head>
+<body>
+  <h1>Frontend assets incomplete</h1>
+  <p>
+    This <code>agent-pro</code> binary does not include a complete embedded UI
+    (version <code>%s</code>), and no complete asset cache was found.
+  </p>
+  <p>To fix:</p>
+  <ol>
+    <li>Build a fat binary with a full <code>frontend/dist</code>, or</li>
+    <li>
+      Set <code>%s</code> to your release asset host and ensure the agent-pro frontend
+      archive is available, then restart.
+    </li>
+  </ol>
+  <p>
+    Cache layout: <code>$XDG_CACHE_HOME/agent-pro/asset-cache/agent-pro/%s/frontend</code>
+    (or <code>~/.cache/...</code>).
+  </p>
+</body>
+</html>
+`, version, env, version)
 }
 
 // NormalizeRoutePrefix converts values like "my-app" and "/my-app/" to

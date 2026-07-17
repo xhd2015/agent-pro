@@ -4,9 +4,23 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/xhd2015/xgo/support/cmd"
 )
+
+const frontendPlaceholder = `agent-pro frontend embed placeholder
+
+This tree is incomplete in git / module zip so bare ` + "`go install`" + ` compiles.
+Stage a full SPA via:
+
+  go run ./script/build-frontend
+  # or
+  go run ./script/install
+
+At runtime, thin embeds hydrate from GitHub Releases when
+AGENT_PRO_ASSET_BASE_URL is set (see doc/assets-hydrate.md).
+`
 
 func main() {
 	err := Handle(os.Args[1:])
@@ -17,23 +31,26 @@ func main() {
 }
 
 func Handle(args []string) error {
-	// check if bun installed
 	if _, err := exec.LookPath("bun"); err != nil {
 		return fmt.Errorf("bun is not installed, install it from https://bun.sh/docs/installation")
 	}
 
-	// check if frontend/node_modules exists
-	if _, err := os.Stat("frontend/node_modules"); err != nil {
-		// run bun install
-		err := cmd.Debug().Dir("frontend").Run("bun", "install")
-		if err != nil {
-			return err
-		}
+	// Always install so package.json/lockfile changes are applied even when
+	// node_modules already exists but is missing newer deps.
+	if err := cmd.Debug().Dir("frontend").Run("bun", "install"); err != nil {
+		return fmt.Errorf("bun install (frontend): %w", err)
 	}
 
-	err := cmd.Debug().Dir("frontend").Run("bun", "run", "build")
-	if err != nil {
+	if err := cmd.Debug().Dir("frontend").Run("bun", "run", "build"); err != nil {
+		return fmt.Errorf("bun run build (frontend): %w", err)
+	}
+	// Vite empties dist/; restore tracked placeholder so git/module stay embed-safe.
+	return writePlaceholder("frontend/dist/placeholder.txt", frontendPlaceholder)
+}
+
+func writePlaceholder(rel, content string) error {
+	if err := os.MkdirAll(filepath.Dir(rel), 0o755); err != nil {
 		return err
 	}
-	return nil
+	return os.WriteFile(rel, []byte(content), 0o644)
 }

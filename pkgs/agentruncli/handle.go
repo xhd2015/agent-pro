@@ -23,6 +23,7 @@ Commands:
   watch      stream readonly output from a live TTY session by id
   sessions   list stored sessions or print one session's events
   status     show agent-run home or multi-layer session status
+  assets     frontend asset status and ensure (download)
   tty        TTY session helpers (status, attach, send, snapshot, watch)
   pty        PTY resource stats and kill orphan __serve processes
 
@@ -97,6 +98,8 @@ func Handle(args []string) error {
 		return runSessions(sub)
 	case "status":
 		return runStatus(sub)
+	case "assets":
+		return runAssets(sub)
 	default:
 		return fmt.Errorf("unknown command: %s", cmd)
 	}

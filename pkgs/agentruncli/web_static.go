@@ -9,20 +9,46 @@ import (
 	"path/filepath"
 	"strings"
 
-	frontend "github.com/xhd2015/agent-pro/frontend-agent-run"
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
+	"github.com/xhd2015/agent-pro/pkgs/assets"
 )
 
 func registerStatic(mux *http.ServeMux, store agentstorage.Store) error {
-	dist, err := fs.Sub(frontend.DistFS, "dist")
-	if err != nil {
-		return err
+	ctx, cancel := defaultEnsureContext()
+	defer cancel()
+	resolved := resolveAgentRunFrontend(ctx, assets.EnsureConfig{})
+
+	if resolved.FS == nil {
+		// A1: incomplete assets — serve a minimal shell; never fail server start.
+		shell := []byte(a1IncompleteHTML("agent-run"))
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasPrefix(r.URL.Path, "/api/") {
+				http.NotFound(w, r)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write(shell)
+		})
+		return nil
 	}
+
+	dist := resolved.FS
 	indexHTML, err := fs.ReadFile(dist, "index.html")
 	if err != nil {
-		return err
+		// Unexpected after DistComplete/CacheComplete; fall back to A1.
+		shell := []byte(a1IncompleteHTML("agent-run"))
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasPrefix(r.URL.Path, "/api/") {
+				http.NotFound(w, r)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write(shell)
+		})
+		return nil
 	}
+
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			http.NotFound(w, r)

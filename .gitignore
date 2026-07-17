@@ -20,7 +20,8 @@ handoff_*
 /fake-codex
 
 node_modules
-/frontend-agent-run/dist
+/frontend-agent-run/dist/**
+!/frontend-agent-run/dist/placeholder.txt
 
 .commandcode
 
