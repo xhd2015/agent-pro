@@ -80,7 +80,7 @@ func buildAgentRun(t *testing.T, repoRoot, out string) error {
 	if err := os.MkdirAll(filepath.Dir(out), 0755); err != nil {
 		return fmt.Errorf("mkdir bin: %w", err)
 	}
-	cmd := exec.Command("go", "build", "-o", out, "./cmd/agent-run")
+	cmd := exec.Command("go", "build", "-buildvcs=false", "-o", out, "./cmd/agent-run")
 	cmd.Dir = repoRoot
 	if outBytes, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("build agent-run: %w\n%s", err, string(outBytes))

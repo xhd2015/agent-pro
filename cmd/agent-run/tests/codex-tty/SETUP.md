@@ -874,7 +874,7 @@ func Setup(t *testing.T, req *Request) error {
 	if err := os.MkdirAll(filepath.Dir(req.AgentRun), 0755); err != nil {
 		return fmt.Errorf("mkdir bin: %w", err)
 	}
-	build := exec.Command("go", "build", "-o", req.AgentRun, "./cmd/agent-run")
+	build := exec.Command("go", "build", "-buildvcs=false", "-o", req.AgentRun, "./cmd/agent-run")
 	build.Dir = req.RepoRoot
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("build agent-run: %w\n%s", err, string(out))

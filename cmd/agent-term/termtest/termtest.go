@@ -107,7 +107,7 @@ func BuildAgentTerm(t *testing.T) string {
 			return
 		}
 		out := filepath.Join(os.TempDir(), "agent-term-doctest-shared")
-		cmd := exec.Command("go", "build", "-o", out, "./cmd/agent-term")
+		cmd := exec.Command("go", "build", "-buildvcs=false", "-o", out, "./cmd/agent-term")
 		cmd.Dir = root
 		if combined, err := cmd.CombinedOutput(); err != nil {
 			cachedAgentTermBinErr = fmt.Errorf("build agent-term: %v\n%s", err, combined)

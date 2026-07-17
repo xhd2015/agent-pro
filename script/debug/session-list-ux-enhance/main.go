@@ -419,7 +419,7 @@ func waitHealth(ctx context.Context, baseURL, bearer string, timeout time.Durati
 }
 
 func goBuild(repoRoot, pkg, out string) error {
-	cmd := exec.Command("go", "build", "-o", out, pkg)
+	cmd := exec.Command("go", "build", "-buildvcs=false", "-o", out, pkg)
 	cmd.Dir = repoRoot
 	if b, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("go build %s: %w\n%s", pkg, err, b)

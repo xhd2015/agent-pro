@@ -11,6 +11,10 @@ import (
 
 func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	if err != nil {
+		// Missing crush binary on CI: Run should Skip; keep ASSERT defensive.
+		if strings.Contains(err.Error(), "crush") && strings.Contains(err.Error(), "not found") {
+			t.Skipf("crush not available: %v", err)
+		}
 		t.Fatalf("server-ask session-persist failed: %v", err)
 	}
 	lower := strings.ToLower(resp.Answer)

@@ -43,7 +43,7 @@ func Setup(t *testing.T, req *Request) error {
     req.FakeCodex = filepath.Join(req.TempDir, "fake-codex")
     req.HookLogPath = filepath.Join(req.TempDir, "hooks.jsonl")
     req.MarkerPath = filepath.Join(req.TempDir, "markers.log")
-    build := exec.Command("go", "build", "-o", req.FakeCodex, "./cmd/fake-codex")
+    build := exec.Command("go", "build", "-buildvcs=false", "-o", req.FakeCodex, "./cmd/fake-codex")
     build.Dir = req.RepoRoot
     if out, err := build.CombinedOutput(); err != nil {
         return fmt.Errorf("build fake-codex: %w\n%s", err, string(out))

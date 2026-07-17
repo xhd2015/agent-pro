@@ -164,7 +164,7 @@ func buildShowUsage(t *testing.T) (string, error) {
 		binPath := filepath.Join(tmp, "grok-show-usage")
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "go", "build", "-o", binPath, "./script/grok/show-usage")
+		cmd := exec.CommandContext(ctx, "go", "build", "-buildvcs=false", "-o", binPath, "./script/grok/show-usage")
 		cmd.Dir = repoRoot
 		var be bytes.Buffer
 		cmd.Stderr = &be

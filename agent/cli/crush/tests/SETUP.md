@@ -255,6 +255,10 @@ func runServerClient(t *testing.T, req *Request) (*Response, error) {
 }
 
 func runServerAsk(t *testing.T, req *Request) (*Response, error) {
+	if _, err := osexec.LookPath("crush"); err != nil {
+		t.Skip("crush not found in PATH; skip integration test")
+		return &Response{}, nil
+	}
 	client, err := crush.NewCrushServerClient()
 	if err != nil {
 		return nil, err

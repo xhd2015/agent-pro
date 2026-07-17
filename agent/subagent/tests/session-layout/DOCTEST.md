@@ -238,7 +238,7 @@ func invokeRun(t *testing.T, req *Request) (*Response, error) {
 
 func buildFakeCodex(t *testing.T, moduleRoot, out string) {
 	t.Helper()
-	cmd := exec.Command("go", "build", "-o", out, "./cmd/fake-codex")
+	cmd := exec.Command("go", "build", "-buildvcs=false", "-o", out, "./cmd/fake-codex")
 	cmd.Dir = moduleRoot
 	if outBytes, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build fake-codex: %v\n%s", err, string(outBytes))

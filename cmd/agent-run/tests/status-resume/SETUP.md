@@ -168,7 +168,7 @@ func buildOnce(t *testing.T) (agentRun string, err error) {
 				return fmt.Errorf("ensure %s stub: %w", rel, err)
 			}
 		}
-		build := exec.Command("go", "build", "-o", agentRun, "./cmd/agent-run")
+		build := exec.Command("go", "build", "-buildvcs=false", "-o", agentRun, "./cmd/agent-run")
 		build.Dir = repoRoot
 		if out, err := build.CombinedOutput(); err != nil {
 			return fmt.Errorf("build agent-run: %w\n%s", err, string(out))

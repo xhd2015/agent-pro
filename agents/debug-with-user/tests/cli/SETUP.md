@@ -42,7 +42,7 @@ func Setup(t *testing.T, req *Request) error {
 	if err := os.MkdirAll(filepath.Dir(req.Binary), 0o755); err != nil {
 		return fmt.Errorf("mkdir bin: %w", err)
 	}
-	build := exec.Command("go", "build", "-o", req.Binary, "./agents/debug-with-user")
+	build := exec.Command("go", "build", "-buildvcs=false", "-o", req.Binary, "./agents/debug-with-user")
 	build.Dir = req.RepoRoot
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("build debug-with-user: %w\n%s", err, string(out))

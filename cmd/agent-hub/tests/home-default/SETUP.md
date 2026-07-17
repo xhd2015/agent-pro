@@ -63,7 +63,7 @@ func Setup(t *testing.T, req *Request) error {
         return fmt.Errorf("mkdir bin: %w", err)
     }
 
-    build := exec.Command("go", "build", "-o", req.AgentHub, "./cmd/agent-hub")
+    build := exec.Command("go", "build", "-buildvcs=false", "-o", req.AgentHub, "./cmd/agent-hub")
     build.Dir = req.RepoRoot
     if out, err := build.CombinedOutput(); err != nil {
         return fmt.Errorf("build agent-hub: %w\n%s", err, string(out))

@@ -178,7 +178,7 @@ func buildShowStatus(t *testing.T) (string, error) {
 		binPath := filepath.Join(tmp, "codex-show-status")
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "go", "build", "-o", binPath, "./script/codex/show-status")
+		cmd := exec.CommandContext(ctx, "go", "build", "-buildvcs=false", "-o", binPath, "./script/codex/show-status")
 		cmd.Dir = repoRoot
 		var be bytes.Buffer
 		cmd.Stderr = &be
@@ -207,7 +207,7 @@ func buildTTYWatch(t *testing.T) (string, error) {
 		binPath := filepath.Join(tmp, "tty-watch")
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "go", "build", "-o", binPath, "./script/tty-watch")
+		cmd := exec.CommandContext(ctx, "go", "build", "-buildvcs=false", "-o", binPath, "./script/tty-watch")
 		cmd.Dir = repoRoot
 		var be bytes.Buffer
 		cmd.Stderr = &be

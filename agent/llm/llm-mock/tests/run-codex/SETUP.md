@@ -84,13 +84,13 @@ func Setup(t *testing.T, req *Request) error {
 	req.BinaryPath = filepath.Join(tmp, "llm-mock")
 	req.ShortcutPath = filepath.Join(tmp, "llm-mock-run-codex")
 
-	buildMain := exec.Command("go", "build", "-o", req.BinaryPath, "./agent/llm/llm-mock")
+	buildMain := exec.Command("go", "build", "-buildvcs=false", "-o", req.BinaryPath, "./agent/llm/llm-mock")
 	buildMain.Dir = req.RepoRoot
 	if out, err := buildMain.CombinedOutput(); err != nil {
 		return fmt.Errorf("build llm-mock: %w\n%s", err, string(out))
 	}
 
-	buildShortcut := exec.Command("go", "build", "-o", req.ShortcutPath, "./agent/llm/llm-mock/llm-mock-run-codex")
+	buildShortcut := exec.Command("go", "build", "-buildvcs=false", "-o", req.ShortcutPath, "./agent/llm/llm-mock/llm-mock-run-codex")
 	buildShortcut.Dir = req.RepoRoot
 	if out, err := buildShortcut.CombinedOutput(); err != nil {
 		return fmt.Errorf("build llm-mock-run-codex: %w\n%s", err, string(out))

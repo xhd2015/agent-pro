@@ -25,7 +25,7 @@ func main() {
 	}
 
 	ttyWatchBin := "/tmp/tty-watch-inspect"
-	buildCmd := exec.Command("go", "build", "-o", ttyWatchBin, "./script/tty-watch")
+	buildCmd := exec.Command("go", "build", "-buildvcs=false", "-o", ttyWatchBin, "./script/tty-watch")
 	buildCmd.Stderr = os.Stderr
 	if err := buildCmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "FAIL: build tty-watch: %v\n", err)

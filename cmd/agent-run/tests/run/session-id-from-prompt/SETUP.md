@@ -105,12 +105,12 @@ func buildOnce(t *testing.T) (agentRun, fakeCodex string, err error) {
 		if err := os.MkdirAll(cache, 0755); err != nil {
 			return err
 		}
-		build := exec.Command("go", "build", "-o", agentRun, "./cmd/agent-run")
+		build := exec.Command("go", "build", "-buildvcs=false", "-o", agentRun, "./cmd/agent-run")
 		build.Dir = repoRoot
 		if out, err := build.CombinedOutput(); err != nil {
 			return fmt.Errorf("build agent-run: %w\n%s", err, string(out))
 		}
-		build2 := exec.Command("go", "build", "-o", fakeCodex, "./cmd/fake-codex")
+		build2 := exec.Command("go", "build", "-buildvcs=false", "-o", fakeCodex, "./cmd/fake-codex")
 		build2.Dir = repoRoot
 		if out, err := build2.CombinedOutput(); err != nil {
 			return fmt.Errorf("build fake-codex: %w\n%s", err, string(out))

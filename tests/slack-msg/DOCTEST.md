@@ -847,7 +847,7 @@ func buildSlackMsg(t *testing.T) (string, error) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 			defer cancel()
-			cmd := exec.CommandContext(ctx, "go", "build", "-o", bin, "./cmd/slack-msg")
+			cmd := exec.CommandContext(ctx, "go", "build", "-buildvcs=false", "-o", bin, "./cmd/slack-msg")
 			cmd.Dir = repoRoot
 			var stderr bytes.Buffer
 			cmd.Stderr = &stderr

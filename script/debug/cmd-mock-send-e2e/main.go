@@ -19,12 +19,12 @@ func main() {
 	mockBin := "/tmp/llm-mock-run-commandcode"
 
 	// Build
-	build := exec.Command("go", "build", "-o", agentRun, "./cmd/agent-run")
+	build := exec.Command("go", "build", "-buildvcs=false", "-o", agentRun, "./cmd/agent-run")
 	if out, err := build.CombinedOutput(); err != nil {
 		fmt.Printf("FAIL: build agent-run: %v\n%s\n", err, out)
 		os.Exit(1)
 	}
-	build2 := exec.Command("go", "build", "-o", mockBin, "./agent/llm/llm-mock/llm-mock-run-commandcode")
+	build2 := exec.Command("go", "build", "-buildvcs=false", "-o", mockBin, "./agent/llm/llm-mock/llm-mock-run-commandcode")
 	if out, err := build2.CombinedOutput(); err != nil {
 		fmt.Printf("FAIL: build mock: %v\n%s\n", err, out)
 		os.Exit(1)

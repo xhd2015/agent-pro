@@ -86,7 +86,7 @@ func Setup(t *testing.T, req *Request) error {
         req.Method = "POST"
     }
 
-    build := exec.Command("go", "build", "-o", req.BinaryPath, "./agent/llm/llm-mock")
+    build := exec.Command("go", "build", "-buildvcs=false", "-o", req.BinaryPath, "./agent/llm/llm-mock")
     build.Dir = req.RepoRoot
     if out, err := build.CombinedOutput(); err != nil {
         return fmt.Errorf("build llm-mock: %w\n%s", err, string(out))

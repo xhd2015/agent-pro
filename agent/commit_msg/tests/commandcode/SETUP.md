@@ -57,14 +57,14 @@ func Setup(t *testing.T, req *Request) error {
 	}
 
 	req.MockCommandCode = filepath.Join(req.TempDir, "llm-mock-run-commandcode")
-	build := exec.Command("go", "build", "-o", req.MockCommandCode, "./agent/llm/llm-mock/llm-mock-run-commandcode")
+	build := exec.Command("go", "build", "-buildvcs=false", "-o", req.MockCommandCode, "./agent/llm/llm-mock/llm-mock-run-commandcode")
 	build.Dir = req.RepoRoot
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("build llm-mock-run-commandcode: %w\n%s", err, string(out))
 	}
 
 	req.GenCommitMsgBin = filepath.Join(req.TempDir, "gen-commit-msg")
-	buildCLI := exec.Command("go", "build", "-o", req.GenCommitMsgBin, "./cmd/gen-commit-msg")
+	buildCLI := exec.Command("go", "build", "-buildvcs=false", "-o", req.GenCommitMsgBin, "./cmd/gen-commit-msg")
 	buildCLI.Dir = req.RepoRoot
 	if out, err := buildCLI.CombinedOutput(); err != nil {
 		return fmt.Errorf("build gen-commit-msg: %w\n%s", err, string(out))

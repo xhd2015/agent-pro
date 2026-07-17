@@ -57,7 +57,7 @@ func buildExpert() (binPath string) {
 	binPath = tmp.Name()
 	tmp.Close()
 
-	cmd := exec.Command("go", "build", "-o", binPath, ".")
+	cmd := exec.Command("go", "build", "-buildvcs=false", "-o", binPath, ".")
 	cmd.Dir = srcDir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -218,7 +218,7 @@ func validateGeneratedModule(t *T, dir, expectedSlug string) {
 		t.Errorf("output dir missing _test.go file(s)")
 	}
 
-	cmd := exec.Command("go", "build", "./...")
+	cmd := exec.Command("go", "build", "-buildvcs=false", "./...")
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {

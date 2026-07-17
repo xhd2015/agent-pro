@@ -114,7 +114,7 @@ func ensureAgentRunBinary(t *testing.T, repoRoot string) string {
 		if err := os.MkdirAll(cache, 0755); err != nil {
 			return err
 		}
-		cmd := exec.Command("go", "build", "-o", bin, "./cmd/agent-run")
+		cmd := exec.Command("go", "build", "-buildvcs=false", "-o", bin, "./cmd/agent-run")
 		cmd.Dir = repoRoot
 		if out, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("build agent-run: %w\n%s", err, string(out))

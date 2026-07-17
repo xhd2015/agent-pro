@@ -260,7 +260,7 @@ func BuildTTYWatch(t *testing.T) string {
 			return
 		}
 		out := filepath.Join(os.TempDir(), "tty-watch-doctest-shared")
-		cmd := exec.Command("go", "build", "-o", out, "./script/tty-watch")
+		cmd := exec.Command("go", "build", "-buildvcs=false", "-o", out, "./script/tty-watch")
 		cmd.Dir = root
 		if combined, err := cmd.CombinedOutput(); err != nil {
 			cachedBinErr = fmt.Errorf("build tty-watch: %v\n%s", err, combined)
@@ -804,7 +804,7 @@ func buildLockHolder(t *testing.T) string {
 			return
 		}
 		out := filepath.Join(os.TempDir(), "tty-watch-lockholder-doctest")
-		cmd := exec.Command("go", "build", "-o", out, "./script/tty-watch/ttywatchtest/lockholder")
+		cmd := exec.Command("go", "build", "-buildvcs=false", "-o", out, "./script/tty-watch/ttywatchtest/lockholder")
 		cmd.Dir = root
 		if combined, err := cmd.CombinedOutput(); err != nil {
 			cachedLockHolderErr = fmt.Errorf("build lockholder: %v\n%s", err, combined)

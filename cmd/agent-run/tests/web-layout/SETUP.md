@@ -78,7 +78,7 @@ func buildAgentRun(t *testing.T, repoRoot, out string) error {
 	if err := os.MkdirAll(filepath.Dir(out), 0755); err != nil {
 		return fmt.Errorf("mkdir bin: %w", err)
 	}
-	cmd := exec.Command("go", "build", "-o", out, "./cmd/agent-run")
+	cmd := exec.Command("go", "build", "-buildvcs=false", "-o", out, "./cmd/agent-run")
 	cmd.Dir = repoRoot
 	if outBytes, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("build agent-run: %w\n%s", err, string(outBytes))
@@ -1046,7 +1046,7 @@ func buildFakeCodexIntoPath(t *testing.T, req *Request) error {
 	if err := os.MkdirAll(filepath.Dir(fakeCodex), 0755); err != nil {
 		return err
 	}
-	build := exec.Command("go", "build", "-o", fakeCodex, "./cmd/fake-codex")
+	build := exec.Command("go", "build", "-buildvcs=false", "-o", fakeCodex, "./cmd/fake-codex")
 	build.Dir = req.RepoRoot
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("build fake-codex: %w\n%s", err, string(out))
@@ -1069,7 +1069,7 @@ func buildLLMMockRunGrok(t *testing.T, req *Request) error {
 	if err := os.MkdirAll(req.GrokHome, 0755); err != nil {
 		return err
 	}
-	build := exec.Command("go", "build", "-o", req.LLMMockRunGrok, "./agent/llm/llm-mock/llm-mock-run-grok")
+	build := exec.Command("go", "build", "-buildvcs=false", "-o", req.LLMMockRunGrok, "./agent/llm/llm-mock/llm-mock-run-grok")
 	build.Dir = req.RepoRoot
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("build llm-mock-run-grok: %w\n%s", err, string(out))
