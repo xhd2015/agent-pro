@@ -28,9 +28,13 @@ require a real `agent-run` binary, iTerm, or grok.
   current `runAutoSendOrResume` classify in `cmd/agent-run/run_cmd.go`.
 - **Probe** — supplies lifecycle facts without real TTY/registry when injected.
   Report fields used for classification: `ResumeReady` (bound+exited) and
-  `RunnerExited` (`*bool`: nil unknown, false live, true exited). Production
-  default probe mirrors `probeSessionStatus` (out of unit scope; nil probe uses
-  package default).
+  `RunnerExited` (`*bool`: nil unknown, false live, true exited).
+- **`LifecycleProbe`** — production TTY/registry/process probe. When
+  `Classify` / `Opts.Probe` is **nil**, the package uses **`LifecycleProbe`**
+  (not `EmptyProbe`). Without a real TTY registry under a temp store, lifecycle
+  is unknown → classify **ModeRun** for a found session (unit-testable contract).
+- **`EmptyProbe`** — always unknown lifecycle (`ResumeReady=false`,
+  `RunnerExited=nil`) for unit tests that need ModeRun without TTY I/O.
 - **`AutoSendOrResume`** — validates opts, calls `Classify`, then dispatches:
   - `send` → live follow-up path (agentsend parity / `SendLive` hook)
   - `resume` → resumeExistingSession semantics (`ResumeSession` hook)
@@ -42,8 +46,10 @@ require a real `agent-run` binary, iTerm, or grok.
   With hooks set, no `agent-run` binary LookPath is required.
 - **Store** — `agentstorage.Store` (file store under temp home in tests). Missing
   session is valid (`found=false` → mode `run`).
-- **`cmd/agent-run` (source-wire)** — exit criterion for CLI cutover: main package
-  sources import `agentrunapi` after implementer wires the thin flags wrapper.
+- **`cmd/agent-run` (source-wire)** — thin main imports `agentrunapi` (blank
+  import OK); production auto path lives in **`pkgs/agentruncli`**.
+- **`pkgs/agentruncli` (source-wire)** — run/status paths reference
+  `agentrunapi.LifecycleProbe` as the shared production probe.
 
 **Behaviors**
 
@@ -53,6 +59,12 @@ found=false                              -> ModeRun
 found && ResumeReady                     -> ModeResume
 found && RunnerExited!=nil && !*Exited   -> ModeSend
 else (unbound / exited unknown / …)      -> ModeRun
+
+# Probe selection
+probe == nil                             -> LifecycleProbe (production default)
+probe == EmptyProbe                      -> unknown lifecycle → else ModeRun when found
+probe == LifecycleProbe (empty store)    -> unknown/not live → ModeRun when found
+injected script probe                    -> report drives Mode
 
 # AutoSendOrResume validation (before store/probe side effects)
 SessionID empty/whitespace -> error (requires session id); no dispatch hooks
@@ -64,6 +76,9 @@ classify -> switch Mode:
   resume -> ResumeSession hook or resumeExistingSession
   run    -> RunSession hook or agentui.Run
 # No agent-run binary required when hooks cover the path.
+
+# CLI wire
+agentruncli run_cmd / status -> agentrunapi.LifecycleProbe
 ```
 
 ## Version
@@ -78,13 +93,15 @@ tests/agentrunapi/
 ├── SETUP.md
 ├── api-surface/                         # package + public symbols
 │   ├── SETUP.md
-│   └── exports-exist/                   # Mode + Classify + AutoSendOrResume + Opts
+│   └── exports-exist/                   # Mode + Classify + probes + AutoSendOrResume
 ├── classify/                            # Classify(store, id, probe)
 │   ├── SETUP.md
 │   ├── missing-session/                 # no meta → run, found=false
 │   ├── live/                            # found + exited=false → send
 │   ├── resume-ready/                    # found + ResumeReady → resume
-│   └── found-else-run/                  # found but not live/resume → run
+│   ├── found-else-run/                  # found + script probe unknown → run
+│   ├── empty-probe-found-run/           # found + EmptyProbe → run
+│   └── nil-probe-found-run/             # found + nil → LifecycleProbe default → run
 ├── auto-send-or-resume/                 # AutoSendOrResume(ctx, Opts)
 │   ├── SETUP.md
 │   ├── validation/                      # gates before dispatch
@@ -95,10 +112,13 @@ tests/agentrunapi/
 │       ├── SETUP.md
 │       ├── mode-run-hook/               # missing → RunSession; no LookPath
 │       ├── mode-send-hook/              # live → SendLive
-│       └── mode-resume-hook/            # resume-ready → ResumeSession
+│       ├── mode-resume-hook/            # resume-ready → ResumeSession
+│       ├── nil-probe-mode-run-hook/     # found + Probe nil → RunSession once
+│       └── empty-probe-mode-run-hook/   # found + EmptyProbe → RunSession once
 ├── source-wire/                         # CLI cutover exit criterion
 │   ├── SETUP.md
-│   └── cli-imports-agentrunapi/         # cmd/agent-run sources import package
+│   ├── cli-imports-agentrunapi/         # cmd/agent-run sources import package
+│   └── cli-uses-lifecycle-probe/        # agentruncli references LifecycleProbe
 └── wait-driver/                         # P2 NESTED DOCTEST root (separate Run)
     └── …                                # status | wait-ready | follow-up | open-new-terminal
 ```
@@ -107,8 +127,9 @@ Parameter ranking (most → least significant):
 
 1. **API concern** — surface | classify | auto-send-or-resume | source-wire
 2. **Session lifecycle state** (classify / dispatch) — missing | live | resume-ready | else-run
-3. **Validation vs dispatch** (auto) — empty session / open+detach vs mode hooks
-4. **Binary independence** — NewTerminal=false + hooks never need agent-run LookPath
+3. **Probe selection** — script | EmptyProbe | nil/LifecycleProbe default
+4. **Validation vs dispatch** (auto) — empty session / open+detach vs mode hooks
+5. **Binary independence** — NewTerminal=false + hooks never need agent-run LookPath
 
 P2 nested ranking: see `wait-driver/DOCTEST.md`.
 
@@ -116,17 +137,22 @@ P2 nested ranking: see `wait-driver/DOCTEST.md`.
 
 | # | Leaf | Description |
 |---|------|-------------|
-| 1 | `api-surface/exports-exist` | Package exports `Mode` constants, `Classify`, `AutoSendOrResume`, `Opts`, `ProbeReport` |
+| 1 | `api-surface/exports-exist` | Package exports `Mode`, `Classify`, `AutoSendOrResume`, `Opts`, `ProbeReport`, `LifecycleProbe`, `EmptyProbe` |
 | 2 | `classify/missing-session` | Empty store / unknown id → `ModeRun`, `found=false`, no error |
 | 3 | `classify/live` | Seeded meta + probe `RunnerExited=false` → `ModeSend`, `found=true` |
 | 4 | `classify/resume-ready` | Seeded meta + probe `ResumeReady=true` → `ModeResume`, `found=true` |
-| 5 | `classify/found-else-run` | Seeded meta + probe not ready / exited unknown → `ModeRun`, `found=true` |
-| 6 | `auto-send-or-resume/validation/empty-session-id` | Empty SessionID → API error; zero dispatch hooks |
-| 7 | `auto-send-or-resume/validation/open-and-detach-mutex` | Open+Detach → mutual exclusive error; zero hooks |
-| 8 | `auto-send-or-resume/dispatch/mode-run-hook` | Missing session → `RunSession` once; Mode=run; no binary |
-| 9 | `auto-send-or-resume/dispatch/mode-send-hook` | Live probe → `SendLive` once; Mode=send |
-| 10 | `auto-send-or-resume/dispatch/mode-resume-hook` | ResumeReady → `ResumeSession` once; Mode=resume |
-| 11 | `source-wire/cli-imports-agentrunapi` | `cmd/agent-run` `.go` sources import `pkgs/agentrunapi` |
+| 5 | `classify/found-else-run` | Seeded meta + script probe not ready / exited unknown → `ModeRun`, `found=true` |
+| 6 | `classify/empty-probe-found-run` | Seeded meta + `EmptyProbe` → `ModeRun`, `found=true` |
+| 7 | `classify/nil-probe-found-run` | Seeded meta + nil probe (→ `LifecycleProbe`) → `ModeRun`, `found=true`; no crash |
+| 8 | `auto-send-or-resume/validation/empty-session-id` | Empty SessionID → API error; zero dispatch hooks |
+| 9 | `auto-send-or-resume/validation/open-and-detach-mutex` | Open+Detach → mutual exclusive error; zero hooks |
+| 10 | `auto-send-or-resume/dispatch/mode-run-hook` | Missing session → `RunSession` once; Mode=run; no binary |
+| 11 | `auto-send-or-resume/dispatch/mode-send-hook` | Live probe → `SendLive` once; Mode=send |
+| 12 | `auto-send-or-resume/dispatch/mode-resume-hook` | ResumeReady → `ResumeSession` once; Mode=resume |
+| 13 | `auto-send-or-resume/dispatch/nil-probe-mode-run-hook` | Seeded + Probe nil → `RunSession` once (not SendLive); no binary |
+| 14 | `auto-send-or-resume/dispatch/empty-probe-mode-run-hook` | Seeded + EmptyProbe → `RunSession` once |
+| 15 | `source-wire/cli-imports-agentrunapi` | `cmd/agent-run` `.go` sources import `pkgs/agentrunapi` |
+| 16 | `source-wire/cli-uses-lifecycle-probe` | `pkgs/agentruncli` sources reference `LifecycleProbe` |
 
 ## How to Run
 
@@ -140,22 +166,26 @@ doctest test -v ./tests/agentrunapi/classify/missing-session
 doctest test -v ./tests/agentrunapi/classify/live
 doctest test -v ./tests/agentrunapi/classify/resume-ready
 doctest test -v ./tests/agentrunapi/classify/found-else-run
+doctest test -v ./tests/agentrunapi/classify/empty-probe-found-run
+doctest test -v ./tests/agentrunapi/classify/nil-probe-found-run
 doctest test -v ./tests/agentrunapi/auto-send-or-resume/validation/empty-session-id
 doctest test -v ./tests/agentrunapi/auto-send-or-resume/validation/open-and-detach-mutex
 doctest test -v ./tests/agentrunapi/auto-send-or-resume/dispatch/mode-run-hook
 doctest test -v ./tests/agentrunapi/auto-send-or-resume/dispatch/mode-send-hook
 doctest test -v ./tests/agentrunapi/auto-send-or-resume/dispatch/mode-resume-hook
+doctest test -v ./tests/agentrunapi/auto-send-or-resume/dispatch/nil-probe-mode-run-hook
+doctest test -v ./tests/agentrunapi/auto-send-or-resume/dispatch/empty-probe-mode-run-hook
 doctest test -v ./tests/agentrunapi/source-wire/cli-imports-agentrunapi
+doctest test -v ./tests/agentrunapi/source-wire/cli-uses-lifecycle-probe
 
-# P2 nested tree (classic RED until WaitReady / FollowUp APIs land)
+# P2 nested tree (independent; WaitReady/FollowUp may be GREEN when implemented)
 doctest vet ./tests/agentrunapi/wait-driver
 doctest test ./tests/agentrunapi/wait-driver
 ```
 
-P1 leaves should stay **GREEN** once `pkgs/agentrunapi` Classify/AutoSendOrResume
-exist. P2 nested tree is independently **RED** until WaitReady/FollowUp land.
-Existing `cmd/agent-run/tests/auto-send-or-resume` remains the CLI integration
-regression suite (not part of this tree).
+P1 leaves are **GREEN** for Classify/AutoSendOrResume + LifecycleProbe/EmptyProbe
+coverage. Existing `cmd/agent-run/tests/auto-send-or-resume` remains the CLI
+integration regression suite (not part of this tree).
 
 ### Planned public API (RED until implementer)
 
@@ -186,8 +216,14 @@ type ProbeReport struct {
 	RunnerExited *bool
 }
 
-// ProbeFunc injects lifecycle probing. nil → package default (TTY/registry/process).
+// ProbeFunc injects lifecycle probing. nil → LifecycleProbe (not EmptyProbe).
 type ProbeFunc func(store agentstorage.Store, meta agentstorage.SessionMeta) (ProbeReport, error)
+
+// LifecycleProbe is the production TTY/registry/process probe (Classify default).
+func LifecycleProbe(store agentstorage.Store, meta agentstorage.SessionMeta) (ProbeReport, error)
+
+// EmptyProbe always returns unknown lifecycle for unit ModeRun without TTY I/O.
+func EmptyProbe(store agentstorage.Store, meta agentstorage.SessionMeta) (ProbeReport, error)
 
 // Classify resolves session id and returns Mode using the same rules as
 // cmd/agent-run runAutoSendOrResume. Missing session → ModeRun, found=false.
@@ -265,6 +301,12 @@ type Request struct {
 	ResumeReady  bool
 	// RunnerExited: "live" | "exited" | "unknown" (empty = unknown)
 	RunnerExited string
+	// ProbeName selects probe for classify/auto:
+	//   "" | "nil" → nil (production LifecycleProbe inside Classify), unless UseProbe
+	//   "empty" → EmptyProbe
+	//   "lifecycle" → LifecycleProbe (explicit)
+	//   "script" → makeProbe (same as UseProbe)
+	ProbeName string
 
 	// AutoSendOrResume option fields
 	Open   bool
@@ -273,6 +315,10 @@ type Request struct {
 	InstallHooks bool
 	// Fail if any hook is invoked (validation leaves).
 	ExpectNoHooks bool
+
+	// SourceWireTarget: "cmd" (default) scans cmd/agent-run for import;
+	// "agentruncli" scans pkgs/agentruncli for LifecycleProbe symbol.
+	SourceWireTarget string
 }
 
 // Response is the harness observation after calling package APIs.
@@ -289,8 +335,12 @@ type Response struct {
 	HookMode    agentrunapi.Mode // mode observed when first hook fired
 
 	// source_wire
-	ImportFound bool
-	ScannedFiles int
+	ImportFound          bool
+	LifecycleProbeFound  bool
+	ScannedFiles         int
+	// api_surface: EmptyProbe/LifecycleProbe callable
+	EmptyProbeOK      bool
+	LifecycleProbeOK  bool
 }
 
 func Run(t *testing.T, req *Request) (*Response, error) {
@@ -319,6 +369,9 @@ func runAPISurface(t *testing.T, req *Request, resp *Response) (*Response, error
 	_ = agentrunapi.ModeResume
 	_ = agentrunapi.ProbeReport{}
 	_ = agentrunapi.Opts{}
+	// LifecycleProbe / EmptyProbe must be package-level funcs (callable).
+	var _ agentrunapi.ProbeFunc = agentrunapi.LifecycleProbe
+	var _ agentrunapi.ProbeFunc = agentrunapi.EmptyProbe
 	// Classify / AutoSendOrResume are invoked with empty fixtures; errors OK.
 	store, err := agentstorage.NewFileStore(req.Home)
 	if err != nil {
@@ -329,6 +382,14 @@ func runAPISurface(t *testing.T, req *Request, resp *Response) (*Response, error
 	resp.Found = found
 	if err != nil {
 		resp.ErrString = err.Error()
+	}
+	// EmptyProbe always succeeds with zero report.
+	if rep, err := agentrunapi.EmptyProbe(store, agentstorage.SessionMeta{}); err == nil && !rep.ResumeReady && rep.RunnerExited == nil {
+		resp.EmptyProbeOK = true
+	}
+	// LifecycleProbe on empty store/meta must not panic; empty report is OK.
+	if _, err := agentrunapi.LifecycleProbe(store, agentstorage.SessionMeta{}); err == nil {
+		resp.LifecycleProbeOK = true
 	}
 	// AutoSendOrResume with empty session must be callable (validation error expected).
 	if err := agentrunapi.AutoSendOrResume(context.Background(), agentrunapi.Opts{
@@ -348,10 +409,7 @@ func runClassify(t *testing.T, req *Request, resp *Response) (*Response, error) 
 	if err != nil {
 		return nil, err
 	}
-	var probe agentrunapi.ProbeFunc
-	if req.UseProbe {
-		probe = makeProbe(req)
-	}
+	probe := selectProbe(req)
 	mode, meta, found, err := agentrunapi.Classify(store, req.SessionID, probe)
 	resp.Mode = mode
 	resp.Found = found
@@ -377,9 +435,7 @@ func runAuto(t *testing.T, req *Request, resp *Response) (*Response, error) {
 		Store:     store,
 		// P1 unit path: never new-terminal / never agent-run binary.
 		NewTerminal: false,
-	}
-	if req.UseProbe {
-		opts.Probe = makeProbe(req)
+		Probe:       selectProbe(req),
 	}
 	if req.InstallHooks {
 		opts.RunSession = func(ctx context.Context, o agentrunapi.Opts, meta agentstorage.SessionMeta, found bool) error {
@@ -419,7 +475,22 @@ func runAuto(t *testing.T, req *Request, resp *Response) (*Response, error) {
 func runSourceWire(t *testing.T, req *Request, resp *Response) (*Response, error) {
 	t.Helper()
 	// DOCTEST_ROOT is tests/agentrunapi; module root is ../..
-	cmdDir := filepath.Join(DOCTEST_ROOT, "..", "..", "cmd", "agent-run")
+	moduleRoot := filepath.Join(DOCTEST_ROOT, "..", "..")
+	target := strings.TrimSpace(req.SourceWireTarget)
+	if target == "" {
+		target = "cmd"
+	}
+	switch target {
+	case "agentruncli":
+		return scanAgentruncliLifecycleProbe(t, moduleRoot, resp)
+	default:
+		return scanCmdAgentRunImport(t, moduleRoot, resp)
+	}
+}
+
+func scanCmdAgentRunImport(t *testing.T, moduleRoot string, resp *Response) (*Response, error) {
+	t.Helper()
+	cmdDir := filepath.Join(moduleRoot, "cmd", "agent-run")
 	entries, err := os.ReadDir(cmdDir)
 	if err != nil {
 		return nil, fmt.Errorf("read cmd/agent-run: %w", err)
@@ -455,6 +526,65 @@ func runSourceWire(t *testing.T, req *Request, resp *Response) (*Response, error
 		}
 	}
 	return resp, nil
+}
+
+func scanAgentruncliLifecycleProbe(t *testing.T, moduleRoot string, resp *Response) (*Response, error) {
+	t.Helper()
+	cliDir := filepath.Join(moduleRoot, "pkgs", "agentruncli")
+	entries, err := os.ReadDir(cliDir)
+	if err != nil {
+		return nil, fmt.Errorf("read pkgs/agentruncli: %w", err)
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") {
+			continue
+		}
+		if strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		path := filepath.Join(cliDir, e.Name())
+		resp.ScannedFiles++
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		src := string(data)
+		if strings.Contains(src, "LifecycleProbe") {
+			resp.LifecycleProbeFound = true
+			// Prefer files that also import agentrunapi for confidence.
+			if strings.Contains(src, "pkgs/agentrunapi") || strings.Contains(src, "agentrunapi.LifecycleProbe") {
+				resp.ImportFound = true
+			}
+			return resp, nil
+		}
+	}
+	return resp, nil
+}
+
+// selectProbe maps Request probe fields to ProbeFunc.
+// nil → Classify uses LifecycleProbe (production default, not EmptyProbe).
+func selectProbe(req *Request) agentrunapi.ProbeFunc {
+	name := strings.TrimSpace(strings.ToLower(req.ProbeName))
+	switch name {
+	case "empty":
+		return agentrunapi.EmptyProbe
+	case "lifecycle":
+		return agentrunapi.LifecycleProbe
+	case "script":
+		return makeProbe(req)
+	case "nil":
+		return nil
+	case "":
+		if req.UseProbe {
+			return makeProbe(req)
+		}
+		return nil
+	default:
+		if req.UseProbe {
+			return makeProbe(req)
+		}
+		return nil
+	}
 }
 
 func openAndMaybeSeed(t *testing.T, req *Request) (agentstorage.Store, error) {

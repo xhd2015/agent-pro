@@ -2,6 +2,7 @@
 
 - `Classify` on missing session returns `ModeRun` and `found=false`.
 - No harness error (package must exist and export symbols).
+- `LifecycleProbe` and `EmptyProbe` are callable (`EmptyProbeOK`, `LifecycleProbeOK`).
 - `AutoSendOrResume` is callable (empty session may set API error; allowed).
 
 ## Side Effects
@@ -27,5 +28,11 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	assertNoError(t, err)
 	assertEqual(t, "Mode", resp.Mode, agentrunapi.ModeRun)
 	assertEqual(t, "Found", resp.Found, false)
+	if !resp.EmptyProbeOK {
+		t.Fatal("EmptyProbe must be callable and return unknown lifecycle")
+	}
+	if !resp.LifecycleProbeOK {
+		t.Fatal("LifecycleProbe must be callable on empty store without error")
+	}
 }
 ```

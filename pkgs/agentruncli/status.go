@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/xhd2015/agent-pro/pkgs/agentrunapi"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 	"github.com/xhd2015/agent-pro/pkgs/ttywatch"
@@ -295,16 +296,24 @@ func probeSessionStatus(store agentstorage.Store, meta agentstorage.SessionMeta)
 		report.Runner.Status = "unbound"
 	}
 
-	exited := computeRunnerExited(report, meta, scrollbackSnapshot)
-	report.Runner.Exited = exited
-
-	// --- resume layer ---
-	bound := report.Runner.Status == "bound"
-	exitedTrue := exited != nil && *exited
-	if bound && exitedTrue {
-		report.Resume.Ready = true
+	// Classify/send gate: shared production LifecycleProbe (single source of truth).
+	// Display layers above stay for human/JSON status; resume/exited come from probe.
+	if pr, err := agentrunapi.LifecycleProbe(store, meta); err == nil {
+		report.Runner.Exited = pr.RunnerExited
+		report.Resume.Ready = pr.ResumeReady
 	} else {
-		report.Resume.Ready = false
+		exited := computeRunnerExited(report, meta, scrollbackSnapshot)
+		report.Runner.Exited = exited
+		bound := report.Runner.Status == "bound"
+		report.Resume.Ready = bound && exited != nil && *exited
+	}
+
+	// --- resume reason (display only) ---
+	bound := report.Runner.Status == "bound"
+	exited := report.Runner.Exited
+	if report.Resume.Ready {
+		// ready; no reason
+	} else {
 		switch {
 		case report.Runner.Status == "binding":
 			report.Resume.Reason = "runner session bind in progress"

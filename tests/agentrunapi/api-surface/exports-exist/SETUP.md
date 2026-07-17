@@ -1,20 +1,22 @@
 # Scenario
 
-**Feature**: Mode constants and entrypoints exist and are callable
+**Feature**: Mode constants, entrypoints, and lifecycle probes exist and are callable
 
 ```
 agentrunapi.ModeRun/Send/Resume + Classify + AutoSendOrResume + Opts + ProbeReport
-  -> compile + callable (classify missing id; auto empty session validates)
+  + LifecycleProbe + EmptyProbe
+  -> compile + callable (classify missing id; probes on empty store; auto empty session validates)
 ```
 
 ## Preconditions
 
-- Empty store home is enough; no seed, no probe, no hooks.
+- Empty store home is enough; no seed, no hooks.
+- `LifecycleProbe` and `EmptyProbe` are package-level `ProbeFunc` values.
 
 ## Steps
 
 1. Rely on root Home and mode from grouping.
-2. Assert symbols usable and Classify returns ModeRun for missing session.
+2. Assert symbols usable, Classify ModeRun for missing session, probes callable.
 
 ```go
 import "testing"

@@ -503,13 +503,8 @@ func runAutoSendOrResume(opts autoSendOrResumeOpts) error {
 		Store:                         store,
 		Stdout:                        os.Stdout,
 		Stderr:                        os.Stderr,
-		Probe: func(s agentstorage.Store, meta agentstorage.SessionMeta) (agentrunapi.ProbeReport, error) {
-			report := probeSessionStatus(s, meta)
-			return agentrunapi.ProbeReport{
-				ResumeReady:  report.Resume.Ready,
-				RunnerExited: report.Runner.Exited,
-			}, nil
-		},
+		// Shared production probe (same as Classify default when Probe is nil).
+		Probe: agentrunapi.LifecycleProbe,
 		// Production dispatch keeps full CLI semantics (resume reclaim, new-terminal).
 		RunSession: func(ctx context.Context, o agentrunapi.Opts, meta agentstorage.SessionMeta, found bool) error {
 			if opts.newTerminal {

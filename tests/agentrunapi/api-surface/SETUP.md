@@ -8,6 +8,7 @@ import agentrunapi
   -> Classify(...)
   -> AutoSendOrResume(...)
   -> Opts | ProbeReport types
+  -> LifecycleProbe | EmptyProbe
 ```
 
 ## Preconditions
@@ -18,7 +19,7 @@ import agentrunapi
 ## Steps
 
 1. Set harness mode `api_surface`.
-2. `Run` touches constants/types and calls Classify + AutoSendOrResume.
+2. `Run` touches constants/types, probes, Classify + AutoSendOrResume.
 
 ```go
 import "testing"

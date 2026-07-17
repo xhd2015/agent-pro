@@ -31,8 +31,9 @@ type ProbeReport struct {
 	RunnerExited *bool
 }
 
-// ProbeFunc injects lifecycle probing. nil → package default (empty report /
-// unknown lifecycle; production callers should inject a real probe).
+// ProbeFunc injects lifecycle probing.
+// nil → LifecycleProbe (production TTY/registry/process probe).
+// Use EmptyProbe in unit tests that need unknown lifecycle without TTY I/O.
 type ProbeFunc func(store agentstorage.Store, meta agentstorage.SessionMeta) (ProbeReport, error)
 
 // Classify resolves session id and returns Mode using the same rules as
@@ -50,7 +51,7 @@ func Classify(store agentstorage.Store, sessionID string, probe ProbeFunc) (mode
 		return ModeRun, agentstorage.SessionMeta{}, false, nil
 	}
 	if probe == nil {
-		probe = defaultProbe
+		probe = LifecycleProbe
 	}
 	report, err := probe(store, meta)
 	if err != nil {
@@ -125,6 +126,7 @@ func AutoSendOrResume(ctx context.Context, opts Opts) error {
 		opts.Stderr = os.Stderr
 	}
 
+	// Prefer explicit opts.Probe; nil → LifecycleProbe inside Classify.
 	mode, meta, found, err := Classify(opts.Store, sessionID, opts.Probe)
 	if err != nil {
 		return err
@@ -147,11 +149,6 @@ func AutoSendOrResume(ctx context.Context, opts Opts) error {
 		}
 		return defaultRunSession(ctx, opts, meta, found)
 	}
-}
-
-func defaultProbe(store agentstorage.Store, meta agentstorage.SessionMeta) (ProbeReport, error) {
-	// Unknown lifecycle without TTY/registry: treat as unbound / not live.
-	return ProbeReport{}, nil
 }
 
 // resolveSession looks up a bare session id. Missing → found=false (MODE=run).

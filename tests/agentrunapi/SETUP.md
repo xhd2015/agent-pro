@@ -21,9 +21,12 @@ cmd/agent-run/*.go import pkgs/agentrunapi
 
 - Package `github.com/xhd2015/agent-pro/pkgs/agentrunapi` (P1 surface).
 - Exports: `Mode` (`ModeRun`/`ModeSend`/`ModeResume`), `ProbeReport`, `ProbeFunc`,
-  `Classify`, `Opts`, `AutoSendOrResume` — see root DOCTEST.md planned API.
+  `LifecycleProbe`, `EmptyProbe`, `Classify`, `Opts`, `AutoSendOrResume` —
+  see root DOCTEST.md planned API.
 - Unit leaves use temp `agentstorage.NewFileStore` + injectable `Probe` /
   dispatch hooks. **No real agent-run binary, PATH LookPath, iTerm, or grok.**
+- Nil probe → production `LifecycleProbe` (not EmptyProbe). Empty store + seeded
+  meta without TTY registry still classifies ModeRun in unit leaves.
 - `NewTerminal=false` on all auto unit leaves (ForceNew / FollowUp are P2 nested).
 - P2 WaitReady/FollowUp: nested root `wait-driver/` (own DOCTEST.md; not this Run).
 - Harness stores API errors on `Response.ErrString` (harness `error` is nil for
