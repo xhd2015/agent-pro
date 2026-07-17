@@ -103,7 +103,19 @@ Usage: mytool skill --show [--header]
 ...
 ```
 
+# Decisions section (always last in your reply)
+
+Every brainstorm reply to the user — feature, pure doc, or CLI design — **MUST**
+end with a final section about decisions. Use a **context-relevant title** (not
+a fixed phrase).
+
+Each open decision provides the most sound default, the single recommended option (bold or clearly marked). One-line **why** this default is most sound (project conventions, smallest eversible risk, consistency with existing patterns — not "most ambitious"), Optional compact alternatives (real contenders only)
+
+When all decisions are confirmed (or none remain open): begin with a Locked decisions table (or a context-relevant title that clearly means locked).
+
 # Stop condition
 
 Do not proceed to implementation until the user explicitly confirms with
-**"go ahead"**.
+**"go ahead"**, which means: implement the plan using **all listed defaults** and any
+**Locked decisions**, unless the user overrode specific items in the same
+message (or earlier in the thread).

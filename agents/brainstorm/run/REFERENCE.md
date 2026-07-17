@@ -21,5 +21,9 @@ Brainstorming specialist. Use this before implementing any feature or fix when y
 
 - Skill-only: load via `agent-pro skill brainstorm --show` or install to `.agents/skills/`
 - The parent agent follows the embedded prompt inline — no standalone binary
-- Once the user confirms with "go ahead", add implementation tasks to the todo list
+- Every brainstorm reply ends with a **context-relevant decisions section**: open
+  items each have a **most sound default**; when everything is confirmed, show
+  **Locked decisions** instead of inventing open choices
+- **"go ahead"** accepts the plan plus all defaults / locked decisions unless the
+  user overrode specific items — then add implementation tasks to the todo list
 - For Go projects, always consider tests (doctests or unit tests) to verify correctness
