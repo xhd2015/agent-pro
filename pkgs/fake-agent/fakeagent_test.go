@@ -2,6 +2,8 @@ package fakeagent
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -349,7 +351,11 @@ func TestExecProbe_ReturnsResultText(t *testing.T) {
 	}
 	_ = result // some commands legitimately have empty output
 
-	_, result2 := g.execProbe(probe.Suggestion{Kind: "file_read", Value: "/tmp/test.txt"})
+	path := filepath.Join(t.TempDir(), "test.txt")
+	if err := os.WriteFile(path, []byte("hello from probe"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, result2 := g.execProbe(probe.Suggestion{Kind: "file_read", Value: path})
 	if result2 == "" {
 		t.Fatal("execFileRead returned empty result")
 	}

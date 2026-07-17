@@ -83,7 +83,7 @@ func TestAskAgentCLISurfacesFakeCodexError(t *testing.T) {
 func buildFakeCodex(t *testing.T) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "fake-codex")
-	cmd := exec.Command("go", "build", "-o", bin, "../../../cmd/fake-codex")
+	cmd := exec.Command("go", "build", "-buildvcs=false", "-o", bin, "../../../cmd/fake-codex")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build fake-codex: %v\n%s", err, string(out))
 	}

@@ -105,6 +105,13 @@ func writeHumanTrace(w io.Writer, summary trace.AgentTraceSummary, detail *trace
 	nextNum := len(detail.Messages)
 	var mu sync.Mutex
 	statusDone := make(chan struct{})
+	var statusDoneOnce sync.Once
+	signalStatusDone := func() {
+		statusDoneOnce.Do(func() {
+			statusCancel()
+			close(statusDone)
+		})
+	}
 
 	go func() {
 		logs.WatchFileEvents(statusCtx, metaPath, logs.WatchFileEventsOptions{
@@ -119,10 +126,7 @@ func writeHumanTrace(w io.Writer, summary trace.AgentTraceSummary, detail *trace
 				return nil
 			}
 			if meta.Status != "running" {
-				mu.Lock()
-				statusCancel()
-				mu.Unlock()
-				close(statusDone)
+				signalStatusDone()
 			}
 			return nil
 		})

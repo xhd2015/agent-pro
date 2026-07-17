@@ -11,6 +11,12 @@ jobs:
       image: golang:1.25.0
     steps:
       - uses: actions/checkout@v4
+      - name: Placeholder frontend dist for go:embed
+        run: |
+          mkdir -p frontend/dist frontend-agent-run/dist
+          # Minimal shell so Static(PrepareFrontendHTML) tests keep working without a full Vite build.
+          printf '%s\n' '<!doctype html><html><body><div id="root"></div></body></html>' > frontend/dist/index.html
+          printf '%s\n' '<!doctype html><html><body><div id="root"></div></body></html>' > frontend-agent-run/dist/index.html
       - name: Go test
         run: go test -v ./...
 

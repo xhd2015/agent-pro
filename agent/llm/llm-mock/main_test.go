@@ -252,7 +252,7 @@ func userMessages(t *testing.T, content string) []openai.ChatCompletionMessagePa
 func TestRunHelpFlag(t *testing.T) {
 	t.Parallel()
 	exe := filepath.Join(t.TempDir(), "llm-mock-help-test")
-	build := exec.Command("go", "build", "-o", exe, ".")
+	build := exec.Command("go", "build", "-buildvcs=false", "-o", exe, ".")
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, out)
 	}
@@ -273,7 +273,7 @@ func TestRunHelpFlag(t *testing.T) {
 func TestMainHelpFlag(t *testing.T) {
 	t.Parallel()
 	exe := filepath.Join(t.TempDir(), "llm-mock-main-help")
-	build := exec.Command("go", "build", "-o", exe, ".")
+	build := exec.Command("go", "build", "-buildvcs=false", "-o", exe, ".")
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, out)
 	}
