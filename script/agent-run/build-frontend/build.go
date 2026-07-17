@@ -21,10 +21,10 @@ func Handle(args []string) error {
 		return fmt.Errorf("bun is not installed, install it from https://bun.sh/docs/installation")
 	}
 
-	if _, err := os.Stat("frontend-agent-run/node_modules"); err != nil {
-		if err := cmd.Debug().Dir("frontend-agent-run").Run("bun", "install"); err != nil {
-			return err
-		}
+	// Always install so package.json/lockfile changes are applied even when
+	// node_modules already exists but is missing newer deps.
+	if err := cmd.Debug().Dir("frontend-agent-run").Run("bun", "install"); err != nil {
+		return err
 	}
 
 	return cmd.Debug().Dir("frontend-agent-run").Run("bun", "run", "build")
