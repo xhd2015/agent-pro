@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/xhd2015/agent-pro/agent/grok/sessions"
+	"github.com/xhd2015/agent-pro/pkgs/agentdriver"
 	"github.com/xhd2015/agent-pro/pkgs/agentrunapi"
 	"github.com/xhd2015/agent-pro/pkgs/agentsend"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
@@ -232,6 +233,7 @@ func runHeadless(args []string, defaultRunner string) error {
 		Open:                  openFlag,
 		Detach:                detachFlag,
 		NoSubmit:              noSubmit,
+		Driver:                mergeHostDriver(agentdriver.Driver{}),
 		Store:                 store,
 		Stdout:                os.Stdout,
 		Stderr:                os.Stderr,
@@ -425,6 +427,7 @@ func runResumeFromGrokSession(opts resumeFromGrokOpts) error {
 		Open:                  opts.openFlag,
 		Detach:                opts.detachFlag,
 		NoSubmit:              opts.noSubmit,
+		Driver:                mergeHostDriver(agentdriver.Driver{}),
 		Store:                 store,
 		Stdout:                os.Stdout,
 		Stderr:                os.Stderr,
@@ -494,6 +497,7 @@ func runAutoSendOrResume(opts autoSendOrResumeOpts) error {
 		JSON:                          opts.jsonFlag,
 		AllowRelocateResumeSessionDir: opts.allowRelocateResumeSessionDir,
 		NewTerminal:                   opts.newTerminal,
+		Driver:                        mergeHostDriver(agentdriver.Driver{}),
 		Env:                           opts.envEntries,
 		PrependPaths:                  opts.prependPaths,
 		Store:                         store,
@@ -573,8 +577,13 @@ func openAutoInNewTerminal(opts autoSendOrResumeOpts, meta agentstorage.SessionM
 		workspaceDir = ""
 	}
 
+	// Prefer process embedding Driver (spl agent-run); else re-exec this binary alone.
+	host := mergeHostDriver(agentdriver.Driver{})
+	if strings.TrimSpace(host.Binary) == "" {
+		host = agentdriver.Driver{Binary: exe}
+	}
 	followUp, err := agentrunapi.BuildFollowUpCommand(agentrunapi.FollowUpOpts{
-		DriverBinary:                  exe,
+		Driver:                        host,
 		SessionID:                     strings.TrimSpace(opts.sessionID),
 		Prompt:                        opts.prompt,
 		AgentRunner:                   runner,
@@ -752,6 +761,7 @@ func autoRunCreate(store agentstorage.Store, sessionID string, opts autoSendOrRe
 		Open:                  opts.openFlag,
 		Detach:                opts.detachFlag,
 		NoSubmit:              opts.noSubmit,
+		Driver:                mergeHostDriver(agentdriver.Driver{}),
 		Store:                 store,
 		Stdout:                os.Stdout,
 		Stderr:                os.Stderr,

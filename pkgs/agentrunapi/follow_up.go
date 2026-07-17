@@ -6,15 +6,20 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/xhd2015/agent-pro/pkgs/agentdriver"
 	"github.com/xhd2015/agent-pro/pkgs/shell"
 	"github.com/xhd2015/dot-pkgs/go-pkgs/shell/iterm2"
 )
 
 // FollowUpOpts builds a shell-quoted ForceNew child command (no --new-terminal).
 type FollowUpOpts struct {
-	// DriverBinary empty → "agent-run". Use os.Executable() for self re-exec.
+	// Driver is the host re-exec config. Zero Binary → Resolve defaults to self
+	// unless legacy DriverBinary/DriverArgsPrefix are set (compat).
+	Driver agentdriver.Driver
+	// DriverBinary is deprecated: use Driver.Binary.
+	// Empty with empty Driver → historical default "agent-run" for bare CLI PATH.
 	DriverBinary string
-	// DriverArgsPrefix optional tokens after binary, before "run" (spl helper).
+	// DriverArgsPrefix is deprecated: use Driver.Args.
 	DriverArgsPrefix []string
 
 	SessionID                     string
@@ -42,56 +47,53 @@ func BuildFollowUpCommand(opts FollowUpOpts) (string, error) {
 		return "", fmt.Errorf("--detach and --open are mutually exclusive; cannot use both")
 	}
 
-	driver := strings.TrimSpace(opts.DriverBinary)
-	if driver == "" {
-		driver = "agent-run"
+	driver, err := resolveFollowUpDriver(opts)
+	if err != nil {
+		return "", err
 	}
 
-	tokens := make([]string, 0, 16+len(opts.DriverArgsPrefix)+len(opts.Env))
-	tokens = append(tokens, driver)
-	for _, p := range opts.DriverArgsPrefix {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
-		}
-		tokens = append(tokens, p)
-	}
-	tokens = append(tokens, "run")
-	tokens = append(tokens, "--session-id="+sessionID)
+	remainder := make([]string, 0, 16+len(opts.Env))
+	remainder = append(remainder, "run")
+	remainder = append(remainder, "--session-id="+sessionID)
 	if runner := strings.TrimSpace(opts.AgentRunner); runner != "" {
-		tokens = append(tokens, "--agent-runner="+runner)
+		remainder = append(remainder, "--agent-runner="+runner)
 	}
-	tokens = append(tokens, "--auto-send-or-resume")
+	remainder = append(remainder, "--auto-send-or-resume")
 	if dir := strings.TrimSpace(opts.WorkspaceDir); dir != "" {
-		tokens = append(tokens, "--dir="+dir)
+		remainder = append(remainder, "--dir="+dir)
 	}
 	if opts.AllowRelocateResumeSessionDir {
-		tokens = append(tokens, "--allow-relocate-resume-session-dir")
+		remainder = append(remainder, "--allow-relocate-resume-session-dir")
 	}
 	if opts.NoSubmit {
-		tokens = append(tokens, "--no-submit")
+		remainder = append(remainder, "--no-submit")
 	}
 	if opts.Open {
-		tokens = append(tokens, "--open")
+		remainder = append(remainder, "--open")
 	}
 	if opts.Detach {
-		tokens = append(tokens, "--detach")
+		remainder = append(remainder, "--detach")
 	}
 	for _, e := range opts.Env {
 		e = strings.TrimSpace(e)
 		if e == "" {
 			continue
 		}
-		tokens = append(tokens, "-e", e)
+		remainder = append(remainder, "-e", e)
 	}
 
 	prompt := opts.Prompt
 	// ForceNew auto-send child: open/detach always use "--"; non-empty prompt also
 	// uses "--" so dash-leading prompts are not parsed as flags.
 	if opts.Open || opts.Detach {
-		tokens = append(tokens, "--", prompt)
+		remainder = append(remainder, "--", prompt)
 	} else if strings.TrimSpace(prompt) != "" {
-		tokens = append(tokens, "--", prompt)
+		remainder = append(remainder, "--", prompt)
+	}
+
+	tokens, err := driver.Argv(remainder...)
+	if err != nil {
+		return "", err
 	}
 
 	quoted := make([]string, 0, len(tokens))
@@ -99,6 +101,29 @@ func BuildFollowUpCommand(opts FollowUpOpts) (string, error) {
 		quoted = append(quoted, shell.ShellQuote(tok))
 	}
 	return strings.Join(quoted, " "), nil
+}
+
+// resolveFollowUpDriver merges Driver with legacy fields and Resolves.
+// Historical empty DriverBinary defaulted to bare "agent-run" (PATH). When
+// Driver is fully zero and legacy fields empty, keep that PATH name without
+// forcing abs(self), so existing slack-msg / bare defaults stay valid.
+func resolveFollowUpDriver(opts FollowUpOpts) (agentdriver.Driver, error) {
+	d := opts.Driver
+	if strings.TrimSpace(d.Binary) == "" {
+		if b := strings.TrimSpace(opts.DriverBinary); b != "" {
+			d.Binary = b
+		}
+	}
+	if len(d.Args) == 0 && len(opts.DriverArgsPrefix) > 0 {
+		d.Args = append([]string(nil), opts.DriverArgsPrefix...)
+	}
+	// Fully unspecified → historical "agent-run" on PATH (not DefaultSelf).
+	if strings.TrimSpace(d.Binary) == "" && len(d.Args) == 0 {
+		d.Binary = "agent-run"
+		// Do not abs-resolve bare "agent-run" via DefaultSelf; LookPath in Resolve.
+		return agentdriver.Resolve(d)
+	}
+	return agentdriver.Resolve(d)
 }
 
 // OpenInNewTerminalOpts opens a new terminal with a follow-up command.

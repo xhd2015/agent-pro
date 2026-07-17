@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/xhd2015/agent-pro/pkgs/agentdriver"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 )
 
@@ -81,6 +82,9 @@ type Opts struct {
 	KeepTTY                       bool
 	JSON                          bool
 	AllowRelocateResumeSessionDir bool
+	// Driver is the host re-exec config for TTY __serve_* and should match
+	// ForceNew FollowUp Driver (see pkgs/agentdriver). Zero → DefaultSelf in serve.
+	Driver agentdriver.Driver
 	// NewTerminal: P1 unit leaves keep false. When true, ForceNew may remain CLI-owned.
 	NewTerminal  bool
 	Env          []string

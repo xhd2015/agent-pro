@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/xhd2015/agent-pro/agent/grok/sessions"
+	"github.com/xhd2015/agent-pro/pkgs/agentdriver"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 	"github.com/xhd2015/agent-pro/pkgs/agentui"
@@ -289,6 +290,7 @@ func resumeExistingSession(store agentstorage.Store, meta agentstorage.SessionMe
 		Open:                  openFlag,
 		Detach:                detachFlag,
 		NoSubmit:              cfg.noSubmit,
+		Driver:                mergeHostDriver(agentdriver.Driver{}),
 		Store:                 store,
 		Stdout:                os.Stdout,
 		Stderr:                os.Stderr,

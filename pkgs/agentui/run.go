@@ -21,6 +21,7 @@ import (
 	eventprint "github.com/xhd2015/agent-pro/agent/event/print"
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	agentexec "github.com/xhd2015/agent-pro/agent/exec"
+	"github.com/xhd2015/agent-pro/pkgs/agentdriver"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 )
@@ -60,6 +61,8 @@ type RunOptions struct {
 	Detach bool
 	// NoSubmit is run --no-submit: with Open, inject prompt without trailing Enter.
 	NoSubmit bool
+	// Driver is the host re-exec config for TTY __serve_* children.
+	Driver agentdriver.Driver
 	// WebManagedGrokSync skips in-process grok sync; caller runs agentsync.EnsureGrokSync.
 	WebManagedGrokSync bool
 }
@@ -217,7 +220,7 @@ func Run(ctx context.Context, opts RunOptions) error {
 		}
 	}
 
-	newRunnerSessionID, newTerminalSessionID, runErr := streamRunner(ctx, runner, opts.Store.Home(), workspace, env, runnerPrompt, opts.Model, opts.AgentRunnerBinary, opts.AgentRunnerConfigHome, opts.PrependPaths, opts.Env, runnerSessionID, sessionID, ttySessionID, opts.StreamPhases, opts.KeepTerminalAlive, opts.Open, opts.Detach, opts.NoSubmit, ttyGrokSyncOwnsEvents, persistTerminalSessionID, emit, stderr)
+	newRunnerSessionID, newTerminalSessionID, runErr := streamRunner(ctx, runner, opts.Store.Home(), workspace, env, runnerPrompt, opts.Model, opts.AgentRunnerBinary, opts.AgentRunnerConfigHome, opts.PrependPaths, opts.Env, runnerSessionID, sessionID, ttySessionID, opts.StreamPhases, opts.KeepTerminalAlive, opts.Open, opts.Detach, opts.NoSubmit, ttyGrokSyncOwnsEvents, opts.Driver, persistTerminalSessionID, emit, stderr)
 	if strings.TrimSpace(newRunnerSessionID) != "" {
 		_ = opts.Store.UpdateSessionRunnerSessionID(sessionID, newRunnerSessionID)
 	}
@@ -433,7 +436,7 @@ func resolveTTYSessionID(opts RunOptions, userSessionID string) string {
 
 // streamRunner runs the selected agent. ttySessionID is the custom terminal
 // registry id (from --session / --session-id-from-prompt); empty keeps session-N.
-func streamRunner(ctx context.Context, runner, home, workspace string, env *agentexec.Env, prompt, model, agentRunnerBinary, agentRunnerConfigHome string, prependPaths, envEntries []string, runnerSessionID, agentSessionID, ttySessionID string, streamPhases, keepTerminalAlive, open, detach, noSubmit, grokSyncOwnsEvents bool, onTerminalSessionID func(string), emit func(types.AgentEvent) error, stderr io.Writer) (string, string, error) {
+func streamRunner(ctx context.Context, runner, home, workspace string, env *agentexec.Env, prompt, model, agentRunnerBinary, agentRunnerConfigHome string, prependPaths, envEntries []string, runnerSessionID, agentSessionID, ttySessionID string, streamPhases, keepTerminalAlive, open, detach, noSubmit, grokSyncOwnsEvents bool, driver agentdriver.Driver, onTerminalSessionID func(string), emit func(types.AgentEvent) error, stderr io.Writer) (string, string, error) {
 	if agenttty.IsTTYRunner(runner) {
 		terminalSessionID := ""
 		onID := func(id string) {
@@ -455,6 +458,7 @@ func streamRunner(ctx context.Context, runner, home, workspace string, env *agen
 			AgentRunnerConfigHome: agentRunnerConfigHome,
 			PrependPaths:          prependPaths,
 			Env:                   envEntries,
+			Driver:                driver,
 			KeepTerminalAlive:     keepTerminalAlive || open || detach,
 			Open:                  open,
 			Detach:                detach,

@@ -59,7 +59,10 @@ func (s *EphemeralSession) StartInProcess(ctx context.Context) error {
 	entry, err := WaitForRegistryEntry(s.registryConfig(), s.SessionID, 15*time.Second)
 	if err != nil {
 		cancel()
-		<-s.serveDone
+		serveErr := <-s.serveDone
+		if serveErr != nil {
+			return fmt.Errorf("%w: serve: %v", err, serveErr)
+		}
 		return err
 	}
 	s.entry = entry

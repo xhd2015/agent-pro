@@ -12,6 +12,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/xhd2015/agent-pro/pkgs/agentdriver"
 )
 
 const (
@@ -30,9 +32,15 @@ type HeadlessRunOptions struct {
 	RegistrySubdir string // e.g. "grok-tty-registry"; empty uses tty-watch default
 	SessionID      string // empty → auto-reserve session-N
 	Command        []string
-	BinaryPath     string // re-exec target for __serve__ (os.Args[0])
-	Cwd            string
-	ExtraPaths     []string
+	// Driver is the host re-exec config (binary + optional prefix args).
+	// Zero value → agentdriver.DefaultSelf (abs self, no prefix).
+	// Prefer Driver over BinaryPath. When Driver.Binary is empty and BinaryPath
+	// is set, BinaryPath is used as Driver.Binary for compatibility.
+	Driver agentdriver.Driver
+	// BinaryPath is deprecated: use Driver. Kept for older call sites.
+	BinaryPath string
+	Cwd        string
+	ExtraPaths []string
 	// KeepAlive, when true, sets TTY_WATCH_KEEP_ALIVE so __serve__ stays alive
 	// after the PTY child exits (intentional keep-tty). Default false: serve
 	// exits shortly after the child so short attached runs leave no orphans.
@@ -57,30 +65,60 @@ func (e *ExitStatus) Error() string {
 	return fmt.Sprintf("exit status %d", e.Code)
 }
 
+// wrapRegistryTimeout annotates WaitForRegistryEntry failures with serve-child
+// exit status and stderr so hosts that mis-route __serve_* re-execs are obvious.
+func wrapRegistryTimeout(regErr error, binaryPath string, argv []string, waitErr error, stderr string) error {
+	if regErr == nil {
+		return nil
+	}
+	stderr = strings.TrimSpace(stderr)
+	parts := []string{regErr.Error()}
+	parts = append(parts, fmt.Sprintf("serve binary=%q", binaryPath))
+	if len(argv) > 0 {
+		parts = append(parts, fmt.Sprintf("serve argv0=%q", argv[0]))
+	}
+	if waitErr != nil {
+		parts = append(parts, fmt.Sprintf("serve wait: %v", waitErr))
+	} else {
+		parts = append(parts, "serve wait: exit 0")
+	}
+	if stderr != "" {
+		// Keep a single-line-ish snippet for CLI stderr.
+		if len(stderr) > 400 {
+			stderr = stderr[:400] + "…"
+		}
+		parts = append(parts, "serve stderr: "+stderr)
+	}
+	return errors.New(strings.Join(parts, "; "))
+}
+
 // HeadlessRun reserves a session id, spawns a detached __serve__ child, and waits
 // for the registry entry.
 func HeadlessRun(ctx context.Context, opts HeadlessRunOptions) (*HeadlessRunResult, error) {
 	if len(opts.Command) == 0 {
 		return nil, fmt.Errorf("headless run: missing command")
 	}
-	binaryPath := opts.BinaryPath
-	if binaryPath == "" {
-		return nil, fmt.Errorf("headless run: missing binary path")
+	driver := opts.Driver
+	if strings.TrimSpace(driver.Binary) == "" && strings.TrimSpace(opts.BinaryPath) != "" {
+		driver.Binary = opts.BinaryPath
+	}
+	resolved, err := agentdriver.Resolve(driver)
+	if err != nil {
+		return nil, fmt.Errorf("headless run: host driver: %w", err)
 	}
 
 	home := opts.Home
 	if home == "" {
-		var err error
-		home, err = TTYWatchHome()
-		if err != nil {
-			return nil, err
+		var homeErr error
+		home, homeErr = TTYWatchHome()
+		if homeErr != nil {
+			return nil, homeErr
 		}
 	}
 	cfg := registryConfigFor(home, opts.RegistrySubdir)
 
 	var sessionID string
 	var release func()
-	var err error
 	if opts.SessionID != "" {
 		release, err = ReserveCustomSessionID(cfg, opts.SessionID)
 		if err != nil {
@@ -98,12 +136,20 @@ func HeadlessRun(ctx context.Context, opts HeadlessRunOptions) (*HeadlessRunResu
 	release()
 
 	serveToken := ServeSubcommand(opts.Command)
-	argv := append([]string{serveToken, sessionID}, opts.Command...)
-	cmd := exec.CommandContext(ctx, binaryPath, argv...)
+	remainder := append([]string{serveToken, sessionID}, opts.Command...)
+	fullArgv, err := resolved.Argv(remainder...)
+	if err != nil {
+		clearSessionClaim(cfg, sessionID)
+		return nil, err
+	}
+	cmd := exec.CommandContext(ctx, fullArgv[0], fullArgv[1:]...)
 	cmd.Env = serveChildEnv(os.Environ(), opts)
 	cmd.Stdin = nil
 	cmd.Stdout = nil
-	cmd.Stderr = nil
+	// Capture serve-child stderr so registry timeouts can surface real failures
+	// (e.g. host binary rejecting __serve_* tokens with "unrecognized command").
+	var serveStderr strings.Builder
+	cmd.Stderr = &serveStderr
 	if opts.Cwd != "" {
 		cmd.Dir = opts.Cwd
 	}
@@ -116,10 +162,10 @@ func HeadlessRun(ctx context.Context, opts HeadlessRunOptions) (*HeadlessRunResu
 	entry, err := WaitForRegistryEntry(cfg, sessionID, headlessRegistryTimeout)
 	if err != nil {
 		_ = cmd.Process.Kill()
-		_, _ = cmd.Process.Wait()
+		waitErr := cmd.Wait()
 		// Drop claim and any partial registry left by a failed serve.
 		RemoveRegistry(cfg, sessionID)
-		return nil, err
+		return nil, wrapRegistryTimeout(err, fullArgv[0], fullArgv, waitErr, serveStderr.String())
 	}
 
 	return &HeadlessRunResult{

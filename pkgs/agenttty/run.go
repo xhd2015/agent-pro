@@ -11,6 +11,7 @@ import (
 	"time"
 
 	types "github.com/xhd2015/agent-pro/agent/event/types"
+	"github.com/xhd2015/agent-pro/pkgs/agentdriver"
 	"github.com/xhd2015/agent-pro/pkgs/ttywatch"
 )
 
@@ -32,7 +33,11 @@ type RunOptions struct {
 	// PrependPaths are absolute dirs prepended to the PTY child PATH (ordered).
 	PrependPaths []string
 	// Env is ordered KEY=VALUE entries applied to the PTY child (last-win per key).
-	Env               []string
+	Env []string
+	// Driver is the host re-exec config for __serve_* children (see agentdriver).
+	// Zero → DefaultSelf. Prefer over BinaryPath.
+	Driver agentdriver.Driver
+	// BinaryPath is deprecated: use Driver.Binary.
 	BinaryPath        string
 	KeepTerminalAlive bool
 	// Open is run --open: silent start, optional inject, auto-attach, no pre-attach id print.
@@ -125,16 +130,16 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	}
 	argv = ApplyChildProcessEnv(argv, runnerID, configHome, opts.PrependPaths, opts.Env)
 
-	binaryPath, err := resolveBinaryPath(opts.BinaryPath)
-	if err != nil {
-		return "", "", err
+	driver := opts.Driver
+	if strings.TrimSpace(driver.Binary) == "" && strings.TrimSpace(opts.BinaryPath) != "" {
+		driver.Binary = opts.BinaryPath
 	}
 
 	result, err := ttywatch.HeadlessRun(ctx, ttywatch.HeadlessRunOptions{
 		Home:           opts.Home,
 		RegistrySubdir: provider.RegistryDir,
 		SessionID:      strings.TrimSpace(opts.SessionID),
-		BinaryPath:     binaryPath,
+		Driver:         driver,
 		Command:        argv,
 		Cwd:            opts.Workspace,
 		KeepAlive:      opts.KeepTerminalAlive,
@@ -532,16 +537,6 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 		return runnerSessionID, terminalSessionID, waitErr
 	}
 	return runnerSessionID, terminalSessionID, nil
-}
-
-func resolveBinaryPath(explicit string) (string, error) {
-	if v := strings.TrimSpace(explicit); v != "" {
-		return v, nil
-	}
-	if len(os.Args) > 0 && strings.TrimSpace(os.Args[0]) != "" {
-		return os.Args[0], nil
-	}
-	return os.Executable()
 }
 
 // waitForOpenReady polls until scrollback has any content or timeout elapses.
