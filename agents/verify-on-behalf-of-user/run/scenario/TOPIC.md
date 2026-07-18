@@ -35,12 +35,25 @@ Classify before running:
 | Surface | Runtime bring-up | UI tool | Min depth |
 |---------|------------------|---------|-----------|
 | CLI-only | No | — | smoke OK if labeled |
+| Interactive CLI / TTY | Yes (as needed) | **tty-watch** (see `tty` topic) | scenario |
 | Server / HTTP | Yes | optional API checks | scenario |
 | Frontend / UI | Yes | **browser-agent** | scenario |
-| Session lifecycle | Yes | browser-agent if UI involved | scenario |
+| Session lifecycle | Yes | browser-agent if UI; **tty-watch** if interactive shell | scenario |
 | Multi-binary | Yes | as needed | scenario |
 
 If server **or** frontend/UI **or** session lifecycle is in scope → depth ≥ **scenario**.
+
+## Interactive CLI / TTY
+
+When the claim needs a **real TTY** (not pipe-only):
+
+- Follow topic **`tty`**: `agent-pro skill --show verify-on-behalf-of-user/tty`
+- **Start** with `tty-watch run --detach` (non-blocking)
+- Drive input with `tty-watch send`; assert via `tty-watch snapshot`
+- **Always** end with `tty-watch kill` to reclaim registry/PTY resources
+- Missing `tty-watch` when TTY is required → **FAIL** (not skip)
+
+Do not treat pipe/`SkipTTYCheck` library Attach alone as proof of interactive CLI.
 
 ## What a scenario is
 

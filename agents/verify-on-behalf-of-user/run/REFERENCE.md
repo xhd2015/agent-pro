@@ -22,6 +22,7 @@ agent-pro skill verify-on-behalf-of-user --show
 agent-pro skill verify-on-behalf-of-user workflow --show
 agent-pro skill --show verify-on-behalf-of-user/sandbox
 agent-pro skill --show verify-on-behalf-of-user/scenario
+agent-pro skill --show verify-on-behalf-of-user/tty
 agent-pro skill --show verify-on-behalf-of-user/transcript
 agent-pro skill --install verify-on-behalf-of-user
 agent-pro skills update
@@ -30,7 +31,7 @@ agent-pro skills update
 Installs to `.agents/skills/verify-on-behalf-of-user/`:
 
 - `SKILL.md` (index)
-- `sandbox/TOPIC.md`, `workflow/TOPIC.md`, `scenario/TOPIC.md`, `transcript/TOPIC.md`
+- `sandbox/TOPIC.md`, `workflow/TOPIC.md`, `scenario/TOPIC.md`, `tty/TOPIC.md`, `transcript/TOPIC.md`
 - `scripts/enter-sandbox.sh`
 - `scripts/sandbox-verify.sb`
 - `templates/transcript.md`
@@ -63,6 +64,7 @@ source .agents/skills/verify-on-behalf-of-user/scripts/enter-sandbox.sh
 | Scenario-first | Real bring-up + user journey by default; smoke only as labeled downgrade |
 | UI = browser-agent | Never playwright-debug / headless for this skill |
 | UI path broken | **FAIL** (not skip) |
+| Interactive TTY | **tty-watch** `run --detach` → `send`/`snapshot` → always **`kill`** (see `tty` topic) |
 | Transcript | Write file **and** print full contents |
 
 ## Pairing

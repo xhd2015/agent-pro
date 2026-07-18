@@ -77,6 +77,12 @@ Rules:
 - Assert exit code, stdout, stderr, HTTP, on-disk artifacts
 - **UI:** use **browser-agent only** (`session new` → open app URL → eval/screenshot).
   Do **not** use `playwright-debug` here.
+- **Interactive TTY:** if the claim needs a real terminal, use **tty-watch** only
+  (see topic `tty`). Golden non-blocking start:
+  `tty-watch run --detach --session-id <id> -- <cmd>…`. Drive with `send`,
+  assert with `snapshot`. **Always** `tty-watch kill <id>` to reclaim (trap EXIT).
+  Set `TTY_WATCH_HOME` under sandbox `HOME`. Do not use pipe-only or raw openpty
+  as sole interactive evidence.
 - Prefer a project recipe’s scenario steps when present
 - Truncate huge output: `... (N lines omitted)`
 - Label each scenario (S1, S2, …) with expected observables and ✓/✗
@@ -90,8 +96,11 @@ Record:
 
 - Screenshot paths (UI), log tails, status dumps
 - Teardown: kill leftover PIDs, note sandbox data left for inspection
+- **tty-watch:** every session started with `run --detach` must get
+  `tty-watch kill <session-id>` (reclaim registry/PTY). Prefer EXIT trap.
 
 If UI was required and browser-agent/Chrome/session failed → verdict **FAIL**.
+If TTY was required and `tty-watch` was missing → verdict **FAIL**.
 
 ## Phase 6 — Optional doctest spot-check
 

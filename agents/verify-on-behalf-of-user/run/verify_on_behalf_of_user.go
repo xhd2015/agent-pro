@@ -17,6 +17,7 @@ var SkillFile string
 //go:embed workflow
 //go:embed scenario
 //go:embed transcript
+//go:embed tty
 var skillTreeFS embed.FS
 
 //go:embed scripts/enter-sandbox.sh

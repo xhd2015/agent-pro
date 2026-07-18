@@ -61,5 +61,9 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	if _, err := os.Stat(scenarioTopic); err != nil {
 		t.Fatalf("missing %s: %v", scenarioTopic, err)
 	}
+	ttyTopic := filepath.Join(target, "tty", "TOPIC.md")
+	if _, err := os.Stat(ttyTopic); err != nil {
+		t.Fatalf("missing %s: %v", ttyTopic, err)
+	}
 }
 ```

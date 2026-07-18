@@ -35,6 +35,7 @@ This is **outside doctests** — it mimics one-time manual verification.
 - `sandbox` — `~/.sandbox` paths, `enter-sandbox.sh`, forbidden writes, strict mode
 - `workflow` — phases: scope → git → build → runtime → scenarios → evidence → transcript
 - `scenario` — depth labels, surface gate, browser-agent UI rules, FAIL when UI path broken
+- `tty` — interactive CLI via **tty-watch** (`run --detach`, `send`, `snapshot`, always `kill`)
 - `transcript` — format rules, template, write file **and** inline full content
 
 ## Usage
@@ -47,6 +48,7 @@ agent-pro skill verify-on-behalf-of-user --show
 agent-pro skill --show verify-on-behalf-of-user sandbox
 agent-pro skill verify-on-behalf-of-user workflow --show
 agent-pro skill --show verify-on-behalf-of-user/scenario
+agent-pro skill --show verify-on-behalf-of-user/tty
 agent-pro skill --show verify-on-behalf-of-user/transcript
 ```
 
@@ -66,7 +68,11 @@ Utility files install with the skill (not in topic bodies):
    those are for doctests/CI.
 4. **Missing UI path = FAIL** — if the surface requires UI and browser-agent/Chrome/session
    is unusable, verdict is **FAIL** (not skip, not BLOCKED).
-5. **Transcript = file + inline** — write `~/.sandbox/transcripts/<timestamp>-<slug>.md`,
+5. **Interactive TTY uses tty-watch** — for claims that need a real TTY, drive the CLI with
+   `tty-watch run --detach` (non-blocking), then `send` / `snapshot`, and always
+   `tty-watch kill` to reclaim. Do not use pipe-only or raw openpty harnesses as sole
+   evidence. Missing `tty-watch` when TTY is required → **FAIL**. See topic `tty`.
+6. **Transcript = file + inline** — write `~/.sandbox/transcripts/<timestamp>-<slug>.md`,
    then put the **full file body** in the agent reply for direct review.
 
 ## Relationship to other skills
