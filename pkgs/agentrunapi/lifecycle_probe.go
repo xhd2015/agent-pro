@@ -11,7 +11,7 @@ import (
 
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
-	"github.com/xhd2015/agent-pro/pkgs/ttywatch"
+	"github.com/xhd2015/tty-watch/pkgs/ttywatch"
 )
 
 // LifecycleProbe is the production TTY/registry lifecycle probe for Classify.

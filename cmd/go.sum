@@ -44,8 +44,7 @@ github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/tidwall/jsonc v0.3.3 h1:RVQqL3xFfDkKKXIDsrBiVQiEpBtxoKbmMXONb2H/y2w=
 github.com/tidwall/jsonc v0.3.3/go.mod h1:dw+3CIxqHi+t8eFSpzzMlcVYxKp08UP5CD8/uSFCyJE=
-github.com/xhd2015/dot-pkgs/go-pkgs v0.0.72 h1:xNhW8dqSa8+lzvzzyqxLtBgeVtncubczYn/HojpyA38=
-github.com/xhd2015/dot-pkgs/go-pkgs v0.0.72/go.mod h1:GSLPqsH9VnATa1LdugdtTt4j12257i0pNUQjw1hjH6Y=
+github.com/xhd2015/dot-pkgs/go-pkgs v0.0.89 h1:4PoY8CbRrLOv/dobJVIiL+/QhJw4NemRlTScvq02scc=
 github.com/xhd2015/gitops v0.0.25 h1:SJ2mIgnJdLl528HNYNqpecjuWkdrZFoOD5eOUA0A6R4=
 github.com/xhd2015/gitops v0.0.25/go.mod h1:KS8y6tZ3FG+myEaR+H6MvoR099YrP/ADIHZX9ROpZo8=
 github.com/xhd2015/go-coverage v1.0.41 h1:JjUcE93IMz0KHmdCYUKq9JN/EDC/5k0OEhsMAeVvL88=
@@ -60,6 +59,7 @@ github.com/xhd2015/less-gen v0.0.19 h1:JllrPhx3HzN+f2AB6cTvW9aRCpvuODJFx7affpa0z
 github.com/xhd2015/less-gen v0.0.19/go.mod h1:Ym5HW/yfVnf2mgSo48QsuHAKnMTPv/u7oqty+raTnTQ=
 github.com/xhd2015/skills v0.0.22 h1:n3hHwUUExzPqbekZUZ0L1N530SLPGe7hCk09pBw54AY=
 github.com/xhd2015/skills v0.0.22/go.mod h1:sQO/anTeiydpHF7yRvVbqbdbgmg+QyxpaiaVWnkOPdc=
+github.com/xhd2015/tty-watch v0.0.1 h1:EdC7j4zXt91t86JC785YsmOlOKhX+nqPPfsSXiatwUU=
 github.com/xhd2015/xgo v1.0.40/go.mod h1:LJxlcYSaXo/9YpsnB3yHh9NHe7BRettYCytaNGWY2BE=
 github.com/xhd2015/xgo v1.2.0 h1:DT5mAx73ANIUFDx3Lz+QcKrCVoLV0B7HxCvchGMxJq0=
 github.com/xhd2015/xgo v1.2.0/go.mod h1:LJxlcYSaXo/9YpsnB3yHh9NHe7BRettYCytaNGWY2BE=

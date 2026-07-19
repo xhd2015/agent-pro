@@ -10,7 +10,7 @@ fake ptywrap / stub-tty / web server / CLI / SSE / playwright probes
 
 ## Preconditions
 
-- Repository contains `cmd/agent-run`, `cmd/fake-codex`, `script/tty-watch`.
+- Repository contains `cmd/agent-run`, `cmd/fake-codex`; tty-watch from module `github.com/xhd2015/tty-watch`.
 - Session-scoped cache under `$TMPDIR/web-cli-subset-doctest-<DOCTEST_SESSION_ID>/`
   shares compiled binaries across parallel leaves.
 - Each leaf uses isolated `AGENT_RUN_HOME` under `t.TempDir()`.
@@ -120,7 +120,7 @@ func ensureSessionBinaries(t *testing.T, repoRoot string) (agentRun, fakeCodex, 
 		}{
 			{agentRun, []string{"build", "-o", agentRun, "./cmd/agent-run"}},
 			{fakeCodex, []string{"build", "-o", fakeCodex, "./cmd/fake-codex"}},
-			{ttyWatch, []string{"build", "-o", ttyWatch, "./script/tty-watch"}},
+			{ttyWatch, []string{"build", "-o", ttyWatch, "github.com/xhd2015/tty-watch/cmd/tty-watch"}},
 		}
 		for _, b := range builds {
 			cmd := exec.Command("go", b.args...)

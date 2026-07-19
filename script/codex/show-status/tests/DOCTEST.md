@@ -207,12 +207,12 @@ func buildTTYWatch(t *testing.T) (string, error) {
 		binPath := filepath.Join(tmp, "tty-watch")
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "go", "build", "-o", binPath, "./script/tty-watch")
+		cmd := exec.CommandContext(ctx, "go", "build", "-o", binPath, "github.com/xhd2015/tty-watch/cmd/tty-watch")
 		cmd.Dir = repoRoot
 		var be bytes.Buffer
 		cmd.Stderr = &be
 		if err := cmd.Run(); err != nil {
-			builtTTYWatchErr = fmt.Errorf("go build ./script/tty-watch: %w\n%s", err, be.String())
+			builtTTYWatchErr = fmt.Errorf("go build github.com/xhd2015/tty-watch/cmd/tty-watch: %w\n%s", err, be.String())
 			return
 		}
 		builtTTYWatchPath = binPath

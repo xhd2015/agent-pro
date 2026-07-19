@@ -38,7 +38,7 @@ vs print mode which sends `"content":"hello"` (string).
 **Fix (2026-07-14):** Changed `alphaMessage.Content` from `string` to `json.RawMessage`. Added `extractAlphaContentText` helper that tries string first, then array of `{"text":"..."}` blocks. Applied to both `server/server.go` and `main.go`.
 
 **Repro preconditions:**
-1. `tty-watch` binary built from `./script/tty-watch`
+1. `tty-watch` binary built from `github.com/xhd2015/tty-watch/cmd/tty-watch`
 2. `llm-mock-run-commandcode` binary built from `./agent/llm/llm-mock/llm-mock-run-commandcode`
 3. `cmd` CLI installed and on PATH
 
@@ -51,7 +51,7 @@ Steps 1–4 reproduce the symptom: interactive cmd shows "Connection Issue. Retr
 ### 1. Build
 
 ```sh
-go build -o /tmp/tty-watch ./script/tty-watch
+go build -o /tmp/tty-watch github.com/xhd2015/tty-watch/cmd/tty-watch
 go build -o /tmp/llm-mock-run-commandcode ./agent/llm/llm-mock/llm-mock-run-commandcode
 ```
 

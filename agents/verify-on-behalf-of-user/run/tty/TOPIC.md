@@ -13,7 +13,7 @@ shell attach, “requires interactive terminal”, remote bash/terminal sessions
 
 Drive the CLI with **`tty-watch`**, not ad-hoc `openpty` Python or pipe-only
 Attach helpers. `tty-watch` is agent-pro’s PTY session manager
-(`script/tty-watch`, library `pkgs/ttywatch`).
+(module `github.com/xhd2015/tty-watch`, CLI `cmd/tty-watch`, library `pkgs/ttywatch`).
 
 ## When TTY is required
 
@@ -67,7 +67,8 @@ Never use a shared real-user tty-watch home for parallel verifies.
 source "${VERIFY_SKILL_ROOT}/scripts/enter-sandbox.sh"
 
 # ensure tty-watch on PATH (build into $SANDBOX_BIN if needed)
-# go build -o "$SANDBOX_BIN/tty-watch" ./script/tty-watch   # from agent-pro root
+# go install github.com/xhd2015/tty-watch/cmd/tty-watch@latest
+# # or: go build -o "$SANDBOX_BIN/tty-watch" github.com/xhd2015/tty-watch/cmd/tty-watch
 
 export TTY_WATCH_HOME="$HOME/.verify-tty-watch"
 mkdir -p "$TTY_WATCH_HOME"
@@ -131,7 +132,8 @@ tty-watch run --detach … ; … ; # never kill
 If the claim requires TTY and `tty-watch` is not on `PATH`:
 
 - Verdict is **FAIL** (not skip), with a short install/build hint:
-  - build from agent-pro: `go build -o "$SANDBOX_BIN/tty-watch" ./script/tty-watch`
+  - install/build: `go install github.com/xhd2015/tty-watch/cmd/tty-watch@latest`
+  - or: `go build -o "$SANDBOX_BIN/tty-watch" github.com/xhd2015/tty-watch/cmd/tty-watch`
   - or ensure the installed `tty-watch` binary is on `PATH`
 - Same spirit as missing browser-agent for UI surfaces.
 

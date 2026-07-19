@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
-	"github.com/xhd2015/agent-pro/pkgs/ttywatch"
+	"github.com/xhd2015/tty-watch/pkgs/ttywatch"
 )
 
 // TTYSession is the unified resolver result for status, attach, and send.

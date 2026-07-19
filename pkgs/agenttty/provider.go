@@ -9,7 +9,7 @@ import (
 
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	agentexec "github.com/xhd2015/agent-pro/agent/exec"
-	"github.com/xhd2015/agent-pro/pkgs/ttywatch"
+	"github.com/xhd2015/tty-watch/pkgs/ttywatch"
 )
 
 // BuildArgvFunc builds the argv for a TTY runner command inside the PTY.

@@ -15,7 +15,7 @@ import (
 	"github.com/xhd2015/agent-pro/agent/debuglog"
 	agentexec "github.com/xhd2015/agent-pro/agent/exec"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
-	"github.com/xhd2015/agent-pro/pkgs/ttywatch"
+	"github.com/xhd2015/tty-watch/pkgs/ttywatch"
 )
 
 const (

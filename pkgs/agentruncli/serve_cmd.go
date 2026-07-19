@@ -8,7 +8,7 @@ import (
 
 	"github.com/xhd2015/agent-pro/pkgs/agentsend"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
-	"github.com/xhd2015/agent-pro/pkgs/ttywatch"
+	"github.com/xhd2015/tty-watch/pkgs/ttywatch"
 )
 
 func runServeSession(args []string) error {

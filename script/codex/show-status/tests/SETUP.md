@@ -10,7 +10,7 @@ doctest <- stdout: Monthly usage + Credits used + Next reset (exactly three line
 
 ## Preconditions
 
-- `go` is available in PATH (to build `./script/codex/show-status` and `./script/tty-watch`). Tests skip otherwise.
+- `go` is available in PATH (to build `./script/codex/show-status` and `github.com/xhd2015/tty-watch/cmd/tty-watch`). Tests skip otherwise.
 - `script/codex/show-status/main.go` and `agent/codex/tty/show_status.go` exist (added by implementer).
 - Default-suite tests set `CODEX_SHOW_STATUS_COMMAND` to a fake interactive TUI script.
 - Each test uses isolated `TTY_WATCH_HOME` under `req.TempDir`.
@@ -40,7 +40,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/xhd2015/agent-pro/script/tty-watch/ttywatchtest"
+	"github.com/xhd2015/tty-watch/ttywatchtest"
 )
 
 func Setup(t *testing.T, req *Request) error {

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xhd2015/agent-pro/pkgs/ttywatch"
+	"github.com/xhd2015/tty-watch/pkgs/ttywatch"
 )
 
 func main() {
@@ -25,7 +25,7 @@ func main() {
 	}
 
 	ttyWatchBin := "/tmp/tty-watch-inspect"
-	buildCmd := exec.Command("go", "build", "-o", ttyWatchBin, "./script/tty-watch")
+	buildCmd := exec.Command("go", "build", "-o", ttyWatchBin, "github.com/xhd2015/tty-watch/cmd/tty-watch")
 	buildCmd.Stderr = os.Stderr
 	if err := buildCmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "FAIL: build tty-watch: %v\n", err)

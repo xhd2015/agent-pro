@@ -1,12 +1,12 @@
 module github.com/xhd2015/agent-pro
 
-go 1.25.0
+go 1.25.10
 
 require (
 	github.com/coder/acp-go-sdk v0.13.0
 	github.com/coder/websocket v1.8.14
 	github.com/tidwall/jsonc v0.3.3
-	github.com/xhd2015/dot-pkgs/go-pkgs v0.0.85
+	github.com/xhd2015/dot-pkgs/go-pkgs v0.0.89
 	github.com/xhd2015/gitops v0.0.25
 	github.com/xhd2015/less-gen v0.0.19
 	github.com/xhd2015/xgo v1.2.0
@@ -60,6 +60,8 @@ require (
 	github.com/xhd2015/less-flags v1.0.2
 	github.com/xhd2015/skills v0.0.22
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	golang.org/x/sys v0.44.0
+	golang.org/x/sys v0.44.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 )
+
+require github.com/xhd2015/tty-watch v0.0.1

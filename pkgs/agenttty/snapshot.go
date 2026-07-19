@@ -3,7 +3,7 @@ package agenttty
 import (
 	"time"
 
-	"github.com/xhd2015/agent-pro/pkgs/ttywatch"
+	"github.com/xhd2015/tty-watch/pkgs/ttywatch"
 )
 
 func fetchSnapshotBytes(listenAddr, sessionID string) ([]byte, error) {

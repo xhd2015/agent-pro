@@ -97,7 +97,7 @@ import (
 	"time"
 
 	"github.com/xhd2015/agent-pro/agent/usage"
-	"github.com/xhd2015/agent-pro/pkgs/ttywatch"
+	"github.com/xhd2015/tty-watch/pkgs/ttywatch"
 )
 
 type Request struct {

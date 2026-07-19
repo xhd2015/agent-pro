@@ -76,7 +76,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xhd2015/agent-pro/pkgs/ttywatch"
+	"github.com/xhd2015/tty-watch/pkgs/ttywatch"
 )
 
 const (
