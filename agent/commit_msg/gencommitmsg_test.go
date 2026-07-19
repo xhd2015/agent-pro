@@ -1,6 +1,7 @@
 package commit_msg
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -516,5 +517,63 @@ func TestParseCommitMsgFromText_EmptyJSONTitle(t *testing.T) {
 	// and joins the remaining lines
 	if got == "" {
 		t.Errorf("parseCommitMsgFromText() should have fallback output, got empty")
+	}
+}
+
+// TestGenerate_CommandCodePassesMaxTurns16 locks the Command Code argv budget.
+// A recorder binary writes os.Args and prints fixed commit JSON so we can assert
+// --max-turns 16 without a live Command Code API.
+func TestGenerate_CommandCodePassesMaxTurns16(t *testing.T) {
+	dir := initGitRepo(t)
+	t.Chdir(dir)
+
+	writeFile(t, "feature.go", []byte("package main\n// feature\n"))
+	mustRun(t, "git", "add", "feature.go")
+
+	argsFile := filepath.Join(dir, "cmd-args.txt")
+	recorder := filepath.Join(dir, "fake-cmd")
+	// NUL-separated argv so prompts with spaces do not confuse parsing.
+	script := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\0' \"$@\" > %q\nprintf '%%s\\n' '{\"title\":\"feat: argv lock\",\"description\":\"max-turns check\"}'\n", argsFile)
+	if err := os.WriteFile(recorder, []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	msg, err := Generate(dir, GenerateOptions{
+		AgentRunner:       "commandcode",
+		AgentRunnerBinary: recorder,
+		Logger:            &testLogger{},
+	})
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if !strings.Contains(msg, "feat: argv lock") {
+		t.Fatalf("unexpected message: %q", msg)
+	}
+
+	raw, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatalf("read recorder args: %v", err)
+	}
+	parts := strings.Split(string(raw), "\x00")
+	// trailing empty from final NUL
+	var args []string
+	for _, p := range parts {
+		if p != "" {
+			args = append(args, p)
+		}
+	}
+
+	found := false
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == "--max-turns" && args[i+1] == commandCodeMaxTurns {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("argv missing --max-turns %s; got %q", commandCodeMaxTurns, args)
+	}
+	if commandCodeMaxTurns != "16" {
+		t.Fatalf("commandCodeMaxTurns = %q, want 16", commandCodeMaxTurns)
 	}
 }

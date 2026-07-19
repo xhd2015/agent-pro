@@ -324,8 +324,12 @@ Respond with ONLY a JSON object in this exact format (no other text):
 	return commitMessage, nil
 }
 
+// commandCodeMaxTurns is the turn budget passed to Command Code (`cmd`).
+// A budget of 1 exits before a useful reply (exit 8: "Reached maximum conversation turns").
+const commandCodeMaxTurns = "16"
+
 // runCommandCodeAgent invokes Command Code (`cmd` on PATH, or AgentRunnerBinary override).
-// Argv: -p <prompt> --skip-onboarding --yolo --max-turns 1 [-m <model>]
+// Argv: -p <prompt> --skip-onboarding --yolo --max-turns 16 [-m <model>]
 // Full stdout is returned (no opencode NDJSON parse).
 func runCommandCodeAgent(dir string, options GenerateOptions, commitPrompt string, fileCount, stagedDiffLen int) (string, error) {
 	logger := options.Logger
@@ -335,7 +339,7 @@ func runCommandCodeAgent(dir string, options GenerateOptions, commitPrompt strin
 		logger.Log(fmt.Sprintf("Using model: %s", options.Model))
 	}
 
-	args := []string{"-p", commitPrompt, "--skip-onboarding", "--yolo", "--max-turns", "1"}
+	args := []string{"-p", commitPrompt, "--skip-onboarding", "--yolo", "--max-turns", commandCodeMaxTurns}
 	if options.Model != "" {
 		args = append(args, "-m", options.Model)
 	}

@@ -5,7 +5,7 @@
 ```
 # commandcode runner path (not opencode NDJSON)
 staged diff -> gen-commit-msg --agent-runner commandcode --agent-runner-binary <llm-mock-run-commandcode>
-  -> binary -p <prompt> --skip-onboarding --yolo --max-turns 1 [-m MODEL]
+  -> binary -p <prompt> --skip-onboarding --yolo --max-turns 16 [-m MODEL]
   -> full stdout agent text -> SanitizeOrError -> format message
 
 # deterministic mock (no live Command Code API)
