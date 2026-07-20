@@ -27,13 +27,22 @@ non-empty file under `assets/` (`frontend.DistComplete` /
 Stage fat dist, then install:
 
 ```bash
-# agent-pro SPA
-go run ./script/build-frontend
-go run ./script/install          # builds frontend then go install ./cmd/agent-pro
+# agent-pro (recommended): both SPAs + binary
+#   frontend/              traces viewer
+#   frontend-agent-run/    grok session view --web (message cards)
+go run ./script/agent-pro/bundle    # fat both dist trees only
+go run ./script/agent-pro/install   # bundle + go install ./cmd/agent-pro
 
-# agent-run SPA
+# legacy alias (delegates to script/agent-pro/install)
+go run ./script/install
+
+# agent-run only
 go run ./script/agent-run/build-frontend
 go run ./script/agent-run/install
+
+# low-level SPA builders (used by the scripts above)
+go run ./script/build-frontend              # frontend/
+go run ./script/agent-run/build-frontend    # frontend-agent-run/
 ```
 
 After a fat dist is present, `//go:embed` ships a complete SPA and runtime

@@ -1,3 +1,10 @@
+// Command install is a compatibility entrypoint that delegates to
+// script/agent-pro/install (fat both SPAs + go install ./cmd/agent-pro).
+//
+// Usage:
+//
+//	go run ./script/install
+//	go run ./script/agent-pro/install   # preferred
 package main
 
 import (
@@ -20,31 +27,15 @@ func run() error {
 		return err
 	}
 
-	fmt.Println("Building frontend...")
-	buildFrontend := exec.Command("go", "run", "./script/build-frontend")
-	buildFrontend.Dir = rootDir
-	buildFrontend.Stdout = os.Stdout
-	buildFrontend.Stderr = os.Stderr
-	if err := buildFrontend.Run(); err != nil {
-		return fmt.Errorf("build frontend: %w", err)
-	}
-
-	fmt.Println("Installing agent-pro...")
-	installCmd := exec.Command("go", "install", "./cmd/agent-pro")
-	installCmd.Dir = rootDir
-	installCmd.Stdout = os.Stdout
-	installCmd.Stderr = os.Stderr
-	if err := installCmd.Run(); err != nil {
-		return fmt.Errorf("install agent-pro: %w", err)
-	}
-
-	fmt.Println("agent-pro installed successfully")
-	return nil
+	fmt.Println("Delegating to script/agent-pro/install (both SPAs + agent-pro binary)...")
+	cmd := exec.Command("go", "run", "./script/agent-pro/install")
+	cmd.Dir = rootDir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 func findRootDir() (string, error) {
-	// go run ./script/install resolves the module root automatically.
-	// If called with GOPATH mode, walk up to find go.mod.
 	dir, err := os.Getwd()
 	if err != nil {
 		return "", err
@@ -55,7 +46,6 @@ func findRootDir() (string, error) {
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			// Reached root, use cwd
 			return os.Getwd()
 		}
 		dir = parent

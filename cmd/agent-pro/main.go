@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,12 +13,13 @@ import (
 	codexsessions "github.com/xhd2015/agent-pro/agent/codex/sessions"
 	codexskills "github.com/xhd2015/agent-pro/agent/codex/skills"
 	groksessions "github.com/xhd2015/agent-pro/agent/grok/sessions"
+	grokview "github.com/xhd2015/agent-pro/agent/grok/view"
 	"github.com/xhd2015/agent-pro/agent/opencode/commands"
 	opencodecfg "github.com/xhd2015/agent-pro/agent/opencode/config"
-	openskills "github.com/xhd2015/agent-pro/agent/opencode/skills"
-	opencodesessions "github.com/xhd2015/agent-pro/agent/opencode/sessions"
 	"github.com/xhd2015/agent-pro/agent/opencode/permissions"
 	"github.com/xhd2015/agent-pro/agent/opencode/plugins"
+	opencodesessions "github.com/xhd2015/agent-pro/agent/opencode/sessions"
+	openskills "github.com/xhd2015/agent-pro/agent/opencode/skills"
 	"github.com/xhd2015/agent-pro/frontend"
 	"github.com/xhd2015/agent-pro/pkgs/agentconfig"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
@@ -825,6 +827,7 @@ Usage: agent-pro grok session <command> [ARGS]
 
 Commands:
   info <session-id>   show detailed info for one Grok CLI session
+  view <session-id>   print or web-view session messages (in-memory convert)
   log  <session-id>   print session log (not implemented yet)
 
 Run agent-pro grok session <command> --help for command-specific options.
@@ -839,6 +842,24 @@ Options:
   -h,--help     show help
 `
 
+const grokSessionViewHelp = `
+Usage: agent-pro grok session view <session-id> [OPTIONS]
+
+View a Grok CLI session transcript. Converts updates.jsonl to standard
+events fully in memory (does not write agent-run storage).
+
+Without --web: print human-readable events to stdout (print mode).
+With --web:    start a local read-only web viewer using the agent-run UI.
+
+Options:
+  --web         serve read-only web UI (live follow via file watch; prints URL)
+  --follow      print mode: after existing events, keep printing until Ctrl+C
+  --port N      with --web: preferred listen port (default 61781; tries next
+                up to 100 ports if taken)
+  --open        with --web: open the viewer in a browser
+  -h,--help     show help
+`
+
 func handleGrokSession(args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
 		fmt.Print(strings.TrimPrefix(grokSessionHelp, "\n"))
@@ -848,6 +869,10 @@ func handleGrokSession(args []string) error {
 	switch args[0] {
 	case "info":
 		return handleGrokSessionInfo(args[1:])
+	case "view":
+		return handleGrokSessionView(args[1:])
+	case "log":
+		return fmt.Errorf("not implemented yet")
 	default:
 		return fmt.Errorf("unknown grok session command: %s", args[0])
 	}
@@ -876,6 +901,58 @@ func handleGrokSessionInfo(args []string) error {
 	}
 
 	fmt.Println(groksessions.FormatInfoText(info, homeDir(), time.Now()))
+	return nil
+}
+
+func handleGrokSessionView(args []string) error {
+	var webFlag bool
+	var followFlag bool
+	var openFlag bool
+	port := 0
+	remaining, err := flags.Bool("--web", &webFlag).
+		Bool("--follow", &followFlag).
+		Bool("--open", &openFlag).
+		Int("--port", &port).
+		Help("-h,--help", grokSessionViewHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+	if len(remaining) != 1 {
+		return fmt.Errorf("expected exactly one session id, got %d arguments", len(remaining))
+	}
+	sessionID := strings.TrimSpace(remaining[0])
+	if sessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+	if openFlag && !webFlag {
+		return fmt.Errorf("--open requires --web")
+	}
+	if port != 0 && !webFlag {
+		return fmt.Errorf("--port requires --web")
+	}
+
+	grokHome := agenttty.GrokHome()
+	viewer, err := grokview.Open(grokHome, sessionID)
+	if err != nil {
+		return err
+	}
+	if err := viewer.Bootstrap(); err != nil {
+		return fmt.Errorf("load session updates: %w", err)
+	}
+
+	if webFlag {
+		return grokview.ServeWeb(context.Background(), viewer, grokview.WebOptions{
+			Port:   port,
+			Open:   openFlag,
+			Stderr: os.Stderr,
+		})
+	}
+
+	if followFlag {
+		return grokview.PrintFollow(context.Background(), os.Stdout, viewer)
+	}
+	grokview.PrintSnapshot(os.Stdout, viewer)
 	return nil
 }
 
@@ -2004,8 +2081,8 @@ Note: --base-url should be the full API base including the version path (e.g.
 	}
 
 	providers[id] = map[string]interface{}{
-		"npm":    npm,
-		"name":   displayName,
+		"npm":     npm,
+		"name":    displayName,
 		"options": options,
 		"models":  modelsMap,
 	}
