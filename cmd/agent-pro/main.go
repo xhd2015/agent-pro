@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -826,9 +827,10 @@ const grokSessionHelp = `
 Usage: agent-pro grok session <command> [ARGS]
 
 Commands:
-  info <session-id>   show detailed info for one Grok CLI session
-  view <session-id>   print or web-view session messages (in-memory convert)
-  log  <session-id>   print session log (not implemented yet)
+  info  <session-id>   show detailed info for one Grok CLI session
+  stats <session-id>   analyse counts, latency, tools, and tasks for one session
+  view  <session-id>   print or web-view session messages (in-memory convert)
+  log   <session-id>   print session log (not implemented yet)
 
 Run agent-pro grok session <command> --help for command-specific options.
 `
@@ -839,6 +841,22 @@ Usage: agent-pro grok session info <session-id>
 Show detailed info for one Grok CLI session from ~/.grok (or $GROK_HOME).
 
 Options:
+  -h,--help     show help
+`
+
+const grokSessionStatsHelp = `
+Usage: agent-pro grok session stats <session-id> [OPTIONS]
+
+Analyse one Grok CLI session: counts and latency (signals.json), per-tool
+handler times (events.jsonl), thinking blocks / background tasks / subagents
+(updates.jsonl).
+
+Options:
+  --json        print SessionStats as JSON (raw ms, no ANSI)
+  --by-tool     include per-tool table (default: included when tools exist)
+  --top N       top-N tools/tasks/subagents sections (default 5; 0 hides)
+  --color       always use ANSI colors (even when stdout is not a TTY)
+  --no-color    disable ANSI colors
   -h,--help     show help
 `
 
@@ -869,6 +887,8 @@ func handleGrokSession(args []string) error {
 	switch args[0] {
 	case "info":
 		return handleGrokSessionInfo(args[1:])
+	case "stats":
+		return handleGrokSessionStats(args[1:])
 	case "view":
 		return handleGrokSessionView(args[1:])
 	case "log":
@@ -901,6 +921,75 @@ func handleGrokSessionInfo(args []string) error {
 	}
 
 	fmt.Println(groksessions.FormatInfoText(info, homeDir(), time.Now()))
+	return nil
+}
+
+func handleGrokSessionStats(args []string) error {
+	var jsonFlag *bool
+	var byToolFlag *bool
+	var colorFlag *bool
+	var noColorFlag *bool
+	topN := 5
+	remaining, err := flags.Bool("--json", &jsonFlag).
+		Bool("--by-tool", &byToolFlag).
+		Bool("--color", &colorFlag).
+		Bool("--no-color", &noColorFlag).
+		Int("--top", &topN).
+		Help("-h,--help", grokSessionStatsHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+	if colorFlag != nil && *colorFlag && noColorFlag != nil && *noColorFlag {
+		return fmt.Errorf("--color and --no-color are mutually exclusive")
+	}
+	if len(remaining) != 1 {
+		return fmt.Errorf("expected exactly one session id, got %d arguments", len(remaining))
+	}
+
+	sessionID := strings.TrimSpace(remaining[0])
+	if sessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+
+	grokHome := agenttty.GrokHome()
+	stats, err := groksessions.Stats(grokHome, sessionID)
+	if err != nil {
+		return err
+	}
+
+	// Surface source warnings on stderr (human + JSON).
+	for _, w := range stats.Sources.Warnings {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
+	}
+
+	if jsonFlag != nil && *jsonFlag {
+		// Optional: --by-tool false could strip tools, but default keep full struct.
+		_ = byToolFlag
+		data, err := json.MarshalIndent(stats, "", "  ")
+		if err != nil {
+			return fmt.Errorf("format session stats json: %w", err)
+		}
+		fmt.Println(string(data))
+		return nil
+	}
+
+	// Text mode: FormatStatsTextOpts prints tools when non-empty.
+	// --by-tool is reserved for future force-include; default matches that.
+	_ = byToolFlag
+	colorMode := "auto"
+	if colorFlag != nil && *colorFlag {
+		colorMode = "always"
+	}
+	if noColorFlag != nil && *noColorFlag {
+		colorMode = "never"
+	}
+	fmt.Println(groksessions.FormatStatsTextOpts(stats, groksessions.FormatStatsOptions{
+		Home:      homeDir(),
+		Now:       time.Now(),
+		ColorMode: colorMode,
+		TopN:      topN,
+	}))
 	return nil
 }
 

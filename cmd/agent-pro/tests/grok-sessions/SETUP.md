@@ -1,9 +1,10 @@
 # Scenario
 
-**Feature**: agent-pro grok sessions list, grep-filter, and session info from synthetic GROK_HOME
+**Feature**: agent-pro grok sessions list, grep-filter, session info, and session stats from synthetic GROK_HOME
 
 ```
-# harness builds synthetic Grok home with summary.json, optional chat_history.jsonl, signals.json
+# harness builds synthetic Grok home with summary.json, optional chat_history.jsonl,
+# signals.json, events.jsonl, updates.jsonl
 test harness -> sessions package -> fixtures under GROK_HOME/sessions/
 
 # list discovers sessions; optional grep filters by content hits
@@ -11,25 +12,53 @@ sessions package -> List | ListWithGrep -> FormatListTable | FormatListTableWith
 
 # info locates one session by exact UUID and renders detail blocks
 sessions.Find/Info -> FormatInfoText(now) -> key-value session detail
+
+# stats aggregates signals / events / updates into SessionStats
+sessions.Stats(grokHome, sessionID) -> FormatStatsTextOpts(stats, opts)
+# opts: Home, Now, ColorMode (never|always|auto), TopN (0 hides Top sections)
 ```
 
 ## Preconditions
 
 - Package `agent/grok/sessions` exposes List, FormatListTable, ListWithGrep,
-  FormatListTableWithHits, Find, Info, and FormatInfoText.
-- Expected grep types (implementer adds; tests go RED until then):
+  FormatListTableWithHits, Find, Info, FormatInfoText, Stats,
+  FormatStatsText, and FormatStatsTextOpts.
+- Expected grep types:
   - `MatchHit` with File, Line, Part, Snippet, MatchStart, MatchLen
   - `SessionMatch` embedding Session plus `Hits []MatchHit`
   - `ListWithGrep(grokHome, limit, pattern) ([]SessionMatch, error)`
   - `FormatListTableWithHits(matches, home, now, colorMode string) string`
     where colorMode is `never` | `always` | `auto`
+- Expected stats types:
+  - `SessionStats` with identity, counts, latency, Tools, BackgroundTasks,
+    Subagents, Sources, plus optional `BackgroundTaskItems` /
+    `SubagentItems` for Top sections
+  - `BackgroundTaskItem` (DurationMs, Command full in Stats, Description,
+    ExitCode *int, Kind, CWD) and `SubagentItem` (DurationMs, ID, Description,
+    Type, Status, ToolCalls, Turns, TokensUsed, Model) replace `TimedItem`
+    for bg/sub lists (`TimedItem` may remain unused or for tools only)
+  - `ToolStat`, `TaskAgg`, `StatsSources`
+  - `Stats(grokHome, sessionID string) (*SessionStats, error)`
+  - `FormatStatsOptions` with Home, Now, ColorMode, TopN
+  - `FormatStatsTextOpts(stats *SessionStats, opts FormatStatsOptions) string`
+    — preferred harness entry (pretty durations, tool table sort, color, tops)
+  - Top background table: `#  DURATION  EXIT  COMMAND` (cmd display ≤**200**
+    runes + `…`; EXIT integer or `-`)
+  - Top subagents table: `#  DURATION  STATUS  TYPE  TOOLS  TURNS  DESC`
+    (desc display ≤**64** runes; join spawn→finish by `subagent_id`)
+  - `FormatStatsText(stats, home, now)` may remain as a thin wrapper
+    (`ColorMode: "never"`, `TopN: 5`) for CLI / callers that do not pass opts
+- Harness `Request` fields for stats formatting:
+  - `ColorMode` empty → Run uses `"never"`
+  - `TopNSet` false → Run uses TopN `5`; `TopNSet` true uses `TopN` (`0` hides tops)
 - Tests never read the real user `~/.grok` directory.
 
 ## Steps
 
 1. Root Setup allocates `req.GrokHome` as `{temp}/.grok`.
 2. Root Setup sets `req.Now` to a fixed UTC instant for deterministic relative times.
-3. Leaf Setup writes `summary.json` (and optional `chat_history.jsonl`) under encoded cwd directories.
+3. Leaf Setup writes `summary.json` and optional sidecars (`chat_history.jsonl`,
+   `signals.json`, `events.jsonl`, `updates.jsonl`) under encoded cwd directories.
 
 ## Context
 
@@ -38,7 +67,13 @@ sessions.Find/Info -> FormatInfoText(now) -> key-value session detail
 - `last_active_at` drives sort order; `generated_title` populates the TITLE column.
 - `num_chat_messages` populates the MSGS column in list table output.
 - Grep v1 searches `summary.json` + `chat_history.jsonl` only (not `updates.jsonl`).
-- Info tests require exact session UUIDs (no prefix matching).
+- Info and stats tests require exact session UUIDs (no prefix matching).
+- Stats prefers `signals.json` for session-level counts/latency; uses
+  `events.jsonl` for per-tool handler durations; uses `updates.jsonl` for
+  thinking-block coalescing, background-task wall clock, and subagent durations.
+- Missing optional stats files warn via `Sources.Warnings` and do not fail.
+- Human stats output uses pretty durations; tool table sorted by N desc;
+  optional Top-N sections; ColorMode controls ANSI (tests default never).
 
 ```go
 import (
@@ -242,6 +277,72 @@ func sessionDirOf(summaryPath string) string {
 	return filepath.Dir(summaryPath)
 }
 
+// writeSignalsJSON writes (or overwrites) signals.json in a session directory.
+// Used by stats fixtures for richer counters beyond the token-only WriteSignals path.
+func writeSignalsJSON(t *testing.T, sessionDir string, signals map[string]any) string {
+	t.Helper()
+	path := filepath.Join(sessionDir, "signals.json")
+	b, err := json.Marshal(signals)
+	if err != nil {
+		t.Fatalf("marshal signals: %v", err)
+	}
+	if err := os.WriteFile(path, b, 0644); err != nil {
+		t.Fatalf("write signals %s: %v", path, err)
+	}
+	return path
+}
+
+// writeJSONL writes path with one JSON object per line.
+func writeJSONL(t *testing.T, path string, lines []map[string]any) string {
+	t.Helper()
+	var b strings.Builder
+	for _, line := range lines {
+		raw, err := json.Marshal(line)
+		if err != nil {
+			t.Fatalf("marshal jsonl line: %v", err)
+		}
+		b.Write(raw)
+		b.WriteByte('\n')
+	}
+	if err := os.WriteFile(path, []byte(b.String()), 0644); err != nil {
+		t.Fatalf("write jsonl %s: %v", path, err)
+	}
+	return path
+}
+
+// writeEventsJSONL writes events.jsonl (tool_started / tool_completed, etc.).
+func writeEventsJSONL(t *testing.T, sessionDir string, events []map[string]any) string {
+	t.Helper()
+	return writeJSONL(t, filepath.Join(sessionDir, "events.jsonl"), events)
+}
+
+// writeUpdatesJSONL writes updates.jsonl (thought chunks, tasks, subagents).
+func writeUpdatesJSONL(t *testing.T, sessionDir string, updates []map[string]any) string {
+	t.Helper()
+	return writeJSONL(t, filepath.Join(sessionDir, "updates.jsonl"), updates)
+}
+
+// defaultStatsSignals returns a realistic signals.json map for stats fixtures.
+func defaultStatsSignals() map[string]any {
+	return map[string]any{
+		"turnCount":               2,
+		"userMessageCount":        2,
+		"assistantMessageCount":   5,
+		"toolCallCount":           3,
+		"toolFailureCount":        1,
+		"errorCount":              0,
+		"cancellationCount":       0,
+		"compactionCount":         1,
+		"sessionDurationSeconds":  120,
+		"avgResponseTimeMs":       1500,
+		"avgTimeToFirstTokenMs":   400,
+		"contextTokensUsed":       75085,
+		"contextWindowTokens":     200000,
+		"contextWindowUsage":      38,
+		"totalTokensBeforeCompaction": 0,
+	}
+}
+
 func assertSuccess(t *testing.T, resp *Response) {
 	t.Helper()
 	if resp.Err != nil {
@@ -268,5 +369,16 @@ func assertNotContains(t *testing.T, got, want string) {
 	if strings.Contains(got, want) {
 		t.Fatalf("unexpected %q in:\n%s", want, got)
 	}
+}
+
+func assertFloatNear(t *testing.T, name string, got, want, eps float64) {
+	t.Helper()
+	if got < want-eps || got > want+eps {
+		t.Fatalf("%s = %v, want ~%v (±%v)", name, got, want, eps)
+	}
+}
+
+func joinWarnings(warnings []string) string {
+	return strings.Join(warnings, "\n")
 }
 ```
