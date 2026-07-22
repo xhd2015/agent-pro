@@ -17,28 +17,48 @@ type Logger interface {
 }
 
 type Options struct {
-	Dir       string
-	Model     string
-	Prompt    string
-	SessionID string
-	Logger    Logger
-	AgentPath string
-	Env       map[string]string
+	Dir   string
+	Model string
+	// Prompt is the full prompt body. When PromptFile is empty, it is written
+	// to a temp file for --file delivery. Ignored when PromptFile is set.
+	Prompt string
+	// PromptFile is an existing prompt file path (absolute preferred). When
+	// set, Run uses it with --file and does not create or delete the file
+	// (caller owns lifecycle). When empty, Run creates a temp file from Prompt
+	// and removes it after the agent exits.
+	PromptFile string
+	SessionID  string
+	Logger     Logger
+	AgentPath  string
+	Env        map[string]string
 }
 
 func Run(ctx context.Context, opts Options) (string, string, error) {
-	promptFile, err := os.CreateTemp("", "opencode-prompt-*.txt")
-	if err != nil {
-		return "", "", fmt.Errorf("failed to create temp file for prompt: %w", err)
+	promptPath := opts.PromptFile
+	ownTemp := false
+	if promptPath == "" {
+		promptFile, err := os.CreateTemp("", "opencode-prompt-*.txt")
+		if err != nil {
+			return "", "", fmt.Errorf("failed to create temp file for prompt: %w", err)
+		}
+		if _, err := promptFile.WriteString(opts.Prompt); err != nil {
+			promptFile.Close()
+			os.Remove(promptFile.Name())
+			return "", "", fmt.Errorf("failed to write prompt to temp file: %w", err)
+		}
+		if err := promptFile.Close(); err != nil {
+			os.Remove(promptFile.Name())
+			return "", "", fmt.Errorf("failed to close temp prompt file: %w", err)
+		}
+		promptPath = promptFile.Name()
+		ownTemp = true
 	}
-	if _, err := promptFile.WriteString(opts.Prompt); err != nil {
-		promptFile.Close()
-		return "", "", fmt.Errorf("failed to write prompt to temp file: %w", err)
+	if ownTemp {
+		defer os.Remove(promptPath)
 	}
-	promptFile.Close()
 
 	inlineMsg := "Read the attached file and follow the instructions in it."
-	args := []string{"run", inlineMsg, "--file", promptFile.Name()}
+	args := []string{"run", inlineMsg, "--file", promptPath}
 	if opts.Model != "" {
 		args = append(args, "--model", opts.Model)
 	}

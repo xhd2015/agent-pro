@@ -254,10 +254,17 @@ Respond with ONLY a JSON object in this exact format (no other text):
 		runner = "opencode"
 	}
 
+	// Write full commit prompt once; both runners use the temp file and clean it up.
+	promptPath, cleanupPrompt, err := writeCommitPromptFile(commitPrompt)
+	if err != nil {
+		return "", err
+	}
+	defer cleanupPrompt()
+
 	var rawText string
 	switch runner {
 	case "commandcode":
-		out, err := runCommandCodeAgent(dir, options, commitPrompt, fileCount, len(stagedDiff))
+		out, err := runCommandCodeAgent(dir, options, promptPath, fileCount, len(stagedDiff))
 		if err != nil {
 			return "", err
 		}
@@ -288,12 +295,12 @@ Respond with ONLY a JSON object in this exact format (no other text):
 
 		ctx := context.Background()
 		output, sessionID, err := run.Run(ctx, run.Options{
-			Dir:       dir,
-			Model:     actualModel,
-			Prompt:    commitPrompt,
-			Logger:    logger,
-			AgentPath: options.AgentRunnerBinary,
-			Env:       options.AgentEnv,
+			Dir:        dir,
+			Model:      actualModel,
+			PromptFile: promptPath,
+			Logger:     logger,
+			AgentPath:  options.AgentRunnerBinary,
+			Env:        options.AgentEnv,
 		})
 		_ = sessionID
 		if err != nil {
@@ -328,10 +335,37 @@ Respond with ONLY a JSON object in this exact format (no other text):
 // A budget of 1 exits before a useful reply (exit 8: "Reached maximum conversation turns").
 const commandCodeMaxTurns = "16"
 
+// writeCommitPromptFile writes the full commit prompt to a temp file shared by
+// agent runners. cleanup removes the file (safe to call multiple times).
+func writeCommitPromptFile(prompt string) (path string, cleanup func(), err error) {
+	f, err := os.CreateTemp("", "commit-msg-prompt-*.txt")
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to create temp prompt file: %w", err)
+	}
+	path = f.Name()
+	cleanup = func() { _ = os.Remove(path) }
+	if _, err := f.WriteString(prompt); err != nil {
+		f.Close()
+		cleanup()
+		return "", nil, fmt.Errorf("failed to write temp prompt file: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("failed to close temp prompt file: %w", err)
+	}
+	return path, cleanup, nil
+}
+
+// shortPromptReadInstruction is the argv -p value for Command Code: point at the
+// absolute prompt file path without embedding the full diff body.
+func shortPromptReadInstruction(promptPath string) string {
+	return fmt.Sprintf("Read the file at %s and follow the instructions in it.", promptPath)
+}
+
 // runCommandCodeAgent invokes Command Code (`cmd` on PATH, or AgentRunnerBinary override).
-// Argv: -p <prompt> --skip-onboarding --yolo --max-turns 16 [-m <model>]
-// Full stdout is returned (no opencode NDJSON parse).
-func runCommandCodeAgent(dir string, options GenerateOptions, commitPrompt string, fileCount, stagedDiffLen int) (string, error) {
+// Argv: -p <short read-path instruction> --skip-onboarding --yolo --max-turns 16 [-m <model>]
+// Full commit prompt lives in promptPath (temp file); full stdout is returned.
+func runCommandCodeAgent(dir string, options GenerateOptions, promptPath string, fileCount, stagedDiffLen int) (string, error) {
 	logger := options.Logger
 
 	// Skip models.ListFree for commandcode; only honor an explicit --model.
@@ -339,7 +373,8 @@ func runCommandCodeAgent(dir string, options GenerateOptions, commitPrompt strin
 		logger.Log(fmt.Sprintf("Using model: %s", options.Model))
 	}
 
-	args := []string{"-p", commitPrompt, "--skip-onboarding", "--yolo", "--max-turns", commandCodeMaxTurns}
+	shortP := shortPromptReadInstruction(promptPath)
+	args := []string{"-p", shortP, "--skip-onboarding", "--yolo", "--max-turns", commandCodeMaxTurns}
 	if options.Model != "" {
 		args = append(args, "-m", options.Model)
 	}
@@ -348,7 +383,7 @@ func runCommandCodeAgent(dir string, options GenerateOptions, commitPrompt strin
 	if options.AgentRunnerBinary != "" {
 		binLabel = filepath.Base(options.AgentRunnerBinary)
 	}
-	logger.Log(fmt.Sprintf("$ %s -p …  [prompt: Generate brief git commit message for %d staged file(s), %d chars]", binLabel, fileCount, stagedDiffLen))
+	logger.Log(fmt.Sprintf("$ %s -p …  [prompt file: %s; Generate brief git commit message for %d staged file(s), %d chars]", binLabel, promptPath, fileCount, stagedDiffLen))
 	logger.Log("Running agent...")
 
 	cmd, err := tool_exec.New("cmd", args, &tool_exec.Options{

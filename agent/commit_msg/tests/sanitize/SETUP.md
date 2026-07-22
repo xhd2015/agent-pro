@@ -34,9 +34,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+// antiPatternsDirAbs is set once per Setup from d.DOCTEST_ROOT (fixture path is immutable).
+var antiPatternsDirAbs string
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	_ = AntiPatternsDir
 	_ = ReadAntiPatternIn
 	_ = ReadAntiPatternWant
@@ -52,12 +57,14 @@ func Setup(t *testing.T, req *Request) error {
 	if req.TempDir == "" {
 		return fmt.Errorf("sanitize subtree requires initialized TempDir from root Setup")
 	}
+	// agent/commit_msg/testdata/anti_patterns (sibling of tests/)
+	antiPatternsDirAbs = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "..", "testdata", "anti_patterns"))
 	return nil
 }
 
 // AntiPatternsDir is agent/commit_msg/testdata/anti_patterns (sibling of tests/).
 func AntiPatternsDir() string {
-	return filepath.Clean(filepath.Join(DOCTEST_ROOT, "..", "testdata", "anti_patterns"))
+	return antiPatternsDirAbs
 }
 
 func ReadAntiPatternIn(t *testing.T, name string) string {

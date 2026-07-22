@@ -34,16 +34,17 @@ import (
 	"testing"
 
 	"github.com/xhd2015/agent-pro/agent/commit_msg"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	_ = InitGitRepo
 	_ = InitGitRepoWithWorktree
 	_ = WriteMockConfig
 	_ = WriteFile
 	_ = captureRunGenCommitMsg
 	_ = captureGenCommitMsgHelp
-	req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../.."))
+	req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../.."))
 	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
 		return fmt.Errorf("repo root not found: %w", err)
 	}

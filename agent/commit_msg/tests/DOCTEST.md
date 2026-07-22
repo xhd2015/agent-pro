@@ -17,6 +17,11 @@ submodules, calls a supported agent runner to produce a JSON commit message
   `--agent-runner-binary` plus `LLM_MOCK_RUN_COMMANDCODE_COMMAND` hook so the
   mock prints fixed JSON on stdout without a live Command Code API. Default
   LookPath binary name is `cmd` (override via `--agent-runner-binary`).
+  The full commit prompt (truncated unified diff + JSON instructions) is written
+  to an ephemeral temp file; the CLI `-p` value is only a **short** instruction
+  (read path / follow instructions) so large staged sets stay under OS ARG_MAX.
+  Argv-recorder leaves capture `-p` and best-effort copy the prompt file while
+  the agent process runs (production deletes the temp file after completion).
 
 Race tests spawn a background `git status` loop during the agent phase to
 reproduce `index.lock` contention at commit time. The `--no-verify` flag
@@ -72,7 +77,8 @@ agent/commit_msg/tests/
 │   │   └── succeeds/          --dry-run --agent-runner commandcode → mock B; no agent
 │   └── generate/
 │       ├── no-commit/         mock binary + hook → title/description; HEAD unchanged
-│       └── with-commit/       mock + --commit → new commit with sanitized subject
+│       ├── with-commit/       mock + --commit → new commit with sanitized subject
+│       └── short-p-argv/      argv recorder: -p short (no diff --git body); prompt via temp file
 ├── commit-race/
 │   ├── background-git-loop/   agent spawns background git loop → --commit must succeed
 │   └── worktree-concurrent-git/
@@ -120,30 +126,31 @@ agent/commit_msg/tests/
 | 5 | `commandcode/dry-run/succeeds` | `--dry-run --agent-runner commandcode` succeeds with mock B; no agent |
 | 6 | `commandcode/generate/no-commit` | commandcode mock binary returns JSON; message printed; HEAD unchanged |
 | 7 | `commandcode/generate/with-commit` | commandcode mock + `--commit` creates commit with sanitized subject |
-| 8 | `commit-race/background-git-loop` | Background git status loop during agent run must not break `--commit` |
-| 9 | `commit-race/worktree-concurrent-git` | Same race reproduced from a linked git worktree |
-| 10 | `no-verify/requires-commit` | `--no-verify` without `--commit` errors before agent |
-| 11 | `no-verify/passes-to-git` | `--commit --no-verify` skips failing pre-commit hook |
-| 12 | `sanitize/accepted/dirty-json-title-backticks` | Outer-backticked JSON title cleaned; git subject clean with `--commit` |
-| 13 | `sanitize/accepted/md-title-meta` | Markdown `**Title (N chars):**` meta stripped |
-| 14 | `sanitize/accepted/git-commit-m-wrapper` | Single `git commit -m` wrapper → inner title |
-| 15 | `sanitize/accepted/git-commit-m-double` | Multi `-m` → title + `\n\n`-joined body |
-| 16 | `sanitize/accepted/raw-json-subject` | Raw JSON object → formatted title/description |
-| 17 | `sanitize/accepted/clean-passthrough` | Clean JSON passes sanitize unchanged |
-| 18 | `sanitize/accepted/inner-backticks-preserved` | Inner code-span backticks preserved |
-| 19 | `sanitize/rejected/todowrite-garbage` | Tool noise hard-fails; no commit |
-| 20 | `sanitize/fixtures-corpus` | Full `testdata/anti_patterns` table (all `.in` / `.want` / `.want_err`) |
-| 21 | `dry-run/mock-message-count` | `--dry-run` prints exact mock B with correct staged file count; no agent |
-| 22 | `dry-run/no-unstage-binary` | Dry-run plans binary unstage on stderr; binary stays staged; N includes it |
-| 23 | `dry-run/with-commit-no-mutate` | `--dry-run --commit` would-line only; HEAD subject unchanged |
-| 24 | `dry-run/with-commit-no-verify-plan` | Would commit line includes `--no-verify`; HEAD unchanged |
-| 25 | `dry-run/rejects-unknown-agent-runner` | `--dry-run --agent-runner codex` → unsupported; supported list includes `commandcode` |
-| 26 | `dry-run/accepts-model-no-agent` | `--dry-run --model` accepted; mock success without agent |
-| 27 | `dry-run/no-staged-errors` | Dry-run with empty index → no staged changes error |
-| 28 | `add-all/dry-run-would-line` | `--add-all --dry-run` → `would: git add -A`; index unchanged (honest empty-index error OK) |
-| 29 | `add-all/stages-untracked` | Real `--add-all` logs `$ git add -A`, stages untracked; HEAD unchanged without `--commit` |
-| 30 | `add-all/with-commit` | `--add-all --commit` stages untracked then creates commit with mock subject |
-| 31 | `add-all/help-mentions-add-all` | `-h` help text mentions `--add-all` |
+| 8 | `commandcode/generate/short-p-argv` | argv recorder: `-p` short (no `diff --git` / full `Git diff:` body); prompt via temp file; generate still succeeds |
+| 9 | `commit-race/background-git-loop` | Background git status loop during agent run must not break `--commit` |
+| 10 | `commit-race/worktree-concurrent-git` | Same race reproduced from a linked git worktree |
+| 11 | `no-verify/requires-commit` | `--no-verify` without `--commit` errors before agent |
+| 12 | `no-verify/passes-to-git` | `--commit --no-verify` skips failing pre-commit hook |
+| 13 | `sanitize/accepted/dirty-json-title-backticks` | Outer-backticked JSON title cleaned; git subject clean with `--commit` |
+| 14 | `sanitize/accepted/md-title-meta` | Markdown `**Title (N chars):**` meta stripped |
+| 15 | `sanitize/accepted/git-commit-m-wrapper` | Single `git commit -m` wrapper → inner title |
+| 16 | `sanitize/accepted/git-commit-m-double` | Multi `-m` → title + `\n\n`-joined body |
+| 17 | `sanitize/accepted/raw-json-subject` | Raw JSON object → formatted title/description |
+| 18 | `sanitize/accepted/clean-passthrough` | Clean JSON passes sanitize unchanged |
+| 19 | `sanitize/accepted/inner-backticks-preserved` | Inner code-span backticks preserved |
+| 20 | `sanitize/rejected/todowrite-garbage` | Tool noise hard-fails; no commit |
+| 21 | `sanitize/fixtures-corpus` | Full `testdata/anti_patterns` table (all `.in` / `.want` / `.want_err`) |
+| 22 | `dry-run/mock-message-count` | `--dry-run` prints exact mock B with correct staged file count; no agent |
+| 23 | `dry-run/no-unstage-binary` | Dry-run plans binary unstage on stderr; binary stays staged; N includes it |
+| 24 | `dry-run/with-commit-no-mutate` | `--dry-run --commit` would-line only; HEAD subject unchanged |
+| 25 | `dry-run/with-commit-no-verify-plan` | Would commit line includes `--no-verify`; HEAD unchanged |
+| 26 | `dry-run/rejects-unknown-agent-runner` | `--dry-run --agent-runner codex` → unsupported; supported list includes `commandcode` |
+| 27 | `dry-run/accepts-model-no-agent` | `--dry-run --model` accepted; mock success without agent |
+| 28 | `dry-run/no-staged-errors` | Dry-run with empty index → no staged changes error |
+| 29 | `add-all/dry-run-would-line` | `--add-all --dry-run` → `would: git add -A`; index unchanged (honest empty-index error OK) |
+| 30 | `add-all/stages-untracked` | Real `--add-all` logs `$ git add -A`, stages untracked; HEAD unchanged without `--commit` |
+| 31 | `add-all/with-commit` | `--add-all --commit` stages untracked then creates commit with mock subject |
+| 32 | `add-all/help-mentions-add-all` | `-h` help text mentions `--add-all` |
 
 ## How to Run
 
@@ -152,6 +159,7 @@ doctest vet ./agent/commit_msg/tests
 doctest test -v ./agent/commit_msg/tests
 doctest test -v ./agent/commit_msg/tests/not-a-git-repo
 doctest test -v ./agent/commit_msg/tests/commandcode
+doctest test -v ./agent/commit_msg/tests/commandcode/generate/short-p-argv
 doctest test -v ./agent/commit_msg/tests/dry-run
 doctest test -v ./agent/commit_msg/tests/add-all
 doctest test -v ./agent/commit_msg/tests/sanitize
@@ -186,6 +194,12 @@ type Request struct {
 	// CommandCodeHook is the shell snippet for LLM_MOCK_RUN_COMMANDCODE_COMMAND
 	// (deterministic stdout from the mock without a live Command Code API).
 	CommandCodeHook string
+	// CommandCodeArgvPath is where the commandcode argv recorder writes
+	// NUL-separated process args (short-p-argv leaf).
+	CommandCodeArgvPath string
+	// CommandCodePromptCopyPath is where the argv recorder copies the temp
+	// prompt file (if -p references a readable path) during the agent run.
+	CommandCodePromptCopyPath string
 	// GenCommitMsgBin is the path to cmd/gen-commit-msg (help subprocess).
 	GenCommitMsgBin string
 	// HEADSubjectBefore records git subject before generate (HEAD-unchanged asserts).
