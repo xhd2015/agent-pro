@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,6 +43,19 @@ Options:
 `
 
 func RunGenCommitMsg(args []string) error {
+	return RunGenCommitMsgWithWriters(args, os.Stdout, os.Stderr)
+}
+
+// RunGenCommitMsgWithWriters is like RunGenCommitMsg but writes plan/message
+// output to out and diagnostics to errw (nil → process streams). Used by wrk
+// in-process CLI capture without hijacking os.Stdout/os.Stderr.
+func RunGenCommitMsgWithWriters(args []string, out, errw io.Writer) error {
+	if out == nil {
+		out = os.Stdout
+	}
+	if errw == nil {
+		errw = os.Stderr
+	}
 	var dir string
 	var model string
 	var agentRunner string
@@ -91,9 +105,9 @@ func RunGenCommitMsg(args []string) error {
 	// Order: add-all → existing auto-unstage inside Generate → generate → optional commit.
 	if addAll {
 		if dryRun {
-			fmt.Fprintf(os.Stderr, "would: git add -A\n")
+			fmt.Fprintf(errw, "would: git add -A\n")
 		} else {
-			fmt.Fprintf(os.Stderr, "$ git add -A\n")
+			fmt.Fprintf(errw, "$ git add -A\n")
 			if err := gitwrite.AddAll(dir); err != nil {
 				return fmt.Errorf("git add -A failed: %w", err)
 			}
@@ -101,34 +115,34 @@ func RunGenCommitMsg(args []string) error {
 	}
 
 	if dryRun {
-		return runGenCommitMsgDryRun(dir, commit, noVerify)
+		return runGenCommitMsgDryRun(out, errw, dir, commit, noVerify)
 	}
 
 	msg, err := Generate(dir, GenerateOptions{
 		Model:             model,
 		AgentRunner:       agentRunner,
 		AgentRunnerBinary: agentRunnerBinary,
-		Logger:            &stderrLogger{},
+		Logger:            &writerLogger{w: errw},
 	})
 	if err != nil {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "\n--- Generated Commit Message ---\n")
-	fmt.Println(msg)
+	fmt.Fprintf(errw, "\n--- Generated Commit Message ---\n")
+	fmt.Fprintln(out, msg)
 
 	quotedMsg := shellQuote(msg)
 	commitCmd := "git commit -m " + quotedMsg
 	if noVerify {
 		commitCmd += " --no-verify"
 	}
-	fmt.Fprintf(os.Stderr, "\nRun:\n  %s\n", commitCmd)
+	fmt.Fprintf(errw, "\nRun:\n  %s\n", commitCmd)
 
 	if commit {
-		fmt.Fprintf(os.Stderr, "\nRunning git commit...\n")
+		fmt.Fprintf(errw, "\nRunning git commit...\n")
 		output, err := git_runner.CommitWithRetry(dir, msg, 5, noVerify)
 		if len(output) > 0 {
-			fmt.Fprint(os.Stderr, string(output))
+			fmt.Fprint(errw, string(output))
 		}
 		if err != nil {
 			return fmt.Errorf("git commit failed: %w", err)
@@ -141,7 +155,13 @@ func RunGenCommitMsg(args []string) error {
 // runGenCommitMsgDryRun implements pure-plan --dry-run: inspect staged set, print
 // mock message B, plan would-unstage / would-commit on stderr, never call agent
 // or mutate the index/HEAD.
-func runGenCommitMsgDryRun(dir string, commit, noVerify bool) error {
+func runGenCommitMsgDryRun(out, errw io.Writer, dir string, commit, noVerify bool) error {
+	if out == nil {
+		out = os.Stdout
+	}
+	if errw == nil {
+		errw = os.Stderr
+	}
 	stagedFiles, err := git.GetStagedFiles(dir)
 	if err != nil {
 		return fmt.Errorf("failed to list staged files: %w", err)
@@ -157,17 +177,17 @@ func runGenCommitMsgDryRun(dir string, commit, noVerify bool) error {
 	}
 	for _, b := range binaries {
 		if b.desc != "" {
-			fmt.Fprintf(os.Stderr, "would: unstage %s (%s)\n", b.path, b.desc)
+			fmt.Fprintf(errw, "would: unstage %s (%s)\n", b.path, b.desc)
 		} else {
-			fmt.Fprintf(os.Stderr, "would: unstage %s\n", b.path)
+			fmt.Fprintf(errw, "would: unstage %s\n", b.path)
 		}
 	}
 	for _, sm := range subModuleDirs {
-		fmt.Fprintf(os.Stderr, "would: unstage %s/\n", sm)
+		fmt.Fprintf(errw, "would: unstage %s/\n", sm)
 	}
 
 	n := len(stagedFiles)
-	fmt.Printf("dry-run: would generate commit message for %d staged file(s)\n", n)
+	fmt.Fprintf(out, "dry-run: would generate commit message for %d staged file(s)\n", n)
 
 	if commit {
 		// Plan commit using the mock message as the planned -m payload.
@@ -176,7 +196,7 @@ func runGenCommitMsgDryRun(dir string, commit, noVerify bool) error {
 		if noVerify {
 			commitCmd += " --no-verify"
 		}
-		fmt.Fprintf(os.Stderr, "would: %s\n", commitCmd)
+		fmt.Fprintf(errw, "would: %s\n", commitCmd)
 	}
 
 	return nil
@@ -187,6 +207,23 @@ type stderrLogger struct{}
 func (l *stderrLogger) Log(msg string)   { fmt.Fprintf(os.Stderr, "%s\n", msg) }
 func (l *stderrLogger) Error(msg string) { fmt.Fprintf(os.Stderr, "ERROR: %s\n", msg) }
 
+type writerLogger struct{ w io.Writer }
+
+func (l *writerLogger) Log(msg string) {
+	w := l.w
+	if w == nil {
+		w = os.Stderr
+	}
+	fmt.Fprintf(w, "%s\n", msg)
+}
+func (l *writerLogger) Error(msg string) {
+	w := l.w
+	if w == nil {
+		w = os.Stderr
+	}
+	fmt.Fprintf(w, "ERROR: %s\n", msg)
+}
+
 func shellQuote(s string) string {
 	if !strings.ContainsAny(s, "'\"\\$ !`\n\r\t") {
 		return "'" + s + "'"
@@ -194,7 +231,7 @@ func shellQuote(s string) string {
 	return "$'" + strings.NewReplacer(
 		"\\", "\\\\",
 		"'", "\\'",
-		"\n", "\\n",
+		"\n", "\n",
 		"\r", "\\r",
 		"\t", "\\t",
 	).Replace(s) + "'"
