@@ -1,0 +1,5 @@
+Fix login timeout
+
+Retry on 5xx from auth service.
+
+Co-authored-by: Bot <bot@example.com>

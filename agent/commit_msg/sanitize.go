@@ -26,9 +26,13 @@ var (
 	reTrailingCharCount = regexp.MustCompile(`(?i)\s*\(\s*\d+\s*chars?\s*\)\s*$`)
 	// Tool noise: todowrite … completed.
 	reTodoWriteNoise = regexp.MustCompile(`(?is)\btodowrite\b.*\bcompleted\b`)
-	// git commit -m "..." / -m '...' tokens (non-greedy quoted args).
+	// git commit -m "..." / -m '...' / -m $'...' tokens (quoted args; ANSI-C supported).
 	reGitCommitM = regexp.MustCompile(`(?is)^\s*(?:` + "`" + `)?\s*git\s+commit\b`)
-	reDashMArg   = regexp.MustCompile(`-m\s+(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)')`)
+	// Groups: 1=ANSI-C $'...', 2=double-quoted, 3=single-quoted.
+	reDashMArg = regexp.MustCompile(`-m\s+(?:\$'((?:\\.|[^'\\])*)'|"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)')`)
+	// In-line Co-authored-by: trailer span (identity with optional <email>, or bare tokens).
+	reCoAuthoredBySpan = regexp.MustCompile(`(?i)Co-authored-by:\s*(?:[^<\n]*<[^>\n]*>|[^\s\n]+(?:\s+[^\s\n<]+)*)`)
+	reMultiSpace      = regexp.MustCompile(`[^\S\n]{2,}`)
 )
 
 // Sanitize applies post-parse anti-pattern cleanup to agent commit-message text.
@@ -139,6 +143,23 @@ func Sanitize(raw string) SanitizeResult {
 	if cleaned := reTrailingCharCount.ReplaceAllString(msg.Description, ""); cleaned != msg.Description {
 		msg.Description = strings.TrimSpace(cleaned)
 		changes = append(changes, "char-count-desc")
+	}
+
+	msg.Title = strings.TrimSpace(msg.Title)
+	msg.Description = strings.TrimSpace(msg.Description)
+
+	// Strip Co-authored-by whole lines and in-line spans (title + description).
+	coAuthoredStripped := false
+	if cleaned, did := stripCoAuthored(msg.Title); did {
+		msg.Title = cleaned
+		coAuthoredStripped = true
+	}
+	if cleaned, did := stripCoAuthored(msg.Description); did {
+		msg.Description = cleaned
+		coAuthoredStripped = true
+	}
+	if coAuthoredStripped {
+		changes = append(changes, "co-authored")
 	}
 
 	msg.Title = strings.TrimSpace(msg.Title)
@@ -318,7 +339,9 @@ func isGitCommitWrapper(s string) bool {
 }
 
 // extractGitCommitM parses git commit -m "..." [-m "..."]* into title + description.
+// Supports double quotes, single quotes, and ANSI-C $'...' quoting.
 // 1st -m → title; remaining -m → description joined by \n\n.
+// When a single -m value contains blank-line-separated body, split into title+desc.
 func extractGitCommitM(s string) (CommitMsg, bool) {
 	s = strings.TrimSpace(s)
 	// Drop outer backticks if still present.
@@ -334,23 +357,157 @@ func extractGitCommitM(s string) (CommitMsg, bool) {
 	}
 	var args []string
 	for _, m := range matches {
-		arg := m[1]
-		if arg == "" {
+		var arg string
+		ansiC := false
+		switch {
+		case m[1] != "":
+			arg = m[1]
+			ansiC = true
+		case m[2] != "":
 			arg = m[2]
+		default:
+			arg = m[3]
 		}
-		// Unescape simple \" sequences.
-		arg = strings.ReplaceAll(arg, `\"`, `"`)
-		arg = strings.ReplaceAll(arg, `\'`, `'`)
+		if ansiC {
+			arg = unescapeANSIC(arg)
+		} else {
+			// Unescape simple \" / \' sequences in plain quotes.
+			arg = strings.ReplaceAll(arg, `\"`, `"`)
+			arg = strings.ReplaceAll(arg, `\'`, `'`)
+		}
 		args = append(args, strings.TrimSpace(arg))
 	}
 	if len(args) == 0 || args[0] == "" {
 		return CommitMsg{}, false
 	}
-	msg := CommitMsg{Title: args[0]}
-	if len(args) > 1 {
-		msg.Description = strings.Join(args[1:], "\n\n")
+	// Single -m may embed title\n\nbody (and trailers); split like a normal blob.
+	if len(args) == 1 {
+		return splitTitleDesc(args[0]), true
 	}
+	msg := CommitMsg{Title: args[0]}
+	msg.Description = strings.Join(args[1:], "\n\n")
 	return msg, true
+}
+
+// unescapeANSIC expands common ANSI-C $'...' escapes used in git -m arguments.
+func unescapeANSIC(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) {
+			switch s[i+1] {
+			case 'n':
+				b.WriteByte('\n')
+				i++
+			case 't':
+				b.WriteByte('\t')
+				i++
+			case 'r':
+				b.WriteByte('\r')
+				i++
+			case '\\':
+				b.WriteByte('\\')
+				i++
+			case '\'':
+				b.WriteByte('\'')
+				i++
+			case '"':
+				b.WriteByte('"')
+				i++
+			default:
+				// Keep unknown escapes as literal backslash + char.
+				b.WriteByte(s[i])
+				b.WriteByte(s[i+1])
+				i++
+			}
+			continue
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
+// stripCoAuthored removes whole-line and in-line Co-authored-by: trailers.
+// Does not touch "Co-authored-by" without a colon. Returns cleaned text and
+// whether anything was removed.
+func stripCoAuthored(s string) (string, bool) {
+	if s == "" || !strings.Contains(strings.ToLower(s), "co-authored-by:") {
+		return s, false
+	}
+	orig := s
+	lines := strings.Split(s, "\n")
+	var out []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			out = append(out, "")
+			continue
+		}
+		// Whole-line trailer: trimmed starts with Co-authored-by:
+		if len(trimmed) >= len("Co-authored-by:") &&
+			strings.EqualFold(trimmed[:len("Co-authored-by:")], "Co-authored-by:") {
+			continue
+		}
+		cleaned := reCoAuthoredBySpan.ReplaceAllString(line, "")
+		cleaned = reMultiSpace.ReplaceAllString(cleaned, " ")
+		cleaned = stripDanglingTrailSeps(cleaned)
+		cleaned = strings.TrimSpace(cleaned)
+		if cleaned == "" {
+			continue
+		}
+		out = append(out, cleaned)
+	}
+	// Collapse consecutive blank lines and trim ends.
+	collapsed := collapseBlankLines(out)
+	result := strings.TrimSpace(strings.Join(collapsed, "\n"))
+	return result, result != strings.TrimSpace(orig)
+}
+
+// stripDanglingTrailSeps removes leftover trailing separators after co-authored strip.
+func stripDanglingTrailSeps(s string) string {
+	for {
+		s = strings.TrimRightFunc(s, func(r rune) bool {
+			return unicode.IsSpace(r)
+		})
+		if s == "" {
+			return s
+		}
+		r := []rune(s)
+		last := r[len(r)-1]
+		switch last {
+		case '—', '–', '-', ',', ';', ':':
+			// Orphan trailing separators (em/en dash, hyphen, comma, semicolon, colon).
+			r = r[:len(r)-1]
+			s = string(r)
+			continue
+		}
+		return s
+	}
+}
+
+func collapseBlankLines(lines []string) []string {
+	var out []string
+	prevBlank := false
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			if prevBlank {
+				continue
+			}
+			prevBlank = true
+			out = append(out, "")
+			continue
+		}
+		prevBlank = false
+		out = append(out, line)
+	}
+	// Trim leading/trailing blank entries.
+	for len(out) > 0 && strings.TrimSpace(out[0]) == "" {
+		out = out[1:]
+	}
+	for len(out) > 0 && strings.TrimSpace(out[len(out)-1]) == "" {
+		out = out[:len(out)-1]
+	}
+	return out
 }
 
 func splitTitleDesc(blob string) CommitMsg {
