@@ -38,6 +38,7 @@ Commands:
   crush             manage crush configuration
   codex             manage codex configuration
   grok              manage grok CLI sessions
+  proc              resolve agent session from a process id
   skills            list available skills; skills update refreshes installs
   skill             show or install a skill (--show / --install)
   traces            view agent trace sessions (web viewer)
@@ -91,6 +92,8 @@ func handle(args []string) error {
 		return handleSkill(args[1:])
 	case "skills":
 		return handleSkills(args[1:])
+	case "proc":
+		return handleProc(args[1:])
 	case "traces":
 		return handleTraces(args[1:])
 	case "show-agent-files":
