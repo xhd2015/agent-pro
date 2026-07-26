@@ -22,7 +22,12 @@ type RunOptions struct {
 	Prompt          string
 	Model           string
 	ResumeSessionID string
-	RunnerID        string
+	// Fork appends grok --fork-session after --resume (grok-tty only). Requires
+	// non-empty ResumeSessionID. Creates a new Grok conversation branch.
+	Fork bool
+	// ForkSessionID optional Grok --session-id for the forked session (with Fork).
+	ForkSessionID string
+	RunnerID      string
 	// SessionID is the terminal registry id. Empty → auto-reserve session-N.
 	// When set (explicit --session or --session-id-from-prompt), storage and registry share it.
 	SessionID             string
@@ -103,6 +108,20 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	argv, err := provider.BuildArgv(env, opts.SettingsPath, opts.AgentPath, opts.Model, opts.ResumeSessionID)
 	if err != nil {
 		return "", "", err
+	}
+	if opts.Fork {
+		if runnerID != "grok-tty" {
+			return "", "", fmt.Errorf("--fork requires grok-tty (got %s)", runnerID)
+		}
+		if strings.TrimSpace(opts.ResumeSessionID) == "" {
+			return "", "", fmt.Errorf("--fork requires a resume parent session id")
+		}
+		if !hasFlagPair(argv, "--fork-session") {
+			argv = append(argv, "--fork-session")
+		}
+		if sid := strings.TrimSpace(opts.ForkSessionID); sid != "" && !hasFlagPair(argv, "--session-id") {
+			argv = append(argv, "--session-id", sid)
+		}
 	}
 	// New session (no --resume): pass initial prompt as trailing positional arg
 	// (grok [PROMPT]). Resume follow-ups stay inject-only so argv keeps --resume.

@@ -20,6 +20,7 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	}
 	assertSuccess(t, resp)
 	assertContains(t, resp.Stdout, "--resume-from-grok-session")
+	assertContains(t, resp.Stdout, "--fork")
 	if !strings.HasSuffix(resp.Stdout, "\n") {
 		t.Fatalf("help stdout must end with trailing newline; last bytes %q", tailBytes(resp.Stdout, 8))
 	}

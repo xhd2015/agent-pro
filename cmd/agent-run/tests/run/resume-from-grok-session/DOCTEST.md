@@ -160,6 +160,7 @@ type Request struct {
 	DetachFlag        bool   // append --detach
 	OpenFlag          bool   // append --open
 	AutoSendOrResume  bool   // append --auto-send-or-resume
+	ForkFlag          bool   // append --fork (with --resume-from-grok-session)
 	OpenInstantAttach bool   // AGENT_RUN_OPEN_ATTACH_INSTANT=1
 	ExecTimeout       time.Duration
 }

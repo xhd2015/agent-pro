@@ -404,6 +404,9 @@ func runArgs(req *Request, resumeID string, extra ...string) []string {
 	if req.DetachFlag {
 		args = append(args, "--detach")
 	}
+	if req.ForkFlag {
+		args = append(args, "--fork")
+	}
 	args = append(args, "--resume-from-grok-session", resumeID)
 	args = append(args, extra...)
 	return args

@@ -46,6 +46,8 @@ Options:
   --resume-from-grok-session ID
                       import an external Grok CLI session by provider id (grok-tty only);
                       validates id / runner / GROK_HOME presence / not already mapped / --dir vs cwd
+  --fork              with --resume-from-grok-session: branch via grok --fork-session into a
+                      NEW agent-run session (skips already-mapped for the parent Grok id)
   --agent-runner RUNNER   codex, codex-tty, grok-tty, opencode, fake-codex, ...
   --agent-runner-binary SPEC
                       agent executable: bare name/path or shell-style "binary flags..."
@@ -76,6 +78,7 @@ func runHeadless(args []string, defaultRunner string) error {
 	var dir string
 	var allowRelocateResumeSessionDir bool
 	var resumeFromGrokSession *string
+	var forkFlag bool
 	var recorded flags.Flags
 	remaining, err := flags.Bool("--json", &jsonFlag).
 		String("--model", &model).
@@ -90,6 +93,7 @@ func runHeadless(args []string, defaultRunner string) error {
 		String("--dir", &dir).
 		Bool("--allow-relocate-resume-session-dir", &allowRelocateResumeSessionDir).
 		String("--resume-from-grok-session", &resumeFromGrokSession).
+		Bool("--fork", &forkFlag).
 		String("--agent-runner", &agentRunner).
 		String("--agent-runner-binary", &agentRunnerBinary).
 		String("--agent-runner-config-home", &agentRunnerConfigHome).
@@ -141,7 +145,11 @@ func runHeadless(args []string, defaultRunner string) error {
 			openFlag:          openFlag,
 			detachFlag:        detachFlag,
 			noSubmit:          noSubmit,
+			fork:              forkFlag,
 		})
+	}
+	if forkFlag {
+		return fmt.Errorf("--fork requires --resume-from-grok-session (or use: agent-run resume --fork …)")
 	}
 
 	if newTerminal && !autoSendOrResume {
@@ -272,6 +280,7 @@ type resumeFromGrokOpts struct {
 	openFlag          bool
 	detachFlag        bool
 	noSubmit          bool
+	fork              bool
 }
 
 // runResumeFromGrokSession validates (P1), CreateSession-pre-binds the Grok UUID
@@ -333,13 +342,17 @@ func runResumeFromGrokSession(opts resumeFromGrokOpts) error {
 	if err != nil {
 		return err
 	}
-	for _, m := range list {
-		if !isGrokRunner(m.Runner) {
-			continue
-		}
-		if strings.TrimSpace(m.RunnerSessionID) == id {
-			return fmt.Errorf("grok session %s is already mapped to agent-run session %s; use resume --grok-session-id %s",
-				id, m.SessionID, id)
+	// Without --fork: 1:1 import identity — reject re-import of an already-bound Grok id.
+	// With --fork: branch into a NEW agent-run session; parent may already be mapped.
+	if !opts.fork {
+		for _, m := range list {
+			if !isGrokRunner(m.Runner) {
+				continue
+			}
+			if strings.TrimSpace(m.RunnerSessionID) == id {
+				return fmt.Errorf("grok session %s is already mapped to agent-run session %s; use resume --grok-session-id %s (or re-run with --fork to branch)",
+					id, m.SessionID, id)
+			}
 		}
 	}
 
@@ -412,6 +425,7 @@ func runResumeFromGrokSession(opts resumeFromGrokOpts) error {
 	// Existing session with RunnerSessionID → agentui.Run loads it as ResumeSessionID.
 	// Open/Detach/KeepTTY match normal run so --detach prints ids and returns early
 	// and --open uses the interactive attach path (tests use instant-attach hook).
+	// --fork: argv gets grok --fork-session; new agent-run session already created above.
 	return agentui.Run(context.Background(), agentui.RunOptions{
 		Prompt:                opts.prompt,
 		Runner:                runner,
@@ -427,6 +441,7 @@ func runResumeFromGrokSession(opts resumeFromGrokOpts) error {
 		Open:                  opts.openFlag,
 		Detach:                opts.detachFlag,
 		NoSubmit:              opts.noSubmit,
+		Fork:                  opts.fork,
 		Driver:                mergeHostDriver(agentdriver.Driver{}),
 		Store:                 store,
 		Stdout:                os.Stdout,

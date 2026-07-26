@@ -47,6 +47,8 @@ Options:
   --grok-session-id ID
                       resolve session by provider runner_session_id (meta.runner grok|grok-tty);
                       mutually exclusive with positional <session-id>
+  --fork              branch via grok --fork-session into a NEW agent-run session
+                      (parent Grok id from bound runner_session_id; skips live/exited gate)
   --agent-runner RUNNER   override runner (default: from session meta)
   --agent-runner-binary SPEC
                       agent executable: bare name/path or "binary flags..."
@@ -75,6 +77,7 @@ type resumeRunConfig struct {
 	allowRelocateResumeSessionDir bool
 	prompt                        string
 	defaultRunner                 string
+	fork                          bool
 }
 
 func runResume(args []string, defaultRunner string) error {
@@ -91,6 +94,7 @@ func runResume(args []string, defaultRunner string) error {
 	var noSubmit bool
 	var dir string
 	var allowRelocateResumeSessionDir bool
+	var forkFlag bool
 	var grokSessionID *string
 	remaining, err := flags.Bool("--json", &jsonFlag).
 		String("--model", &model).
@@ -100,6 +104,7 @@ func runResume(args []string, defaultRunner string) error {
 		Bool("--no-submit", &noSubmit).
 		String("--dir", &dir).
 		Bool("--allow-relocate-resume-session-dir", &allowRelocateResumeSessionDir).
+		Bool("--fork", &forkFlag).
 		String("--grok-session-id", &grokSessionID).
 		String("--agent-runner", &agentRunner).
 		String("--agent-runner-binary", &agentRunnerBinary).
@@ -177,12 +182,15 @@ func runResume(args []string, defaultRunner string) error {
 		allowRelocateResumeSessionDir: allowRelocateResumeSessionDir,
 		prompt:                        prompt,
 		defaultRunner:                 defaultRunner,
+		fork:                          forkFlag,
 	})
 }
 
 // resumeExistingSession reclaims a zombie terminal if needed and re-invokes
 // the provider with --resume <runner_session_id>. Workspace priority:
 // --dir > meta.workspace > process cwd (+ stderr warning).
+// With cfg.fork, creates a NEW agent-run session and launches grok --fork-session
+// from the parent runner_session_id (does not require the parent runner to have exited).
 func resumeExistingSession(store agentstorage.Store, meta agentstorage.SessionMeta, cfg resumeRunConfig) error {
 	prompt := strings.TrimSpace(cfg.prompt)
 	keepTTY := cfg.keepTTY
@@ -208,13 +216,21 @@ func resumeExistingSession(store agentstorage.Store, meta agentstorage.SessionMe
 		return fmt.Errorf("--no-submit requires --open")
 	}
 
-	// Gate: bound + exited (Resume.Ready).
-	report := probeSessionStatus(store, meta)
-	if report.Runner.Status != "bound" || strings.TrimSpace(meta.RunnerSessionID) == "" {
+	parentGrokID := strings.TrimSpace(meta.RunnerSessionID)
+	if parentGrokID == "" {
 		return fmt.Errorf("runner session not bound (missing runner_session_id); cannot resume")
 	}
-	if report.Runner.Exited == nil || !*report.Runner.Exited {
-		return fmt.Errorf("cannot resume: runner not exited (still active/live); use send instead of resume")
+
+	// Gate: bound + exited (Resume.Ready). --fork branches from on-disk Grok state
+	// and does not require the parent agent-run TTY to have exited.
+	if !cfg.fork {
+		report := probeSessionStatus(store, meta)
+		if report.Runner.Status != "bound" {
+			return fmt.Errorf("runner session not bound (missing runner_session_id); cannot resume")
+		}
+		if report.Runner.Exited == nil || !*report.Runner.Exited {
+			return fmt.Errorf("cannot resume: runner not exited (still active/live); use send instead of resume")
+		}
 	}
 
 	runner := strings.TrimSpace(cfg.agentRunner)
@@ -226,6 +242,13 @@ func resumeExistingSession(store agentstorage.Store, meta agentstorage.SessionMe
 	}
 	if err := validateRunner(runner); err != nil {
 		return err
+	}
+	if cfg.fork {
+		r := strings.TrimSpace(runner)
+		if r != "" && r != "grok-tty" && r != "grok" {
+			return fmt.Errorf("--fork requires grok-tty (got %s)", r)
+		}
+		runner = "grok-tty"
 	}
 	if openFlag && !agenttty.IsTTYRunner(runner) {
 		return fmt.Errorf("--open requires a TTY runner (got %s); non-TTY runners like fake-codex are not supported", runner)
@@ -262,6 +285,53 @@ func resumeExistingSession(store agentstorage.Store, meta agentstorage.SessionMe
 	model := strings.TrimSpace(cfg.model)
 	if model == "" {
 		model = strings.TrimSpace(meta.Model)
+	}
+
+	// --fork: new agent-run session pre-bound to parent Grok id; launch with --fork-session.
+	if cfg.fork {
+		newID, genErr := generateAutoSessionID(prompt, runner, store.Home())
+		if genErr != nil {
+			return genErr
+		}
+		if _, err := store.GetSession(newID); err == nil {
+			return fmt.Errorf("session already exists: %s", newID)
+		}
+		createMeta := agentstorage.SessionMeta{
+			Runner:                runner,
+			SessionID:             newID,
+			Status:                "running",
+			Model:                 model,
+			InitialPrompt:         prompt,
+			RunnerSessionID:       parentGrokID,
+			Workspace:             workspace,
+			PrependPaths:          append([]string(nil), effectivePrepend...),
+			Env:                   append([]string(nil), effectiveEnv...),
+			AgentRunnerConfigHome: configHome,
+		}
+		if err := store.CreateSession(newID, createMeta); err != nil {
+			return err
+		}
+		return agentui.Run(context.Background(), agentui.RunOptions{
+			Prompt:                prompt,
+			Runner:                runner,
+			Model:                 model,
+			SessionID:             newID,
+			AgentRunnerBinary:     cfg.agentRunnerBinary,
+			AgentRunnerConfigHome: configHome,
+			PrependPaths:          effectivePrepend,
+			Env:                   effectiveEnv,
+			JSON:                  cfg.jsonFlag,
+			Workspace:             workspace,
+			KeepTerminalAlive:     keepTTY || openFlag || detachFlag,
+			Open:                  openFlag,
+			Detach:                detachFlag,
+			NoSubmit:              cfg.noSubmit,
+			Fork:                  true,
+			Driver:                mergeHostDriver(agentdriver.Driver{}),
+			Store:                 store,
+			Stdout:                os.Stdout,
+			Stderr:                os.Stderr,
+		})
 	}
 
 	// Zombie keep-alive often still holds the TTY registry id (same as agent

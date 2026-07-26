@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -24,8 +25,10 @@ import (
 	"github.com/xhd2015/agent-pro/frontend"
 	"github.com/xhd2015/agent-pro/pkgs/agentconfig"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
+	"github.com/xhd2015/agent-pro/pkgs/shell"
 	"github.com/xhd2015/agent-pro/run"
 	"github.com/xhd2015/agent-pro/server"
+	lib "github.com/xhd2015/dot-pkgs/go-pkgs/shell/iterm2"
 	"github.com/xhd2015/less-gen/flags"
 )
 
@@ -833,9 +836,26 @@ Commands:
   info  <session-id>   show detailed info for one Grok CLI session
   stats <session-id>   analyse counts, latency, tools, and tasks for one session
   view  <session-id>   print or web-view session messages (in-memory convert)
+  fork  <session-id>   fork via grok --resume … --fork-session (no agent-run map)
   log   <session-id>   print session log (not implemented yet)
 
 Run agent-pro grok session <command> --help for command-specific options.
+`
+
+const grokSessionForkHelp = `
+Usage: agent-pro grok session fork <session-id> [OPTIONS]
+
+Fork a Grok CLI session using the native flag:
+  grok --resume <session-id> --fork-session
+
+Does not use agent-run storage (avoids already-mapped import limits).
+
+Options:
+  -n, --new-terminal   open a new iTerm2 window and run the fork command there
+  --dir DIR            workspace (default: session info.cwd from GROK_HOME)
+  --session-id UUID    optional id for the forked Grok session
+  --dry-run            print plan only; do not launch
+  -h,--help            show help
 `
 
 const grokSessionInfoHelp = `
@@ -894,11 +914,125 @@ func handleGrokSession(args []string) error {
 		return handleGrokSessionStats(args[1:])
 	case "view":
 		return handleGrokSessionView(args[1:])
+	case "fork":
+		return handleGrokSessionFork(args[1:])
 	case "log":
 		return fmt.Errorf("not implemented yet")
 	default:
 		return fmt.Errorf("unknown grok session command: %s", args[0])
 	}
+}
+
+// grokSessionOpenInNewTerminal is injectable for tests (default: iTerm ForceNew).
+var grokSessionOpenInNewTerminal = defaultGrokSessionOpenInNewTerminal
+
+func defaultGrokSessionOpenInNewTerminal(dir, followUp string) error {
+	return lib.OpenConfig(dir, &lib.Config{
+		Mode:             lib.ModeForceNew,
+		FollowUpCommands: []string{followUp},
+	})
+}
+
+func handleGrokSessionFork(args []string) error {
+	var newTerminal bool
+	var dryRun bool
+	var dir string
+	var newSessionID string
+	remaining, err := flags.Bool("-n,--new-terminal", &newTerminal).
+		Bool("--dry-run", &dryRun).
+		String("--dir", &dir).
+		String("--session-id", &newSessionID).
+		Help("-h,--help", grokSessionForkHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+	if len(remaining) != 1 {
+		return fmt.Errorf("expected exactly one session id, got %d arguments", len(remaining))
+	}
+	sessionID := strings.TrimSpace(remaining[0])
+	if sessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+
+	grokHome := agenttty.GrokHome()
+	info, err := groksessions.Info(grokHome, sessionID)
+	if err != nil {
+		return err
+	}
+
+	cwd := strings.TrimSpace(dir)
+	if cwd == "" {
+		cwd = strings.TrimSpace(info.CWD)
+	}
+	if cwd == "" {
+		return fmt.Errorf("session %s has empty cwd; pass --dir", sessionID)
+	}
+	abs, absErr := filepath.Abs(cwd)
+	if absErr != nil {
+		return fmt.Errorf("workspace dir: %w", absErr)
+	}
+	if real, e := filepath.EvalSymlinks(abs); e == nil {
+		abs = real
+	}
+	st, stErr := os.Stat(abs)
+	if stErr != nil {
+		return fmt.Errorf("workspace dir: %w", stErr)
+	}
+	if !st.IsDir() {
+		return fmt.Errorf("workspace dir: not a directory: %s", abs)
+	}
+	cwd = abs
+
+	tokens := []string{"grok", "--resume", sessionID, "--fork-session"}
+	if sid := strings.TrimSpace(newSessionID); sid != "" {
+		tokens = append(tokens, "--session-id", sid)
+	}
+	quoted := make([]string, 0, len(tokens))
+	for _, t := range tokens {
+		quoted = append(quoted, shell.ShellQuote(t))
+	}
+	cmdLine := strings.Join(quoted, " ")
+
+	if dryRun {
+		fmt.Println("Would fork grok session")
+		fmt.Printf("  grok id:   %s\n", sessionID)
+		fmt.Printf("  cwd:       %s\n", cwd)
+		fmt.Printf("  command:   %s\n", cmdLine)
+		if newTerminal {
+			fmt.Println("  terminal:  new iTerm2 window")
+		} else {
+			fmt.Println("  terminal:  current")
+		}
+		return nil
+	}
+
+	if newTerminal {
+		if err := grokSessionOpenInNewTerminal(cwd, cmdLine); err != nil {
+			return fmt.Errorf("open new terminal: %w", err)
+		}
+		fmt.Printf("Opened new window; forking grok session %s\n", sessionID)
+		return nil
+	}
+
+	// Foreground: resolve grok on PATH and run in session cwd.
+	bin, lookErr := exec.LookPath("grok")
+	if lookErr != nil {
+		return fmt.Errorf("grok not found on PATH: %w", lookErr)
+	}
+	argv := []string{"--resume", sessionID, "--fork-session"}
+	if sid := strings.TrimSpace(newSessionID); sid != "" {
+		argv = append(argv, "--session-id", sid)
+	}
+	cmd := exec.Command(bin, argv...)
+	cmd.Dir = cwd
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("grok fork: %w", err)
+	}
+	return nil
 }
 
 func handleGrokSessionInfo(args []string) error {
