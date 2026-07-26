@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Registry file exists at `AGENT_RUN_HOME/grok-tty-registry/<session-id>.json` while run is active.
@@ -12,9 +16,10 @@
 import (
 	"strings"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

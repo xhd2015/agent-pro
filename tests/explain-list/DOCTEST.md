@@ -120,6 +120,12 @@ explain list [--limit N] [--color]
 ## How to Run
 
 ```sh
+# Discovery skips labeled e2e/heavy/slow leaves by default.
+# Run e2e / full suite explicitly when needed:
+doctest test ./tests/explain-list/...                    # discovery (skips labeled e2e/heavy/slow)
+doctest test --label e2e ./tests/explain-list/...
+doctest test --label-all ./tests/explain-list/...
+
 doctest vet ./tests/explain-list
 doctest test ./tests/explain-list/...
 ```
@@ -137,6 +143,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/xhd2015/doctest/session"
 )
 
 // Msg is one role/message pair written into session.data.
@@ -173,7 +181,7 @@ type Response struct {
 	Stderr   string
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	t.Helper()
 	if req.Bin == "" {
 		t.Fatal("req.Bin not set; root Setup must build explain")
@@ -289,8 +297,8 @@ func seedSessions(configHome string, seeds []SessionSeed) error {
 
 // --- session-scoped binary + fake agent cache ---
 
-func sessionCacheDir() string {
-	return filepath.Join(os.TempDir(), "explain-list-doctest-"+DOCTEST_SESSION_ID)
+func sessionCacheDir(sessionID string) string {
+	return filepath.Join(os.TempDir(), "explain-list-doctest-"+sessionID)
 }
 
 func withFileLock(lockPath string, fn func() error) error {
@@ -309,8 +317,7 @@ func withFileLock(lockPath string, fn func() error) error {
 	return fn()
 }
 
-func findModuleRoot() (string, error) {
-	start := DOCTEST_ROOT
+func findModuleRoot(start string) (string, error) {
 	if start == "" {
 		wd, err := os.Getwd()
 		if err != nil {
@@ -331,9 +338,9 @@ func findModuleRoot() (string, error) {
 	}
 }
 
-func buildExplainOnce(t *testing.T) (string, error) {
+func buildExplainOnce(t *testing.T, d *session.Doctest) (string, error) {
 	t.Helper()
-	cache := sessionCacheDir()
+	cache := sessionCacheDir(d.DOCTEST_SESSION_ID)
 	bin := filepath.Join(cache, "explain")
 	ready := filepath.Join(cache, "binaries.ready")
 	lock := filepath.Join(cache, "build.lock")
@@ -342,7 +349,7 @@ func buildExplainOnce(t *testing.T) (string, error) {
 		if fileExists(ready) && fileExists(bin) {
 			return nil
 		}
-		repoRoot, err := findModuleRoot()
+		repoRoot, err := findModuleRoot(d.DOCTEST_ROOT)
 		if err != nil {
 			return err
 		}
@@ -366,9 +373,9 @@ func buildExplainOnce(t *testing.T) (string, error) {
 	return bin, nil
 }
 
-func ensureFakeAgent(t *testing.T) (string, error) {
+func ensureFakeAgent(t *testing.T, d *session.Doctest) (string, error) {
 	t.Helper()
-	cache := sessionCacheDir()
+	cache := sessionCacheDir(d.DOCTEST_SESSION_ID)
 	path := filepath.Join(cache, "fake-opencode")
 	lock := filepath.Join(cache, "fake-agent.lock")
 	ready := filepath.Join(cache, "fake-agent.ready")

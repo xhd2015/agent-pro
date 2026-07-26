@@ -41,7 +41,7 @@ import (
 	"testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.TempDir = t.TempDir()
 	req.GrokHome = filepath.Join(req.TempDir, ".grok")
 	if err := os.MkdirAll(filepath.Join(req.GrokHome, "sessions"), 0o755); err != nil {

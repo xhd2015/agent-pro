@@ -21,9 +21,13 @@ GET /fs/list?path=<root>
 1. Build fixture; start web; GET list.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "dirs-before-files-include-dots"
 	root := makeChooserOptimizeFixture(t, req)
 	req.Port = findFreePort(t)

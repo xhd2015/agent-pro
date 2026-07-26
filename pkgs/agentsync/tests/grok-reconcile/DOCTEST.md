@@ -69,6 +69,7 @@ doctest test -v ./pkgs/agentsync/tests/grok-reconcile/reconcile/heals-finished-e
 
 ```go
 import (
+
 	"context"
 	"fmt"
 	"os"
@@ -78,6 +79,7 @@ import (
 
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	"github.com/xhd2015/agent-pro/pkgs/agentsync"
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request struct {
@@ -111,7 +113,7 @@ type Response struct {
 	WorkerActive         bool
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	if req.TempDir == "" {
 		req.TempDir = t.TempDir()
 	}

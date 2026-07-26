@@ -11,9 +11,12 @@ Caller -> slack-msg auth status -> bot token required
 1. Args `["auth", "status"]` only.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"auth", "status"}
 	return nil
 }

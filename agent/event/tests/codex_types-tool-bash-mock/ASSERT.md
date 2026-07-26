@@ -3,9 +3,12 @@
 - The completed event contains the mock output and exit code.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertContains(t, resp.Output, `"type":"item.started"`)
 	assertContains(t, resp.Output, `"type":"item.completed"`)
 	assertContains(t, resp.Output, `"type":"command_execution"`)

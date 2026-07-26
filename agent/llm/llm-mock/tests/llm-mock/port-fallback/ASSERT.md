@@ -1,12 +1,19 @@
+---
+label: e2e
+---
+
 ## Expected
 - Server starts successfully (exit code 0).
 - `resp.Port` is the fallback port (blocked port + 1).
 - HTTP request to the fallback port returns 200 with the configured response.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     if err != nil {
         t.Fatal(err)
     }

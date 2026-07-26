@@ -15,11 +15,24 @@ import (
 type Options struct {
 	// AgentRunnerEnv is the env var name for explicit override (empty = skip).
 	AgentRunnerEnv string
+	// EnvLookup, when non-nil, is consulted before os.Getenv for detection env
+	// keys. Return (value, true) to force a value (empty = treat as unset);
+	// ("", false) falls through to the process environment. Request-scoped.
+	EnvLookup func(key string) (string, bool)
 }
 
 // TestProcessNameFunc, when non-nil, overrides PID → process-name lookup used
 // during parent-process detection. Tests set this to inject a fake process tree.
 var TestProcessNameFunc func(pid int) string
+
+func getenv(opts Options, key string) string {
+	if opts.EnvLookup != nil {
+		if v, ok := opts.EnvLookup(key); ok {
+			return v
+		}
+	}
+	return os.Getenv(key)
+}
 
 // Detect reports the parent agent runner if one is found.
 // Priority:
@@ -30,14 +43,14 @@ var TestProcessNameFunc func(pid int) string
 //  5. grandparent: pi|grok
 func Detect(opts Options) (runner string, ok bool) {
 	if opts.AgentRunnerEnv != "" {
-		if v := os.Getenv(opts.AgentRunnerEnv); v != "" {
+		if v := getenv(opts, opts.AgentRunnerEnv); v != "" {
 			return strings.TrimSpace(v), true
 		}
 	}
-	if v := os.Getenv("CODEX_THREAD_ID"); v != "" {
+	if v := getenv(opts, "CODEX_THREAD_ID"); v != "" {
 		return "codex", true
 	}
-	if v := os.Getenv("PI_CODING_AGENT"); v != "" {
+	if v := getenv(opts, "PI_CODING_AGENT"); v != "" {
 		return "pi", true
 	}
 	if ppid := os.Getppid(); ppid > 0 {

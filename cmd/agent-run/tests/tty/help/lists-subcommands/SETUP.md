@@ -17,7 +17,10 @@ agent-run tty --help -> status, attach, send
 3. `Assert` checks exit code 0 and lists status, attach, send.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"tty", "--help"}
 	return nil
 }

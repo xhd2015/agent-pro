@@ -23,7 +23,11 @@ seed finished grok-tty + runner_session_id + events
 3. Run `agent-run sessions --print --grok-session-id <UUID>` (no positional id).
 
 ```go
-import "testing"
+import (
+	"testing"
+
+	"github.com/xhd2015/doctest/session"
+)
 
 const (
 	printGrokSessionID     = "print_gsid_s1"
@@ -32,7 +36,7 @@ const (
 	printGrokSecondMessage = "Second gsid print line"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	store := openAgentStore(t, req)
 	req.SessionID = printGrokSessionID
 	req.SessionRunner = "grok-tty"

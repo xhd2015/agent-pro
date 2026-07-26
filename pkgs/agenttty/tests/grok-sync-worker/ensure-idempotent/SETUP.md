@@ -22,7 +22,7 @@ two goroutines call EnsureGrokSync concurrently
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ConcurrentEnsure = true
 	return nil
 }

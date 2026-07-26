@@ -9,7 +9,7 @@ seed session + optional registry -> agent-run web -> playwright network monitor 
 ## Preconditions
 
 - Repository contains `cmd/agent-run` and `frontend-agent-run/`.
-- Session-scoped cache under `$TMPDIR/terminal-poll-doctest-<DOCTEST_SESSION_ID>/` shares
+- Session-scoped cache under `$TMPDIR/terminal-poll-doctest-<d.DOCTEST_SESSION_ID>/` shares
   compiled `agent-run` across parallel leaves.
 - Each leaf uses isolated `AGENT_RUN_HOME` under `t.TempDir()`.
 - Playwright leaves require `playwright-debug` on PATH.
@@ -48,16 +48,17 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
-	req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../.."))
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../.."))
 	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
 		return fmt.Errorf("repo root not found: %w", err)
 	}
 	req.TempDir = t.TempDir()
 	req.Home = filepath.Join(req.TempDir, ".agent-run")
-	req.AgentRun = ensureAgentRunBinary(t, req.RepoRoot)
+	req.AgentRun = ensureAgentRunBinary(t, d, req.RepoRoot)
 	req.Port = 0
 	req.Token = "test"
 	req.Runner = "grok-tty"
@@ -75,8 +76,8 @@ func Setup(t *testing.T, req *Request) error {
 	return nil
 }
 
-func sessionCacheDir() string {
-	return filepath.Join(os.TempDir(), "terminal-poll-doctest-"+DOCTEST_SESSION_ID)
+func sessionCacheDir(d *session.Doctest) string {
+	return filepath.Join(os.TempDir(), "terminal-poll-doctest-"+d.DOCTEST_SESSION_ID)
 }
 
 func withFileLock(t *testing.T, lockPath string, fn func() error) error {
@@ -101,9 +102,9 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-func ensureAgentRunBinary(t *testing.T, repoRoot string) string {
+func ensureAgentRunBinary(t *testing.T, d *session.Doctest, repoRoot string) string {
 	t.Helper()
-	cache := sessionCacheDir()
+	cache := sessionCacheDir(d)
 	bin := filepath.Join(cache, "agent-run")
 	ready := filepath.Join(cache, "binaries.ready")
 	lock := filepath.Join(cache, "build.lock")

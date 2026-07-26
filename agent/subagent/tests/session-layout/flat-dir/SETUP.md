@@ -28,6 +28,8 @@ import (
 	"testing"
 
 	"github.com/xhd2015/agent-pro/agent/subagent"
+
+	"github.com/xhd2015/doctest/session"
 )
 
 const flatSessionID = "gen_layout_flat_test"
@@ -50,7 +52,7 @@ func configureFlatDirBase(t *testing.T, req *Request) {
 	req.MockConfigPath = mockPath
 }
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	configureFlatDirBase(t, req)
 	return nil
 }

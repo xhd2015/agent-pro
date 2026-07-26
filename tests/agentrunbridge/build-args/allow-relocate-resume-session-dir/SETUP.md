@@ -14,7 +14,7 @@ RunOpts{… open profile + AllowRelocateResumeSessionDir: true}
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "build_args"
 	req.SessionID = "sess-relocate-1"
 	req.Prompt = "relocate ok"

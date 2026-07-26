@@ -26,9 +26,10 @@ Grok info.cwd = WS_A
 import (
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	wsA := filepath.Join(req.TempDir, "ws-a")
 	wsB := filepath.Join(req.TempDir, "ws-b")
 	mustMkdir(t, wsA)

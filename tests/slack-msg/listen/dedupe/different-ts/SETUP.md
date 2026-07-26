@@ -11,9 +11,12 @@ two app_mention events different ts -> 2 agent launches
 1. Inject two channel mentions with distinct ts values.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.WantAgentCalls = 2
 	req.InjectEvents = []InjectedEvent{
 		{

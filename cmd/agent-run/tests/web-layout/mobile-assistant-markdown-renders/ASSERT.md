@@ -1,5 +1,5 @@
 ---
-label: ui-automation
+label: e2e, ui-automation
 explanation: assistant message card renders markdown strong/pre/code
 ---
 
@@ -9,9 +9,13 @@ explanation: assistant message card renders markdown strong/pre/code
 - Assistant message has `strong` and `pre`/`code`; no raw `**` / fence markers as sole text.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

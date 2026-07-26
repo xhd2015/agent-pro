@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected Output
 
 After open completes, stderr includes:
@@ -22,9 +26,10 @@ grok-tty: grok updates <path>/updates.jsonl
 ```go
 import (
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatalf("run failed: %v\nstdout:\n%s\nstderr:\n%s", err, resp.Stdout, resp.Stderr)
 	}

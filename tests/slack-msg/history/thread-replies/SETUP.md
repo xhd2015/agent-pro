@@ -16,9 +16,12 @@ slack-msg history --thread TS -> conversations.replies -> chronological reply li
 2. Leaf sets `--thread` with parent ts.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClearSlackEnv = true
 	apiURL, err := ensureSlackTestServer(t)
 	if err != nil {

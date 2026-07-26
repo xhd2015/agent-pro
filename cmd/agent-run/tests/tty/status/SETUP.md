@@ -13,7 +13,10 @@ agent-run tty status <session-id> -> registry file -> human-readable/JSON output
 3. `Assert` checks exit code and output fields.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	writeMockRegistryEntry(t, req)
 	return nil
 }

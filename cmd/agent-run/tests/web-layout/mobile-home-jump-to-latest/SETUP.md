@@ -26,9 +26,10 @@ seed 20 home sessions → scroll down to detach → append session → poll → 
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 
 	req.Layout = "home-jump-to-latest"

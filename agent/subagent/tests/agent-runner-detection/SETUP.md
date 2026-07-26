@@ -22,7 +22,7 @@ import (
     "github.com/xhd2015/agent-pro/agent/subagent"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     _ = req.AgentRunnerEnv
     _ = req.ProcessNames
     return nil

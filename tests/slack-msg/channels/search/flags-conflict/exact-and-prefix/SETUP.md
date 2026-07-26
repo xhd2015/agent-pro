@@ -11,9 +11,12 @@ Caller -> slack-msg channels search --token --exact --prefix gen -> exit 1
 1. Token, both flags, QUERY `gen`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{
 		"channels", "search",
 		"--token", slackTestToken,

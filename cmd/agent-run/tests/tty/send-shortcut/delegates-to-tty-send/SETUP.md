@@ -13,7 +13,10 @@ agent-run send bogus-id "hello" vs agent-run tty send bogus-id "hello" -> same e
 3. Stderr output should match the tty send equivalent.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"send", "session-nonexistent", "hello"}
 	return nil
 }

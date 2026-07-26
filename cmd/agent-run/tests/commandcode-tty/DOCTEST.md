@@ -61,6 +61,12 @@ cmd/agent-run/tests/commandcode-tty/
 ## How to Run
 
 ```sh
+# Discovery skips labeled e2e/heavy/slow leaves by default.
+# Run e2e / full suite explicitly when needed:
+doctest test ./cmd/agent-run/tests/commandcode-tty                    # discovery (skips labeled e2e/heavy/slow)
+doctest test --label e2e ./cmd/agent-run/tests/commandcode-tty
+doctest test --label-all ./cmd/agent-run/tests/commandcode-tty
+
 doctest vet ./cmd/agent-run/tests/commandcode-tty
 doctest test ./cmd/agent-run/tests/commandcode-tty
 doctest test -v ./cmd/agent-run/tests/commandcode-tty/run-headless
@@ -78,6 +84,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request struct {
@@ -108,7 +115,7 @@ func execSnapshot(t *testing.T, agentRun, sessionID string) string {
 	return string(out)
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	start := time.Now()
 	var stdout, stderr bytes.Buffer
 

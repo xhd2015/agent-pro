@@ -10,9 +10,10 @@
 ```go
 import (
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     // Override default args: no mock config, use --seed for determinism
     req.Args = []string{"exec", "--json", "--seed", "12345", "echo GEN_TEST_MARKER && ls -la"}
     req.Env = append(req.Env, "CODEX_SANDBOX_SKIP=1")

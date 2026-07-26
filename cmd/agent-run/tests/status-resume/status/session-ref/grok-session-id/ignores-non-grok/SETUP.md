@@ -15,9 +15,13 @@ seed runner=codex-tty runner_session_id=UUID
 2. Run status with `--grok-session-id` for that UUID.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "codex-tty"
 	req.SessionID = "test-gsid-codex-s1"
 	req.RunnerSessionID = "550e8400-e29b-41d4-a716-446655440905"

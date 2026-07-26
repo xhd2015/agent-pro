@@ -12,11 +12,14 @@ slack-msg auth status --config PATH -> Using config from: <abs> -> auth.test ok
 2. Token from config botToken (no CLI --token).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"auth", "status"}
-	if err := withConfigArg(t, req, "valid-config.json", false); err != nil {
+	if err := withConfigArg(t, d, req, "valid-config.json", false); err != nil {
 		return err
 	}
 	return nil

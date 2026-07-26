@@ -17,26 +17,17 @@ CLI/test -> ptywrap/client -> HTTP list/create + WS attach bridge
 
 ## Context
 
-- `requires-tty` leaf uses pipe stdin (non-TTY) via root helper or env override.
+- `requires-tty` leaf sets `req.UsePipeStdin` / `UsePipeStdout` explicitly (no process env).
 
 ```go
 import (
-	"os"
 	"testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
-	r, w, err := os.Pipe()
-	if err != nil {
-		return err
-	}
-	t.Cleanup(func() {
-		r.Close()
-		w.Close()
-	})
-	// Save original; attach leaf with Phase attach-requires-tty swaps to pipe.
-	t.Setenv("PTYWRAP_CLIENT_TEST_STDIN_FD", "pipe")
-	req.UsePipeStdin = true
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	_ = d
+	// No os.Setenv: pipe non-TTY is selected via req.UsePipeStdin on the leaf that
+	// needs it (attach/requires-tty). Product harness must honor Request fields.
 	return nil
 }
 ```

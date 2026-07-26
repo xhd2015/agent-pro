@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Fake grok exits 0 (all curls succeed; no `curl -sf` failure from HTTP 400).
@@ -10,9 +14,11 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

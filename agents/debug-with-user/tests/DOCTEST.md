@@ -83,11 +83,13 @@ doctest test -v ./agents/debug-with-user/tests/agent-pro/register
 
 ```go
 import (
+
 	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/xhd2015/agent-pro/agents/debug-with-user/dialog"
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request struct {
@@ -102,7 +104,7 @@ type Response struct {
 	Err     error
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	resp := &Response{}
 	switch req.Operation {
 	case "escape":

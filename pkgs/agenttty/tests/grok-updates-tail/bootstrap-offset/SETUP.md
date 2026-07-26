@@ -24,7 +24,7 @@ import (
 	"time"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.TailStartDelay = 100 * time.Millisecond
 	req.HoldAfterSchedule = 200 * time.Millisecond
 	return nil

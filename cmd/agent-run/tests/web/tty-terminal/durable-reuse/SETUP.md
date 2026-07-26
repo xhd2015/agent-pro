@@ -21,9 +21,13 @@ GET session detail -> return to same chat -> GET /terminal -> same terminal id
 3. `Assert` fetches it again and compares the resolved identity.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "http"
 	req.Runner = "codex-tty"
 	req.SessionID = "web-created-tty-session"

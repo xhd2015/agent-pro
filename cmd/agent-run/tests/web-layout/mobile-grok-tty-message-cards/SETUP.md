@@ -22,9 +22,10 @@ seed grok-tty/web_a1e886dbcebb3e2b-shaped events -> web -> session route -> dist
 import (
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 
 	req.Layout = "grok-tty-message-cards"

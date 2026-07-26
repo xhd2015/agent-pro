@@ -14,9 +14,12 @@ POST #2 /v1/messages -> text block with message text
 2. Send two Anthropic messages requests.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.MockEventsPreset = "think-tool-message"
 	req.Requests = []string{
 		`{"model":"mock-model","max_tokens":1024,"messages":[{"role":"user","content":"anthropic-bp-1"}]}`,

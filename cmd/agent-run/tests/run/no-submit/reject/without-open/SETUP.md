@@ -20,9 +20,13 @@ agent-run run --agent-runner grok-tty --no-submit "x"
 2. Assert non-zero exit and clear requires-`--open` wording.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "grok-tty"
 	req.Prompt = "x"
 	// Install fake TUI in case validation order starts the runner first.

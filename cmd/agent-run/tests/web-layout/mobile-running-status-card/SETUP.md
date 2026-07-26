@@ -22,9 +22,10 @@ seed running session(updated_at ~30s ago) -> web + token -> /sessions/... -> age
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 
 	req.Layout = "running-card"

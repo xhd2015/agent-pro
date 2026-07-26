@@ -18,9 +18,10 @@ seed bound+exited
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "test-resume-detach-alive"
 	req.RunnerSessionID = "550e8400-e29b-41d4-a716-446655440802"
 	req.MetaStatus = "finished"

@@ -19,9 +19,13 @@ agent-run web (no --token) -> GET / -> status.workspace drives WorkspacePath
 2. Descendant leaves set `WebWorkingDir` / script.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.WebTokenMode = "omit"
 	req.Token = ""
 	return nil

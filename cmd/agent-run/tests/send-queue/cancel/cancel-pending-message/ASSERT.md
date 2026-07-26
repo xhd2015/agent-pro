@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - `msg status` before cancel prints `pending`.
@@ -14,9 +18,10 @@
 import (
 	"strings"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertNoError(t, err)
 	assertSuccess(t, resp)
 	if strings.TrimSpace(resp.StatusBeforeStdout) != "pending" {

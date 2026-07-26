@@ -20,8 +20,11 @@ with `no_match: no matching exchange` on `/v1/chat/completions`.
 3. Assert all curls return HTTP 200 bodies without `no_match`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
+	"github.com/xhd2015/doctest/session"
+)
 const fakeGrokCurlTwoTurnNoConfig = `sh -c '
 base="${GROK_MODELS_BASE_URL}"
 r1=$(curl -sf "$base/chat/completions" -H "Content-Type: application/json" -d "{\"model\":\"mock-model\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello\"}]}")
@@ -32,7 +35,7 @@ echo "R2=$r2"
 echo "R3=$r3"
 '`
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ConfigJSON = ""
 	req.ConfigEnv = ""
 	req.FakeGrokCmd = fakeGrokCurlTwoTurnNoConfig

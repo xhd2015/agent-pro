@@ -14,9 +14,11 @@
 ```go
 import (
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Interruption tests: non-ActionMessage events reset coalescer state.
 	t.Helper()
 	return nil

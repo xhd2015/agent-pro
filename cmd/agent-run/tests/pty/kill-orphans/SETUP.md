@@ -39,9 +39,13 @@ agent-run pty kill-orphans --exe <testbin>
 4. Assert exit code, stdout, and process liveness / selection.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Default mode for live kill leaves; help-documents-flags overrides Mode "".
 	if req.Mode == "" {
 		req.Mode = "kill-orphans"

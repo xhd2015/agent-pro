@@ -7,7 +7,7 @@
 3. Call `Logf`, capture stdout.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     req.LogMessage = "value=%s count=%s"
     req.LogArgs = []any{"foo", "42"}
     return nil

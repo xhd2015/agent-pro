@@ -19,9 +19,13 @@ open /workspace -> tap workspace-quick-cwd
 1. Start web; open selector; tap Quick cwd; assert path + status.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 	req.Scenario = "quick-cwd-no-commit"
 	req.Port = findFreePort(t)

@@ -23,9 +23,12 @@ glob testdata/grok-writable/grok-*.txt
 - Primary coverage gate (F1); fails if any fixture drifts from manifest or implementation regresses.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.RunAllFixtures = true
 	return nil
 }

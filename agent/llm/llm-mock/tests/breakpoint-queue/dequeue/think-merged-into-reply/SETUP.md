@@ -14,9 +14,12 @@ agent-events: think + message on same serve
 2. Send one chat completion request.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.MockEventsPreset = "think-message"
 	req.Requests = []string{
 		`{"model":"mock-model","messages":[{"role":"user","content":"merge-think-reply"}]}`,

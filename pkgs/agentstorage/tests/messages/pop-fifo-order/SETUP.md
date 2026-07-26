@@ -19,7 +19,7 @@ AppendMessage("oldest") + AppendMessage("middle") + AppendMessage("newest") -> P
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Action = "pop_fifo"
 	req.MessageText = []string{"oldest", "middle", "newest"}
 	return nil

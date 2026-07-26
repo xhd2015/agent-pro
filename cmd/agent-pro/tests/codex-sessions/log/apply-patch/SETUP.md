@@ -22,7 +22,7 @@ terminal log with EDIT label
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "01900010-1111-7111-8111-111111111111"
 	patchLine := `{"type":"response_item","payload":{"type":"custom_tool_call","name":"apply_patch","call_id":"call_patch_1","input":"{\"path\":\"src/main.go\",\"patch\":\"+added line\"}"}}`
 	writeRolloutSession(t, req.CodexHome, req.SessionID,

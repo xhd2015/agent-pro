@@ -48,12 +48,13 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/xhd2015/doctest/session"
 )
 
 var fakePTYWrapUpgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
 
-func Setup(t *testing.T, req *Request) error {
-	req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../.."))
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../.."))
 	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
 		return fmt.Errorf("repo root not found: %w", err)
 	}

@@ -1,5 +1,5 @@
 ---
-label: ui-automation
+label: e2e, ui-automation
 explanation: Playwright document-order of dirs → workspace-show-files → files
 ---
 
@@ -12,9 +12,13 @@ explanation: Playwright document-order of dirs → workspace-show-files → file
   (first file after the toggle in document order).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertPlaywrightOK(t, resp, err)
 }
 ```

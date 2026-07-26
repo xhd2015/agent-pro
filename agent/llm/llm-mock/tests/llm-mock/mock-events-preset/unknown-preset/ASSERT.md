@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Non-zero exit code (server did not announce a listening port).
@@ -13,9 +17,12 @@
 non-zero
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if resp.ExitCode == 0 && resp.Err == nil {
 		t.Fatalf("expected startup failure for unknown preset, got exit 0\nstdout:\n%s\nstderr:\n%s",
 			resp.Stdout, resp.Stderr)

@@ -10,7 +10,7 @@
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Operation = "export"
 	req.Agent = "pi"
 	createSourceFile(t, req.HomeDir, ".pi/agent/auth.json", `{"token":"pi-token"}`)

@@ -18,9 +18,11 @@ mock server -> log AgentEvent message per served response -> session.jsonl (>=2 
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ConfigEnv = "file"
 	req.FakeGrokCmd = fakeGrokCurlTwice
 	req.ConfigJSON = minimalMockConfigJSON(8080, `[

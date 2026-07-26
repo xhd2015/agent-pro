@@ -47,6 +47,12 @@ agent-pro/
 ## How to Run
 
 ```sh
+# Discovery skips labeled e2e/heavy/slow leaves by default.
+# Run e2e / full suite explicitly when needed:
+doctest test ./agents/brainstorm/tests/agent-pro/...                    # discovery (skips labeled e2e/heavy/slow)
+doctest test --label e2e ./agents/brainstorm/tests/agent-pro/...
+doctest test --label-all ./agents/brainstorm/tests/agent-pro/...
+
 doctest vet ./agents/brainstorm/tests/agent-pro
 doctest test -v ./agents/brainstorm/tests/agent-pro/...
 ```
@@ -62,6 +68,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request struct {
@@ -79,7 +87,7 @@ type Response struct {
 	Err      error
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

@@ -22,9 +22,11 @@ staged change + leftover index.lock
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.RepoDir = filepath.Join(t.TempDir(), "repo")
 	initGitRepo(t, req.RepoDir)
 	stageNewFile(t, req.RepoDir, "next.txt", "world\n")

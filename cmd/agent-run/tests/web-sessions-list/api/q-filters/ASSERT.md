@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Each GET **200**.
@@ -13,6 +17,7 @@
 ```go
 import (
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
 func assertSingleMatch(t *testing.T, resp *Response, name, wantID string) {
@@ -29,7 +34,7 @@ func assertSingleMatch(t *testing.T, resp *Response, name, wantID string) {
 	}
 }
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatalf("Run error: %v", err)
 	}

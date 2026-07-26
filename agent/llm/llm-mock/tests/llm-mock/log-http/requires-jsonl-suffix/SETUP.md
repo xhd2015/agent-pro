@@ -15,9 +15,11 @@ llm-mock --log-http /tmp/http.log -> startup error (no listener)
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.LogHTTPFile = filepath.Join(t.TempDir(), "http.log")
 	return nil
 }

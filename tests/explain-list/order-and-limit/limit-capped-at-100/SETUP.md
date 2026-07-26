@@ -21,9 +21,12 @@
 - Cap applies to the limit parameter; shown count is min(total, capped limit).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"list", "--limit", "200"}
 	req.Sessions = seedNSessions(3, 12)
 	return nil

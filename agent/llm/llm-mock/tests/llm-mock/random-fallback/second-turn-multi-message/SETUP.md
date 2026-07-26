@@ -19,9 +19,12 @@ errors with `no_match` when prior turns exhausted the shared `genStream`.
 3. Third request includes assistant reply from turn 1 and new user message.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ConfigJSON = `{
   "port": 8080,
   "exchanges": []

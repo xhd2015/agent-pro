@@ -19,7 +19,7 @@ WS create-on-connect -> close 1000
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Phase = "lifecycle-multi-create-orphan"
 	req.RepeatCount = 5
 	return nil

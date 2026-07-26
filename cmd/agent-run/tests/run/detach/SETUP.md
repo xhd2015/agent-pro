@@ -33,11 +33,11 @@ MODE=send + --detach -> note: ignored; send proceeds
 
 - Repository contains `cmd/agent-run` and `cmd/fake-codex`.
 - Nested DOCTEST root: does not inherit parent `cmd/agent-run/tests` Setup/Run.
-- Repo root from this tree: `DOCTEST_ROOT/../../../../..`
+- Repo root from this tree: `d.DOCTEST_ROOT/../../../../..`
   (`detach` → `run` → `tests` → `agent-run` → `cmd` → module root).
 - Each leaf uses isolated `AGENT_RUN_HOME` under `t.TempDir()`.
 - Session-scoped build cache:
-  `$TMPDIR/agent-run-run-detach-doctest-<DOCTEST_SESSION_ID>/`
+  `$TMPDIR/agent-run-run-detach-doctest-<d.DOCTEST_SESSION_ID>/`
   shares compiled `agent-run` + `fake-codex` across parallel leaves.
 - `frontend-agent-run/dist` (and `frontend/dist` if present) may be absent
   (gitignored). Build Setup stubs a minimal `index.html` so `//go:embed dist`
@@ -95,6 +95,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
+	"github.com/xhd2015/doctest/session"
 )
 
 const (
@@ -107,8 +108,8 @@ const (
 
 var fakePTYWrapUpgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
 
-func sessionCacheDir() string {
-	return filepath.Join(os.TempDir(), "agent-run-run-detach-doctest-"+DOCTEST_SESSION_ID)
+func sessionCacheDir(d *session.Doctest) string {
+	return filepath.Join(os.TempDir(), "agent-run-run-detach-doctest-"+d.DOCTEST_SESSION_ID)
 }
 
 func withFileLock(t *testing.T, lockPath string, fn func() error) error {
@@ -151,14 +152,14 @@ func ensureStubDist(distDir string) error {
 	return os.WriteFile(filepath.Join(distDir, "index.html"), []byte("stub\n"), 0644)
 }
 
-func buildOnce(t *testing.T) (agentRun, fakeCodex string, err error) {
+func buildOnce(t *testing.T, d *session.Doctest) (agentRun, fakeCodex string, err error) {
 	t.Helper()
-	cache := sessionCacheDir()
+	cache := sessionCacheDir(d)
 	agentRun = filepath.Join(cache, "agent-run")
 	fakeCodex = filepath.Join(cache, "fake-codex")
 	lock := filepath.Join(cache, "build.lock")
 	ready := filepath.Join(cache, "binaries.ready")
-	repoRoot := filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../../.."))
+	repoRoot := filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../../.."))
 	err = withFileLock(t, lock, func() error {
 		if fileExists(ready) && fileExists(agentRun) && fileExists(fakeCodex) {
 			return nil
@@ -790,8 +791,8 @@ func runAgentRun(t *testing.T, req *Request, args ...string) (*Response, error) 
 	return resp, nil
 }
 
-func Setup(t *testing.T, req *Request) error {
-	req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../../.."))
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../../.."))
 	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
 		return fmt.Errorf("repo root not found: %w", err)
 	}
@@ -801,7 +802,7 @@ func Setup(t *testing.T, req *Request) error {
 	if err := os.MkdirAll(req.Home, 0755); err != nil {
 		return fmt.Errorf("mkdir home: %w", err)
 	}
-	agentRun, fakeCodex, err := buildOnce(t)
+	agentRun, fakeCodex, err := buildOnce(t, d)
 	if err != nil {
 		return err
 	}

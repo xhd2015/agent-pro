@@ -10,9 +10,13 @@ open Paris → /exit → resume --open hello → /exit → resume --open hello
 ## Steps
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "double-resume"
 	req.SessionID = "e2e-double-resume"
 	req.GrokSessionUUID = "b2222222-2222-4222-8222-222222222204"

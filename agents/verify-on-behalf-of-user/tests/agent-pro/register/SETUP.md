@@ -11,9 +11,12 @@ agent-pro skill verify-on-behalf-of-user transcript --show -> transcript topic
 1. Invoke `agent-pro skill verify-on-behalf-of-user transcript --show`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"skill", "verify-on-behalf-of-user", "transcript", "--show"}
 	return nil
 }

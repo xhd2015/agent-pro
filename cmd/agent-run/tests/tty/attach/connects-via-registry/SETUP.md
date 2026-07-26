@@ -14,9 +14,14 @@ agent-run tty attach session-1 -> registry lookup -> ptyclient.Attach -> connect
 4. Since attach blocks interactively, the probe verifies the WS handshake succeeds.
 
 ```go
-import "fmt"
+import (
+	"fmt"
+	"time"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.StartFakePTYWrap = true
 	startFakePTYWrapServer(t, req)
 	waitForPortOpen(t, fmt.Sprintf("127.0.0.1:%d", req.FakePTYWrapPort), 5*time.Second)

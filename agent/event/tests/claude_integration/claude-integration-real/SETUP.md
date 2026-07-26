@@ -20,9 +20,12 @@ claude -p "Reply with exactly the word: pong" --output-format stream-json --verb
 - The prompt expects the single word `pong` somewhere in the assistant text.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Prompt = "Reply with exactly the word: pong"
 	return nil
 }

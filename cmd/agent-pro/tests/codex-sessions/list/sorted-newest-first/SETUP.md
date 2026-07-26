@@ -22,7 +22,7 @@ writeRolloutSession(middle, oldest, newest) -> sessions.List
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Limit = 10
 	writeRolloutSession(t, req.CodexHome,
 		"01900003-0000-7000-8000-000000000002",

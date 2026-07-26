@@ -37,13 +37,14 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/xhd2015/doctest/session"
 )
 
 const layoutTermTouchSessionID = "web_term_touch_scroll"
 const layoutTermTouchTerminalID = "session-touch-1"
 const layoutTermTouchScrollbackLines = 120
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 
 	req.Layout = "terminal-touch-scroll-history"

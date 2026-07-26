@@ -18,7 +18,7 @@ RunInteractiveDetach(SessionID, Prompt) -> launch detach argv -> poll ready -> o
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "interactive_detach"
 	req.SessionID = "sess-id-default"
 	req.Prompt = "interactive detach hello"

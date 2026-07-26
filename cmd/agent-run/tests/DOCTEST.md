@@ -359,6 +359,12 @@ doctest test -v ./cmd/agent-run/tests/web-layout --label chromium
 ## How to Run
 
 ```sh
+# Discovery skips labeled e2e/heavy/slow leaves by default.
+# Run e2e / full suite explicitly when needed:
+doctest test ./cmd/agent-run/tests/...                    # discovery (skips labeled e2e/heavy/slow)
+doctest test --label e2e ./cmd/agent-run/tests/...
+doctest test --label-all ./cmd/agent-run/tests/...
+
 doctest vet ./cmd/agent-run/tests
 doctest test -v ./cmd/agent-run/tests
 doctest test -v ./cmd/agent-run/tests/run/json-fake-codex-hi
@@ -381,6 +387,7 @@ import (
 	"os/exec"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request struct {
@@ -391,7 +398,7 @@ type Request struct {
 	FakeCodex  string
 	Args       []string
 	Env        []string
-	Mode          string // "" | "web"
+	Mode          string // "" | "web" | "sse" | "handle" (handle = L2 agentruncli.Handle)
 	WebTokenMode  string // "omit" | "explicit" | "auto" (default explicit)
 	WebToken      string // explicit/auto: bearer value; auto: filled from stderr after start
 	WebPort       int    // 0 = OS-assigned; -1 = default (8192)
@@ -427,7 +434,8 @@ type Response struct {
 	SSEEvents        []map[string]any
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
+	_ = d
 	switch req.Mode {
 	case "web":
 		return runWebHTTP(t, req)
@@ -437,6 +445,9 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 		}
 		events := collectSSESessionEvents(t, req, req.SessionRunner, req.SessionID, req.SSEAfterOffset, req.SSEMaxWait)
 		return &Response{SSEEvents: events}, nil
+	case "handle":
+		// L2 short-path: help / unknown command / early validation via agentruncli.Handle.
+		return runHandleInProcess(t, req)
 	default:
 		return runAgentRun(t, req, req.Args...)
 	}

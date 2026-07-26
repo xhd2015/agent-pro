@@ -9,9 +9,10 @@
 import (
     "encoding/json"
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_bash_real","llm_events":[{"type":"tool_call","tool":"bash","tool_input":{"command":"echo hello real bash"}}]}`)
     return nil
 }

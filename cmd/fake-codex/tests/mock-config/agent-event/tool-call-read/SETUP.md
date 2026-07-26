@@ -9,9 +9,10 @@
 import (
     "path/filepath"
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     readFile := filepath.Join(req.TempDir, "sample.txt")
     writeFile(t, readFile, "file contents here")
     writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-codex","llm_events":[{"type":"tool_call","tool":"read","tool_input":{"path":"`+readFile+`"}}]}`)

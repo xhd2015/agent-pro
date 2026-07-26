@@ -20,9 +20,12 @@ Caller -> slack-msg <unknown> -> stderr error -> exit 1
 - Unknown command must not be treated as a silent no-op.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClearSlackEnv = true
 	req.SlackAPIURL = ""
 	return nil

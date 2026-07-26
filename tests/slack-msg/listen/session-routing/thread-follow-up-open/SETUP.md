@@ -13,9 +13,12 @@ first message open run --session-id=…
 2. Expect two interactive-open launches (no legacy `send` argv).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	threadTS := "1710000200.000100"
 	req.WantAgentCalls = 2
 	req.InjectEvents = []InjectedEvent{

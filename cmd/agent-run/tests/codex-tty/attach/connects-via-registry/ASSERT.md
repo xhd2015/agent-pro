@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Registry entry found for parsed session id.

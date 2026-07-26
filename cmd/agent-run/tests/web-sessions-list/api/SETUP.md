@@ -21,9 +21,13 @@ agent-run web -> GET /api/agent-run/sessions[?limit&offset&q&status]
 3. Leaves choose seed fixture and GET query strings.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "http"
 	if req.WebTokenMode == "" {
 		req.WebTokenMode = "explicit"

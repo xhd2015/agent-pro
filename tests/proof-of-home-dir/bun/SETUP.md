@@ -9,9 +9,10 @@
 import (
     "os/exec"
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     if _, err := exec.LookPath("bun"); err != nil {
         t.Skipf("skipping: bun not found in PATH")
     }

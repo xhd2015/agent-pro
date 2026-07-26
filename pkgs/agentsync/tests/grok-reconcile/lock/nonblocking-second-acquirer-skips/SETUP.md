@@ -17,7 +17,7 @@ session dir exists
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "flock-nb"
 	req.SessionID = "lock-nb-test"
 	return nil

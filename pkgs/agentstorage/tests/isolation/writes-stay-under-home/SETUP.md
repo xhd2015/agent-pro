@@ -23,7 +23,7 @@ import (
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Operation = "isolation"
 	req.Action = "writes_under_home"
 	req.SessionID = "sess_iso_leaf"

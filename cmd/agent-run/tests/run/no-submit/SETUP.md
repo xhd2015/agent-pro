@@ -32,7 +32,7 @@ agent-run run --agent-runner grok-tty --open --no-submit "draft-…"
 - Option C leaves set `LLM_MOCK_RUN_FLAGS=--log-http <tmp>.jsonl` and
   `AGENT_RUN_OPEN_ATTACH_INSTANT=1`.
 - Session-scoped build cache may share compiled binaries across parallel leaves:
-  `$TMPDIR/agent-run-run-no-submit-doctest-<DOCTEST_SESSION_ID>/`
+  `$TMPDIR/agent-run-run-no-submit-doctest-<d.DOCTEST_SESSION_ID>/`
   (`agent-run`, `fake-codex`, `llm-mock`, `llm-mock-run-grok`).
 
 ## Steps
@@ -53,8 +53,8 @@ agent-run run --agent-runner grok-tty --open --no-submit "draft-…"
 ## Context
 
 - Nested DOCTEST root: does not inherit parent `cmd/agent-run/tests` Setup/Run.
-- Repo root from this tree: `DOCTEST_ROOT/../../../../..` (same depth as `run/open`).
-- Session cache dir: `$TMPDIR/agent-run-run-no-submit-doctest-<DOCTEST_SESSION_ID>/`.
+- Repo root from this tree: `d.DOCTEST_ROOT/../../../../..` (same depth as `run/open`).
+- Session cache dir: `$TMPDIR/agent-run-run-no-submit-doctest-<d.DOCTEST_SESSION_ID>/`.
 - Test hook env: `AGENT_RUN_OPEN_ATTACH_INSTANT=1` — auto-attach returns
   immediately so open leaves complete without interactive stdin.
 - Default Option C draft marker: unique string unlikely to collide with UI chrome.
@@ -77,6 +77,8 @@ import (
 	"time"
 
 	"github.com/xhd2015/tty-watch/pkgs/ttywatch"
+	"github.com/xhd2015/doctest/session"
+	"path"
 )
 
 const (
@@ -93,8 +95,8 @@ const (
 	defaultRealGrokTimeout = 120 * time.Second
 )
 
-func sessionCacheDir() string {
-	return filepath.Join(os.TempDir(), "agent-run-run-no-submit-doctest-"+DOCTEST_SESSION_ID)
+func sessionCacheDir(d *session.Doctest) string {
+	return filepath.Join(os.TempDir(), "agent-run-run-no-submit-doctest-"+d.DOCTEST_SESSION_ID)
 }
 
 func withFileLock(t *testing.T, lockPath string, fn func() error) error {
@@ -140,9 +142,9 @@ func ensureStubDist(distDir string) error {
 	return os.WriteFile(filepath.Join(distDir, "index.html"), []byte("stub\n"), 0644)
 }
 
-func buildOnce(t *testing.T) (agentRun, fakeCodex, llmMockServer, llmMockRunGrok string, err error) {
+func buildOnce(t *testing.T, d *session.Doctest) (agentRun, fakeCodex, llmMockServer, llmMockRunGrok string, err error) {
 	t.Helper()
-	cache := sessionCacheDir()
+	cache := sessionCacheDir(d)
 	agentRun = filepath.Join(cache, "agent-run")
 	fakeCodex = filepath.Join(cache, "fake-codex")
 	// llm-mock must sit next to llm-mock-run-grok (mockServerExecutable sibling lookup).
@@ -150,7 +152,7 @@ func buildOnce(t *testing.T) (agentRun, fakeCodex, llmMockServer, llmMockRunGrok
 	llmMockRunGrok = filepath.Join(cache, "llm-mock-run-grok")
 	lock := filepath.Join(cache, "build.lock")
 	ready := filepath.Join(cache, "binaries.ready")
-	repoRoot := filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../../.."))
+	repoRoot := filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../../.."))
 	err = withFileLock(t, lock, func() error {
 		if fileExists(ready) && fileExists(agentRun) && fileExists(fakeCodex) &&
 			fileExists(llmMockServer) && fileExists(llmMockRunGrok) {
@@ -628,8 +630,8 @@ func openRealGrokArgs(req *Request) []string {
 	return args
 }
 
-func Setup(t *testing.T, req *Request) error {
-	req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../../.."))
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../../.."))
 	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
 		return fmt.Errorf("repo root not found: %w", err)
 	}
@@ -641,7 +643,7 @@ func Setup(t *testing.T, req *Request) error {
 			return fmt.Errorf("mkdir: %w", err)
 		}
 	}
-	agentRun, fakeCodex, llmMockServer, llmMockRunGrok, err := buildOnce(t)
+	agentRun, fakeCodex, llmMockServer, llmMockRunGrok, err := buildOnce(t, d)
 	if err != nil {
 		return err
 	}

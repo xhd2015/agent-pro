@@ -12,9 +12,12 @@ app_mention (default thread mode) -> RunInteractiveOpen -> 0 agent-body PostMess
 2. Expect agent launch; no chat.postMessage of mock agent stdout.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.WantPosts = 0
 	req.InjectEvents = []InjectedEvent{{
 		Kind:    "app_mention",

@@ -17,9 +17,10 @@ agent-run run --session-id-from-prompt <200 x 'a'>
 import (
 	"strings"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Prompt = strings.Repeat("a", 200)
 	req.Args = append(req.Args, req.Prompt)
 	return nil

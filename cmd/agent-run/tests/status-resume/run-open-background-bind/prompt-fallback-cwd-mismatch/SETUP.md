@@ -34,12 +34,14 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
+	"time"
 )
 
 const promptFallbackUUID = "550e8400-e29b-41d4-a716-446655440812"
 const promptFallbackOtherCwd = "/Users/other/path/for-prompt-fallback"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	prompt := "prompt fallback cwd mismatch"
 	req.OpenPrompt = prompt
 	req.InitialPrompt = prompt

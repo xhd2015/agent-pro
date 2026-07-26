@@ -20,9 +20,12 @@ mock server + opencode/pi -> Paris in output
    spawns the external binary, then reads events from the file.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     // EventsFile is auto-created by runBinary if not set.
     // Each leaf sets BinaryCmd and BinaryEnv in its own Setup.
     t.Logf("integration Setup: BinaryCmd=%v", req.BinaryCmd)

@@ -40,13 +40,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if _, err := exec.LookPath("go"); err != nil {
 		t.Skipf("skipping: go not found in PATH")
 	}
-	bin, err := buildAgentPro(t)
+	bin, err := buildAgentPro(t, d)
 	if err != nil {
 		return err
 	}

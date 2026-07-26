@@ -1,12 +1,20 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Persisted `events.jsonl` contains assistant message events.
 - No event line includes a `phase` field (CLI-parity / StreamPhases:false).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	path, lines := readEventsJSONL(t, req.Home, req.Runner, req.SessionID)
 	events := parseEventLines(t, lines)
 	hasAssistant := false

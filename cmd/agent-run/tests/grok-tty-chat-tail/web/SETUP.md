@@ -17,9 +17,13 @@ SSE must not stop when meta.status becomes finished
 1. Grouping setup sets `req.Mode` for web leaves (`sse` or `sse-finished-append`).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "grok-tty"
 	return nil
 }

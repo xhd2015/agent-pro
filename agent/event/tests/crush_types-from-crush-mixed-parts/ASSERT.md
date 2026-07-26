@@ -4,9 +4,12 @@
   - Type `tool_call` with tool `bash` and command `ls`
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertContains(t, resp.Output, `"type":"message"`)
 	assertContains(t, resp.Output, `"let me run that command"`)
 	assertContains(t, resp.Output, `"type":"tool_call"`)

@@ -15,9 +15,13 @@ ActionToolCall(tool="bash", tool_input={"command":"echo hi"}) -> {"role":"assist
 2. Verify the output contains an assistant event with a `tool-call` block.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+	"github.com/xhd2015/agent-pro/agent/event/types"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Events = []types.AgentEvent{
 		{
 			Type:      types.ActionToolCall,

@@ -1,11 +1,18 @@
+---
+label: e2e
+---
+
 ## Expected
 - HTTP 200 — config loaded via `LLM_MOCK_CONFIG` env var.
 - Content is "env config works".
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     assertSuccess(t, resp)
 
     r := resp.Responses[0]

@@ -31,7 +31,7 @@ sessions.ListWithGrep(grokHome, limit, pattern) -> []SessionMatch (newest matche
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Parent list Setup already set Operation=list and created sessions root.
 	// Default color off for plain-output leaves; color leaves override.
 	if req.Color == "" {

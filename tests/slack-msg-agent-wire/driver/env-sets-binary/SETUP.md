@@ -14,7 +14,7 @@ agentRunBinary() reads that env
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "driver_env"
 	return nil
 }

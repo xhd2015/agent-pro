@@ -17,7 +17,7 @@ import (
 	"testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.WireLines = []string{
 		acpToolCall("call_exec_1", "execute", "false"),
 		acpToolCallUpdate("call_exec_1", "failed", "exit code 1"),

@@ -1,5 +1,5 @@
 ---
-label: ui-automation
+label: e2e, ui-automation
 explanation: AX tree poll for Terminal button on finished session with known mapping
 ---
 
@@ -18,9 +18,13 @@ explanation: AX tree poll for Terminal button on finished session with known map
 - Playwright process exits 0.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -13,9 +13,12 @@ trace JSONL -> adapter registry -> parsed event JSON
 1. Configure `Request` fields for this scenario.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.RawLine = `{"type":"message_update","message":{"role":"assistant","content":[{"type":"text","text":"world"}]},"assistantMessageEvent":{"type":"text_delta","delta":"hello delta"}}`
 	return nil
 }

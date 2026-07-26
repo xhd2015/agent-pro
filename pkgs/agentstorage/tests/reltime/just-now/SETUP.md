@@ -23,7 +23,7 @@ import (
 	"time"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	now := req.Now
 	req.Cases = []FormatCase{
 		{Name: "half_second", Target: ageTarget(now, 500*time.Millisecond), Want: "just now"},

@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 - The text event is emitted with the original text `"plain text message"`.
 - The error event is emitted with the original error `"an error occurred"`.
@@ -7,9 +11,10 @@
 import (
     "strings"
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     assertSuccess(t, resp)
     stdout := resp.Stdout
     if !strings.Contains(stdout, "plain text message") {

@@ -13,7 +13,10 @@ agent-run tty status session-1 -> registry with reachable listen addr but server
 3. `Assert` checks that screen status is "unknown" or error indicator.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.StartFakePTYWrap = false
 	req.FakePTYWrapPort = 0
 	req.RegistryEntryJSON = defaultRegistryEntryJSON(req.RegistrySessionID, 12345)

@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 - The tool_use event contains `"output":"hello real bash\n"` (or similar) — the real stdout.
 - The event status is `"completed"`.
@@ -7,9 +11,10 @@
 import (
     "strings"
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     assertSuccess(t, resp)
     events := parseJSONLines(t, resp.Stdout)
     if len(events) == 0 {

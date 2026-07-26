@@ -11,9 +11,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertExitZero(t, resp)
 	assertDirExists(t, filepath.Join(req.Home, "sessions", "fake-codex", "dry_sess"))
 	assertPathMissing(t, filepath.Join(req.Home, "sessions", "dry_sess"))

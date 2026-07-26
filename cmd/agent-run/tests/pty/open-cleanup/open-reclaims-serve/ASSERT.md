@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Open path reaches a keep-alive serve (registry PID and/or listen_addr) under
@@ -16,9 +20,13 @@
 0 (open CLI)
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatalf("open-cleanup run error: %v\nstdout:\n%s\nstderr:\n%s",
 			err, resp.Stdout, resp.Stderr)

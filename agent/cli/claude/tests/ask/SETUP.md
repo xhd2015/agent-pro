@@ -19,7 +19,7 @@ ClaudeAgent <- claude (assistant text, system init session_id, result session_id
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Operation = OpAsk
 	return nil
 }

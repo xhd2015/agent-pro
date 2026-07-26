@@ -36,7 +36,7 @@ import "testing"
 const formatTopNSessionID = "019f283b-6666-7666-6666-666666666666"
 const formatTopNSubID = "019f283b-6666-sa66-6666-666666666666"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = formatTopNSessionID
 	req.TopN = 2
 	req.TopNSet = true

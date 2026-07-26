@@ -22,9 +22,12 @@ explain list -> "No explain sessions yet." (exit 0, trailing newline)
 - Empty store is not an error; users may run `list` before any ask.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.Bin == "" {
 		t.Fatalf("empty setup: explain binary not built (root Setup skipped?)")
 	}

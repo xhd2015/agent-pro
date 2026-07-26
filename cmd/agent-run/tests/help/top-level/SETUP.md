@@ -3,21 +3,27 @@
 **Feature**: top-level `--help` lists subcommands and flags
 
 ```
-agent-run --help → stdout lists web, run, sessions, status, --agent-runner
+# L2 in-process (Mode handle): agentruncli.Handle(["--help"])
+# same tokens as binary agent-run --help
 ```
 
 ## Preconditions
 
-- `agent-run` binary is built (inherited from root `SETUP.md`).
+- No binary build: `req.Mode = "handle"` uses `pkgs/agentruncli.Handle`.
 
 ## Steps
 
-1. Run `agent-run --help`.
+1. Set Mode handle and args `--help`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	req.Mode = "handle"
 	req.Args = []string{"--help"}
 	return nil
 }

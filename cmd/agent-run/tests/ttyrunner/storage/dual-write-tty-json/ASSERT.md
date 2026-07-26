@@ -8,9 +8,10 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertNoError(t, err)
 	if resp.ExitCode != 0 {
 		t.Fatalf("stub-tty run exit %d stderr:\n%s", resp.ExitCode, resp.Stderr)

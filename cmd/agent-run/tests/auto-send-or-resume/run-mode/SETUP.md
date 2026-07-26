@@ -12,9 +12,13 @@ auto + new --session-id + prompt
 1. Ensure argv-sensitive leaves clear the grok-tty command hook env.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Run-mode creates sessions via provider; never inherit ambient TTY command hook.
 	req.GrokTTYCommand = ""
 	req.Env = withoutEnvKey(req.Env, envGrokTTYCommand)

@@ -31,9 +31,12 @@ Caller -> slack-msg auth status [--app] [options]
 - App validation contract: **`apps.connections.open`** (Socket Mode / connections).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.WorkDir == "" {
 		req.WorkDir = t.TempDir()
 	}

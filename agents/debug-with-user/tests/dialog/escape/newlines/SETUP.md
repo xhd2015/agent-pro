@@ -13,7 +13,7 @@ multiline message -> Escape -> no raw newline characters in literal
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Input = "Step 1 — Did VS Code open?\nProject folder:\n/tmp/demo"
 	return nil
 }

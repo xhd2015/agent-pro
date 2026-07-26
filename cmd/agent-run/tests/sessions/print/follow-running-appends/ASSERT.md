@@ -1,5 +1,5 @@
 ---
-label: slow
+label: e2e, slow
 explanation: subprocess follow loop until meta.status leaves running; sidecar appends after 500ms
 ---
 
@@ -28,9 +28,10 @@ import (
 	"testing"
 
 	"github.com/xhd2015/doctest/assert"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertSuccess(t, resp)
 	assert.Output(t, resp.Stdout, `
 <contains>

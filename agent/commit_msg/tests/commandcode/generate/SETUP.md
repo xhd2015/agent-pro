@@ -19,9 +19,12 @@ staged -> gen-commit-msg --agent-runner commandcode --agent-runner-binary <llm-m
 2. Leaves stage git changes and set Commit flag (or replace binary with argv recorder).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.DryRun = false
 	req.AgentRunner = "commandcode"
 	// Leaves that install an argv recorder set AgentRunnerBinary themselves and

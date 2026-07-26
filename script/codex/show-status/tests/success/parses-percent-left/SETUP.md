@@ -21,9 +21,12 @@ codex-show-status -> fake codex (30% left) -> print
 - Verifies `monthly_usage = (100 - N)%` is not hard-coded to the default `58%` / `42% left` values.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ShowStatusCommand = fakeTUICustom("30%", "3000", "10,000", "12:00 on 15 Jan")
 	return nil
 }

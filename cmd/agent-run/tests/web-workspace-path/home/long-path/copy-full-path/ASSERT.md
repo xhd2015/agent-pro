@@ -1,5 +1,5 @@
 ---
-label: ui-automation
+label: e2e, ui-automation
 explanation: playwright clipboard copy of full workspace path (expect RED pre-impl)
 ---
 
@@ -14,9 +14,13 @@ explanation: playwright clipboard copy of full workspace path (expect RED pre-im
 - Pre-impl: missing copy control / toggle → RED.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertPlaywrightOK(t, resp, err)
 	if req.Scenario != "home-long-copy-full-path" {
 		t.Fatalf("expected scenario home-long-copy-full-path, got %q", req.Scenario)

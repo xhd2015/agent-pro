@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Startup stderr contains `agent-run web token:` followed by a hex token.
@@ -13,9 +17,10 @@ import (
 	"testing"
 
 	"github.com/xhd2015/doctest/assert"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

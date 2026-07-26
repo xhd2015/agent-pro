@@ -21,9 +21,13 @@ agent-run pty kill-orphans --dry-run --all --kind=test-generated --exe <testbin>
 3. Assert child PID is listed; trailing `\n`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "kill-orphans"
 	req.SpawnPlan = []ServeSpawnSpec{
 		{Label: "child", Orphan: false, SessionID: "pty-all-wins-plain"},

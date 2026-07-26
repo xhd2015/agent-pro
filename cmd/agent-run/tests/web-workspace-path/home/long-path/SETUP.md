@@ -20,9 +20,13 @@ makeDeepWorkspaceDir -> agent-run web cmd.Dir=deep
 2. Leaf starts web and runs interaction-specific Playwright script.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	deep := makeDeepWorkspaceDir(t, req.TempDir)
 	req.WebWorkingDir = deep
 	req.WorkspacePath = deep

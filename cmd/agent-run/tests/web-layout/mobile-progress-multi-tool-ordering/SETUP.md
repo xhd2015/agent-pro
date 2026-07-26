@@ -22,9 +22,10 @@ seed tool A -> tool B -> tool A update -> session page -> first progress card is
 import (
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 
 	req.Layout = "progress-multi-tool-ordering"

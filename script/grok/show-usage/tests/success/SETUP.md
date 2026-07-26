@@ -25,9 +25,12 @@ doctest <- stdout: two lines only; stderr empty
 - Default fake fixture: `1%` and `July 9, 16:55 PT`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.Bin == "" {
 		t.Fatalf("success setup: grok-show-usage binary not built (root Setup skipped?)")
 	}

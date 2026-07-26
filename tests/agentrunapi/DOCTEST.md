@@ -278,6 +278,7 @@ import (
 
 	"github.com/xhd2015/agent-pro/pkgs/agentrunapi"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
+	"github.com/xhd2015/doctest/session"
 )
 
 // Request drives one leaf via Mode. Leaves set Mode in Setup (root→leaf chain).
@@ -343,26 +344,27 @@ type Response struct {
 	LifecycleProbeOK  bool
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	t.Helper()
 	resp := &Response{}
 
 	switch req.Mode {
 	case "api_surface":
-		return runAPISurface(t, req, resp)
+		return runAPISurface(t, d, req, resp)
 	case "classify":
-		return runClassify(t, req, resp)
+		return runClassify(t, d, req, resp)
 	case "auto":
-		return runAuto(t, req, resp)
+		return runAuto(t, d, req, resp)
 	case "source_wire":
-		return runSourceWire(t, req, resp)
+		return runSourceWire(t, d, req, resp)
 	default:
 		return nil, fmt.Errorf("unknown mode %q", req.Mode)
 	}
 }
 
-func runAPISurface(t *testing.T, req *Request, resp *Response) (*Response, error) {
+func runAPISurface(t *testing.T, d *session.Doctest, req *Request, resp *Response) (*Response, error) {
 	t.Helper()
+	_ = d
 	// Touch public symbols so the leaf fails to compile until exports exist.
 	_ = agentrunapi.ModeRun
 	_ = agentrunapi.ModeSend
@@ -403,8 +405,9 @@ func runAPISurface(t *testing.T, req *Request, resp *Response) (*Response, error
 	return resp, nil
 }
 
-func runClassify(t *testing.T, req *Request, resp *Response) (*Response, error) {
+func runClassify(t *testing.T, d *session.Doctest, req *Request, resp *Response) (*Response, error) {
 	t.Helper()
+	_ = d
 	store, err := openAndMaybeSeed(t, req)
 	if err != nil {
 		return nil, err
@@ -420,8 +423,9 @@ func runClassify(t *testing.T, req *Request, resp *Response) (*Response, error) 
 	return resp, nil
 }
 
-func runAuto(t *testing.T, req *Request, resp *Response) (*Response, error) {
+func runAuto(t *testing.T, d *session.Doctest, req *Request, resp *Response) (*Response, error) {
 	t.Helper()
+	_ = d
 	store, err := openAndMaybeSeed(t, req)
 	if err != nil {
 		return nil, err
@@ -472,10 +476,10 @@ func runAuto(t *testing.T, req *Request, resp *Response) (*Response, error) {
 	return resp, nil
 }
 
-func runSourceWire(t *testing.T, req *Request, resp *Response) (*Response, error) {
+func runSourceWire(t *testing.T, d *session.Doctest, req *Request, resp *Response) (*Response, error) {
 	t.Helper()
-	// DOCTEST_ROOT is tests/agentrunapi; module root is ../..
-	moduleRoot := filepath.Join(DOCTEST_ROOT, "..", "..")
+	// d.DOCTEST_ROOT is tests/agentrunapi; module root is ../..
+	moduleRoot := filepath.Join(d.DOCTEST_ROOT, "..", "..")
 	target := strings.TrimSpace(req.SourceWireTarget)
 	if target == "" {
 		target = "cmd"

@@ -9,7 +9,7 @@
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Agent = "opencode"
 	req.Query = `opencode run --format json "one word of French capital" --dangerously-skip-permissions`
 	return nil

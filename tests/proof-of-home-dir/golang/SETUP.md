@@ -12,9 +12,10 @@ import (
     "os/exec"
     "path/filepath"
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     if _, err := exec.LookPath("go"); err != nil {
         t.Skipf("skipping: go not found in PATH")
     }
@@ -29,7 +30,7 @@ func Setup(t *testing.T, req *Request) error {
         return err
     }
 
-    fixture := filepath.Join(DOCTEST_ROOT, "golang", "testdata", "main.go")
+    fixture := filepath.Join(d.DOCTEST_ROOT, "golang", "testdata", "main.go")
     src, err := os.ReadFile(fixture)
     if err != nil {
         return err

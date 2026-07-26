@@ -21,9 +21,13 @@ type UNIQUE-QUERY-TOKEN into [data-testid="session-search"]
 2. Open home; fill search; assert filtered list.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 	req.Scenario = "search-filters-list"
 	if err := seedSessions(t, req, defaultFiveSessions()); err != nil {

@@ -21,7 +21,7 @@ opencode session not found
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "ses_missing_unknown"
 	return nil
 }

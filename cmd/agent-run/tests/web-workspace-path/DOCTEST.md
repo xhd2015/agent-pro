@@ -82,7 +82,7 @@ cmd/agent-run/tests/web-workspace-path/
 │   └── short-path/                       # cwd ≤2 meaningful segments
 │       ├── SETUP.md
 │       └── collapsed-readable/           # label readable; short === full semantics
-└── session/                              # surface = session detail
+└── session-detail/                       # surface = session detail
     ├── SETUP.md                          # explicit token; flat session seed helper
     └── long-path/
         ├── SETUP.md                      # meta.workspace = deep path
@@ -106,18 +106,24 @@ Parameter ranking (most → least significant):
 | 3 | `home/long-path/tap-collapse` | Expand then second tap → short label; `aria-expanded=false`; runner still in viewport | **Yes** |
 | 4 | `home/long-path/copy-full-path` | Expand + click `[data-testid="workspace-copy"]`; clipboard === full path | **Yes** |
 | 5 | `home/short-path/collapsed-readable` | Short cwd (≤2 segments); label readable and equals full path form | No (label already shows short path) |
-| 6 | `session/long-path/tap-expand` | Seeded long `meta.workspace`; collapsed short then expand shows full path | **Yes** |
+| 6 | `session-detail/long-path/tap-expand` | Seeded long `meta.workspace`; collapsed short then expand shows full path | **Yes** |
 
 ## How to Run
 
 ```sh
+# Discovery skips labeled e2e/heavy/slow leaves by default.
+# Run e2e / full suite explicitly when needed:
+doctest test ./cmd/agent-run/tests/web-workspace-path                    # discovery (skips labeled e2e/heavy/slow)
+doctest test --label e2e ./cmd/agent-run/tests/web-workspace-path
+doctest test --label-all ./cmd/agent-run/tests/web-workspace-path
+
 doctest vet ./cmd/agent-run/tests/web-workspace-path
 doctest test ./cmd/agent-run/tests/web-workspace-path
 doctest test -v ./cmd/agent-run/tests/web-workspace-path
 doctest test --label ui-automation ./cmd/agent-run/tests/web-workspace-path
 doctest test -v ./cmd/agent-run/tests/web-workspace-path/home/long-path/tap-expand --label ui-automation
 doctest test -v ./cmd/agent-run/tests/web-workspace-path/home/long-path/copy-full-path --label ui-automation
-doctest test -v ./cmd/agent-run/tests/web-workspace-path/session/long-path/tap-expand --label ui-automation
+doctest test -v ./cmd/agent-run/tests/web-workspace-path/session-detail/long-path/tap-expand --label ui-automation
 ```
 
 Regression companion (existing tree, not re-owned here):
@@ -137,6 +143,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request struct {
@@ -190,7 +197,7 @@ func runPlaywrightScript(t *testing.T, script string) (string, string, int, erro
 	return stdout, stderr, 0, nil
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	requirePlaywright(t)
 
 	if req.webCmd == nil && req.Port > 0 {

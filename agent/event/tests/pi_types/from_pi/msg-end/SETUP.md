@@ -17,9 +17,10 @@ import (
 	"testing"
 
 	pi_types "github.com/xhd2015/agent-pro/agent/event/pi_types"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Target = "from_pi"
 	req.PiEvents = []pi_types.Event{{
 		Type: pi_types.EventTypeMessageEnd,

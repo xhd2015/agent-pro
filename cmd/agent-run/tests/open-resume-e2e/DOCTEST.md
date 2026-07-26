@@ -96,6 +96,12 @@ Parameter ranking (most → least significant):
 ## How to Run
 
 ```sh
+# Discovery skips labeled e2e/heavy/slow leaves by default.
+# Run e2e / full suite explicitly when needed:
+doctest test ./cmd/agent-run/tests/open-resume-e2e                    # discovery (skips labeled e2e/heavy/slow)
+doctest test --label e2e ./cmd/agent-run/tests/open-resume-e2e
+doctest test --label-all ./cmd/agent-run/tests/open-resume-e2e
+
 doctest vet ./cmd/agent-run/tests/open-resume-e2e
 doctest test ./cmd/agent-run/tests/open-resume-e2e
 doctest test -v ./cmd/agent-run/tests/open-resume-e2e/mock-grok/open-paris-exit-resume-hello
@@ -106,6 +112,7 @@ import (
 	"os/exec"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request struct {
@@ -178,7 +185,7 @@ type Response struct {
 	Err                 error
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	return runScenario(t, req)
 }
 ```

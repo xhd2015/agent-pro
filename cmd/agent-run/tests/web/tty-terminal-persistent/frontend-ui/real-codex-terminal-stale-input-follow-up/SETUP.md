@@ -44,9 +44,10 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	codexPath, err := exec.LookPath("codex")
 	if err != nil {
 		t.Skipf("codex not found in PATH: %v", err)

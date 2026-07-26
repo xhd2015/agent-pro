@@ -14,7 +14,7 @@ import (
 	crush_types "github.com/xhd2015/agent-pro/agent/event/crush_types"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatalf("convert failed: %v", err)
 	}

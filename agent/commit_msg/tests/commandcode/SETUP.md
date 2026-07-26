@@ -43,6 +43,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
 // DefaultCommandCodeJSON is the fixed agent stdout for mock generate leaves.
@@ -58,7 +60,7 @@ const CommandCodeArgvRecorderJSON = `{"title":"feat: short-p argv","description"
 // the full commit prompt is delivered via temp file instead of argv.
 const MaxCommandCodePromptArgBytes = 2048
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	_ = DefaultCommandCodeJSON
 	_ = DefaultCommandCodeHook
 	_ = CommandCodeArgvRecorderJSON

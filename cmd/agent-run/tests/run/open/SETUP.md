@@ -50,8 +50,8 @@ agent-run run --agent-runner grok-tty --open ["prompt"]
 ## Context
 
 - Nested DOCTEST root: does not inherit parent `cmd/agent-run/tests` Setup/Run.
-- Repo root from this tree: `DOCTEST_ROOT/../../../../..`.
-- Session cache dir: `$TMPDIR/agent-run-run-open-doctest-<DOCTEST_SESSION_ID>/`.
+- Repo root from this tree: `d.DOCTEST_ROOT/../../../../..`.
+- Session cache dir: `$TMPDIR/agent-run-run-open-doctest-<d.DOCTEST_SESSION_ID>/`.
 - Test hook env: `AGENT_RUN_OPEN_ATTACH_INSTANT=1` — auto-attach returns
   immediately so lifecycle leaves complete without interactive stdin.
 
@@ -71,6 +71,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
 const (
@@ -80,8 +81,8 @@ const (
 	envCodexTTYCommand      = "AGENT_RUN_CODEX_TTY_COMMAND"
 )
 
-func sessionCacheDir() string {
-	return filepath.Join(os.TempDir(), "agent-run-run-open-doctest-"+DOCTEST_SESSION_ID)
+func sessionCacheDir(d *session.Doctest) string {
+	return filepath.Join(os.TempDir(), "agent-run-run-open-doctest-"+d.DOCTEST_SESSION_ID)
 }
 
 func withFileLock(t *testing.T, lockPath string, fn func() error) error {
@@ -106,14 +107,14 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-func buildOnce(t *testing.T) (agentRun, fakeCodex string, err error) {
+func buildOnce(t *testing.T, d *session.Doctest) (agentRun, fakeCodex string, err error) {
 	t.Helper()
-	cache := sessionCacheDir()
+	cache := sessionCacheDir(d)
 	agentRun = filepath.Join(cache, "agent-run")
 	fakeCodex = filepath.Join(cache, "fake-codex")
 	lock := filepath.Join(cache, "build.lock")
 	ready := filepath.Join(cache, "binaries.ready")
-	repoRoot := filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../../.."))
+	repoRoot := filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../../.."))
 	err = withFileLock(t, lock, func() error {
 		if fileExists(ready) && fileExists(agentRun) && fileExists(fakeCodex) {
 			return nil
@@ -478,8 +479,8 @@ func forbiddenOpenNoise(combined string) []string {
 	return found
 }
 
-func Setup(t *testing.T, req *Request) error {
-	req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../../.."))
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../../.."))
 	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
 		return fmt.Errorf("repo root not found: %w", err)
 	}
@@ -488,7 +489,7 @@ func Setup(t *testing.T, req *Request) error {
 	if err := os.MkdirAll(req.Home, 0755); err != nil {
 		return fmt.Errorf("mkdir home: %w", err)
 	}
-	agentRun, fakeCodex, err := buildOnce(t)
+	agentRun, fakeCodex, err := buildOnce(t, d)
 	if err != nil {
 		return err
 	}

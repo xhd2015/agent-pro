@@ -18,6 +18,7 @@ seed bound+exited meta with prepend_paths / env / agent_runner_config_home
 import (
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
 // prepareEnvLoggingResume installs env-logger as --agent-runner-binary for resume.
@@ -32,7 +33,7 @@ func prepareEnvLoggingResume(t *testing.T, req *Request) {
 	}
 }
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Resume grouping defaults; leaves seed meta and finalize Args.
 	if req.SessionID == "" {
 		req.SessionID = "sess-env-resume"

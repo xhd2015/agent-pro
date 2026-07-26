@@ -25,7 +25,7 @@ import "testing"
 
 const untitledSessionID = "019f283a-cccc-7ccc-cccc-cccccccccccc"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = untitledSessionID
 	writeGrokSessionOpts(t, req.GrokHome, untitledSessionID,
 		"2026-07-03T14:45:00.000Z",

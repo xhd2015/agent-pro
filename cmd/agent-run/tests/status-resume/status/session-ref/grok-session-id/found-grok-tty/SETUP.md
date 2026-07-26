@@ -16,9 +16,13 @@ seed sessions/<id>/meta.json runner=grok-tty runner_session_id=UUID finished bou
    `--agent-runner` to prove meta-only filter.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "grok-tty"
 	req.SessionID = "test-gsid-s1"
 	req.RunnerSessionID = "550e8400-e29b-41d4-a716-446655440901"

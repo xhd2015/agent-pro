@@ -17,9 +17,13 @@ open terminal modal -> close -> chat transcript remains -> session status not st
 3. Verify transcript text is still visible.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "codex-tty"
 	req.SessionID = "ui-modal-close"
 	req.RegistryTranscript = "terminal-close-test\n"

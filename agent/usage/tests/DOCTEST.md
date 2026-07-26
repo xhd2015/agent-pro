@@ -87,10 +87,12 @@ doctest test -v ./agent/usage/tests/fetch-codex-lock-lifetime/same-id-still-in-u
 
 ```go
 import (
+
 	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -98,6 +100,7 @@ import (
 
 	"github.com/xhd2015/agent-pro/agent/usage"
 	"github.com/xhd2015/tty-watch/pkgs/ttywatch"
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request struct {
@@ -131,7 +134,7 @@ type Response struct {
 	RegistryGoneAfter      bool
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	t.Helper()
 	mode := strings.TrimSpace(req.Mode)
 	if mode == "" {
@@ -163,9 +166,7 @@ func runFetchSnapshot(t *testing.T, req *Request) (*Response, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	applyUsageEnv(t, req)
-
-	snap, err := usage.Fetch(ctx, req.Provider)
+	snap, err := usage.FetchWithOptions(ctx, req.Provider, usageFetchOpts(req))
 	if err != nil {
 		return nil, err
 	}
@@ -197,14 +198,13 @@ func runLockDuringFetch(t *testing.T, req *Request) (*Response, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	applyUsageEnv(t, req)
-
 	type fetchResult struct {
 		err error
 	}
 	done := make(chan fetchResult, 1)
+	fetchOpts := usageFetchOpts(req)
 	go func() {
-		_, err := usage.Fetch(ctx, usage.Codex)
+		_, err := usage.FetchWithOptions(ctx, usage.Codex, fetchOpts)
 		done <- fetchResult{err: err}
 	}()
 
@@ -299,30 +299,23 @@ func runLockDuringFetch(t *testing.T, req *Request) (*Response, error) {
 	return resp, nil
 }
 
-func applyUsageEnv(t *testing.T, req *Request) {
-	t.Helper()
-	if req.TTYWatchHome != "" {
-		t.Setenv("TTY_WATCH_HOME", req.TTYWatchHome)
+// usageFetchOpts maps Request hooks to usage.FetchOptions (no process Setenv).
+func usageFetchOpts(req *Request) usage.FetchOptions {
+	opts := usage.FetchOptions{
+		GrokCommand:    req.ShowUsageCommand,
+		CodexCommand:   req.ShowStatusCommand,
+		TTYWatchHome:   req.TTYWatchHome,
+		CodexSessionID: strings.TrimSpace(req.SessionID),
 	}
-	if req.ShowUsageCommand != "" {
-		t.Setenv("GROK_SHOW_USAGE_COMMAND", req.ShowUsageCommand)
-	}
-	if req.ShowStatusCommand != "" {
-		t.Setenv("CODEX_SHOW_STATUS_COMMAND", req.ShowStatusCommand)
+	if opts.CodexSessionID == "" {
+		opts.CodexSessionID = "codex-status-usage"
 	}
 	if req.TimeoutSeconds != "" {
-		switch req.Provider {
-		case usage.Grok:
-			t.Setenv("GROK_SHOW_USAGE_TIMEOUT", req.TimeoutSeconds)
-		case usage.Codex:
-			t.Setenv("CODEX_SHOW_STATUS_TIMEOUT", req.TimeoutSeconds)
+		if sec, err := strconv.Atoi(req.TimeoutSeconds); err == nil && sec > 0 {
+			opts.CodexTimeoutSeconds = sec
 		}
 	}
-	sid := strings.TrimSpace(req.SessionID)
-	if sid == "" {
-		sid = "codex-status-usage"
-	}
-	t.Setenv("CODEX_SHOW_STATUS_SESSION_ID", sid)
+	return opts
 }
 
 func fileExists(path string) bool {

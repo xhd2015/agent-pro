@@ -1,5 +1,5 @@
 ---
-label: real-grok, slow
+label: e2e, real-grok, slow
 explanation: Control oracle for Option C; real grok must produce mock HTTP or session user_message.
 ---
 
@@ -25,9 +25,10 @@ explanation: Control oracle for Option C; real grok must produce mock HTTP or se
 import (
 	"strings"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatalf("run failed: %v\nstdout:\n%s\nstderr:\n%s", err, resp.Stdout, resp.Stderr)
 	}

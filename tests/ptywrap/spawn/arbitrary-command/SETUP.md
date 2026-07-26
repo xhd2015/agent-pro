@@ -10,7 +10,7 @@ REST create echo -> WS attach -> binary output contains hello
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Phase = "spawn-cmd"
 	req.Command = []string{"echo", "hello"}
 	req.Name = "echo-test"

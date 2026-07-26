@@ -19,9 +19,13 @@ PUT /workspace {"path": SelectPath}
 1. Create select dir; start web; PUT once.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "valid-dir-sets-selected-mru"
 	req.SelectPath = makeSelectDir(t, req, "valid-ws")
 	req.Port = findFreePort(t)

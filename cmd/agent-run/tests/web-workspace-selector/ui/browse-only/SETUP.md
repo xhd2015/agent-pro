@@ -24,9 +24,10 @@ tap Quick Home | Recent row
 import (
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Shared: selected workspace is a known dir under TempDir (not $HOME).
 	req.SelectPath = makeSelectDir(t, req, "already-selected")
 	req.WebWorkingDir = mustMkdir(t, filepath.Join(req.TempDir, "proc-cwd"))

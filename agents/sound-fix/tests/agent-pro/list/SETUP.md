@@ -11,9 +11,12 @@ agent-pro skills -> Available skills listing includes sound-fix + description
 1. Invoke `agent-pro skills` with no arguments.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"skills"}
 	return nil
 }

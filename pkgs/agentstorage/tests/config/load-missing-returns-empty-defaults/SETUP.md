@@ -19,7 +19,7 @@ fresh AGENT_RUN_HOME (no config.json) -> Config() -> zero-value Config
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Action = "load_missing"
 	return nil
 }

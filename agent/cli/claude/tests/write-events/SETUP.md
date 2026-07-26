@@ -30,7 +30,7 @@ import (
 	"github.com/xhd2015/agent-pro/agent/cli/claude"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	_ = req.ClaudeLines
 	_ = (*claude.ClaudeAgent)(nil)
 	return nil

@@ -24,9 +24,13 @@ token + home -> /workspace interactions
 3. `Run` executes playwright-debug.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 	req.Mode = "ui"
 	if req.WebTokenMode == "" {

@@ -26,7 +26,7 @@ const (
 	midRunAppendMarker = "MID_RUN_APPEND_MARKER"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.StartOffset = 0
 	req.InitialLines = []string{
 		acpUserMessageChunk(midRunSeedUserText),

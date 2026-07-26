@@ -29,7 +29,7 @@ test client -> WS /api/terminal -> session attach -> PTY I/O + scrollback
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	base, cleanup := startTestServer(t)
 	t.Cleanup(cleanup)
 	req.ServerBase = base

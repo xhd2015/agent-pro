@@ -19,7 +19,10 @@ missing args / unknown session -> exit 1, no msg_N on stdout
 4. `Assert` exit 1, stderr error, empty stdout id.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Operation = "errors"
 	return nil
 }

@@ -19,9 +19,13 @@ stored session + tty registry -> /terminal -> availability JSON
 3. Leaf `Assert` validates JSON and status code.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "http"
 	req.HTTPAuth = req.WebToken
 	if req.HTTPMethod == "" {

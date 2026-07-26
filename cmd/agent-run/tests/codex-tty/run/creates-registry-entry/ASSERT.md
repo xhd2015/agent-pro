@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Registry file exists at `AGENT_RUN_HOME/codex-tty-registry/<session-id>.json` while run is active.

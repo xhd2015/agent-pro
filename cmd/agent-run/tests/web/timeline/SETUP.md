@@ -23,9 +23,13 @@ streaming: agentui.Run -> assistant message events with phase start|update|end
 3. `Run` GETs session detail; `Assert` polls until user event appears when needed.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "web"
 	return nil
 }

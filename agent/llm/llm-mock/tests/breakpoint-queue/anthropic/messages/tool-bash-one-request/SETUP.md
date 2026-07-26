@@ -13,9 +13,12 @@ POST /v1/messages -> content[] with one tool_use name=bash
 2. Send one Anthropic messages request.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.MockEventsPreset = "tool-bash"
 	req.Requests = []string{
 		`{"model":"mock-model","max_tokens":1024,"messages":[{"role":"user","content":"anthropic-tool-bash"}]}`,

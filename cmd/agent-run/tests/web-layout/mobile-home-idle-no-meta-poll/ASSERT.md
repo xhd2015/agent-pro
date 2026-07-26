@@ -1,5 +1,5 @@
 ---
-label: ui-automation, slow
+label: e2e, ui-automation, slow
 explanation: ~7s idle home poll hygiene (no runners/status delta)
 ---
 
@@ -9,9 +9,13 @@ explanation: ~7s idle home poll hygiene (no runners/status delta)
 - After bootstrap, idle 7s: runners GET Δ=0, status GET Δ=0.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

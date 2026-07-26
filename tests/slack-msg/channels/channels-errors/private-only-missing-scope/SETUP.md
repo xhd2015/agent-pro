@@ -15,9 +15,12 @@ slack-msg channels list --types private --token
 2. Request only private type.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ChannelsPrivateMissingScope = true
 	req.Args = []string{
 		"channels", "list",

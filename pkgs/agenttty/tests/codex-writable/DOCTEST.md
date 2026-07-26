@@ -81,6 +81,7 @@ doctest test -v ./pkgs/agenttty/tests/codex-writable/fixture-table/all-expectati
 
 ```go
 import (
+
 	"bufio"
 	"encoding/json"
 	"fmt"
@@ -90,6 +91,7 @@ import (
 	"testing"
 
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
+	"github.com/xhd2015/doctest/session"
 )
 
 type FixtureExpectation struct {
@@ -119,9 +121,9 @@ type Response struct {
 	FixtureResults []FixtureResult
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	if req.RepoRoot == "" {
-		req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "..", "..", "..", ".."))
+		req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "..", "..", "..", ".."))
 	}
 	if req.TestdataDir == "" {
 		req.TestdataDir = filepath.Join(req.RepoRoot, "pkgs", "agenttty", "testdata", "codex-writable")

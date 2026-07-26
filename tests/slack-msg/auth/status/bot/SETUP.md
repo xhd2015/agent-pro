@@ -22,9 +22,12 @@ Caller -> slack-msg auth status [options] -> auth.test -> bot status
 - Masking: `xoxb-` + `...` + last 4 of full bot token.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.WorkDir == "" {
 		req.WorkDir = t.TempDir()
 	}

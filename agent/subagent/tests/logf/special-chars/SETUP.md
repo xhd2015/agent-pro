@@ -6,7 +6,7 @@
 2. Call `Logf`, capture stdout.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     req.LogMessage = "line1\nline2\tindented\nline3\n"
     return nil
 }

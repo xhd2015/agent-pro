@@ -19,7 +19,7 @@ AppendMessage("a") + AppendMessage("b") -> ListMessages -> [a, b]
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Action = "append_list"
 	req.MessageText = []string{"first msg", "second msg"}
 	return nil

@@ -13,9 +13,12 @@ llm-mock run --mock-events-preset=list -> stdout catalog -> exit 0
 2. Do not set fake opencode hook (nothing should run).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ListOnly = true
 	req.MockEventsPreset = "list"
 	req.ExpectedExit = 0

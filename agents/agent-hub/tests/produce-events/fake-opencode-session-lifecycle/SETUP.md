@@ -10,9 +10,10 @@
 import (
     "testing"
     "path/filepath"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     req.Env = append(req.Env, "AGENT_HUB_OPENCODE_RUNNER=fake-opencode")
     config := `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_life","hooks":[{"at":"before_stdout","event":"session.created"},{"at":"before_exit","event":"session.idle"}]}`
     cfgPath := filepath.Join(req.TempDir, "mock-lifecycle.json")

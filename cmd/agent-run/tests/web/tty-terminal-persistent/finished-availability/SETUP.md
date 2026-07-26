@@ -23,9 +23,13 @@ finished web chat + terminal_session_id session-1 + live registry
   affordance to active chat turn status.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "http"
 	req.Status = "finished"
 	req.HTTPPath = terminalStatusPath(req.Runner, req.ChatSessionID)

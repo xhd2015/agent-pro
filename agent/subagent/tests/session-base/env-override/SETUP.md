@@ -14,7 +14,7 @@ import (
     "testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     debugDir := filepath.Join(t.TempDir(), "debug_home")
     customDir := filepath.Join(t.TempDir(), "custom_should_be_ignored")
     sessDir := filepath.Join(debugDir, "sess_debug123")

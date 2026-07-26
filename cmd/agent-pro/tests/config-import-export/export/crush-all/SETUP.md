@@ -9,7 +9,7 @@
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Operation = "export"
 	req.Agent = "crush"
 	createSourceFile(t, req.HomeDir, ".config/crush/crush.json", `{"provider":"anthropic","api_key":"sk-crush"}`)

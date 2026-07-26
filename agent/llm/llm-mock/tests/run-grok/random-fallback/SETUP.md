@@ -21,9 +21,12 @@ orchestrator must keep mock alive; second user turn must not 400 no_match
 4. `Assert` checks all curls succeed without `no_match`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SkipRealGrok = true
 	return nil
 }

@@ -16,9 +16,13 @@ agent-run pty stats -> PTY limit and/or serve-related summary; trailing \n
 2. Assert exit 0, keywords for limit/PTY/serve, trailing newline.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"pty", "stats"}
 	return nil
 }

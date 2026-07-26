@@ -9,7 +9,7 @@ import (
     "testing"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     if resp.Err != nil {
         // the Run() function may return the error via Response.Err
         if !strings.Contains(resp.Err.Error(), "cannot detect session id") &&

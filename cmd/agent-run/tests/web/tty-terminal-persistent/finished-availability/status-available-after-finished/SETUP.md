@@ -20,9 +20,13 @@ codex-tty-registry/session-1.json live -> GET /terminal -> available true
 4. Fetch terminal status.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.RegistryTranscript = "finished-terminal-ready\n"
 	listenAddr := startMappedPtywrap(t, req)
 	writeMappedSessionFixture(t, req)

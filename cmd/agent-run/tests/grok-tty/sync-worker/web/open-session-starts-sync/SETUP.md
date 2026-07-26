@@ -24,9 +24,10 @@ seed finished session: empty events.jsonl, initial_prompt in meta
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "web-open-session-starts-sync"
 	req.SessionID = "web_open_sync_seed"
 	req.PromptA = "open session sync probe prompt"

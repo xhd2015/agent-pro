@@ -19,7 +19,7 @@ RunInteractiveOpen(AgentRunner="") -> argv contains --agent-runner=grok-tty
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "interactive_open"
 	req.SessionID = "sess-io-runner"
 	req.Prompt = "runner default"

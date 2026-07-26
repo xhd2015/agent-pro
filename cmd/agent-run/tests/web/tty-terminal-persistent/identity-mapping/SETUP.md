@@ -23,9 +23,13 @@ web_* chat id + provider runner_session_id + terminal_session_id session-1
 - The tree intentionally does not create `codex-tty-registry/<runner_session_id>.json`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "http"
 	req.HTTPPath = terminalStatusPath(req.Runner, req.ChatSessionID)
 	return nil

@@ -17,7 +17,7 @@ import (
 	"testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.WireLines = []string{
 		acpUserChunk("read file"),
 		acpToolCall("call_read_1", "read", "README.md"),

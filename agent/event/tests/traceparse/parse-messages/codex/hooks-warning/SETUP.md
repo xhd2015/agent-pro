@@ -14,17 +14,16 @@ trace lines[] + created_at -> message aggregator -> Config Warning tool call
 
 ```go
 import (
-	"os"
-	"strings"
 	"testing"
-)
 
-func Setup(t *testing.T, req *Request) error {
-	b, err := os.ReadFile("warning-line.jsonl")
-	if err != nil {
-		t.Fatal(err)
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	_ = d
+	// Fixture inlined: warning-line.jsonl is gitignored (*.jsonl).
+	req.RawLines = []string{
+		`{"type":"item.completed","item":{"id":"item_0","type":"error","message":"` + "`[features].codex_hooks` is deprecated. Use `[features].hooks` instead." + `"}}`,
 	}
-	req.RawLines = []string{strings.TrimSpace(string(b))}
 	req.CreatedAt = "2026-05-25T18:26:22.524536+08:00"
 	return nil
 }

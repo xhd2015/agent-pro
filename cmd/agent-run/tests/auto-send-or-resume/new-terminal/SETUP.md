@@ -38,9 +38,10 @@ live + auto + --new-terminal + prompt
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// New-terminal leaves: default script capture path (leaves may override).
 	ensureItermScriptOutPath(req)
 	if req.ExecTimeout <= 0 {

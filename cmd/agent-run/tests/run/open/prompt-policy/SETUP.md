@@ -18,9 +18,13 @@ agent-run run --agent-runner grok-tty --open    -> empty prompt OK
 2. Leaves set with/without `--open` and assert exit / error text.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Prompt-policy leaves choose with/without --open; ensure base is `run`.
 	if len(req.Args) == 0 || req.Args[0] != "run" {
 		req.Args = []string{"run"}

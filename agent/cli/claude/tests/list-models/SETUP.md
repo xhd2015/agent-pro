@@ -18,7 +18,7 @@ ClaudeAgent -> (no claude invocation) -> nil models, nil error
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Operation = OpListModels
 	return nil
 }

@@ -16,9 +16,13 @@ seed 15 sessions with distinct updated_at -> sessions -> 10 rows, newest first
 2. Run `agent-run sessions` (no `--limit`).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	seedNSessions(t, req.Home, 15)
 	return nil
 }

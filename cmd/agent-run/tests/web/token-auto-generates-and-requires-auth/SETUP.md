@@ -16,9 +16,13 @@ agent-run web --token auto --port 0 → stderr prints token → health without a
 2. `Run` performs an initial health GET without Bearer (leaf default); `Assert` verifies stderr, 401/200 with parsed token, and `auth.token` persistence.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "web"
 	req.WebTokenMode = "auto"
 	req.WebPort = 0

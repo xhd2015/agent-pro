@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 - The mock exit_code 42 is present in the event.
 - The mock stderr `"custom error message"` is present in the event.
@@ -6,9 +10,10 @@
 import (
     "strings"
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     assertSuccess(t, resp)
     events := parseJSONLines(t, resp.Stdout)
     if len(events) == 0 {

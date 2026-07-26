@@ -29,7 +29,7 @@ const (
 	syncReplyB  = "reply-to-recall"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.InitialLines = nil
 	req.AppendSchedules = []AppendSchedule{
 		{

@@ -18,9 +18,13 @@ GET /terminal again -> same registry-backed terminal
 2. Assertion simulates navigation by fetching session detail and terminal status again.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.HTTPPath = terminalStatusPath(req.Runner, req.SessionID)
 	return nil
 }

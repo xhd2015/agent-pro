@@ -16,9 +16,13 @@ seed 15 -> sessions --json -> sessions array length 10, sorted desc by updated_a
 2. Run `agent-run sessions --json`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	seedNSessions(t, req.Home, 15)
 	req.Args = append(req.Args, "--json")
 	return nil

@@ -19,9 +19,10 @@ import (
 	"testing"
 
 	types "github.com/xhd2015/agent-pro/agent/event/types"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Events = []types.AgentEvent{{
 		ID:   "evt_think_1",
 		Type: types.ActionThink,

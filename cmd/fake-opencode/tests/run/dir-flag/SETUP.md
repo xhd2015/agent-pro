@@ -8,9 +8,10 @@
 import (
     "path/filepath"
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","llm_events":[]}`)
     req.Args = []string{"run", "--format", "json", "--dir", filepath.Join(req.TempDir, "work"), "--mock-config", req.MockConfigPath, "hello"}
     return nil

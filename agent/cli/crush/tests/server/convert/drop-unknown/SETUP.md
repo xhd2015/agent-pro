@@ -12,7 +12,7 @@
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SSEInput = `{"type":"lsp_event","payload":{"type":"updated","payload":{"key":"value"}}}`
 	return nil
 }

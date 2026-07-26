@@ -20,9 +20,12 @@ first Run -> events; second Run -> append without clobbering host meta
 - Resume uses `agent_session_id` alias for session matching.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.AgentRunner == "" {
 		req.AgentRunner = "fake-codex"
 	}

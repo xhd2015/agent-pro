@@ -77,6 +77,7 @@ doctest test ./agent/codex/tty/tests/update-modal-skip/...
 
 ```go
 import (
+
 	"context"
 	"fmt"
 	"os"
@@ -88,6 +89,7 @@ import (
 	"time"
 
 	codextty "github.com/xhd2015/agent-pro/agent/codex/tty"
+	"github.com/xhd2015/doctest/session"
 )
 
 // Request drives parse + fetch leaves for update-modal-skip protocol.
@@ -121,39 +123,39 @@ type Response struct {
 	MarkerFiles []string
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	resp := &Response{}
 	switch strings.TrimSpace(req.Op) {
 	case "parse":
-		return runParse(t, req, resp)
+		return runParse(t, d, req, resp)
 	case "fetch":
-		return runFetch(t, req, resp)
+		return runFetch(t, d, req, resp)
 	default:
 		return nil, fmt.Errorf("unknown op %q", req.Op)
 	}
 }
 
-func fixturesDir(req *Request) string {
+func fixturesDir(d *session.Doctest, req *Request) string {
 	if req != nil && strings.TrimSpace(req.FixturesDir) != "" {
 		return req.FixturesDir
 	}
 	candidates := []string{
-		filepath.Join(DOCTEST_ROOT, "testdata", "update-modal-skip"),
+		filepath.Join(d.DOCTEST_ROOT, "testdata", "update-modal-skip"),
 	}
 	for _, c := range candidates {
 		if st, err := os.Stat(c); err == nil && st.IsDir() {
 			return c
 		}
 	}
-	return filepath.Join(DOCTEST_ROOT, "testdata", "update-modal-skip")
+	return filepath.Join(d.DOCTEST_ROOT, "testdata", "update-modal-skip")
 }
 
-func runParse(t *testing.T, req *Request, resp *Response) (*Response, error) {
+func runParse(t *testing.T, d *session.Doctest, req *Request, resp *Response) (*Response, error) {
 	t.Helper()
 	if strings.TrimSpace(req.FixtureFile) == "" {
 		return nil, fmt.Errorf("FixtureFile required for parse")
 	}
-	path := filepath.Join(fixturesDir(req), req.FixtureFile)
+	path := filepath.Join(fixturesDir(d, req), req.FixtureFile)
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -172,11 +174,12 @@ func runParse(t *testing.T, req *Request, resp *Response) (*Response, error) {
 	return resp, nil
 }
 
-func runFetch(t *testing.T, req *Request, resp *Response) (*Response, error) {
+func runFetch(t *testing.T, d *session.Doctest, req *Request, resp *Response) (*Response, error) {
 	t.Helper()
-	restore := applyFetchEnv(t, req)
-	defer restore()
-
+	// Options carry hooks; MarkerDir residual: fake Python script reads
+	// FAKE_CODEX_MARKER_DIR from child env — inject via `env KEY=val` prefix
+	// on the command string (no parent Setenv). StripDaemonPATH residual uses
+	// a narrowed PATH only when required (documented below).
 	timeout := req.FetchTimeoutSecs
 	if timeout <= 0 {
 		timeout = 30
@@ -184,7 +187,38 @@ func runFetch(t *testing.T, req *Request, resp *Response) (*Response, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
 
-	info, err := codextty.FetchStatus(ctx)
+	showCmd := strings.TrimSpace(req.ShowStatusCommand)
+	if showCmd == "" {
+		showCmd = autoSkipFakeCommand(d, req)
+	}
+	if req.MarkerDir != "" {
+		_ = os.MkdirAll(req.MarkerDir, 0o755)
+		// Child-only env for the fake TUI process without parent Setenv.
+		showCmd = "env FAKE_CODEX_MARKER_DIR=" + shellSingleQuote(req.MarkerDir) + " " + showCmd
+	}
+	ttyHome := req.TTYWatchHome
+	if ttyHome == "" {
+		ttyHome = filepath.Join(t.TempDir(), ".tty-watch")
+	}
+	sid := strings.TrimSpace(req.SessionID)
+	if sid == "" {
+		sid = "codex-update-modal-skip"
+	}
+
+	// Residual PATH mutation only for StripDaemonPATH leaves (daemon PATH may
+	// hide node). Prefer Options for everything else.
+	if req.StripDaemonPATH {
+		prevPATH := os.Getenv("PATH")
+		_ = os.Setenv("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
+		defer func() { _ = os.Setenv("PATH", prevPATH) }()
+	}
+
+	info, err := codextty.FetchStatusWithOptions(ctx, codextty.Options{
+		Command:        showCmd,
+		SessionID:      sid,
+		TimeoutSeconds: timeout,
+		TTYWatchHome:   ttyHome,
+	})
 	if err != nil {
 		resp.FetchOK = false
 		resp.FetchError = err.Error()
@@ -209,74 +243,20 @@ func runFetch(t *testing.T, req *Request, resp *Response) (*Response, error) {
 	return resp, nil
 }
 
-func applyFetchEnv(t *testing.T, req *Request) func() {
-	t.Helper()
-	keys := []string{
-		"PATH",
-		"TTY_WATCH_HOME",
-		"CODEX_SHOW_STATUS_COMMAND",
-		"CODEX_SHOW_STATUS_SESSION_ID",
-		"CODEX_SHOW_STATUS_TIMEOUT",
-		"FAKE_CODEX_MARKER_DIR",
-	}
-	prev := make(map[string]string, len(keys))
-	for _, k := range keys {
-		prev[k] = os.Getenv(k)
-	}
-
-	if req.StripDaemonPATH {
-		_ = os.Setenv("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
-	}
-	ttyHome := req.TTYWatchHome
-	if ttyHome == "" {
-		ttyHome = filepath.Join(t.TempDir(), ".tty-watch")
-	}
-	_ = os.Setenv("TTY_WATCH_HOME", ttyHome)
-
-	showCmd := strings.TrimSpace(req.ShowStatusCommand)
-	if showCmd == "" {
-		showCmd = autoSkipFakeCommand(req)
-	}
-	_ = os.Setenv("CODEX_SHOW_STATUS_COMMAND", showCmd)
-
-	sid := strings.TrimSpace(req.SessionID)
-	if sid == "" {
-		sid = "codex-update-modal-skip"
-	}
-	_ = os.Setenv("CODEX_SHOW_STATUS_SESSION_ID", sid)
-
-	timeout := req.FetchTimeoutSecs
-	if timeout <= 0 {
-		timeout = 30
-	}
-	_ = os.Setenv("CODEX_SHOW_STATUS_TIMEOUT", strconv.Itoa(timeout))
-
-	if req.MarkerDir != "" {
-		_ = os.MkdirAll(req.MarkerDir, 0o755)
-		_ = os.Setenv("FAKE_CODEX_MARKER_DIR", req.MarkerDir)
-	}
-
-	return func() {
-		for _, k := range keys {
-			if v, ok := prev[k]; ok {
-				_ = os.Setenv(k, v)
-			} else {
-				_ = os.Unsetenv(k)
-			}
-		}
-	}
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
 }
 
-func autoSkipFakeCommand(req *Request) string {
-	return fakePythonCommand(req, "fake-tui-auto-skip.py")
+func autoSkipFakeCommand(d *session.Doctest, req *Request) string {
+	return fakePythonCommand(d, req, "fake-tui-auto-skip.py")
 }
 
-func stuckUpdateNowFakeCommand(req *Request) string {
-	return fakePythonCommand(req, "fake-tui-stuck-update-now.py")
+func stuckUpdateNowFakeCommand(d *session.Doctest, req *Request) string {
+	return fakePythonCommand(d, req, "fake-tui-stuck-update-now.py")
 }
 
-func fakePythonCommand(req *Request, scriptName string) string {
-	script := filepath.Join(fixturesDir(req), scriptName)
+func fakePythonCommand(d *session.Doctest, req *Request, scriptName string) string {
+	script := filepath.Join(fixturesDir(d, req), scriptName)
 	if abs, err := filepath.Abs(script); err == nil {
 		script = abs
 	}

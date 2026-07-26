@@ -23,7 +23,7 @@ SessionBrief -> FormatBriefText / FormatBriefJSON -> output
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Operation = "brief"
 	if req.LastN == 0 {
 		req.LastN = 3

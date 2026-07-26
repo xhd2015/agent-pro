@@ -17,9 +17,12 @@
   instead (user explicitly opted out of all integration tests).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.CrushPath = "/nonexistent/path/to/crush"
 	req.Prompt = "test"
 	req.HostPort = 0

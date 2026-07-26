@@ -12,9 +12,13 @@ browser WS binary input -> AttachRelay -> fake ptywrap records bytes
 2. Send keyboard bytes over terminal websocket.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	startAgentRunWeb(t, req)
 	req.Runner = "codex-tty"
 	req.SessionID = "web-tty-write"

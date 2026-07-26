@@ -14,9 +14,14 @@ seed live bound + sendable terminal
 1. Default runner and meta status for live fixtures.
 
 ```go
-import "testing"
+import (
+	"path"
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = defaultRunner
 	req.MetaStatus = "running"
 	// Live leaves use fake ptywrap inject; ensure hook does not replace send path.

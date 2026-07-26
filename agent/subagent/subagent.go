@@ -33,6 +33,15 @@ type Config struct {
 	// AutoGenerateSessionID when true generates a session ID when flag, env var,
 	// and CODEX_THREAD_ID are all unset. Default false returns an error with retry hint.
 	AutoGenerateSessionID bool
+	// HomeDir overrides os.UserHomeDir when resolving the default sessions base
+	// (SessionBase and debug-session env empty). Prefer Options.SessionBase in
+	// production; HomeDir is mainly for parallel-safe tests.
+	HomeDir string
+	// EnvLookup, when non-nil, is consulted before os.Getenv for library env
+	// reads (session ID, debug session home, model, detection). Return
+	// (value, true) to force a value (empty string = treat as unset); ( "", false)
+	// falls through to the process environment. Request-scoped and parallel-safe.
+	EnvLookup func(key string) (string, bool)
 }
 
 type AgentRunInfo struct {
@@ -121,7 +130,7 @@ func Run(ctx context.Context, c Config, opts Options) error {
 	}
 
 	if opts.Status {
-		if opts.SessionID == "" && os.Getenv(c.sessionEnvVar()) == "" && os.Getenv("CODEX_THREAD_ID") == "" && !c.AutoGenerateSessionID {
+		if opts.SessionID == "" && getenv(c, c.sessionEnvVar()) == "" && getenv(c, "CODEX_THREAD_ID") == "" && !c.AutoGenerateSessionID {
 			fmt.Fprintf(os.Stderr, "error: --status requires --session-id\n")
 			return nil
 		}
@@ -129,7 +138,7 @@ func Run(ctx context.Context, c Config, opts Options) error {
 	}
 
 	if opts.CatchUp {
-		if opts.SessionID == "" && os.Getenv(c.sessionEnvVar()) == "" && os.Getenv("CODEX_THREAD_ID") == "" {
+		if opts.SessionID == "" && getenv(c, c.sessionEnvVar()) == "" && getenv(c, "CODEX_THREAD_ID") == "" {
 			return fmt.Errorf("--trace requires --session-id")
 		}
 		return traceSession(c, opts)
@@ -174,7 +183,7 @@ func Run(ctx context.Context, c Config, opts Options) error {
 		return fmt.Errorf("unknown agent runner id: %s", agentRunner)
 	}
 
-	model := os.Getenv(c.modelEnv())
+	model := getenv(c, c.modelEnv())
 
 	srcs, err := resolveSessionID(c, opts.SessionID, prompt)
 	if err != nil {
@@ -288,8 +297,13 @@ func Run(ctx context.Context, c Config, opts Options) error {
 		}()
 	}
 
+	// FAKE_CODEX_MOCK_CONFIG must be on the process env for the child runner
+	// (agentexec.Environ starts from os.Environ). Serialize set+spawn+read so
+	// parallel tests with different MockConfig do not cross-contaminate.
+	var mockConfigRelease func()
 	if opts.MockConfig != "" {
-		os.Setenv("FAKE_CODEX_MOCK_CONFIG", opts.MockConfig)
+		mockConfigRelease = lockMockConfigEnv(opts.MockConfig)
+		defer mockConfigRelease()
 	}
 
 	var opencodeSessionID string

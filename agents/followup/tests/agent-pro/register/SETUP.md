@@ -11,9 +11,12 @@ agent-pro skill followup --show -> name: followup in output
 1. Invoke `agent-pro skill followup --show`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"skill", "followup", "--show"}
 	return nil
 }

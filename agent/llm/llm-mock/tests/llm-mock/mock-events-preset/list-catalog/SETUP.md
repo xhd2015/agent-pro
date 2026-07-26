@@ -13,9 +13,12 @@ llm-mock --mock-events-preset=list -> stdout (preset names + descriptions) -> ex
 2. Do not send HTTP requests.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.CatalogOnly = true
 	req.MockEventsPreset = "list"
 	return nil

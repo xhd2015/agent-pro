@@ -14,9 +14,12 @@ fake grok -> curl mock twice -> R2 content from events file
 3. Fake grok curls twice via `GROK_MODELS_BASE_URL`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.FakeGrokCmd = fakeGrokCurlTwice
 	req.ConfigJSON = minimalMockConfigJSON(8080, `[
     {

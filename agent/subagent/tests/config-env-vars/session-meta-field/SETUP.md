@@ -11,7 +11,7 @@ import (
     "testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     req.Operation = "session_meta_field"
     req.Status = true
     req.RoleName = "testrole"

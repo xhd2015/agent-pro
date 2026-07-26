@@ -25,9 +25,10 @@ import (
 	"testing"
 
 	claude_types "github.com/xhd2015/agent-pro/agent/event/claude_types"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	var sb strings.Builder
 
 	fmt.Fprintf(&sb, "EventSystem=%s\n", claude_types.EventSystem)

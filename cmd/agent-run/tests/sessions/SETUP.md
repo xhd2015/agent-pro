@@ -36,6 +36,7 @@ import (
 
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
+	"github.com/xhd2015/doctest/session"
 )
 
 const (
@@ -129,7 +130,7 @@ func seedNSessions(t *testing.T, home string, n int) {
 	}
 }
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.SessionRunner == "" {
 		req.SessionRunner = printRunner
 	}

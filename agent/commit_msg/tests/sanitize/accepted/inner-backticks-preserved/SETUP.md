@@ -19,9 +19,11 @@ fake-opencode -> sanitize unwraps only outer pairs -> inner ` kept
 ```go
 import (
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	StageRepoWithChange(t, req)
 	WriteMockAgentText(t, req, "sess_inner_ticks", ReadAntiPatternIn(t, "legitimate_inner_backticks"))
 	req.Commit = false

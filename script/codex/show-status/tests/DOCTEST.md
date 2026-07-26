@@ -88,6 +88,12 @@ Parameter ranking (most → least significant):
 ## How to Run
 
 ```sh
+# Discovery skips labeled e2e/heavy/slow leaves by default.
+# Run e2e / full suite explicitly when needed:
+doctest test ./script/codex/show-status/tests                    # discovery (skips labeled e2e/heavy/slow)
+doctest test --label e2e ./script/codex/show-status/tests
+doctest test --label-all ./script/codex/show-status/tests
+
 # CI / default — fake TUI only
 doctest vet ./script/codex/show-status/tests
 doctest test ./script/codex/show-status/tests
@@ -111,6 +117,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request struct {
@@ -143,8 +151,7 @@ var (
 	builtTTYWatchErr  error
 )
 
-func findModuleRoot() (string, error) {
-	start := os.Getenv("DOCTEST_ROOT")
+func findModuleRoot(start string) (string, error) {
 	if start == "" {
 		wd, err := os.Getwd()
 		if err != nil {
@@ -162,10 +169,10 @@ func findModuleRoot() (string, error) {
 	}
 }
 
-func buildShowStatus(t *testing.T) (string, error) {
+func buildShowStatus(t *testing.T, d *session.Doctest) (string, error) {
 	t.Helper()
 	builtBinOnce.Do(func() {
-		repoRoot, err := findModuleRoot()
+		repoRoot, err := findModuleRoot(d.DOCTEST_ROOT)
 		if err != nil {
 			builtBinErr = err
 			return
@@ -191,10 +198,10 @@ func buildShowStatus(t *testing.T) (string, error) {
 	return builtBinPath, builtBinErr
 }
 
-func buildTTYWatch(t *testing.T) (string, error) {
+func buildTTYWatch(t *testing.T, d *session.Doctest) (string, error) {
 	t.Helper()
 	builtTTYWatchOnce.Do(func() {
-		repoRoot, err := findModuleRoot()
+		repoRoot, err := findModuleRoot(d.DOCTEST_ROOT)
 		if err != nil {
 			builtTTYWatchErr = err
 			return
@@ -261,7 +268,7 @@ func defaultSessionID(req *Request) string {
 	return "codex-status-usage"
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	if req.Bin == "" {
 		t.Fatal("req.Bin not set; root Setup must build codex-show-status")
 	}

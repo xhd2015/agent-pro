@@ -15,9 +15,12 @@ POST #2 responses -> message breakpoint only
 3. Send two Responses API requests (stream on #1 optional; non-stream on #2).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Endpoint = "/v1/responses"
 	req.MockEventsPreset = "think-tool-message"
 	req.Requests = []string{

@@ -16,7 +16,7 @@ seed finished grok-tty/chat_tail_watch
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "chat_tail_watch"
 	req.AppendText = defaultWatchAppendMarker
 	return nil

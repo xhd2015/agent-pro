@@ -21,7 +21,7 @@
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ServerOperation = "send-and-receive"
 	return nil
 }

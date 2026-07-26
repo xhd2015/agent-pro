@@ -181,6 +181,7 @@ import (
 	"testing"
 
 	"github.com/xhd2015/agent-pro/pkgs/agentruncli"
+	"github.com/xhd2015/doctest/session"
 )
 
 // Request drives one leaf via Mode. Leaves set Mode (and Args for handle/*).
@@ -214,26 +215,27 @@ type Response struct {
 // stdoutMu serializes temporary os.Stdout/os.Stderr redirects across parallel leaves.
 var stdoutMu sync.Mutex
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	t.Helper()
 	resp := &Response{}
 
 	switch req.Mode {
 	case "api_surface":
-		return runAPISurface(t, req, resp)
+		return runAPISurface(t, d, req, resp)
 	case "not_package_main":
-		return runNotPackageMain(t, req, resp)
+		return runNotPackageMain(t, d, req, resp)
 	case "source_wire":
-		return runSourceWire(t, req, resp)
+		return runSourceWire(t, d, req, resp)
 	case "handle":
-		return runHandle(t, req, resp)
+		return runHandle(t, d, req, resp)
 	default:
 		return nil, fmt.Errorf("unknown mode %q", req.Mode)
 	}
 }
 
-func runAPISurface(t *testing.T, req *Request, resp *Response) (*Response, error) {
+func runAPISurface(t *testing.T, d *session.Doctest, req *Request, resp *Response) (*Response, error) {
 	t.Helper()
+	_ = d
 	// Touch public entry so the leaf fails to compile until Handle exists.
 	args := req.Args
 	if args == nil {
@@ -249,10 +251,10 @@ func runAPISurface(t *testing.T, req *Request, resp *Response) (*Response, error
 	return resp, nil
 }
 
-func runNotPackageMain(t *testing.T, req *Request, resp *Response) (*Response, error) {
+func runNotPackageMain(t *testing.T, d *session.Doctest, req *Request, resp *Response) (*Response, error) {
 	t.Helper()
-	// DOCTEST_ROOT is tests/agentruncli; module root is ../..
-	pkgDir := filepath.Join(DOCTEST_ROOT, "..", "..", "pkgs", "agentruncli")
+	// d.DOCTEST_ROOT is tests/agentruncli; module root is ../..
+	pkgDir := filepath.Join(d.DOCTEST_ROOT, "..", "..", "pkgs", "agentruncli")
 	resp.PkgDir = pkgDir
 	entries, err := os.ReadDir(pkgDir)
 	if err != nil {
@@ -292,9 +294,9 @@ func runNotPackageMain(t *testing.T, req *Request, resp *Response) (*Response, e
 	return resp, nil
 }
 
-func runSourceWire(t *testing.T, req *Request, resp *Response) (*Response, error) {
+func runSourceWire(t *testing.T, d *session.Doctest, req *Request, resp *Response) (*Response, error) {
 	t.Helper()
-	cmdDir := filepath.Join(DOCTEST_ROOT, "..", "..", "cmd", "agent-run")
+	cmdDir := filepath.Join(d.DOCTEST_ROOT, "..", "..", "cmd", "agent-run")
 	resp.CmdDir = cmdDir
 	entries, err := os.ReadDir(cmdDir)
 	if err != nil {
@@ -348,8 +350,9 @@ func runSourceWire(t *testing.T, req *Request, resp *Response) (*Response, error
 	return resp, nil
 }
 
-func runHandle(t *testing.T, req *Request, resp *Response) (*Response, error) {
+func runHandle(t *testing.T, d *session.Doctest, req *Request, resp *Response) (*Response, error) {
 	t.Helper()
+	_ = d
 	args := req.Args
 	if args == nil {
 		args = []string{}

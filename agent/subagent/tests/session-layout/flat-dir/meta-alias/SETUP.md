@@ -20,9 +20,12 @@ subagent.Run matches alias -> resumes/completes without rewriting host schema
 - Distinct from `merged-meta` which focuses on field preservation after opencode update.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.AgentRunner == "" {
 		req.AgentRunner = "fake-codex"
 	}

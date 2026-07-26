@@ -16,9 +16,12 @@ slack-msg channels list --limit 2 -> first two by name
 2. Leaf sets `--limit`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClearSlackEnv = true
 	apiURL, err := ensureSlackTestServer(t)
 	if err != nil {

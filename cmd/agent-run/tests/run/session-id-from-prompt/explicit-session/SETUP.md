@@ -19,9 +19,13 @@ agent-run run --session my-task "prompt"
 2. Children split non-TTY vs TTY and finalize `--session` + prompt.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Mark mode for leaf clarity; leaves append --session and runner flags.
 	if req.Prompt == "" {
 		req.Prompt = "explicit session prompt"

@@ -112,11 +112,13 @@ Classic TDD: all leaves RED until implementer adds `RelocateCWD` and related typ
 
 ```go
 import (
+
 	"fmt"
 	"path/filepath"
 	"testing"
 
 	"github.com/xhd2015/agent-pro/agent/grok/sessions"
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request struct {
@@ -153,7 +155,7 @@ type Response struct {
 	Err    error
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	t.Helper()
 	var opts *sessions.RelocateCWDOptions
 	if !req.UseNilOpts {

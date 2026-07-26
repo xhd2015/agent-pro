@@ -19,7 +19,7 @@ WriteClaudeLine -> RawLog (3 AgentEvents: message, think, tool_call)
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClaudeLines = []string{
 		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hi"},{"type":"thinking","thinking":"why"},{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"ls"}}]},"session_id":"sess"}`,
 	}

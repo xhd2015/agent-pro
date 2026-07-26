@@ -10,7 +10,7 @@ import (
 	"github.com/xhd2015/dot-pkgs/go-pkgs/shell/ptywrap"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Phase = "resolve-ambiguous"
 	req.Target = "dup-name"
 	req.Sessions = []ptywrap.SessionInfo{

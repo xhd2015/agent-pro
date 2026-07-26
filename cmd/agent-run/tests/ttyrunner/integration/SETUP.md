@@ -19,7 +19,10 @@ doctest test ./cmd/agent-run/tests/codex-tty/...
 2. CI orchestrator runs sealed trees separately.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Operation = "integration"
 	return nil
 }

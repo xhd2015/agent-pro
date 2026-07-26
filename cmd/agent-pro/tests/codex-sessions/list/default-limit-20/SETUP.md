@@ -27,7 +27,7 @@ import (
 	"testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	for i := 0; i < 25; i++ {
 		id := fmt.Sprintf("01900001-0000-7000-8000-%012d", i+1)
 		ts := fmt.Sprintf("2026-06-23T00:%02d:00.000Z", i)

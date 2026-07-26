@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Both GETs **200**.
@@ -15,6 +19,7 @@
 ```go
 import (
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
 func requireCounts(t *testing.T, body string, wantAll, wantRunning, wantDone int) {
@@ -36,7 +41,7 @@ func requireCounts(t *testing.T, body string, wantAll, wantRunning, wantDone int
 	}
 }
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatalf("Run error: %v", err)
 	}

@@ -1,5 +1,5 @@
 ---
-label: grok
+label: e2e, grok
 explanation: Requires real grok CLI on PATH; verifies stderr grok session diagnostics and live stdout.
 ---
 
@@ -21,11 +21,12 @@ import (
 	"testing"
 
 	"github.com/xhd2015/doctest/assert"
+	"github.com/xhd2015/doctest/session"
 )
 
 var grokSessionStderrRE = regexp.MustCompile(`grok-tty:\s*grok session\s+[0-9a-fA-F-]{8,}`)
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

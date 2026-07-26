@@ -13,7 +13,10 @@ agent-run tty status bogus-id -> registry file not found -> error
 3. `Assert` checks exit code 1 and session-not-found error.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"tty", "status", "session-nonexistent"}
 	return nil
 }

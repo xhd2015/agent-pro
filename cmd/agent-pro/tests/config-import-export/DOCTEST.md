@@ -62,6 +62,7 @@ doctest test -v ./cmd/agent-pro/tests/config-import-export
 
 ```go
 import (
+
 	"archive/zip"
 	"fmt"
 	"io"
@@ -71,6 +72,7 @@ import (
 	"testing"
 
 	agentconfig "github.com/xhd2015/agent-pro/pkgs/agentconfig"
+	"github.com/xhd2015/doctest/session"
 )
 
 
@@ -85,7 +87,7 @@ type Response struct {
 	Err error
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	var err error
 	switch req.Operation {
 	case "export":

@@ -23,9 +23,12 @@ Caller -> slack-msg history [options] [CHANNEL] -> conversations.history|replies
 - Human format: `[ts] user: text` with trailing newline after last line.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.WorkDir == "" {
 		req.WorkDir = t.TempDir()
 	}

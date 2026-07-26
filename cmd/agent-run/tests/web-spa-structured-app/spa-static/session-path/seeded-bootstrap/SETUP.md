@@ -17,9 +17,13 @@ seed sessions/spa-seed-bootstrap/ -> GET /sessions/spa-seed-bootstrap
 2. Start web; `GET /sessions/spa-seed-bootstrap`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "session-path-seeded-bootstrap"
 	req.SessionID = "spa-seed-bootstrap"
 	if err := seedFlatSession(t, req.Home, req.SessionID, "fake-codex", "idle"); err != nil {

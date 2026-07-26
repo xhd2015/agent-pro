@@ -27,9 +27,11 @@ seed sessions.json under HOME
 import (
 	"fmt"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.HomeDir == "" {
 		return fmt.Errorf("list success leaves require HomeDir isolation from parent Setup")
 	}

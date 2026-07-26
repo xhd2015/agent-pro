@@ -22,9 +22,12 @@ Caller -> slack-msg send [options] MESSAGE -> resolve token/channel -> PostMessa
 - Port of `tests/slack-send-cli` with `slack-msg send` argv.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.WorkDir == "" {
 		req.WorkDir = t.TempDir()
 	}

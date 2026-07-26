@@ -28,7 +28,7 @@ first AppendEvent/CreateSession -> mkdir sessions/<session_id>/
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Operation = "home"
 	if req.Runner == "" {
 		req.Runner = "fake-opencode"

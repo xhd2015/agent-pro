@@ -17,9 +17,13 @@ codex chat -> no enabled terminal attach button
 3. Verify terminal button is absent or disabled.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "codex"
 	req.SessionID = "ui-non-tty"
 	writeSessionFixture(t, req, req.Runner, req.SessionID, "finished")

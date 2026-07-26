@@ -21,9 +21,12 @@
 - Spec: if `N <= 0`, treat as default 10 (also covers negative if implementer maps similarly; this leaf locks zero).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"list", "--limit", "0"}
 	req.Sessions = seedNSessions(12, 10)
 	return nil

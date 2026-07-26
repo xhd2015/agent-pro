@@ -24,9 +24,11 @@ explanation: "search empty after soft-skip private; warning with see: topic + em
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

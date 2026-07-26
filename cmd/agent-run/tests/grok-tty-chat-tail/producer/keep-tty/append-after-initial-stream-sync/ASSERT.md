@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Initial pending `tool_call` appears in `events.jsonl` **before** assistant marker (proves early sync).
@@ -13,9 +17,13 @@
 0 (run may be killed after events satisfy probe)
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

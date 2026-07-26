@@ -19,9 +19,13 @@ agent-run web (stderr: token warning + listen URL) -> POST session -> agentui.Ru
 2. `Run` may be a no-op GET; assertions read captured web process streams after the agent run completes.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "web"
 	return nil
 }

@@ -17,7 +17,7 @@ fixture(screen status: banner, sendable: yes) -> IsSessionReady true
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.StatusStdout = statusReadyFixture()
 	return nil
 }

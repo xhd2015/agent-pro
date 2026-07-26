@@ -12,9 +12,13 @@ agent-run run --agent-runner fake-codex "hi"  # no --dir
 1. Leaves run without `--dir`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Omitted --dir branch: leaves must not append --dir.
 	t.Helper()
 	for _, a := range req.Args {

@@ -21,9 +21,11 @@ doctest -> IsTransientIndexError(ClassifyOutput, nil) -> Transient true|false
 import (
 	"fmt"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.Mode != "" && req.Mode != "classify" {
 		return fmt.Errorf("classify subtree requires Mode=classify, got %q", req.Mode)
 	}

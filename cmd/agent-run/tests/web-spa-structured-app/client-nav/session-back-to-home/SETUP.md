@@ -17,9 +17,13 @@ seed + open /sessions/:id -> click .back-link -> URL / + home UI (home-active or
 2. Playwright: open session path with token; click `.back-link`; assert `/` and home UI.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 	req.Scenario = "session-back-to-home"
 	req.SessionID = "spa-nav-back-sess"

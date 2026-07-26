@@ -22,9 +22,12 @@ prompt tail shows idle ❯ + Enter:send
 - Primary bug reproducer (F2); send-queue drainer must not stall on git status scrollback.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.FixtureFile = fixtureFalsePositiveSession18
 	return nil
 }

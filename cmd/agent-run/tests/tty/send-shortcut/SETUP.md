@@ -18,7 +18,10 @@ agent-run tty send <id> "msg" -> delegates to same logic -> same error output
 2. Paired leaves run `send` and compare behavior to the equivalent `tty send` case.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.RegistryDir = "grok-tty-registry"
 	req.RegistrySessionID = "session-nonexistent"
 	return nil

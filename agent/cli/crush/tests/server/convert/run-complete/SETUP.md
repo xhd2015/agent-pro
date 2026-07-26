@@ -12,7 +12,7 @@
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SSEInput = `{"type":"run_complete","payload":{"type":"updated","payload":{"session_id":"sess_xyz789","run_id":"run_001","message_id":"msg_def456","text":"Task completed successfully","error":"","cancelled":false}}}`
 	return nil
 }

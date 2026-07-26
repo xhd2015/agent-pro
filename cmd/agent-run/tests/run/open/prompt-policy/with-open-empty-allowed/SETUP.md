@@ -19,9 +19,14 @@ agent-run run --agent-runner grok-tty --open
 2. Run `run --agent-runner grok-tty --open` with no prompt args.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"time"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "grok-tty"
 	req.OpenInstantAttach = true
 	setGrokTTYCommand(req, fakeTUIHoldSeconds(5))

@@ -29,7 +29,7 @@ import (
 	"time"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Limit = 20
 	base, err := time.Parse(time.RFC3339, "2026-07-03T00:00:00.000Z")
 	if err != nil {

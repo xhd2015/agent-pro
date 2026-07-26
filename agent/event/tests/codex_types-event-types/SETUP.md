@@ -16,9 +16,10 @@ import (
 	"testing"
 
 	codex_types "github.com/xhd2015/agent-pro/agent/event/codex_types"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	var sb strings.Builder
 
 	fmt.Fprintf(&sb, "EventStarted=%s\n", codex_types.EventStarted)

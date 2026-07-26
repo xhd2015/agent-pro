@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Process wall time ≥ materialization delay (proves hard wait, not soft 750ms exit).
@@ -19,9 +23,10 @@
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatalf("run failed: %v elapsed=%s\nstdout:\n%s\nstderr:\n%s", err, resp.Elapsed, resp.Stdout, resp.Stderr)
 	}

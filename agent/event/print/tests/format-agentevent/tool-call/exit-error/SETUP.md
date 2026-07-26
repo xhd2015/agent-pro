@@ -9,7 +9,7 @@
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	exitErr := 1
 	req.Tool = "read"
 	req.Output = "file not found"

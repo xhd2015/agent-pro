@@ -17,7 +17,10 @@ AGENT_RUN_ENABLE_STUB_TTY=1 + AGENT_RUN_STUB_TTY_SCENARIO -> stub-tty run -> reg
 2. `Run` executes `agent-run run --agent-runner stub-tty` or background keep-tty session.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Operation = "stub-tty"
 	req.EnableStubTTY = true
 	return nil

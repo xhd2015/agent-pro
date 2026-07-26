@@ -1,5 +1,5 @@
 ---
-label: ui-automation
+label: e2e, ui-automation
 explanation: Playwright lists and enters dot directories (e.g. .hidden-dir)
 ---
 
@@ -9,9 +9,13 @@ explanation: Playwright lists and enters dot directories (e.g. .hidden-dir)
 - `.hidden-dir` visible as dir; enter updates browse path.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertPlaywrightOK(t, resp, err)
 }
 ```

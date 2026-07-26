@@ -14,7 +14,7 @@ meta.status == finished at watch start
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Finished-status branch: watch starts after UpdateSessionStatus(..., "finished").
 	if req.AfterOffset == 0 {
 		req.AfterOffset = -1 // sentinel: Run resolves to store.ReadEvents EOF offset

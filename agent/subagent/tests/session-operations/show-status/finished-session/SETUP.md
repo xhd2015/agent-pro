@@ -15,7 +15,7 @@ import (
     "testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     baseDir := filepath.Join(t.TempDir(), "custom_base")
     sessDir := filepath.Join(baseDir, "testrole", "sessions", "sess_finished1")
 

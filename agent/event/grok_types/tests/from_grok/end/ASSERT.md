@@ -5,7 +5,7 @@
 ```go
 import "testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertContains(t, resp.Output, `"type":"done"`)
 	assertContains(t, resp.Output, `"grok_session_42"`)
 }

@@ -18,7 +18,7 @@ import (
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatalf("roundtrip tool-call-empty-input failed: %v", err)
 	}

@@ -12,7 +12,7 @@
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SSEInput = `{"type":"agent_event","payload":{"type":"created","payload":{"type":"error","error":"rate limit exceeded","run_id":"run_001"}}}`
 	return nil
 }

@@ -12,9 +12,13 @@ agent-run resume --help -> --open, session-id, --grok-session-id
 1. Run `agent-run resume --help`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"resume", "--help"}
 	return nil
 }

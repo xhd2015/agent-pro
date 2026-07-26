@@ -15,9 +15,13 @@ meta running + runner_session_id + live registry + idle fake ptywrap (Grok ›)
 3. Regression: must stay exited false when truly live (E2/E4 vs zombie-serve E1).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "test-live-s1"
 	req.RunnerSessionID = "550e8400-e29b-41d4-a716-446655440111"
 	req.TerminalSessionID = "term-live-1"

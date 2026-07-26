@@ -11,9 +11,12 @@ slack-msg history --token --channel C0... -> [oldest] then [newer] then [newest]
 1. Flags for token and channel ID.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{
 		"history",
 		"--token", slackTestToken,

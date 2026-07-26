@@ -32,9 +32,14 @@ agent-run run --agent-runner grok-tty "once-only"|"hi"
 3. Leaves choose empty/with-prompt/no-double-inject or delayed-banner fixtures.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"time"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Ensure base run args; children set open vs non-open and runner.
 	if len(req.Args) == 0 || req.Args[0] != "run" {
 		req.Args = []string{"run"}

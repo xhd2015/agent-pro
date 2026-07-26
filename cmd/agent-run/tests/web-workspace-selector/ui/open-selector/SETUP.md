@@ -18,9 +18,13 @@ open / -> tap [data-testid="workspace"] (open selector)
 1. Start web; open `/`; click workspace open control; assert URL + selector root.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 	req.Scenario = "open-selector"
 	req.Port = findFreePort(t)

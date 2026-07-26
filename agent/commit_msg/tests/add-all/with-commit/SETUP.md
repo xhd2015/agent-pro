@@ -23,9 +23,12 @@ repo/ (untracked.go)
 4. Run gen-commit-msg.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	name := InitAddAllRepoWithUntracked(t, req)
 	req.Operation = name
 	req.HEADSubjectBefore = GitHEADSubjectAddAll(t, req.GitDir)

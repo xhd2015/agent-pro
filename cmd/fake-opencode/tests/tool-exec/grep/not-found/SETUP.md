@@ -7,9 +7,12 @@
 2. Run fake-opencode and verify empty/missing output.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     content := "some random content\nnothing to match here"
     filePath := createTestFile(t, req, "grep-no-match/test.txt", content)
     _ = filePath

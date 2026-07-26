@@ -57,7 +57,7 @@ pkgs/agentstorage/tests/
 ├── config/
 │   ├── load-missing-returns-empty-defaults/
 │   └── save-and-reload-roundtrip/
-├── session/
+├── session-ops/
 │   ├── create-get-update-status/   flat path + CRUD + status
 │   ├── create-duplicate-id-error/  second CreateSession same id fails
 │   ├── create-empty-runner-error/  empty meta.Runner rejected
@@ -95,12 +95,12 @@ Pure relative formatting for human session UPDATED lives in nested tree
 | 2 | `home/creates-session-dirs-on-first-write` | First `AppendEvent` creates `sessions/<id>/` (no runner dir) |
 | 3 | `config/load-missing-returns-empty-defaults` | Missing `config.json` yields empty `Config` defaults |
 | 4 | `config/save-and-reload-roundtrip` | `SaveConfig` then `Config` returns identical values |
-| 5 | `session/create-get-update-status` | Create, get, update status; path is `sessions/<id>/meta.json` |
-| 6 | `session/create-duplicate-id-error` | Duplicate `CreateSession` same id errors without overwrite |
-| 7 | `session/create-empty-runner-error` | Empty `meta.Runner` rejected |
-| 8 | `session/list-all-sessions` | `ListSessions()` returns sessions for all runners |
-| 9 | `session/get-missing-error` | `GetSession` on unknown id returns error |
-| 10 | `session/workspace-roundtrip` | `CreateSession` with `workspace` → `GetSession` preserves path |
+| 5 | `session-ops/create-get-update-status` | Create, get, update status; path is `sessions/<id>/meta.json` |
+| 6 | `session-ops/create-duplicate-id-error` | Duplicate `CreateSession` same id errors without overwrite |
+| 7 | `session-ops/create-empty-runner-error` | Empty `meta.Runner` rejected |
+| 8 | `session-ops/list-all-sessions` | `ListSessions()` returns sessions for all runners |
+| 9 | `session-ops/get-missing-error` | `GetSession` on unknown id returns error |
+| 10 | `session-ops/workspace-roundtrip` | `CreateSession` with `workspace` → `GetSession` preserves path |
 | 11 | `events/append-and-read-from-start` | Appended events readable from offset 0 under flat path |
 | 12 | `events/read-after-offset-skips-prior` | `ReadEvents(afterOffset)` skips earlier lines |
 | 13 | `events/read-empty-session` | New session returns zero events and offset 0 |
@@ -115,13 +115,14 @@ Pure relative formatting for human session UPDATED lives in nested tree
 ```sh
 doctest vet ./pkgs/agentstorage/tests
 doctest test -v ./pkgs/agentstorage/tests
-doctest test -v ./pkgs/agentstorage/tests/session/create-get-update-status
+doctest test -v ./pkgs/agentstorage/tests/session-ops/create-get-update-status
 doctest vet ./pkgs/agentstorage/tests/reltime
 doctest test -v ./pkgs/agentstorage/tests/reltime
 ```
 
 ```go
 import (
+
 	"fmt"
 	"os"
 	"path/filepath"
@@ -130,6 +131,7 @@ import (
 
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request struct {
@@ -165,9 +167,12 @@ type Response struct {
 	ResolvedHome string
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
-	applyEnv(req.Env)
-	defer restoreEnv(req.Env)
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
+	// Only env_override needs process AGENT_RUN_HOME; other leaves use explicit Home.
+	if req.Action == "env_override" {
+		applyEnv(req.Env)
+		defer restoreEnv(req.Env)
+	}
 
 	store, home, err := openStore(t, req)
 	if err != nil {

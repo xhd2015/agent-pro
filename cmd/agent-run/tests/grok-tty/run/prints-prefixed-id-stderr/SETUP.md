@@ -11,9 +11,13 @@ agent-run run --agent-runner grok-tty "hi" → stderr grok-tty: session-N; stdou
 1. Run with fake TUI respond script and prompt `hi`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.GrokTTYCommand = fakeTUIRespondHi()
 	req.Args = append(req.Args, "hi")
 	return nil

@@ -33,9 +33,12 @@ fake/real grok -> curl mock -> log AgentEvent (think/message/tool_call) -> sessi
 - `installFakeGrokEchoArgv` — fake `grok` on PATH for argv passthrough leaves (hook ignores argv).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// --log-events is only on llm-mock run subcommand, not the shortcut binary.
 	req.UseShortcut = false
 	return nil

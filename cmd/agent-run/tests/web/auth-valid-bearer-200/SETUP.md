@@ -17,9 +17,13 @@ agent-run web --token test → GET health Bearer test → 200
 2. `GET /api/agent-run/health` with `Authorization: Bearer test`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "web"
 	req.WebTokenMode = "explicit"
 	req.WebToken = "test"

@@ -12,7 +12,10 @@ agent-run tty attach bogus-id -> registry file not found -> error
 2. Exit code 1, stderr mentions session not found.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"tty", "attach", "session-nonexistent"}
 	return nil
 }

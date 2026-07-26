@@ -13,7 +13,7 @@
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.GrokLines = []string{
 		`{"type":"thought","data":"I'll read the requirement and search the tree."}`,
 		`{"type":"tool_started","tool_name":"Read"}`,

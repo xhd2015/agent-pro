@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected Output
 
 Stderr ends with a single prefixed registry session id (no pre-attach chatter).
@@ -29,9 +33,10 @@ if extra blank noise appears — prefer single id line.)
 import (
 	"strings"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatalf("run failed: %v\nstdout:\n%s\nstderr:\n%s", err, resp.Stdout, resp.Stderr)
 	}

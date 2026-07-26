@@ -34,9 +34,13 @@ seed meta session_id == terminal_session_id
 4. Assert: no "already in use"; path proceeds (prefer exit 0).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Grouping: zombie registry reclaim path for resume.
 	// Leaves finalize SessionID, args, and runner stubs.
 	req.Mode = "read-meta"

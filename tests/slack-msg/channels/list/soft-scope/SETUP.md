@@ -22,9 +22,12 @@ public_channel ok -> private_channel missing_scope needed groups:read
 2. Leaf sets `channels list` args (human or `--json`).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClearSlackEnv = true
 	req.ChannelsPrivateMissingScope = true
 	return nil

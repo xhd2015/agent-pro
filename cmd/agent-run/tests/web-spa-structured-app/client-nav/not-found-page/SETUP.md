@@ -18,9 +18,13 @@ open /this-route-does-not-exist -> [data-testid="not-found"]
 2. Playwright: goto unknown path; assert not-found; click home; assert `/`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 	req.Scenario = "not-found-page"
 	req.Port = findFreePort(t)

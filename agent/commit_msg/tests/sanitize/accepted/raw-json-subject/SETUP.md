@@ -18,9 +18,11 @@ fake-opencode -> parse/sanitize -> formatted message (never print raw JSON as su
 ```go
 import (
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	StageRepoWithChange(t, req)
 	WriteMockAgentText(t, req, "sess_raw_json", ReadAntiPatternIn(t, "json_raw_subject"))
 	req.Commit = false

@@ -155,6 +155,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
 // Request drives one leaf via Mode.
@@ -182,12 +184,12 @@ type Response struct {
 	HasDriverBinary      bool
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	t.Helper()
 	resp := &Response{}
 
-	// DOCTEST_ROOT = tests/slack-msg-agent-wire → ../../cmd/slack-msg/agent.go
-	path := filepath.Join(DOCTEST_ROOT, "..", "..", "cmd", "slack-msg", "agent.go")
+	// d.DOCTEST_ROOT = tests/slack-msg-agent-wire → ../../cmd/slack-msg/agent.go
+	path := filepath.Join(d.DOCTEST_ROOT, "..", "..", "cmd", "slack-msg", "agent.go")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read agent.go: %w", err)

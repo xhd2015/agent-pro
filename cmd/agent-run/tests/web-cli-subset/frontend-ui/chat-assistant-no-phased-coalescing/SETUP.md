@@ -15,9 +15,10 @@ POST grok-tty -> open chat page -> one assistant bubble for stored message
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	prompt := "ui assistant parity"
 	marker := "WEB_CLI_ASSISTANT_MARKER"
 	startGrokTTYWebMockEnv(t, req, prompt, marker, 2)

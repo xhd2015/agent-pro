@@ -18,7 +18,7 @@ N/A
 ```go
 import "testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	// Missing pkgs/agentruncli is the Classic RED state until implementer creates it.
 	if err != nil {
 		t.Fatalf("pkgs/agentruncli must exist as a library package: %v", err)

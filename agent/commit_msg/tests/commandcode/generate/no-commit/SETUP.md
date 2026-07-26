@@ -20,9 +20,12 @@ repo/ (1 staged) -> gen-commit-msg --agent-runner commandcode --agent-runner-bin
 3. Run without `--commit`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	StageCommandCodeRepo(t, req)
 	req.HEADSubjectBefore = GitHEADSubjectCmd(t, req.GitDir)
 	req.Commit = false

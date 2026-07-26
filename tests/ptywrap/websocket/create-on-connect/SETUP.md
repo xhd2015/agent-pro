@@ -10,7 +10,7 @@ WS ?name=&cwd= -> create shell -> session_id JSON message
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Phase = "ws-create-on-connect"
 	req.Name = "compat-shell"
 	req.Cwd = absTempDir(t)

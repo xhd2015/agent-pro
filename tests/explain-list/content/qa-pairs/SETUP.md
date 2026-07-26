@@ -22,9 +22,12 @@ explain list -> header (time, runner/model, 2 turns) + Q/A/Q/A lines
 - Locks the pretty format from the requirement example (single card).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"list"}
 	req.Sessions = []SessionSeed{
 		{

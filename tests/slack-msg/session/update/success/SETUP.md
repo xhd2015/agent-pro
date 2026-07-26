@@ -23,6 +23,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
 func sessionUpdateFixtureEntry() sessionMapEntry {
@@ -40,7 +42,7 @@ func sessionUpdateFixtureEntry() sessionMapEntry {
 	}
 }
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClearSlackEnv = true
 	if err := isolateHome(t, req); err != nil {
 		return err

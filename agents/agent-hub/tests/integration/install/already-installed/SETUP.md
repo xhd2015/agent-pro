@@ -11,9 +11,10 @@ import (
     "os"
     "path/filepath"
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     pluginsDir := filepath.Join(req.TempDir, ".opencode", "plugins")
     if err := os.MkdirAll(pluginsDir, 0755); err != nil {
         return err

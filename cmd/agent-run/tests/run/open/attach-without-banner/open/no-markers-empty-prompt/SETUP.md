@@ -23,9 +23,13 @@ agent-run run --agent-runner grok-tty --open
 2. Assert success without banner error.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	clearOpenInstantAttach(req)
 	req.Prompt = ""
 	// Explicit empty open args (no trailing prompt).

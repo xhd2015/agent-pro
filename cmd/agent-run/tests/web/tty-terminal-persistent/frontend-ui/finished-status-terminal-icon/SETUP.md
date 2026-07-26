@@ -19,9 +19,13 @@ chat page -> visible enabled Terminal button
 4. Open the chat page and wait for the terminal button.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.RegistryTranscript = "ui-finished-terminal-ready\n"
 	listenAddr := startMappedPtywrap(t, req)
 	writeMappedSessionFixture(t, req)

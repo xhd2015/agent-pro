@@ -14,9 +14,12 @@ integration <- events.jsonl turn_started model_id mock-model
 2. Run headless grok: `-p "What is the capital of France?" --always-approve -m mock-model`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ConfigJSON = `{
   "port": 8080,
   "exchanges": [

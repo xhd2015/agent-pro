@@ -16,9 +16,12 @@ slack-msg channels search no-such-channel -> empty / {"channels":[]} -> exit 0
 2. Leaf supplies non-matching QUERY (and optional `--json`).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClearSlackEnv = true
 	apiURL, err := ensureSlackTestServer(t)
 	if err != nil {

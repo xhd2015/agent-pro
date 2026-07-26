@@ -3,9 +3,12 @@
 - The marshaled `StreamEvent` JSON carries `"type":"assistant"`, `"session_id":"sess_claude"`, and a `message.content` array with a `text` block whose text is `pong`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertContains(t, resp.Output, "EventSystem=system")
 	assertContains(t, resp.Output, "EventAssistant=assistant")
 	assertContains(t, resp.Output, "EventUser=user")

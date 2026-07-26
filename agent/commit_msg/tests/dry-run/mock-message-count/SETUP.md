@@ -18,9 +18,12 @@
 3. Run gen-commit-msg without `--commit`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	StageDryRunRepo(t, req, 2)
 	req.DryRun = true
 	req.Commit = false

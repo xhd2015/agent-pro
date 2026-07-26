@@ -40,12 +40,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
 // AddAllUntrackedName is the default untracked file used by add-all leaves.
 const AddAllUntrackedName = "untracked.go"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	_ = AddAllUntrackedName
 	_ = InitAddAllRepoWithUntracked
 	_ = GitHEADSubjectAddAll

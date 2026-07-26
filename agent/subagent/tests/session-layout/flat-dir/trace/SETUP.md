@@ -20,9 +20,12 @@ subagent.Run -> traceSession -> formatted Events: N lines output
 - Uses `runTrace` helper from root `DOCTEST.md`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.AgentRunner == "" {
 		req.AgentRunner = "fake-codex"
 	}

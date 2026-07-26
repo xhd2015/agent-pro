@@ -19,9 +19,13 @@ agent-run run --session-id-from-prompt "prompt"
 2. Child dirs split non-TTY vs TTY runners and slug edges.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = append(req.Args, "--session-id-from-prompt")
 	return nil
 }

@@ -19,9 +19,13 @@ open /workspace -> tap recent item for other
 1. Seed config with two recents; start web; tap recent; assert no commit.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 	req.Scenario = "recent-row-no-commit"
 	// Parent already set SelectPath as selected; add a second recent target.

@@ -14,9 +14,13 @@ agent-run run --agent-runner grok-tty --open --json "x"
 2. Fake TUI is optional — validation should fail before long PTY work.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "grok-tty"
 	req.Prompt = "x"
 	// Install fake TUI in case validation order starts the runner first.

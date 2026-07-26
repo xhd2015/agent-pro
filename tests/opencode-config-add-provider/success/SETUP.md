@@ -30,9 +30,11 @@ doctest <- config file: provider[id] = { npm, name, options.baseURL, models }
 import (
 	"strings"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Leaves under success/ set req.Args in their own Setup. Verify the shared
 	// harness is ready for this subtree: the binary must have been built by
 	// the root Setup.

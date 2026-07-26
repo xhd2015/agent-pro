@@ -18,9 +18,10 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "auto-live-open-c3"
 	req.RunnerSessionID = "550e8400-e29b-41d4-a716-446655440c33"
 	req.TerminalSessionID = "term-auto-live-c3"

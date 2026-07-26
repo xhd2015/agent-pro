@@ -32,7 +32,7 @@ import "testing"
 
 const thinkingBlocksSessionID = "019f283b-dddd-7ddd-dddd-dddddddddddd"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = thinkingBlocksSessionID
 	summaryPath := writeGrokSessionOpts(t, req.GrokHome, thinkingBlocksSessionID,
 		"2026-07-03T14:20:00.000Z",

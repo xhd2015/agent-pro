@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Exit code 1.
@@ -12,9 +16,10 @@
 import (
 	"strings"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertNoError(t, err)
 	assertExitCode(t, resp, 1)
 	if strings.TrimSpace(resp.Stdout) != "" {

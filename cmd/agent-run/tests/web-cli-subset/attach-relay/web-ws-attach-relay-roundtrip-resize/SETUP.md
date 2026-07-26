@@ -12,9 +12,13 @@ fake ptywrap (attach only) -> web terminal/ws -> transcript + resize JSON
 2. Seed tty session + registry; attach websocket with resize + input.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	startAgentRunWeb(t, req)
 	req.Runner = "codex-tty"
 	req.SessionID = "web-tty-1"

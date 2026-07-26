@@ -16,9 +16,13 @@ seed 15 -> sessions --limit 0 -> 15 rows, newest first
 2. Run `agent-run sessions --limit 0`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	seedNSessions(t, req.Home, 15)
 	req.Args = append(req.Args, "--limit", "0")
 	return nil

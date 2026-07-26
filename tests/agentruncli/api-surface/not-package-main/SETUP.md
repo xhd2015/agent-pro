@@ -10,7 +10,7 @@ pkgs/agentruncli/*.go
 
 ## Preconditions
 
-- Module layout: DOCTEST_ROOT = tests/agentruncli → `../../pkgs/agentruncli`.
+- Module layout: d.DOCTEST_ROOT = tests/agentruncli → `../../pkgs/agentruncli`.
 - Production `.go` only (skip `_test.go`).
 
 ## Steps
@@ -21,7 +21,7 @@ pkgs/agentruncli/*.go
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	t.Helper()
 	req.Mode = "not_package_main"
 	return nil

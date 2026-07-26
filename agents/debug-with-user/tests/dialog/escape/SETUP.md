@@ -18,7 +18,7 @@ raw title/message with metacharacters -> Escape -> doubled quotes/backslashes, e
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Operation = "escape"
 	return nil
 }

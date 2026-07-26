@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Both HTTP responses return 200.
@@ -13,11 +17,13 @@
 import (
 	"regexp"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
 var evtIDPattern = regexp.MustCompile(`^evt_\d+$`)
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertSuccess(t, resp)
 
 	if len(resp.Responses) != 2 {

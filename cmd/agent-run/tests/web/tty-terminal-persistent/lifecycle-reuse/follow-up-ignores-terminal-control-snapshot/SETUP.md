@@ -36,9 +36,10 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "followup"
 	req.Runner = "codex-tty"
 	req.ChatSessionID = "web_control_snapshot_followup"

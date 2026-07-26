@@ -15,11 +15,17 @@ temp config home + updates.jsonl
 2. Run with `--agent-runner-config-home` and hold fake runner binary.
 
 ```go
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/xhd2015/doctest/session"
+)
 
 const configHomeUUID = "b2222222-2222-4222-8222-222222222222"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.AgentRunnerConfigHome = filepath.Join(req.TempDir, "shared-grok-home")
 	req.Prompt = "config home discovery"
 	req.GrokSessionUUID = configHomeUUID

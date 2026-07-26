@@ -17,9 +17,10 @@ import (
 	"testing"
 
 	types "github.com/xhd2015/agent-pro/agent/event/types"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	var sb strings.Builder
 	startEvt := types.AgentEvent{
 		ID:        "evt_ss",

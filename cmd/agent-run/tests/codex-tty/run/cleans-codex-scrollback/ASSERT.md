@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected Output
 
 ```text
@@ -27,6 +31,7 @@ import (
 	"github.com/xhd2015/doctest/session"
 
 	"github.com/xhd2015/doctest/assert"
+	"github.com/xhd2015/doctest/session"
 )
 
 func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {

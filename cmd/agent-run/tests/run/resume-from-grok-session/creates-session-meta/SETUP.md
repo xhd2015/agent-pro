@@ -19,9 +19,13 @@ argv-recorder binary (so launch can complete)
 3. Run with fixed `--session-id` so meta path is known.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "import-meta-s1"
 	req.FollowupPrompt = "create meta followup"
 	setupValidImport(t, req, true)

@@ -20,9 +20,12 @@ subagent.Run -> events.jsonl without questions/ or progress/
 - Inner session id: `inner_flags_off_sess`
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.SessionDir == "" {
 		configureFlatDirFlagsOff(t, req)
 	}

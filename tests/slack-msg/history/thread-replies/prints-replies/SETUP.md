@@ -11,9 +11,12 @@ slack-msg history --thread 1710001000.000100 --channel C0... -> parent then repl
 1. Flags for token, channel, and `--thread`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{
 		"history",
 		"--token", slackTestToken,

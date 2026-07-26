@@ -1,5 +1,5 @@
 ---
-label: ui-automation, slow
+label: e2e, ui-automation, slow
 explanation: multi-step home scroll settle (~3.5s) must not snap back
 ---
 
@@ -9,9 +9,13 @@ explanation: multi-step home scroll settle (~3.5s) must not snap back
 - After A→B→C settle, `session-list.scrollTop` stays near C (±80px), not snapped to B.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - HTTP **400**.
@@ -8,9 +12,13 @@
 - Pre-impl: route missing may yield 404 (still RED vs 400 contract).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatalf("Run error: %v", err)
 	}

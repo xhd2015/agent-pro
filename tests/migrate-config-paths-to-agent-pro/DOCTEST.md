@@ -31,6 +31,7 @@ doctest test ./tests/migrate-config-paths-to-agent-pro/...
 
 ```go
 import (
+
 	"fmt"
 	"os"
 	"testing"
@@ -40,6 +41,7 @@ import (
 	opencodeconfig "github.com/xhd2015/agent-pro/agent/opencode/config"
 	opencodeSkills "github.com/xhd2015/agent-pro/agent/opencode/skills"
 	codexSkills "github.com/xhd2015/agent-pro/agent/codex/skills"
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request struct {
@@ -53,21 +55,25 @@ type Response struct {
 	Error string
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
-	origHome := os.Getenv("HOME")
-	defer func() {
-		if origHome == "" {
-			os.Unsetenv("HOME")
-		} else {
-			os.Setenv("HOME", origHome)
-		}
-	}()
-
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
+	// Residual process Setenv(HOME): product path helpers (SettingsPath,
+	// DefaultConfigPath, GlobalSkillDirs, …) call os.UserHomeDir() with no
+	// home-parameter option. No small product API path yet across packages.
+	// Restore after Run so other parallel leaves are less likely to observe
+	// a leaked HOME (still a race under t.Parallel — product fix preferred).
+	origHome, hadHome := os.LookupEnv("HOME")
 	if req.Home != "" {
 		if err := os.Setenv("HOME", req.Home); err != nil {
 			return nil, err
 		}
 	}
+	defer func() {
+		if !hadHome {
+			_ = os.Unsetenv("HOME")
+		} else {
+			_ = os.Setenv("HOME", origHome)
+		}
+	}()
 
 	switch req.TestCase {
 	case "claude-all":

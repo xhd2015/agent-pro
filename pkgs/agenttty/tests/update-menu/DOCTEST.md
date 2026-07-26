@@ -77,6 +77,7 @@ doctest test -v ./pkgs/agenttty/tests/update-menu/classify/blocking-menu/default
 
 ```go
 import (
+
 	"fmt"
 	"os"
 	"path/filepath"
@@ -109,7 +110,7 @@ func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	if strings.TrimSpace(req.FixtureFile) == "" {
 		return nil, fmt.Errorf("FixtureFile required")
 	}
-	dir := fixturesDir(req)
+	dir := fixturesDir(d, req)
 	path := filepath.Join(dir, req.FixtureFile)
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -147,11 +148,19 @@ func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	return resp, nil
 }
 
-func fixturesDir(req *Request) string {
+func fixturesDir(d *session.Doctest, req *Request) string {
 	if req != nil && strings.TrimSpace(req.FixturesDir) != "" {
 		return req.FixturesDir
 	}
-	// Root Setup always sets FixturesDir from d.DOCTEST_ROOT; fallback is empty.
-	return ""
+	candidates := []string{
+		filepath.Join(d.DOCTEST_ROOT, "testdata", "update-modal-skip"),
+		filepath.Join(d.DOCTEST_ROOT, "..", "testdata", "update-modal-skip"),
+	}
+	for _, c := range candidates {
+		if st, err := os.Stat(c); err == nil && st.IsDir() {
+			return c
+		}
+	}
+	return filepath.Join(d.DOCTEST_ROOT, "testdata", "update-modal-skip")
 }
 ```

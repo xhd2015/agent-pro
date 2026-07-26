@@ -1,5 +1,5 @@
 ---
-label: ui-automation
+label: e2e, ui-automation
 explanation: Playwright home opens /workspace selector page
 ---
 
@@ -14,9 +14,13 @@ explanation: Playwright home opens /workspace selector page
 - Pre-impl: workspace control does not navigate / selector missing (RED).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertPlaywrightOK(t, resp, err)
 	if req.Scenario != "open-selector" {
 		t.Fatalf("expected scenario open-selector, got %q", req.Scenario)

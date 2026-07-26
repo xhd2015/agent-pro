@@ -6,9 +6,12 @@
 2. Pop and verify the exact message content.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     req.Env = append(req.Env, "AGENT_HUB_OPENCODE_RUNNER=fake-opencode")
     notifyEvent(t, req, "agent.session.started", "fake-opencode", "srt1")
     runAgentHub(t, req, "session", "message", "send", "--runner", "fake-opencode", "--session-id", "srt1", "--text", "exact message")

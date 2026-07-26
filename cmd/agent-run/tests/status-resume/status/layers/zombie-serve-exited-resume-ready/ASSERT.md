@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected Output
 
 Human multi-layer layout after `/exit` with zombie keep-alive serve:
@@ -43,9 +47,10 @@ resume:
 import (
 	"strings"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

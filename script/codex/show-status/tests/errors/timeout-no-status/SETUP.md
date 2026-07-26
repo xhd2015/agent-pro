@@ -23,9 +23,12 @@ codex-show-status -> fake codex (no status fields) -> timeout
 - Default CLI timeout is 60s; this leaf overrides to keep CI fast.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ShowStatusCommand = fakeTUINoStatus()
 	req.TimeoutSeconds = "3"
 	return nil

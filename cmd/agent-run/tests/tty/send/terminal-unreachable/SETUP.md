@@ -14,7 +14,11 @@ agent-run tty send session-1 "hello" -> registry with dead port -> error
 4. Expect exit code 1 or error output.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+	"time"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"tty", "send", req.RegistrySessionID, "hello"}
 	req.Mode = "send-probe"
 	req.ExecTimeout = 15 * time.Second

@@ -27,7 +27,7 @@ import "testing"
 
 const backgroundTaskSessionID = "019f283b-1111-7111-1111-111111111111"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = backgroundTaskSessionID
 	summaryPath := writeGrokSessionOpts(t, req.GrokHome, backgroundTaskSessionID,
 		"2026-07-03T14:30:00.000Z",

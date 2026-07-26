@@ -24,11 +24,12 @@ test -> subagent.Run(SessionLayout{}) -> ~/.agent-pro/subagent/<role>/sessions/<
 
 ```go
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/xhd2015/agent-pro/agent/subagent"
+
+	"github.com/xhd2015/doctest/session"
 )
 
 const legacySessionID = "gen_layout_legacy_test"
@@ -44,10 +45,9 @@ func configureLegacyBase(t *testing.T, req *Request) {
 	req.MockConfigPath = mockPath
 }
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	// HomeDir is applied via Config.HomeDir in invokeRun (no process HOME Setenv).
 	configureLegacyBase(t, req)
-	if req.HomeDir != "" {
-		os.Setenv("HOME", req.HomeDir)
-	}
 	return nil
-}```
+}
+```

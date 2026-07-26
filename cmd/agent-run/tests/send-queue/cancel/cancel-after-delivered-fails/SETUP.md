@@ -12,7 +12,10 @@ default send (delivered) -> send cancel same id -> exit 1
 2. Set `req.SendMessage = "delivered-probe"`.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Action = "cancel-after-delivered-fails"
 	req.SendMessage = "delivered-probe"
 	return nil

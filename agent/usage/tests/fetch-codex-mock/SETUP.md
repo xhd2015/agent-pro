@@ -19,7 +19,7 @@ import (
 	"github.com/xhd2015/agent-pro/agent/usage"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Provider = usage.Codex
 	req.ShowStatusCommand = fakeCodexTUIDefault()
 	return nil

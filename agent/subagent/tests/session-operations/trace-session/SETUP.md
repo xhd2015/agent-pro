@@ -6,7 +6,7 @@
 2. Each leaf pre-creates a session directory with optional events.jsonl.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     req.CatchUp = true
     req.Operation = "trace_session"
     return nil

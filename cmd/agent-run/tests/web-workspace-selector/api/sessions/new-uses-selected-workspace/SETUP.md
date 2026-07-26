@@ -21,9 +21,10 @@ POST /sessions {runner: fake-codex, prompt: "…"}
 import (
 	"encoding/json"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "new-uses-selected-workspace"
 	req.SelectPath = makeSelectDir(t, req, "session-ws")
 	req.Port = findFreePort(t)

@@ -15,7 +15,7 @@ agent.go interactive path
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Leaf overrides Mode to a specific interactive sub-mode.
 	if req.Mode == "" {
 		req.Mode = "interactive_api"

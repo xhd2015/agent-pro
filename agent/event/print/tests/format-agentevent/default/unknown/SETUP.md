@@ -12,7 +12,7 @@ import (
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Type = types.ActionType("custom_event")
 	req.Text = "some arbitrary event"
 	return nil

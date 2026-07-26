@@ -11,9 +11,12 @@ Caller -> slack-msg send --token --channel MESSAGE -> (none) line on stdout
 1. Inherit config-none setup.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"send", "--token", slackTestToken, "--channel", "C0ALE44K5J6", "Hello"}
 	return nil
 }

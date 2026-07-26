@@ -21,9 +21,13 @@ open / (deep cwd) -> tap [data-testid="workspace-toggle"]
 3. Assert label text equals full path, `aria-expanded=true`, no h-scroll (script end).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 	req.Scenario = "home-long-tap-expand"
 

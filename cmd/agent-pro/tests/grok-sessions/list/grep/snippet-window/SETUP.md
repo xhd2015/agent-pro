@@ -32,7 +32,7 @@ import (
 	"testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Grep = "SNIP_WIN_NEEDLE"
 	req.Limit = 10
 	req.Color = "never"

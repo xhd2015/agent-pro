@@ -12,9 +12,12 @@ slack-msg send --config repo/slack-config.json "Hello from doctest" -> real API 
 2. Explicit message positional; no auto-discovery.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"send", "--config", req.ConfigPath, "Hello from doctest"}
 	return nil
 }

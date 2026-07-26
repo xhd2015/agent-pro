@@ -10,7 +10,7 @@ create -> PATCH name -> WS probe by name succeeds
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Phase = "attach-by-name"
 	req.RenameBeforeAttach = "attach-target"
 	req.StartDaemon = true

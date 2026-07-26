@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - First stdout line is `msg_<n>` received within 1 second of start.
@@ -11,9 +15,10 @@ non-zero (busy session times out) or 0 if delivery completes — id timing is th
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertNoError(t, err)
 	assertMsgIDLine(t, resp.MsgID)
 	if resp.IdLineLatency >= time.Second {

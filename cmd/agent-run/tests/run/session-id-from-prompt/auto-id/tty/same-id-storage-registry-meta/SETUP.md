@@ -15,9 +15,13 @@ agent-run run --agent-runner grok-tty --keep-tty --session-id-from-prompt "hello
 1. Run with prompt `hello world` (slug base `hello-world`).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Prompt = "hello world"
 	req.Args = append(req.Args, req.Prompt)
 	return nil

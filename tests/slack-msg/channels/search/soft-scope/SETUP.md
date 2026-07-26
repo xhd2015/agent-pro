@@ -20,9 +20,12 @@ public ok + private missing_scope -> filter QUERY on merged public rows
 2. Leaf sets `channels search` QUERY (and optional `--json`).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClearSlackEnv = true
 	req.ChannelsPrivateMissingScope = true
 	return nil

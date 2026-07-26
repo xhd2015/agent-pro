@@ -7,9 +7,12 @@
 2. Run fake-opencode and verify real grep output appears in the event.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     content := "line 1: no match\nline 2: UNIQUE_MARKER_FOR_GREP is here\nline 3: no match either"
     filePath := createTestFile(t, req, "grep-test/file.txt", content)
     searchDir := req.TempDir + "/grep-test"

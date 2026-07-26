@@ -33,8 +33,9 @@ remain GREEN** while these APIs are missing (compile isolation).
 - **`OpenInNewTerminal`** — resolves workspace dir + follow-up string, then
   calls injectable `OpenTerminal(dir, followUp)` (tests) or production iTerm
   ForceNew (implementer). Unit leaves never open real iTerm.
-- **`cmd/agent-run` (source-wire)** — new-terminal path should call
-  `BuildFollowUpCommand` (Driver = `os.Executable()` when self re-exec).
+- **`pkgs/agentruncli` (source-wire)** — new-terminal path should call
+  `BuildFollowUpCommand` (Driver = process executable when self re-exec).
+  Thin `cmd/agent-run` only blank-imports the package.
 
 **Behaviors**
 
@@ -90,7 +91,7 @@ tests/agentrunapi/wait-driver/
 │   └── injectable-open/                 # records dir + followUp; no real iTerm
 └── source-wire/                         # CLI cutover for FollowUp
     ├── SETUP.md
-    └── uses-build-follow-up/            # cmd/agent-run references BuildFollowUpCommand
+    └── uses-build-follow-up/            # pkgs/agentruncli references BuildFollowUpCommand
 ```
 
 Parameter ranking (most → least significant):
@@ -114,7 +115,7 @@ Parameter ranking (most → least significant):
 | 8 | `follow-up/open-child-shape` | Session, auto-send, open, `--`, prompt; no `--new-terminal` |
 | 9 | `follow-up/detach-child-shape` | Detach profile; no open/new-terminal |
 | 10 | `open-new-terminal/injectable-open` | OpenTerminal hook called with dir + follow-up |
-| 11 | `source-wire/uses-build-follow-up` | `cmd/agent-run` sources reference `BuildFollowUpCommand` |
+| 11 | `source-wire/uses-build-follow-up` | `pkgs/agentruncli` sources reference `BuildFollowUpCommand` |
 
 ## How to Run
 
@@ -225,6 +226,7 @@ import (
 	"time"
 
 	"github.com/xhd2015/agent-pro/pkgs/agentrunapi"
+	"github.com/xhd2015/doctest/session"
 )
 
 // Request drives one leaf via Mode.
@@ -282,28 +284,29 @@ type Response struct {
 	ScannedFiles int
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	t.Helper()
 	resp := &Response{}
 
 	switch req.Mode {
 	case "status":
-		return runStatus(t, req, resp)
+		return runStatus(t, d, req, resp)
 	case "wait_ready":
-		return runWaitReady(t, req, resp)
+		return runWaitReady(t, d, req, resp)
 	case "follow_up":
-		return runFollowUp(t, req, resp)
+		return runFollowUp(t, d, req, resp)
 	case "open_new_terminal":
-		return runOpenNewTerminal(t, req, resp)
+		return runOpenNewTerminal(t, d, req, resp)
 	case "source_wire":
-		return runSourceWire(t, req, resp)
+		return runSourceWire(t, d, req, resp)
 	default:
 		return nil, fmt.Errorf("unknown mode %q", req.Mode)
 	}
 }
 
-func runStatus(t *testing.T, req *Request, resp *Response) (*Response, error) {
+func runStatus(t *testing.T, d *session.Doctest, req *Request, resp *Response) (*Response, error) {
 	t.Helper()
+	_ = d
 	screen, sendable := agentrunapi.ParseTTYStatus(req.StatusStdout)
 	resp.Screen = screen
 	resp.Sendable = sendable
@@ -311,8 +314,9 @@ func runStatus(t *testing.T, req *Request, resp *Response) (*Response, error) {
 	return resp, nil
 }
 
-func runWaitReady(t *testing.T, req *Request, resp *Response) (*Response, error) {
+func runWaitReady(t *testing.T, d *session.Doctest, req *Request, resp *Response) (*Response, error) {
 	t.Helper()
+	_ = d
 	opts := agentrunapi.WaitReadyOpts{
 		SessionID:    req.SessionID,
 		Timeout:      req.ReadyTimeout,
@@ -340,8 +344,9 @@ func runWaitReady(t *testing.T, req *Request, resp *Response) (*Response, error)
 	return resp, nil
 }
 
-func runFollowUp(t *testing.T, req *Request, resp *Response) (*Response, error) {
+func runFollowUp(t *testing.T, d *session.Doctest, req *Request, resp *Response) (*Response, error) {
 	t.Helper()
+	_ = d
 	line, err := agentrunapi.BuildFollowUpCommand(toFollowUpOpts(req))
 	resp.FollowUp = line
 	if err != nil {
@@ -350,8 +355,9 @@ func runFollowUp(t *testing.T, req *Request, resp *Response) (*Response, error) 
 	return resp, nil
 }
 
-func runOpenNewTerminal(t *testing.T, req *Request, resp *Response) (*Response, error) {
+func runOpenNewTerminal(t *testing.T, d *session.Doctest, req *Request, resp *Response) (*Response, error) {
 	t.Helper()
+	_ = d
 	opts := agentrunapi.OpenInNewTerminalOpts{
 		WorkspaceDir: req.WorkspaceDir,
 		FollowUp:     req.FollowUpLine,
@@ -370,13 +376,14 @@ func runOpenNewTerminal(t *testing.T, req *Request, resp *Response) (*Response, 
 	return resp, nil
 }
 
-func runSourceWire(t *testing.T, req *Request, resp *Response) (*Response, error) {
+func runSourceWire(t *testing.T, d *session.Doctest, req *Request, resp *Response) (*Response, error) {
 	t.Helper()
-	// Nested root: DOCTEST_ROOT = tests/agentrunapi/wait-driver → ../../../cmd/agent-run
-	cmdDir := filepath.Join(DOCTEST_ROOT, "..", "..", "..", "cmd", "agent-run")
-	entries, err := os.ReadDir(cmdDir)
+	// Nested root: d.DOCTEST_ROOT = tests/agentrunapi/wait-driver.
+	// Production new-terminal FollowUp lives in pkgs/agentruncli (thin cmd/agent-run).
+	cliDir := filepath.Join(d.DOCTEST_ROOT, "..", "..", "..", "pkgs", "agentruncli")
+	entries, err := os.ReadDir(cliDir)
 	if err != nil {
-		return nil, fmt.Errorf("read cmd/agent-run: %w", err)
+		return nil, fmt.Errorf("read pkgs/agentruncli: %w", err)
 	}
 	fset := token.NewFileSet()
 	importPath := "github.com/xhd2015/agent-pro/pkgs/agentrunapi"
@@ -384,7 +391,7 @@ func runSourceWire(t *testing.T, req *Request, resp *Response) (*Response, error
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
 			continue
 		}
-		path := filepath.Join(cmdDir, e.Name())
+		path := filepath.Join(cliDir, e.Name())
 		resp.ScannedFiles++
 		data, err := os.ReadFile(path)
 		if err != nil {

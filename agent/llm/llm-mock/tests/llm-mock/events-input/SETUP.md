@@ -18,9 +18,12 @@ llm-mock HTTP server <- merged exchanges[]
 2. Leaf `Setup` provides config JSON (optional) + events input JSONL + HTTP requests.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     req.Endpoint = "/v1/chat/completions"
     req.Method = "POST"
     return nil

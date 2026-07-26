@@ -10,7 +10,7 @@ import (
     "testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     req.Operation = "debug_session_env"
     req.ListSessions = true
     req.RoleName = "testrole"

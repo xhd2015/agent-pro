@@ -4,7 +4,7 @@ Builds `agent-run` and `llm-mock-run-commandcode` into temp dir. Sets `AGENT_RUN
 
 ## Steps
 
-1. Resolve repo root from `DOCTEST_ROOT/../../../..`.
+1. Resolve repo root from `d.DOCTEST_ROOT/../../../..`.
 2. Build `agent-run` binary.
 3. Build `llm-mock-run-commandcode` binary (unless `SkipMockBuild`).
 4. Set `AGENT_RUN_HOME` to temp directory.
@@ -16,17 +16,18 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
-	req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../.."))
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../.."))
 	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
 		return fmt.Errorf("repo root not found: %w", err)
 	}
 
 	req.TempDir = t.TempDir()
 	req.Home = filepath.Join(req.TempDir, ".agent-pro")
-	t.Setenv("AGENT_RUN_HOME", req.Home)
+	req.Env = append(req.Env, "AGENT_RUN_HOME="+req.Home)
 
 	req.AgentRun = filepath.Join(req.TempDir, "bin", "agent-run")
 	if err := os.MkdirAll(filepath.Dir(req.AgentRun), 0755); err != nil {

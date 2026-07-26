@@ -17,7 +17,10 @@ agent-run tty status --json -> fetch scrollback -> CheckWritable -> sendable fie
 2. `Run` executes `agent-run tty status <id> --json`.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Operation = "status-sendable"
 	req.StartFakePTYWrap = true
 	req.RegistrySessionID = "session-1"

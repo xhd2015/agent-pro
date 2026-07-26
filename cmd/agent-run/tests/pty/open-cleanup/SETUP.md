@@ -25,9 +25,14 @@ agent-run run --agent-runner grok-tty --open "probe"
 4. Assert open succeeded enough to start a serve, and reclaim cleared it.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"time"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "open-cleanup"
 	req.OpenInstantAttach = true
 	if req.GrokTTYCommand == "" {

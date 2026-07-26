@@ -15,9 +15,12 @@ sessions/.layout v2 + sessions/<id>/ -> migrate-sessions -> exit 0; no destructi
 1. Leaf seeds flat layout and runs migrator.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SeedMode = "already_flat"
 	return nil
 }

@@ -19,7 +19,7 @@ N/A (package call; thin main exit 1 is out of leaf scope)
 ```go
 import "testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertNoError(t, err)
 	if resp == nil {
 		t.Fatal("nil response")

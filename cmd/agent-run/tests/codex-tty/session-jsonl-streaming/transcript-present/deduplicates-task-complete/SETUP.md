@@ -20,6 +20,7 @@ rollout JSONL event_msg.agent_message "final"
 ```go
 import (
 	"testing"
+
 	"github.com/xhd2015/doctest/session"
 )
 

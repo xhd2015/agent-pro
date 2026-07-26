@@ -1,5 +1,5 @@
 ---
-label: ui-automation
+label: e2e, ui-automation
 explanation: Playwright Cancel returns home without PUT
 ---
 
@@ -9,9 +9,13 @@ explanation: Playwright Cancel returns home without PUT
 - After Cancel: home URL; `status.workspace` still original selected path.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertPlaywrightOK(t, resp, err)
 	cfg := readHomeConfigMap(t, req.Home)
 	if cfg != nil {

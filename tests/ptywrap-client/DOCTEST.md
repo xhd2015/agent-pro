@@ -64,15 +64,17 @@ doctest test ./tests/ptywrap-client/...
 
 ```go
 import (
+
 	"testing"
 
 	"github.com/xhd2015/dot-pkgs/go-pkgs/shell/ptywrap/client/clienttest"
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request = clienttest.Request
 type Response = clienttest.Response
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	return clienttest.Run(t, req)
 }
 ```

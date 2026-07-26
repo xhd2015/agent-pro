@@ -20,9 +20,10 @@ import (
     "strings"
     "testing"
     "time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     req.TmpHome = filepath.Join(t.TempDir(), "fake-home")
     if err := os.MkdirAll(req.TmpHome, 0755); err != nil {
         return fmt.Errorf("create fake HOME: %w", err)

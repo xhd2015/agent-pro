@@ -21,9 +21,13 @@ web-created codex-tty running session + live tty registry entry
 3. Probe terminal state through the web chat session id while the turn is still running.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Status = "running"
 	return nil
 }

@@ -40,9 +40,13 @@ agent-run pty kill-orphans --kind=not-a-real-kind -> exit 1
 - Kind markers: `TestGenerated` in path or argv; `/var/folders/` + `/T/` for workdir.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.Mode == "" {
 		req.Mode = "kill-orphans"
 	}

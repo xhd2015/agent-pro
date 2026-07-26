@@ -17,7 +17,7 @@ RunInteractiveOpen(dir, noSubmit=true) -> … --dir=… --no-submit --open -- �
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "interactive_open"
 	req.SessionID = "sess-io-dir"
 	req.Prompt = "dir prompt"

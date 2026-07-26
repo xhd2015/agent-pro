@@ -13,9 +13,11 @@
 ```go
 import (
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Standalone tests: each leaf defines exactly one event.
 	// No shared setup needed beyond root.
 	t.Helper()

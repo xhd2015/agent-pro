@@ -118,6 +118,12 @@ The written provider entry looks like:
 ## How to Run
 
 ```sh
+# Discovery skips labeled e2e/heavy/slow leaves by default.
+# Run e2e / full suite explicitly when needed:
+doctest test ./tests/opencode-config-add-provider/...                    # discovery (skips labeled e2e/heavy/slow)
+doctest test --label e2e ./tests/opencode-config-add-provider/...
+doctest test --label-all ./tests/opencode-config-add-provider/...
+
 doctest vet ./tests/opencode-config-add-provider
 doctest test ./tests/opencode-config-add-provider/...
 ```
@@ -137,6 +143,7 @@ import (
 	"time"
 
 	opencodecfg "github.com/xhd2015/agent-pro/agent/opencode/config"
+	"github.com/xhd2015/doctest/session"
 )
 
 // Request describes one add-provider invocation. Leaves populate Args (the
@@ -176,9 +183,9 @@ var (
 
 // buildAgentPro builds ./cmd/agent-pro from the repo root once per process
 // and caches the resulting binary path. The repo root is located by walking
-// up from DOCTEST_ROOT (falling back to the working directory) for a dir
+// up from d.DOCTEST_ROOT (falling back to the working directory) for a dir
 // containing both go.mod and cmd/agent-pro — robust to doctest's cache-mapped
-// execution where DOCTEST_ROOT points at a per-test directory.
+// execution where d.DOCTEST_ROOT points at a per-test directory.
 //
 // cmd/agent-pro transitively imports the `frontend` package, whose embed.go
 // does `//go:embed dist`. That dist/ is a frontend build artifact that is not
@@ -188,10 +195,10 @@ var (
 // compiler. buildAgentPro creates one if dist/ has no embeddable file. The
 // stub is intentionally left in place (it is gitignored) so that parallel
 // test processes do not race on create/remove during their builds.
-func buildAgentPro(t *testing.T) (string, error) {
+func buildAgentPro(t *testing.T, d *session.Doctest) (string, error) {
 	t.Helper()
 	builtBinOnce.Do(func() {
-		repoRoot, err := findModuleRoot()
+		repoRoot, err := findModuleRoot(d.DOCTEST_ROOT)
 		if err != nil {
 			builtBinErr = err
 			return
@@ -245,11 +252,10 @@ func ensureStubDist(distDir string) error {
 	return os.WriteFile(filepath.Join(distDir, "index.html"), []byte("stub\n"), 0o644)
 }
 
-// findModuleRoot walks up from DOCTEST_ROOT (then the working directory) until
+// findModuleRoot walks up from d.DOCTEST_ROOT (then the working directory) until
 // it finds a directory containing both go.mod and cmd/agent-pro. This works
 // whether doctest runs tests in-place or in a cache-mapped copy of the repo.
-func findModuleRoot() (string, error) {
-	start := os.Getenv("DOCTEST_ROOT")
+func findModuleRoot(start string) (string, error) {
 	if start == "" {
 		wd, err := os.Getwd()
 		if err != nil {
@@ -291,7 +297,7 @@ func resolveConfigPath(home string, args []string) string {
 	return filepath.Join(opencodeDir, "opencode.json")
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	if req.Bin == "" {
 		t.Fatal("req.Bin not set; root Setup must build agent-pro")
 	}

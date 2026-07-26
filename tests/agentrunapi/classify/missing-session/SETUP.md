@@ -20,7 +20,7 @@ Classify(store, "sess-missing", nil)
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "sess-missing-never-created"
 	req.SeedMeta = false
 	req.UseProbe = false

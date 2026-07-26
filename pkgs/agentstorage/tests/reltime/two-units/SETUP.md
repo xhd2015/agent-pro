@@ -24,7 +24,7 @@ import (
 	"time"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	now := req.Now
 	req.Cases = []FormatCase{
 		{Name: "sixty_five_seconds", Target: ageTarget(now, 65*time.Second), Want: "1m5s ago"},

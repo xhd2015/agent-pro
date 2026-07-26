@@ -1,12 +1,20 @@
+---
+label: e2e
+---
+
 ## Expected
 - The command succeeds.
 - stdout contains the text from `llm_events`.
 - stdout does NOT contain the text from `stdout_events`.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"strings"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     assertSuccess(t, resp)
     assertContains(t, resp.Stdout, `"from llm"`)
     if strings.Contains(resp.Stdout, `"from stdout"`) {

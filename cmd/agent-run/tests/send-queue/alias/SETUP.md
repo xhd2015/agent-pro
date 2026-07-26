@@ -17,7 +17,10 @@ agent-run send <id> "msg" -> same agentsend queue as agent-run tty send <id> "ms
 3. `Assert` both print monotonic msg ids (`msg_1`, `msg_2`) with exit 0.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Operation = "alias"
 	req.EnableStubTTY = true
 	return nil

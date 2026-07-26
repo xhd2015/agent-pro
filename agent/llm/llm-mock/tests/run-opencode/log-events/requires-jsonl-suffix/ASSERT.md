@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Non-zero exit code.
@@ -17,9 +21,11 @@ non-zero
 import (
 	"os"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertExitCode(t, resp, 1)
 
 	combined := resp.Stdout + resp.Stderr

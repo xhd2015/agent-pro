@@ -28,7 +28,7 @@ import (
 
 const noMessagesSessionID = "ses_no_msgs"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = noMessagesSessionID
 	updated, err := time.Parse(time.RFC3339, "2026-07-03T14:00:00.000Z")
 	if err != nil {

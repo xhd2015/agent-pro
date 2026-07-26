@@ -27,7 +27,7 @@ import (
 	"time"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Grep = "GREP_LIMIT_TOKEN"
 	req.Limit = 2
 	req.Color = "never"

@@ -15,9 +15,12 @@ slack-msg listen -> logs Using config from: (none) or absolute --config path
 1. Leaf chooses no config, explicit config, or bad path.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClearSlackEnv = true
 	prependListenTokens(req)
 	return nil

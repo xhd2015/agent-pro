@@ -15,9 +15,13 @@ not-exited (live → hint send, not already-in-use)
 2. Assert non-zero exit and error wording.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Grouping marker for deny-path leaves (exit 1 expected).
 	req.Mode = ""
 	return nil

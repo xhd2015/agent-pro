@@ -10,7 +10,7 @@ List sessions -> match id or name -> SessionInfo or ambiguity error
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Phase = "resolve-id"
 	return nil
 }

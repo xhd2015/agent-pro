@@ -103,9 +103,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/xhd2015/agent-pro/agent/subagent"
+
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request struct {
@@ -168,7 +171,7 @@ func findLegacySessionDir(homeDir, roleName, sessionID string) (string, error) {
 	return matches[len(matches)-1], nil
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	if req.FakeCodexBin == "" {
 		return nil, fmt.Errorf("FakeCodexBin not built — root Setup must run first")
 	}
@@ -178,16 +181,33 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 	return invokeRun(t, req)
 }
 
+// residualChildEnvMu serializes PATH / AGENT_RUNNER_FAKE_CODEX_PATH process
+// mutation required for registry path resolution (no product option path yet).
+var residualChildEnvMu sync.Mutex
+
 func invokeRun(t *testing.T, req *Request) (*Response, error) {
 	t.Helper()
 
+	// Residual process Setenv (serialized): registry resolves fake-codex via
+	// os.Getenv / PATH LookPath. HOME uses Config.HomeDir (no process mutation).
+	residualChildEnvMu.Lock()
+	defer residualChildEnvMu.Unlock()
+
 	binDir := filepath.Dir(req.FakeCodexBin)
 	oldPath := os.Getenv("PATH")
-	os.Setenv("PATH", binDir+string(filepath.ListSeparator)+oldPath)
-	defer os.Setenv("PATH", oldPath)
+	_ = os.Setenv("PATH", binDir+string(filepath.ListSeparator)+oldPath)
+	defer func() { _ = os.Setenv("PATH", oldPath) }()
 
-	if req.HomeDir != "" {
-		os.Setenv("HOME", req.HomeDir)
+	prevFake, hadFake := os.LookupEnv("AGENT_RUNNER_FAKE_CODEX_PATH")
+	if req.FakeCodexBin != "" {
+		_ = os.Setenv("AGENT_RUNNER_FAKE_CODEX_PATH", req.FakeCodexBin)
+		defer func() {
+			if hadFake {
+				_ = os.Setenv("AGENT_RUNNER_FAKE_CODEX_PATH", prevFake)
+			} else {
+				_ = os.Unsetenv("AGENT_RUNNER_FAKE_CODEX_PATH")
+			}
+		}()
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -216,6 +236,7 @@ func invokeRun(t *testing.T, req *Request) (*Response, error) {
 		RoleName:              "layout-test",
 		AutoGenerateSessionID: false,
 		PromptContent:         "You are a layout test agent.",
+		HomeDir:               req.HomeDir,
 	}, opts)
 
 	sessionDir := req.SessionDir

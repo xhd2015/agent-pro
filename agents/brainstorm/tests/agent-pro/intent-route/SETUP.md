@@ -11,9 +11,12 @@ agent-pro skill intent-route --show -> Flash Idea category + brainstorm guidelin
 1. Invoke `agent-pro skill intent-route --show`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"skill", "intent-route", "--show"}
 	return nil
 }

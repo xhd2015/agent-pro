@@ -26,9 +26,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Shared layout helpers used by workspace leaves.
 	created := filepath.Join(req.TempDir, "created-ws")
 	cliCwd := filepath.Join(req.TempDir, "cli-cwd")

@@ -19,9 +19,13 @@ agent-run run --resume-from-grok-session UUID
 2. Run with flag only (no `--agent-runner` → treat as grok-tty once implemented).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// GROK_HOME is empty of sessions; id is still a well-formed UUID.
 	req.Args = runArgs(req, req.GrokSessionID)
 	return nil

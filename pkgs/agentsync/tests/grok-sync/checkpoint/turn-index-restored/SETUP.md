@@ -26,7 +26,7 @@ import (
 
 const turnIndexRestoreUser = "turn-index-restore-user-prompt"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.TempDir = t.TempDir()
 	req.UpdatesPath = filepath.Join(req.TempDir, "updates.jsonl")
 	req.SessionDir = filepath.Join(req.TempDir, "session")

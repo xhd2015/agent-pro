@@ -13,7 +13,10 @@ agent-run tty status session-1 -> scrollback after prompt+response -> screen: id
 3. `Assert` checks that screen status indicates idle.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.FakePTYWrapScrollback = "GROK_TTY_BANNER\r\nGrok › run ls\r\nResponse: file1 file2\r\nGrok › \r\n"
 	req.Args = []string{"tty", "status", req.RegistrySessionID}
 	return nil

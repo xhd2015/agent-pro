@@ -13,7 +13,10 @@ agent-run send -> same error as agent-run tty send (missing session-id and messa
 3. Error format matches what `tty send` produces with no args.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"send"}
 	return nil
 }

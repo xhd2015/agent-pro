@@ -11,9 +11,13 @@ agent-run status no-such-session -> exit 1, not found
 1. Run status with an id that has no meta under any runner.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "no-such-session-xyz"
 	req.Args = []string{"status", req.SessionID}
 	return nil

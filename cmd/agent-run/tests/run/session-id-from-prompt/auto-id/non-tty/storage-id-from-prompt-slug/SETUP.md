@@ -14,9 +14,13 @@ agent-run run --agent-runner fake-codex --session-id-from-prompt "Fix the flaky 
 2. Assert single storage session id shape and slug base.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Prompt = "Fix the flaky test"
 	req.Args = append(req.Args, req.Prompt)
 	return nil

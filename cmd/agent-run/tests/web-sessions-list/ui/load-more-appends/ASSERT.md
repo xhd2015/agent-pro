@@ -1,5 +1,5 @@
 ---
-label: ui-automation
+label: e2e, ui-automation
 explanation: Playwright home page-size 30 + explicit load-more button appends
 ---
 
@@ -14,9 +14,13 @@ explanation: Playwright home page-size 30 + explicit load-more button appends
 - Missing `session-load-more` or click does not append → fail.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertPlaywrightOK(t, resp, err)
 	if req.Scenario != "load-more-appends" {
 		t.Fatalf("expected scenario load-more-appends, got %q", req.Scenario)

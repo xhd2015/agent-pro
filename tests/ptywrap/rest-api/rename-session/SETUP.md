@@ -10,7 +10,7 @@ create -> PATCH {name} -> GET list shows new name
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Phase = "rest-rename"
 	req.RenameTo = "after-rename"
 	return nil

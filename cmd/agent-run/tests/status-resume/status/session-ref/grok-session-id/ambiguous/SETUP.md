@@ -14,9 +14,13 @@ seed a1 + a2 both runner=grok-tty runner_session_id=UUID
 2. Run status with `--grok-session-id` for that UUID.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "grok-tty"
 	req.SessionID = "test-gsid-amb-a"
 	req.RunnerSessionID = "550e8400-e29b-41d4-a716-446655440904"

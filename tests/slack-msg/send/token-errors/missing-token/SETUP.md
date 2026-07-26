@@ -11,9 +11,12 @@ Caller -> slack-msg send --channel C... MESSAGE -> bot token required
 1. Channel + message only.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"send", "--channel", "C0ALE44K5J6", "Hello"}
 	return nil
 }

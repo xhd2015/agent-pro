@@ -19,9 +19,13 @@ web cwd=deep -> open / -> workspace shows …/last/two
 2. Open `/`; assert shortened label, full path in `title`, runner-picker in viewport.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 	req.Scenario = "home-long-collapsed-default"
 

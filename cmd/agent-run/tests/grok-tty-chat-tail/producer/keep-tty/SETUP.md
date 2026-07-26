@@ -19,9 +19,13 @@ agent-run run --agent-runner grok-tty --keep-tty
 1. Grouping setup calls `configureProducerKeepTTYEnv` and wires chrome hold seconds.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.ChromeHoldSeconds <= 0 {
 		req.ChromeHoldSeconds = defaultChromeHoldSec
 	}

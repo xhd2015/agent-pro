@@ -14,7 +14,7 @@ import (
     types "github.com/xhd2015/agent-pro/agent/event/types"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     event := types.AgentEvent{
         Type: types.ActionThink,
         Text: "Let me think about this problem carefully...",

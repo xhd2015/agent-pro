@@ -26,9 +26,12 @@ explain list -> formatted cards; full message bodies; indent multi-line; skip in
   non-empty continuations indented 6 spaces; blank segments pure `\n`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.Bin == "" {
 		t.Fatalf("content setup: explain binary not built")
 	}

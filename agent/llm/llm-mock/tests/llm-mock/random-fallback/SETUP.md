@@ -25,9 +25,12 @@ AgentEvent -> OpenAI chat completion JSON (think / tool_calls / message)
 4. Leaf `Assert` checks HTTP 200 and response shape (prefix vs generated).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Endpoint = "/v1/chat/completions"
 	req.Method = "POST"
 	return nil

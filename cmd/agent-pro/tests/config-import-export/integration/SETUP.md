@@ -36,7 +36,7 @@ import (
 	"github.com/xhd2015/agent-pro/pkgs/containers/podman"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	podmanTests := os.Getenv("AGENT_PRO_PODMAN_TESTS")
 	if podmanTests != "1" && podmanTests != "true" {
 		t.Skipf("AGENT_PRO_PODMAN_TESTS=%q; set AGENT_PRO_PODMAN_TESTS=1 to run podman integration tests", podmanTests)

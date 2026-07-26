@@ -22,7 +22,7 @@ import (
 
 const staleEOFSkipMarker = "STALE_EOF_SKIP_MARKER"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.StartOffsetAtEOF = true
 	req.InitialLines = []string{
 		acpUserMessageChunk(staleEOFSkipMarker),

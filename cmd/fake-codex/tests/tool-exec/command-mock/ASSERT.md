@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 - The event output contains `"fake codex output"` (mock value).
 - The output does **not** contain `"REAL CODEX OUTPUT"` in the `aggregated_output` field (the command field naturally contains it, but the output should be mock).
@@ -7,9 +11,10 @@ import (
     "encoding/json"
     "strings"
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     assertSuccess(t, resp)
     stdout := resp.Stdout
     if !strings.Contains(stdout, "fake codex output") {

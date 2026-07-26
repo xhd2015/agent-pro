@@ -17,9 +17,11 @@ orchestrator -> codex CLI with argv "exec -m mock-model hi"
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if err := installFakeCodexEchoArgv(t, req); err != nil {
 		return err
 	}

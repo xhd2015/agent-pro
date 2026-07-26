@@ -22,9 +22,11 @@ warning: Model metadata for `mock-model` not found. Defaulting to fallback metad
 import (
 	"testing"
 	"time"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SkipRealCodex = true
 	req.FakeCodexCmd = ""
 	req.ConfigEnv = ""

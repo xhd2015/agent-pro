@@ -2,6 +2,16 @@
 
 These doc-style tests verify the deterministic fake opencode runner.
 
+## How to Run
+
+```sh
+# Discovery skips labeled e2e/heavy/slow leaves by default.
+doctest test ./cmd/fake-opencode/tests                    # discovery (skips labeled e2e/heavy/slow)
+doctest test --label e2e ./cmd/fake-opencode/tests
+doctest test --label-all ./cmd/fake-opencode/tests
+```
+
+
 ```go
 import (
     "bytes"
@@ -15,6 +25,7 @@ import (
     "strings"
     "testing"
     "time"
+	"github.com/xhd2015/doctest/session"
 )
 
 
@@ -40,7 +51,7 @@ type Response struct {
     Err error
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
     if req.Operation == "per_event_delay" {
         return runPerEventDelay(t, req)
     }

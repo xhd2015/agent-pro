@@ -19,9 +19,13 @@ navigate away/back -> terminal websocket -> same PTY session-1
 4. Check both attaches reached the same fake PTY server.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "ws"
 	req.WSPath = terminalWSPath(req.Runner, req.ChatSessionID)
 	return nil

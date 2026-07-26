@@ -12,9 +12,13 @@ run|resume --detach --open … -> exit ≠ 0
 2. Leaves use run vs resume surfaces.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Open conflict class: leaves finalize --detach + --open on run or resume.
 	if len(req.Args) == 0 {
 		req.Args = []string{"run"}

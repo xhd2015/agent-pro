@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Every concurrent run exits successfully.

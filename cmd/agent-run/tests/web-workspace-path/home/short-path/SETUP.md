@@ -21,9 +21,13 @@ makeShortWorkspaceDir (…/ws/ab) -> web cmd.Dir=short
 2. Leaf opens home and asserts readable collapsed label.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	short := makeShortWorkspaceDir(t, req.TempDir)
 	req.WebWorkingDir = short
 	req.WorkspacePath = short

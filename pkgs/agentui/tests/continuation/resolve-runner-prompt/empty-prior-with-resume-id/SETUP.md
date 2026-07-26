@@ -21,7 +21,7 @@ resumeID="grok-sess-abc" + prior=[] + "only"
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ResumeID = "grok-sess-abc"
 	req.NewPrompt = "only"
 	req.PriorEvents = nil

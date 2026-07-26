@@ -25,7 +25,7 @@ import "testing"
 
 const noTokensSessionID = "01900009-ffff-7fff-ffff-ffffffffffff"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = noTokensSessionID
 	lines := []string{
 		userMessageLine("Docs cleanup"),

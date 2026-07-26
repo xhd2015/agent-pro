@@ -22,7 +22,7 @@ Account-specific numbers from capture day; assert exact fixture values.
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.FixtureFile = "05-status-fields.snapshot.txt"
 	return nil
 }

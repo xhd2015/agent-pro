@@ -16,9 +16,11 @@ orchestrator -> write config.toml with models_base_url -> mock
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.GrokHome = filepath.Join(t.TempDir(), "explicit-grok-home")
 	return nil
 }

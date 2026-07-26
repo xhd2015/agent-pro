@@ -40,9 +40,11 @@ import (
 	"testing"
 
 	"github.com/xhd2015/doctest/assert"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,14 +63,17 @@ func Assert(t *testing.T, req *Request, resp *Response, err error) {
 	if !strings.Contains(resp.Stdout, "--topic") {
 		t.Fatalf("help missing --topic usage:\n%s", resp.Stdout)
 	}
+	// v2: lines with balanced [...] become regex; escape brackets so they match
+	// literally. Parentheses alone are not regex signals and must stay unescaped
+	// (escaping them would require a literal backslash in output).
 	assert.Output(t, resp.Stdout, `---
 version: 2
 ---
 slack-msg: Slack messaging CLI.
 
 Usage:
-  slack-msg <command> [options]
-  slack-msg --help [--topic TOPIC]
+  slack-msg <command> \[options\]
+  slack-msg --help \[--topic TOPIC\]
 
 Commands:
   send      Post a message via Slack Web API

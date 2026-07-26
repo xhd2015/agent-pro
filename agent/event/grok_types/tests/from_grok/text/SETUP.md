@@ -12,7 +12,7 @@ import (
 	grok_types "github.com/xhd2015/agent-pro/agent/event/grok_types"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Target = "from_grok"
 	req.GrokEvents = []grok_types.Event{{
 		Type: grok_types.EventText,

@@ -27,7 +27,7 @@ import "testing"
 
 const subagentDurationSessionID = "019f283b-2222-7222-2222-222222222222"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = subagentDurationSessionID
 	summaryPath := writeGrokSessionOpts(t, req.GrokHome, subagentDurationSessionID,
 		"2026-07-03T14:40:00.000Z",

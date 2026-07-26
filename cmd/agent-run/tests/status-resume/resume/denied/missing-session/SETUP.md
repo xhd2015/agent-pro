@@ -11,9 +11,13 @@ agent-run resume no-such-resume-session "x" -> exit 1, not found
 1. Run resume against unknown id (no meta seed).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "no-such-resume-session"
 	req.Args = []string{"resume", req.SessionID, "followup"}
 	return nil

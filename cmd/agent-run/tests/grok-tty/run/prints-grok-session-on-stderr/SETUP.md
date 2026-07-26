@@ -16,11 +16,16 @@ temp GROK_HOME session with known UUID
 3. Assert stderr contains grok session id and updates path after discovery.
 
 ```go
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+
+	"github.com/xhd2015/doctest/session"
+)
 
 const stderrGrokUUID = "550e8400-e29b-41d4-a716-446655440000"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.GrokHome = filepath.Join(req.TempDir, "grok-home")
 	req.GrokSessionUUID = stderrGrokUUID
 	prompt := "stderr grok session"

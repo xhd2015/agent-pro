@@ -59,9 +59,14 @@ var (
 )
 
 // Options configures FetchUsage.
+// Command/TimeoutSeconds override env hooks so tests need not Setenv under Parallel.
 type Options struct {
 	Debug       bool
 	MaxAttempts int
+	// Command overrides GROK_SHOW_USAGE_COMMAND.
+	Command string
+	// TimeoutSeconds overrides GROK_SHOW_USAGE_TIMEOUT when > 0.
+	TimeoutSeconds int
 }
 
 // FetchUsage launches grok in a PTY, submits /usage show, and parses the response.
@@ -89,7 +94,7 @@ func FetchUsageWithOptions(ctx context.Context, opts Options) (*UsageInfo, error
 	}
 
 	env := newExecEnv()
-	argv, err := buildArgv(env)
+	argv, err := buildArgv(env, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -207,7 +212,10 @@ func debugEnabled() bool {
 	return v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes")
 }
 
-func buildArgv(env *agentexec.Env) ([]string, error) {
+func buildArgv(env *agentexec.Env, opts Options) ([]string, error) {
+	if hook := strings.TrimSpace(opts.Command); hook != "" {
+		return agenttty.ParseShellWords(hook)
+	}
 	if hook := strings.TrimSpace(os.Getenv(envShowUsageCommand)); hook != "" {
 		return agenttty.ParseShellWords(hook)
 	}

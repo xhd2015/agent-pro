@@ -17,9 +17,14 @@ POST session -> GET .../events/stream?after=0 -> SSE data lines (user + assistan
 2. `Run` opens SSE subscription and collects parsed event payloads until session finishes or minimum events received.
 
 ```go
-import "testing"
+import (
+	"fmt"
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.Mode != "" && req.Mode != "sse" {
 		return fmt.Errorf("web/stream group: unexpected Mode %q", req.Mode)
 	}

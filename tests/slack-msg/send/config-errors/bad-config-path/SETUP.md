@@ -14,9 +14,11 @@ Caller -> slack-msg send --config /missing.json MESSAGE -> failed to load config
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	missing := filepath.Join(req.WorkDir, "does-not-exist.json")
 	req.Args = []string{"send", "--config", missing, "Hello"}
 	return nil

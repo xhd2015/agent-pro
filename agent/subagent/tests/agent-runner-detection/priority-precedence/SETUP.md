@@ -8,7 +8,7 @@
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     // Priority interaction tests — leaves set multiple conflicting env vars
     req.AgentRunnerEnv = ""
     return nil

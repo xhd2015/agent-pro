@@ -22,9 +22,13 @@ modal close -> transcript remains; navigation back -> same terminal attach
 3. `Run` executes the script.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "ui"
 	return nil
 }

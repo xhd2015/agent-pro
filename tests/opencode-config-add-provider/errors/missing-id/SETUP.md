@@ -21,9 +21,12 @@ agent-pro opencode config add-provider --base-url ... --api-shape anthropic --mo
 - Isolates the `--id` required-flag validation.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{
 		"opencode", "config", "add-provider",
 		"--base-url", "https://api.example.com/v1",

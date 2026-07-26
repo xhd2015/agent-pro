@@ -142,6 +142,12 @@ Parameter ranking (most → least significant):
 ## How to Run
 
 ```sh
+# Discovery skips labeled e2e/heavy/slow leaves by default.
+# Run e2e / full suite explicitly when needed:
+doctest test ./cmd/agent-run/tests/web-sessions-list                    # discovery (skips labeled e2e/heavy/slow)
+doctest test --label e2e ./cmd/agent-run/tests/web-sessions-list
+doctest test --label-all ./cmd/agent-run/tests/web-sessions-list
+
 doctest vet ./cmd/agent-run/tests/web-sessions-list
 doctest test ./cmd/agent-run/tests/web-sessions-list
 doctest test -v ./cmd/agent-run/tests/web-sessions-list/api
@@ -164,6 +170,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
 // HTTPStep is one request in a multi-step API scenario.
@@ -344,7 +351,7 @@ func runUIProbe(t *testing.T, req *Request) (*Response, error) {
 	}, err
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	if req.webCmd == nil && req.Port > 0 {
 		if err := startWebBackground(t, req); err != nil {
 			return nil, err

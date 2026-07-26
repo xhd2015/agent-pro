@@ -26,9 +26,13 @@ follow-up default dry-run --exe <testbin>
 4. Assert kind lists PID; default does not.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if !tempDirLooksLikeWorkdirAtTmp(req.TempDir) {
 		t.Skipf("workdir-at-tmp requires /var/folders/…/T/ temp layout; TempDir=%s", req.TempDir)
 	}

@@ -1,5 +1,5 @@
 ---
-label: chromium
+label: e2e, chromium
 explanation: Playwright mobile viewport; seeded running session DOM
 ---
 
@@ -13,9 +13,13 @@ explanation: Playwright mobile viewport; seeded running session DOM
 - Playwright process exits 0.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

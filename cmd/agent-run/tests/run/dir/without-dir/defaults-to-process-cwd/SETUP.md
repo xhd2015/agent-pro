@@ -19,9 +19,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Sibling must not be chosen when --dir is omitted.
 	other := filepath.Join(req.TempDir, "other-ws")
 	if err := os.MkdirAll(other, 0o755); err != nil {

@@ -12,9 +12,12 @@ listen connects -> banner lines include team, bot user/id, modes, lock path
 2. Assert multi-field banner on combined stdout/stderr (no events required).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Identity banner only needs connected daemon; no inbound events.
 	req.InjectEvents = nil
 	req.WantAgentCalls = 0

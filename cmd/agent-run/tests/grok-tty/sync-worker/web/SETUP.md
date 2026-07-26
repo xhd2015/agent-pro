@@ -18,9 +18,13 @@ I3: seed finished + empty events + grok on disk -> GET session detail -> events.
 1. Grouping leaves configure web mode and follow-up timing.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.Mode == "" {
 		req.Mode = "web-rapid-followups"
 	}

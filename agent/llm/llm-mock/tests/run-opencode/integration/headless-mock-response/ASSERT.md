@@ -1,5 +1,5 @@
 ---
-label: real-opencode, slow
+label: e2e, real-opencode, slow
 explanation: Requires real opencode CLI on PATH; headless LLM round-trip up to 60s; exit 0 not required.
 ---
 
@@ -19,9 +19,12 @@ explanation: Requires real opencode CLI on PATH; headless LLM round-trip up to 6
 not required (any)
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil && resp.ExitCode == 0 {
 		t.Fatal(err)
 	}

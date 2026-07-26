@@ -4,7 +4,7 @@
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Line = `{"type":"error","error":{"name":"Error","data":{"message":"something broke"}}}`
 	return nil
 }

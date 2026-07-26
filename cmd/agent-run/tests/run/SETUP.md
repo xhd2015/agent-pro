@@ -16,9 +16,13 @@
 4. `Assert` checks NDJSON stream, persistence, or human-readable output.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"run", "--agent-runner", "fake-codex"}
 	return nil
 }

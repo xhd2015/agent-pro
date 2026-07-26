@@ -13,7 +13,7 @@ go build cmd/agent-pro -> agent-pro skill debug-with-user --show -> embedded SKI
 
 ## Steps
 
-1. Resolve repo root from `DOCTEST_ROOT/../../../..`.
+1. Resolve repo root from `d.DOCTEST_ROOT/../../../..`.
 2. Build `agent-pro` binary into temp dir.
 3. Leaf runs `skill debug-with-user show`.
 
@@ -24,10 +24,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
-	req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../.."))
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../.."))
 	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
 		return fmt.Errorf("repo root not found at %s: %w", req.RepoRoot, err)
 	}

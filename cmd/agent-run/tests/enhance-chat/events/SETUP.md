@@ -18,9 +18,13 @@ failure: empty GROK_HOME, PTY chrome stays out of events.jsonl
 1. Grouping setup sets `req.Area = "events"` and `req.Mode = "events"`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Area = "events"
 	req.Mode = "events"
 	return nil

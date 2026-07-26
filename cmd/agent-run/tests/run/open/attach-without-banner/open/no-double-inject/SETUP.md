@@ -28,9 +28,11 @@ agent-run run --agent-runner grok-tty --open "once-only"
 import (
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
+	"time"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	clearOpenInstantAttach(req)
 	req.Prompt = "once-only"
 	probePath := filepath.Join(req.TempDir, "tui-probe.txt")

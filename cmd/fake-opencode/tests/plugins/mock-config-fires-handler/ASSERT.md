@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 - Exit code 0.
 - Marker file exists and contains `"session_id":"sess_mock"`.
@@ -7,9 +11,10 @@ import (
     "encoding/json"
     "os"
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     assertSuccess(t, resp)
 
     data, err := os.ReadFile(req.MarkerPath)

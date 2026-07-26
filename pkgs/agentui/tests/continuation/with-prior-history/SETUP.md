@@ -21,7 +21,7 @@ import (
 	"testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if strings.TrimSpace(req.NewPrompt) == "" {
 		req.NewPrompt = "what did I ask?"
 	}

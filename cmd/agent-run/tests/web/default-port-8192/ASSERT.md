@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Server listens on default port **8192** when `--port` is omitted.
@@ -11,9 +15,10 @@
 import (
 	"strings"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	on8192 := strings.Contains(req.WebBaseURL, ":8192") ||
 		portOpen("127.0.0.1", 8192)
 	if !on8192 {

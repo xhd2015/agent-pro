@@ -15,9 +15,12 @@ POST -> response from events-only exchange
 3. Send one matching chat completion request.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ConfigJSON = ""
 	req.EventsInputJSONL = `{"request":{"role":"user","content":"events-only-prompt","index":-1},"response":{"content":"from-events-only","finish_reason":"stop"}}` + "\n"
 	req.Requests = []string{

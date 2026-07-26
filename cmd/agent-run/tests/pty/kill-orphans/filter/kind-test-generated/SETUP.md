@@ -24,9 +24,13 @@ follow-up: agent-run pty kill-orphans --dry-run --exe <tg-bin>
 4. Assert kind lists PID; default does not; trailing `\n`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "kill-orphans"
 	tgBin := serveBinaryForMarker(t, req, "test-generated")
 	req.SpawnPlan = []ServeSpawnSpec{

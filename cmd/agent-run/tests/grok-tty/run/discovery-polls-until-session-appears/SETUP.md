@@ -20,6 +20,8 @@ no grok session dir at start
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
+	"path/filepath"
 )
 
 const (
@@ -28,7 +30,7 @@ const (
 	delayedSessionPrompt   = "delayed discovery probe"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.GrokHome = filepath.Join(req.TempDir, "grok-home")
 	appendGrokHomeEnv(req)
 	req.Env = withoutEnvKey(req.Env, "AGENT_RUN_GROK_TTY_GROK_SESSION_ID")

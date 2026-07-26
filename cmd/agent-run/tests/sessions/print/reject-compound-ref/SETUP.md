@@ -17,9 +17,13 @@ agent-run sessions fake-codex/web_test123 --print -> exit 1; invalid session ref
 2. Run print with compound positional `fake-codex/web_test123`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	store := openAgentStore(t, req)
 	seedSessionMeta(t, store, printSessionID, "finished")
 	req.Args = []string{"sessions", printRunner + "/" + printSessionID, "--print"}

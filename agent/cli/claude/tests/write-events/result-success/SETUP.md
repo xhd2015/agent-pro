@@ -17,7 +17,7 @@ result-success -> WriteClaudeLine(result success) -> RawLog (1 AgentEvent "done"
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClaudeLines = []string{
 		`{"type":"result","subtype":"success","is_error":false,"result":"pong","duration_ms":1,"num_turns":1,"session_id":"sess","stop_reason":"end_turn"}`,
 	}

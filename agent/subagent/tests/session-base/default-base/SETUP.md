@@ -14,7 +14,7 @@ import (
     "testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     home := t.TempDir()
     sessDir := filepath.Join(home, ".agent-pro", "subagent", "testrole", "sessions", "sess_default123")
 

@@ -9,7 +9,7 @@ read deadline (2s in `WaitSession`).
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Phase = "run-exit-id"
 	req.StartDaemon = true
 	req.RunCommand = []string{"sleep", "2"}

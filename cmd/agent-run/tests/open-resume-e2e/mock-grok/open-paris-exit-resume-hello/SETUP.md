@@ -27,9 +27,13 @@ Mirrors `script/debug/open-resume-e2e` with mock instead of real grok.
 3. Run orchestrates the multi-step flow; Assert checks all gates.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "open-paris-exit-resume-hello"
 	req.SessionID = defaultSessionID
 	req.GrokSessionUUID = defaultGrokSessionUUID

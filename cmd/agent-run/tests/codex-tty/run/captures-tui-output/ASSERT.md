@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Exit code 0.

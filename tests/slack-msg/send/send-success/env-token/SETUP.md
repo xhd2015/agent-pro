@@ -11,9 +11,12 @@ SLACK_BOT_TOKEN=... slack-msg send --channel CH MESSAGE -> OK
 1. No `--token`; set `SLACK_BOT_TOKEN` in env.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"send", "--channel", "C0ALE44K5J6", "env token msg"}
 	req.Env = []string{"SLACK_BOT_TOKEN=" + slackTestToken}
 	return nil

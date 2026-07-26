@@ -18,9 +18,12 @@ CmdInput (JSONL) -> []cmd_types.Event -> FromCmd -> []types.AgentEvent JSON
 2. Leaf SETUPs populate `req.CmdInput` and `req.SessionID`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Target = "from_cmd"
 	if req.SessionID == "" {
 		req.SessionID = "sess_cmd"

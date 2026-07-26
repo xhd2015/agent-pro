@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Follow-up POST returns HTTP 202.
@@ -20,10 +24,14 @@
   turn running instead of marking it finished immediately.
 
 ```go
-import "strings"
+import (
+	"strings"
+
+	"github.com/xhd2015/doctest/session"
+)
 import "testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

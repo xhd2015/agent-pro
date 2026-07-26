@@ -1,5 +1,5 @@
 ---
-label: ui-automation
+label: e2e, ui-automation
 explanation: enter session then back preserves home list scrollTop
 ---
 
@@ -9,9 +9,13 @@ explanation: enter session then back preserves home list scrollTop
 - After session → back, `session-list.scrollTop` within ~60px of pre-nav.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

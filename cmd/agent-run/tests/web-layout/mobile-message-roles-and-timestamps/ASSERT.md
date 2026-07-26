@@ -1,5 +1,5 @@
 ---
-label: chromium
+label: e2e, chromium
 explanation: playwright; role bubble CSS distinction and message-timestamp visibility
 ---
 
@@ -13,9 +13,10 @@ explanation: playwright; role bubble CSS distinction and message-timestamp visib
 import (
 	"strings"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatalf("Run error: %v\nstderr:\n%s", err, resp.PlaywrightStderr)
 	}

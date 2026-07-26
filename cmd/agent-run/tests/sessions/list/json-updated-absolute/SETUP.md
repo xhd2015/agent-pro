@@ -19,9 +19,13 @@ seed session with known updated_at RFC3339
 2. Run `agent-run sessions --json --limit 0`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	seedFlatSessionMeta(t, req.Home, "json_abs", "fake-codex", "finished", "2026-07-01T15:04:05Z")
 	req.Args = append(req.Args, "--json", "--limit", "0")
 	return nil

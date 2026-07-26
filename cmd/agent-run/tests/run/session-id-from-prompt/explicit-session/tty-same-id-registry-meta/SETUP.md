@@ -16,9 +16,13 @@ agent-run run --agent-runner grok-tty --keep-tty --session my-task "hi"
 2. Run with `--session my-task` and prompt `hi`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "grok-tty"
 	req.KeepTTY = true
 	req.Prompt = "hi"

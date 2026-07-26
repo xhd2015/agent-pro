@@ -20,9 +20,12 @@ slack-msg auth status --app --app-token -> SLACK_API_URL=slacktest -> connection
 - Fixed note: `app-level token (Socket Mode / connections); not used for channels/send/history`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClearSlackEnv = true
 	apiURL, err := ensureSlackTestServer(t)
 	if err != nil {

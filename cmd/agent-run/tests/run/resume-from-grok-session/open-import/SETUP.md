@@ -28,9 +28,10 @@ AGENT_RUN_OPEN_ATTACH_INSTANT=1
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "import-open-s1"
 	req.OpenFlag = true
 	req.OpenInstantAttach = true

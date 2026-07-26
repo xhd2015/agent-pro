@@ -1,5 +1,5 @@
 ---
-label: real-grok, slow
+label: e2e, real-grok, slow
 explanation: Requires real grok CLI on PATH; live usage reset date changes daily.
 ---
 
@@ -39,12 +39,14 @@ import (
 	"testing"
 
 	"github.com/xhd2015/doctest/assert"
+
+	"github.com/xhd2015/doctest/session"
 )
 
 var weeklyLimitRE = regexp.MustCompile(`(?m)^Weekly limit: \d+%$`)
 var nextResetRE = regexp.MustCompile(`(?m)^Next reset: .+$`)
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

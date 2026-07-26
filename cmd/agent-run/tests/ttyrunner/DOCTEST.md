@@ -54,7 +54,7 @@ sendable status, test-only `stub-tty` runner, and multi-attach write/observer po
 cmd/agent-run/tests/ttyrunner/
 ├── DOCTEST.md
 ├── SETUP.md                              # build agent-run, ttyrunner helpers, stub env
-├── registry/
+├── provider-registry/
 │   ├── SETUP.md
 │   ├── lists-builtin-providers/          # IDs() → grok-tty, codex-tty (+ stub when enabled)
 │   ├── is-tty-runner/                    # IsTTYRunner true/false per runner id
@@ -116,9 +116,9 @@ Parameter ranking (most → least significant):
 
 | # | Leaf | Description |
 |---|------|-------------|
-| 1 | `registry/lists-builtin-providers` | `IDs()` lists grok-tty and codex-tty; stub-tty only when env enabled |
-| 2 | `registry/is-tty-runner` | `IsTTYRunner` true for TTY ids, false for non-TTY runners |
-| 3 | `registry/registry-dir-convention` | Each provider `RegistryDir` is `<id>-registry` |
+| 1 | `provider-registry/lists-builtin-providers` | `IDs()` lists grok-tty and codex-tty; stub-tty only when env enabled |
+| 2 | `provider-registry/is-tty-runner` | `IsTTYRunner` true for TTY ids, false for non-TTY runners |
+| 3 | `provider-registry/registry-dir-convention` | Each provider `RegistryDir` is `<id>-registry` |
 | 4 | `storage/dual-write-tty-json` | stub-tty run writes registry + `sessions/.../tty.json` |
 | 5 | `storage/resolve-by-agent-session` | `ResolveByAgentSession` links agent id → terminal registry |
 | 6 | `storage/resolve-by-terminal-id` | `ResolveByTerminalID` enriches from `tty.json` |
@@ -154,9 +154,15 @@ Parameter ranking (most → least significant):
 ## How to Run
 
 ```sh
+# Discovery skips labeled e2e/heavy/slow leaves by default.
+# Run e2e / full suite explicitly when needed:
+doctest test ./cmd/agent-run/tests/ttyrunner                    # discovery (skips labeled e2e/heavy/slow)
+doctest test --label e2e ./cmd/agent-run/tests/ttyrunner
+doctest test --label-all ./cmd/agent-run/tests/ttyrunner
+
 doctest vet ./cmd/agent-run/tests/ttyrunner
 doctest test ./cmd/agent-run/tests/ttyrunner
-doctest test -v ./cmd/agent-run/tests/ttyrunner/registry/lists-builtin-providers
+doctest test -v ./cmd/agent-run/tests/ttyrunner/provider-registry/lists-builtin-providers
 doctest test -v ./cmd/agent-run/tests/ttyrunner/stub-tty/multi-attach/first-attach-writes-second-readonly
 
 # Regression guard (sealed trees — must pass unchanged)
@@ -186,6 +192,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 	"github.com/xhd2015/agent-pro/pkgs/ttyrunner"
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request struct {
@@ -287,10 +294,9 @@ type MultiAttachProbeResult struct {
 	SnapshotClaimedWrite bool
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
-	applyEnv(req.Env)
-	defer restoreEnv(req.Env)
-
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
+	// No parent applyEnv: in-process APIs take req.Home explicitly; CLI subprocesses
+	// set cmd.Env via execAgentRun / startStubTTYBackground (req.Env).
 	switch req.Operation {
 	case "registry":
 		return runRegistryOp(t, req)

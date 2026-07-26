@@ -22,7 +22,7 @@ worker processes lines -> SaveCheckpoint (offset + turn_index)
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.Runner == "" {
 		req.Runner = "grok-tty"
 	}

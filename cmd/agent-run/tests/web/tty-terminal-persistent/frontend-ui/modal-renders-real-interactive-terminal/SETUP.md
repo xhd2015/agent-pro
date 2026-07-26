@@ -25,9 +25,13 @@ ptywrap sends control JSON + ANSI terminal bytes
    bytes, hides control JSON, and sends typed input through the websocket.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.RegistryTranscript = "\x1b[31mREADY\x1b[0m\r\n"
 	listenAddr := startControlFramePtywrap(t, req)
 	writeMappedSessionFixture(t, req)

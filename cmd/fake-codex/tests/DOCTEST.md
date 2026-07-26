@@ -2,6 +2,16 @@
 
 These doc-style tests verify `cmd/fake-codex exec --json --mock-config`.
 
+## How to Run
+
+```sh
+# Discovery skips labeled e2e/heavy/slow leaves by default.
+doctest test ./cmd/fake-codex/tests                    # discovery (skips labeled e2e/heavy/slow)
+doctest test --label e2e ./cmd/fake-codex/tests
+doctest test --label-all ./cmd/fake-codex/tests
+```
+
+
 ```go
 import (
     "bytes"
@@ -15,6 +25,7 @@ import (
     "strings"
     "testing"
     "time"
+	"github.com/xhd2015/doctest/session"
 )
 
 
@@ -41,7 +52,7 @@ type Response struct {
     Duration time.Duration
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
     args := req.Args
     if len(args) == 0 {
         args = []string{"exec", "--json", "--mock-config", req.MockConfigPath, "hello"}

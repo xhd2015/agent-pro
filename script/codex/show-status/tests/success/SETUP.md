@@ -25,9 +25,12 @@ doctest <- stdout: three lines only; stderr empty
 - Default fake fixture: `58%` usage (`42% left`), `6519/11250` credits, `08:00 on 1 Aug` reset.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.Bin == "" {
 		t.Fatalf("success setup: codex-show-status binary not built (root Setup skipped?)")
 	}

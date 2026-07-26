@@ -19,10 +19,10 @@ agent-run run --open (+ instant attach) -> keep-alive serve
 ## Preconditions
 
 - Nested DOCTEST root: does not inherit parent `cmd/agent-run/tests` Setup/Run.
-- Repo root from this tree: `DOCTEST_ROOT/../../../..`
+- Repo root from this tree: `d.DOCTEST_ROOT/../../../..`
   (`pty` → `tests` → `agent-run` → `cmd` → module root).
 - Each leaf uses isolated `AGENT_RUN_HOME` under `t.TempDir()`.
-- Session-scoped build cache: `$TMPDIR/agent-run-pty-doctest-<DOCTEST_SESSION_ID>/`
+- Session-scoped build cache: `$TMPDIR/agent-run-pty-doctest-<d.DOCTEST_SESSION_ID>/`
   shares the compiled `agent-run` binary across parallel leaves.
 - Kill tests **must** pass `--exe` pointing at the test binary so host
   brainstorm/seatalk/`__serve*` processes are not destroyed (when a single
@@ -67,6 +67,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
+	"path"
 )
 
 const (
@@ -76,8 +78,8 @@ const (
 	defaultRegistryCreated = "2026-07-03T12:00:00Z"
 )
 
-func sessionCacheDir() string {
-	return filepath.Join(os.TempDir(), "agent-run-pty-doctest-"+DOCTEST_SESSION_ID)
+func sessionCacheDir(d *session.Doctest) string {
+	return filepath.Join(os.TempDir(), "agent-run-pty-doctest-"+d.DOCTEST_SESSION_ID)
 }
 
 func withFileLock(t *testing.T, lockPath string, fn func() error) error {
@@ -102,13 +104,13 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-func buildOnce(t *testing.T) (agentRun string, err error) {
+func buildOnce(t *testing.T, d *session.Doctest) (agentRun string, err error) {
 	t.Helper()
-	cache := sessionCacheDir()
+	cache := sessionCacheDir(d)
 	agentRun = filepath.Join(cache, "agent-run")
 	lock := filepath.Join(cache, "build.lock")
 	ready := filepath.Join(cache, "binaries.ready")
-	repoRoot := filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../.."))
+	repoRoot := filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../.."))
 	err = withFileLock(t, lock, func() error {
 		if fileExists(ready) && fileExists(agentRun) {
 			return nil
@@ -150,14 +152,14 @@ func ensureStubDist(distDir string) error {
 	return os.WriteFile(filepath.Join(distDir, "index.html"), []byte("stub\n"), 0644)
 }
 
-func Setup(t *testing.T, req *Request) error {
-	req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../.."))
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../.."))
 	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
 		return fmt.Errorf("repo root not found: %w", err)
 	}
 	req.TempDir = t.TempDir()
 	req.Home = filepath.Join(req.TempDir, ".agent-run")
-	agentRun, err := buildOnce(t)
+	agentRun, err := buildOnce(t, d)
 	if err != nil {
 		return err
 	}

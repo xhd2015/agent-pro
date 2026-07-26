@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Exit code 0.
@@ -15,11 +19,12 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
 const resolveErrorPrefix = "Cannot resolve session id:"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

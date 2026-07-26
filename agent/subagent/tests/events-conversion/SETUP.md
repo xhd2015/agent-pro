@@ -30,6 +30,7 @@ import (
     "os"
     "path/filepath"
     "strconv"
+    "sync"
     "testing"
     "time"
 
@@ -39,7 +40,34 @@ import (
     "github.com/xhd2015/agent-pro/agent/subagent"
 )
 
-func Setup(t *testing.T, req *Request) error {
+var captureIOMu sync.Mutex
+
+func captureStdoutStderr(fn func() error) (stdout, stderr string, err error) {
+    captureIOMu.Lock()
+    defer captureIOMu.Unlock()
+    oldOut, oldErr := os.Stdout, os.Stderr
+    rOut, wOut, e := os.Pipe()
+    if e != nil {
+        return "", "", e
+    }
+    rErr, wErr, e := os.Pipe()
+    if e != nil {
+        wOut.Close()
+        rOut.Close()
+        return "", "", e
+    }
+    os.Stdout, os.Stderr = wOut, wErr
+    err = fn()
+    wOut.Close()
+    wErr.Close()
+    os.Stdout, os.Stderr = oldOut, oldErr
+    var bufOut, bufErr bytes.Buffer
+    bufOut.ReadFrom(rOut)
+    bufErr.ReadFrom(rErr)
+    return bufOut.String(), bufErr.String(), err
+}
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     _ = runConvertRaw
     _ = runFormatEvent
     _ = runTrace
@@ -66,7 +94,6 @@ func runTrace(t *testing.T, req *Request) (*Response, error) {
     if homeDir == "" {
         homeDir = t.TempDir()
     }
-    os.Setenv("HOME", homeDir)
 
     for _, dir := range req.PreCreateDirs {
         os.MkdirAll(dir, 0755)
@@ -88,25 +115,20 @@ func runTrace(t *testing.T, req *Request) (*Response, error) {
         roleName = "testrole"
     }
 
-    oldOut := os.Stdout
-    rOut, wOut, _ := os.Pipe()
-    os.Stdout = wOut
-
-    err := subagent.TestExported_traceSession(subagent.Config{
-        RoleName: roleName,
-    }, subagent.Options{
-        CatchUp:     true,
-        SessionID:   req.SessionID,
-        SessionBase: req.SessionBase,
+    var err error
+    stdout, _, _ := captureStdoutStderr(func() error {
+        err = subagent.TestExported_traceSession(subagent.Config{
+            RoleName: roleName,
+            HomeDir:  homeDir,
+        }, subagent.Options{
+            CatchUp:     true,
+            SessionID:   req.SessionID,
+            SessionBase: req.SessionBase,
+        })
+        return nil
     })
 
-    wOut.Close()
-    os.Stdout = oldOut
-
-    var bufOut bytes.Buffer
-    bufOut.ReadFrom(rOut)
-
-    return &Response{Stdout: bufOut.String(), Err: err}, nil
+    return &Response{Stdout: stdout, Err: err}, nil
 }
 
 func runStatus(t *testing.T, req *Request) (*Response, error) {
@@ -114,7 +136,6 @@ func runStatus(t *testing.T, req *Request) (*Response, error) {
     if homeDir == "" {
         homeDir = t.TempDir()
     }
-    os.Setenv("HOME", homeDir)
 
     for _, dir := range req.PreCreateDirs {
         os.MkdirAll(dir, 0755)
@@ -136,32 +157,19 @@ func runStatus(t *testing.T, req *Request) (*Response, error) {
         roleName = "testrole"
     }
 
-    oldOut := os.Stdout
-    rOut, wOut, _ := os.Pipe()
-    os.Stdout = wOut
-
-    oldErr := os.Stderr
-    rErr, wErr, _ := os.Pipe()
-    os.Stderr = wErr
-
-    err := subagent.TestExported_showStatus(subagent.Config{
-        RoleName: roleName,
-    }, subagent.Options{
-        Status:      true,
-        SessionID:   req.SessionID,
-        SessionBase: req.SessionBase,
+    var err error
+    stdout, stderr, _ := captureStdoutStderr(func() error {
+        err = subagent.TestExported_showStatus(subagent.Config{
+            RoleName: roleName,
+            HomeDir:  homeDir,
+        }, subagent.Options{
+            Status:      true,
+            SessionID:   req.SessionID,
+            SessionBase: req.SessionBase,
+        })
+        return nil
     })
 
-    wOut.Close()
-    wErr.Close()
-    os.Stdout = oldOut
-    os.Stderr = oldErr
-
-    var bufOut bytes.Buffer
-    bufOut.ReadFrom(rOut)
-    var bufErr bytes.Buffer
-    bufErr.ReadFrom(rErr)
-
-    return &Response{Stdout: bufOut.String(), Stderr: bufErr.String(), Err: err}, nil
+    return &Response{Stdout: stdout, Stderr: stderr, Err: err}, nil
 }
 ```

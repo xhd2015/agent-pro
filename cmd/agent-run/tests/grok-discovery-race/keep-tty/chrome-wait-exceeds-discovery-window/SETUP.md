@@ -22,9 +22,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
+	"time"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "chrome-wait-exceeds-discovery-window"
 	req.SessionID = "grok_discovery_chrome_wait"
 	req.Prompt = chromeWaitPrompt

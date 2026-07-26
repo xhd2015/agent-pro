@@ -11,9 +11,12 @@ channel message (no @bot) + default requireMention -> filtered
 1. Inject plain channel `message` without mention.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.WantAgentCalls = 0
 	req.InjectEvents = []InjectedEvent{{
 		Channel: slackTestChannelID,

@@ -16,9 +16,13 @@ agent-run web --port 0 --token test → OS-assigned port, GET health Bearer test
 2. `GET /api/agent-run/health` with valid Bearer after server is ready.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "web"
 	req.WebTokenMode = "explicit"
 	req.WebToken = "test"

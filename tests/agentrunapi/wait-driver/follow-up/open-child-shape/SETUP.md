@@ -16,7 +16,7 @@ BuildFollowUpCommand(Open, SessionID, AgentRunner, WorkspaceDir, NoSubmit, Promp
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.DriverBinary = ""
 	req.SessionID = "sess-open-shape"
 	req.Prompt = "open child"

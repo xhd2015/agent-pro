@@ -44,6 +44,7 @@ doctest test -v ./external/agent-pro/agent/subagent/tests/pass-ctx-runagent/
 
 ```go
 import (
+
     "context"
     "fmt"
     "os"
@@ -51,6 +52,7 @@ import (
     "testing"
 
     "github.com/xhd2015/agent-pro/agent/subagent"
+    "github.com/xhd2015/doctest/session"
 )
 
 
@@ -66,12 +68,25 @@ type Response struct {
     Err    error
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
-    fakeCodexPath := filepath.Clean(DOCTEST_ROOT + "/../../../../fake-codex")
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
+    // Residual: agentprovider resolves fake-codex via os.Getenv(AGENT_RUNNER_FAKE_CODEX_PATH)
+    // / PATH LookPath with no Config/Options path on runAgent. Process Setenv + restore
+    // until product accepts an explicit AgentPath on the runAgent test export.
+    fakeCodexPath := filepath.Clean(d.DOCTEST_ROOT + "/../../../../fake-codex")
     if _, err := os.Stat(fakeCodexPath); err != nil {
         return nil, fmt.Errorf("fake-codex not found at %s: %w", fakeCodexPath, err)
     }
-    os.Setenv("AGENT_RUNNER_FAKE_CODEX_PATH", fakeCodexPath)
+    prev, had := os.LookupEnv("AGENT_RUNNER_FAKE_CODEX_PATH")
+    if err := os.Setenv("AGENT_RUNNER_FAKE_CODEX_PATH", fakeCodexPath); err != nil {
+        return nil, err
+    }
+    defer func() {
+        if had {
+            _ = os.Setenv("AGENT_RUNNER_FAKE_CODEX_PATH", prev)
+        } else {
+            _ = os.Unsetenv("AGENT_RUNNER_FAKE_CODEX_PATH")
+        }
+    }()
 
     prompt := req.Prompt
     if prompt == "" {

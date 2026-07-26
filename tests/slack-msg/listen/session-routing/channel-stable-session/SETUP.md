@@ -13,9 +13,12 @@ app_mention ts=T1 in channel C + app_mention ts=T2 in same C (different roots)
 2. Expect two interactive-open launches with the same stable channel session id.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.WantAgentCalls = 2
 	req.InjectEvents = []InjectedEvent{
 		{

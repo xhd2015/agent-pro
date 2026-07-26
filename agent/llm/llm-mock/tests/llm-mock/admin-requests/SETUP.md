@@ -14,9 +14,12 @@ GET /admin/requests -> recorded request list
 3. Verify the server correctly matches both requests and records them (validated implicitly by correct responses).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     req.ConfigJSON = `{
   "port": 8080,
   "exchanges": [

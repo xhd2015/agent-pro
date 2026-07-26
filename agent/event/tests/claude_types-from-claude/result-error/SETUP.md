@@ -15,9 +15,12 @@
 2. Call `FromClaude` via the root `Run` dispatch.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClaudeInput = `{"type":"result","subtype":"error","is_error":true,"result":"boom","duration_ms":1,"num_turns":1,"session_id":"sess_claude"}`
 	return nil
 }

@@ -2,9 +2,12 @@
 - All JSON fields are present with correct values, including `tool_input`, `exit_code`, and `changes`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertContains(t, resp.Output, `"id":"evt_001"`)
 	assertContains(t, resp.Output, `"type":"tool_call"`)
 	assertContains(t, resp.Output, `"text":"hello world"`)

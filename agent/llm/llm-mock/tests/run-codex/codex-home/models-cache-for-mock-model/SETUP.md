@@ -21,8 +21,11 @@ Codex looks up model metadata from `$CODEX_HOME/models_cache.json` (not `GET /v1
 2. Run `llm-mock run codex` with default config.
 
 ```go
-import "testing"
+import (
+	"testing"
 
+	"github.com/xhd2015/doctest/session"
+)
 const fakeCodexCheckModelsCache = `sh -c '
 echo CODEX_HOME=$CODEX_HOME
 if [ ! -f "$CODEX_HOME/models_cache.json" ]; then
@@ -32,7 +35,7 @@ fi
 grep -q "\"slug\": \"mock-model\"" "$CODEX_HOME/models_cache.json" && echo MODELS_CACHE=mock-model-found || echo MODELS_CACHE=no-mock-model
 '`
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ConfigEnv = "file"
 	req.FakeCodexCmd = fakeCodexCheckModelsCache
 	req.ConfigJSON = minimalMockConfigJSON(8080, "")

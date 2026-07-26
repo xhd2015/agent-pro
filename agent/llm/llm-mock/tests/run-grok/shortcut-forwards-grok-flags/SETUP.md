@@ -14,9 +14,12 @@ llm-mock-run-grok --always-approve
 2. Run shortcut with `--always-approve` only (no `LLM_MOCK_RUN_GROK_COMMAND` — hook ignores argv).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if err := installFakeGrokEchoArgv(t, req); err != nil {
 		return err
 	}

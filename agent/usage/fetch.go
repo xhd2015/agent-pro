@@ -26,8 +26,27 @@ type Snapshot struct {
 	CreditsTotal string
 }
 
+// FetchOptions configures provider-specific hooks without process env mutation.
+type FetchOptions struct {
+	// GrokCommand overrides GROK_SHOW_USAGE_COMMAND.
+	GrokCommand string
+	// CodexCommand overrides CODEX_SHOW_STATUS_COMMAND.
+	CodexCommand string
+	// CodexSessionID overrides CODEX_SHOW_STATUS_SESSION_ID.
+	CodexSessionID string
+	// CodexTimeoutSeconds overrides CODEX_SHOW_STATUS_TIMEOUT when > 0.
+	CodexTimeoutSeconds int
+	// TTYWatchHome overrides TTY_WATCH_HOME (Codex).
+	TTYWatchHome string
+}
+
 // Fetch retrieves usage for the given provider in-process.
 func Fetch(ctx context.Context, id ProviderID) (*Snapshot, error) {
+	return FetchWithOptions(ctx, id, FetchOptions{})
+}
+
+// FetchWithOptions retrieves usage with explicit provider hooks (parallel-safe tests).
+func FetchWithOptions(ctx context.Context, id ProviderID, opts FetchOptions) (*Snapshot, error) {
 	debuglog.Log(debuglog.Entry{
 		Event: "fetch_dispatch",
 		Labels: map[string]string{
@@ -39,7 +58,9 @@ func Fetch(ctx context.Context, id ProviderID) (*Snapshot, error) {
 
 	switch id {
 	case Grok:
-		info, err := groktty.FetchUsage(ctx)
+		info, err := groktty.FetchUsageWithOptions(ctx, groktty.Options{
+			Command: opts.GrokCommand,
+		})
 		if err != nil {
 			logUsageError(Grok, err)
 			return nil, err
@@ -52,7 +73,12 @@ func Fetch(ctx context.Context, id ProviderID) (*Snapshot, error) {
 		logUsageDone(snap)
 		return snap, nil
 	case Codex:
-		info, err := codextty.FetchStatus(ctx)
+		info, err := codextty.FetchStatusWithOptions(ctx, codextty.Options{
+			Command:        opts.CodexCommand,
+			SessionID:      opts.CodexSessionID,
+			TimeoutSeconds: opts.CodexTimeoutSeconds,
+			TTYWatchHome:   opts.TTYWatchHome,
+		})
 		if err != nil {
 			logUsageError(Codex, err)
 			return nil, err

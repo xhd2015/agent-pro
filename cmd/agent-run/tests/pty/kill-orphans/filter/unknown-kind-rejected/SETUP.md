@@ -22,9 +22,10 @@ agent-run pty kill-orphans --kind=not-a-real-kind --dry-run --exe <unique>
 import (
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "kill-orphans"
 	req.SpawnServe = false
 	req.SpawnPlan = nil

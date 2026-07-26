@@ -10,9 +10,13 @@ open Paris → send "hello" → send "hello again"
 ## Steps
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "send-two-followups-while-live"
 	req.SessionID = "e2e-two-sends"
 	req.GrokSessionUUID = "b2222222-2222-4222-8222-222222222207"

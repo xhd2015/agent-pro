@@ -8,7 +8,7 @@
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     req.Env = []string{"PI_CODING_AGENT=true"}
     return nil
 }

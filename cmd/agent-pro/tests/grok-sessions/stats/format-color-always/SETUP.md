@@ -25,7 +25,7 @@ import "testing"
 
 const formatColorAlwaysSessionID = "019f283b-8888-7888-8888-888888888888"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = formatColorAlwaysSessionID
 	req.ColorMode = "always"
 	summaryPath := writeGrokSessionOpts(t, req.GrokHome, formatColorAlwaysSessionID,

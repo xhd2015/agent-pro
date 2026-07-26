@@ -17,9 +17,14 @@ agent-run run --agent-runner grok-tty --open "pty-open-cleanup"
 2. Assert serve was alive before reclaim and dead after.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"time"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "open-cleanup"
 	req.OpenInstantAttach = true
 	req.Prompt = "pty-open-cleanup"

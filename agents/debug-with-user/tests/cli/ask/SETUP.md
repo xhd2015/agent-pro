@@ -17,9 +17,12 @@ debug-with-user ask --title ... --option ... -> dialog.Ask -> JSON stdout or exi
 2. Append dry-run env vars per scenario.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if len(req.Args) == 0 {
 		req.Args = defaultAskArgs()
 	}

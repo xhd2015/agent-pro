@@ -20,9 +20,12 @@ staged: app.go + blob.bin -> gen-commit-msg --dry-run
 3. Run gen-commit-msg.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	binRel := StageDryRunRepoWithBinary(t, req)
 	req.DryRun = true
 	req.Commit = false

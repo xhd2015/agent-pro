@@ -20,9 +20,12 @@ fake grok <- GROK_HOME path (printed or preset)
 2. Leaf `Setup` chooses default temp vs explicit home.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ConfigEnv = "file"
 	req.FakeGrokCmd = fakeGrokPrintHome
 	req.ConfigJSON = minimalMockConfigJSON(8080, "")

@@ -16,9 +16,10 @@ agent-run run --dir <TempDir/no-such-dir> --agent-runner fake-codex "hi"
 import (
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	missing := filepath.Join(req.TempDir, "no-such-dir")
 	req.Args = append(req.Args, "--dir", missing, "hi")
 	return nil

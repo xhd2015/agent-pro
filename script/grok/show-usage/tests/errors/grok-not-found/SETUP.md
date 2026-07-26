@@ -22,9 +22,12 @@ grok-show-usage -> resolve grok path -> not found
 - Exercises production argv resolution when grok is absent.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SkipFakeCommand = true
 	req.MinimalPATH = true
 	return nil

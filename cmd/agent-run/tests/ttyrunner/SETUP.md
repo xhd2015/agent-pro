@@ -54,14 +54,15 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 	"github.com/xhd2015/agent-pro/pkgs/ttyrunner"
+	"github.com/xhd2015/doctest/session"
 )
 
 var fakePTYWrapUpgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
-var savedEnv = map[string]*string{}
-var stubSessionIDRe = regexp.MustCompile(`stub-tty:\s*(session-\d+)`)
+// Accept default session-N ids and custom --session ids (same-id policy).
+var stubSessionIDRe = regexp.MustCompile(`stub-tty:\s*([a-zA-Z0-9][a-zA-Z0-9._-]*)`)
 
-func Setup(t *testing.T, req *Request) error {
-	req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../.."))
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../.."))
 	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
 		return fmt.Errorf("repo root not found: %w", err)
 	}
@@ -83,39 +84,8 @@ func Setup(t *testing.T, req *Request) error {
 	return nil
 }
 
-func applyEnv(env []string) {
-	for _, e := range env {
-		parts := strings.SplitN(e, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key, val := parts[0], parts[1]
-		if old, ok := os.LookupEnv(key); ok {
-			v := old
-			savedEnv[key] = &v
-		} else {
-			savedEnv[key] = nil
-		}
-		os.Setenv(key, val)
-	}
-}
-
-func restoreEnv(env []string) {
-	for _, e := range env {
-		parts := strings.SplitN(e, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := parts[0]
-		if old, ok := savedEnv[key]; ok {
-			if old == nil {
-				os.Unsetenv(key)
-			} else {
-				os.Setenv(key, *old)
-			}
-		}
-	}
-}
+// applyEnv/restoreEnv removed: leaf isolation uses cmd.Env on CLI children and
+// explicit req.Home for in-process ttyrunner/agentstorage APIs.
 
 func registryDirFor(home, dirName string) string {
 	return filepath.Join(home, dirName)
@@ -125,12 +95,15 @@ func registryPathFor(home, dirName, sessionID string) string {
 	return filepath.Join(registryDirFor(home, dirName), sessionID+".json")
 }
 
+// Flat layout: sessions/<agentSessionID>/{tty,meta}.json (runner is meta only).
 func ttyJSONPathFor(home, runner, agentSessionID string) string {
-	return filepath.Join(home, "sessions", runner, agentSessionID, "tty.json")
+	_ = runner
+	return filepath.Join(home, "sessions", agentSessionID, "tty.json")
 }
 
 func metaJSONPathFor(home, runner, agentSessionID string) string {
-	return filepath.Join(home, "sessions", runner, agentSessionID, "meta.json")
+	_ = runner
+	return filepath.Join(home, "sessions", agentSessionID, "meta.json")
 }
 
 func defaultRegistryEntryJSON(sessionID string, port int) string {
@@ -577,9 +550,13 @@ func runStorageOp(t *testing.T, req *Request) (*Response, error) {
 	switch req.Action {
 	case "dual-write-tty-json":
 		req.EnableStubTTY = true
-		applyEnv(append(req.Env, "AGENT_RUN_ENABLE_STUB_TTY=1"))
+		// cmd.Env via runStubTTYRun / execAgentRun — no parent Setenv.
+		req.Env = append(req.Env, "AGENT_RUN_ENABLE_STUB_TTY=1")
 		req.AgentSessionID = "sess_stub_dual"
-		cliResp, err := runStubTTYRun(t, req, "--session", req.AgentSessionID)
+		// Keep registry + tty.json after turn so assert can inspect dual-write.
+		req.KeepTTY = true
+		// runStubTTYRun already adds --session when AgentSessionID is set.
+		cliResp, err := runStubTTYRun(t, req)
 		if err != nil {
 			return resp, err
 		}
@@ -588,6 +565,10 @@ func runStorageOp(t *testing.T, req *Request) (*Response, error) {
 		resp.ExitCode = cliResp.ExitCode
 		if m := stubSessionIDRe.FindStringSubmatch(resp.Stderr); len(m) > 1 {
 			req.TerminalSessionID = m[1]
+		}
+		// Same-id policy: custom --session is both agent and terminal id.
+		if req.TerminalSessionID == "" {
+			req.TerminalSessionID = req.AgentSessionID
 		}
 		resp.RegistryPath = registryPathFor(req.Home, "stub-tty-registry", req.TerminalSessionID)
 		resp.TTYJSONPath = ttyJSONPathFor(req.Home, "stub-tty", req.AgentSessionID)
@@ -728,7 +709,8 @@ func runStatusSendableOp(t *testing.T, req *Request) (*Response, error) {
 func runStubTTYOp(t *testing.T, req *Request) (*Response, error) {
 	resp := &Response{}
 	req.EnableStubTTY = true
-	applyEnv(append(req.Env, "AGENT_RUN_ENABLE_STUB_TTY=1"))
+	// Child env only (execAgentRun cmd.Env) — no parent applyEnv.
+	req.Env = append(req.Env, "AGENT_RUN_ENABLE_STUB_TTY=1")
 	switch req.Action {
 	case "run-creates-registry-and-tty-json":
 		req.AgentSessionID = "sess_stub_run"
@@ -827,7 +809,8 @@ func runStubTTYOp(t *testing.T, req *Request) (*Response, error) {
 func runMultiAttachOp(t *testing.T, req *Request) (*Response, error) {
 	resp := &Response{MultiAttachProbe: &MultiAttachProbeResult{}}
 	req.EnableStubTTY = true
-	applyEnv(append(req.Env, "AGENT_RUN_ENABLE_STUB_TTY=1"))
+	// Child env only (startStubTTYBackground cmd.Env) — no parent applyEnv.
+	req.Env = append(req.Env, "AGENT_RUN_ENABLE_STUB_TTY=1")
 	if req.StubScenarioJSON == "" {
 		req.StubScenarioJSON = stubScenarioKeepAliveJSON()
 	}

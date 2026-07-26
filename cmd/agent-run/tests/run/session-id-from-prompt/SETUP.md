@@ -37,8 +37,8 @@ agent-run run --session my-task "prompt"
 ## Context
 
 - Nested DOCTEST root: does not inherit parent `cmd/agent-run/tests` Setup/Run.
-- Repo root from this tree: `DOCTEST_ROOT/../../../../..`.
-- Session cache dir: `$TMPDIR/agent-run-session-id-from-prompt-doctest-<DOCTEST_SESSION_ID>/`.
+- Repo root from this tree: `d.DOCTEST_ROOT/../../../../..`.
+- Session cache dir: `$TMPDIR/agent-run-session-id-from-prompt-doctest-<d.DOCTEST_SESSION_ID>/`.
 
 ```go
 import (
@@ -56,6 +56,7 @@ import (
 	"testing"
 	"time"
 	"unicode/utf8"
+	"github.com/xhd2015/doctest/session"
 )
 
 const grokTTYBannerMarker = "GROK_TTY_BANNER"
@@ -64,8 +65,8 @@ const grokTTYBannerMarker = "GROK_TTY_BANNER"
 // Base starts with [a-z0-9] and may contain [a-z0-9._-]; timestamp is 8+6 digits.
 var autoSessionIDShape = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*-\d{8}-\d{6}(-\d+)?$`)
 
-func sessionCacheDir() string {
-	return filepath.Join(os.TempDir(), "agent-run-session-id-from-prompt-doctest-"+DOCTEST_SESSION_ID)
+func sessionCacheDir(d *session.Doctest) string {
+	return filepath.Join(os.TempDir(), "agent-run-session-id-from-prompt-doctest-"+d.DOCTEST_SESSION_ID)
 }
 
 func withFileLock(t *testing.T, lockPath string, fn func() error) error {
@@ -90,14 +91,14 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-func buildOnce(t *testing.T) (agentRun, fakeCodex string, err error) {
+func buildOnce(t *testing.T, d *session.Doctest) (agentRun, fakeCodex string, err error) {
 	t.Helper()
-	cache := sessionCacheDir()
+	cache := sessionCacheDir(d)
 	agentRun = filepath.Join(cache, "agent-run")
 	fakeCodex = filepath.Join(cache, "fake-codex")
 	lock := filepath.Join(cache, "build.lock")
 	ready := filepath.Join(cache, "binaries.ready")
-	repoRoot := filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../../.."))
+	repoRoot := filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../../.."))
 	err = withFileLock(t, lock, func() error {
 		if fileExists(ready) && fileExists(agentRun) && fileExists(fakeCodex) {
 			return nil
@@ -120,8 +121,11 @@ func buildOnce(t *testing.T) (agentRun, fakeCodex string, err error) {
 	return agentRun, fakeCodex, err
 }
 
+// fakeTUIRespondHi prints the grok banner and a turn response without blocking on
+// stdin. Headless new sessions put the prompt on argv and do not re-inject, so a
+// `read`-based fake hangs forever under --keep-tty wait-for-turn.
 func fakeTUIRespondHi() string {
-	return `sh -c 'printf "GROK_TTY_BANNER\nGrok › "; read line; echo "Response: $line"'`
+	return `sh -c 'printf "GROK_TTY_BANNER\nGrok › \nResponse: hi\n› "; sleep 0.2'`
 }
 
 func withoutEnvKey(env []string, key string) []string {
@@ -221,12 +225,21 @@ func parseGrokTTYSessionID(stderr string) (string, bool) {
 	return "", false
 }
 
+// Flat layout: sessions/<session_id>/ (runner is meta only; keep runner args for call sites).
+
+func sessionsRootDir(home string) string {
+	return filepath.Join(home, "sessions")
+}
+
+// sessionsRunnerDir is retained for call-site compatibility; flat layout ignores runner path segment.
 func sessionsRunnerDir(home, runner string) string {
-	return filepath.Join(home, "sessions", runner)
+	_ = runner
+	return sessionsRootDir(home)
 }
 
 func sessionDir(home, runner, id string) string {
-	return filepath.Join(sessionsRunnerDir(home, runner), id)
+	_ = runner
+	return filepath.Join(sessionsRootDir(home), id)
 }
 
 func sessionMetaPath(home, runner, id string) string {
@@ -241,10 +254,11 @@ func grokTTYRegistryPath(home, sessionID string) string {
 	return filepath.Join(grokTTYRegistryDir(home), sessionID+".json")
 }
 
-// listSessionIDs returns direct child directory names under sessions/<runner>/.
+// listSessionIDs returns session directory names under sessions/ (flat layout).
+// When runner is non-empty, only ids whose meta.runner matches are returned.
 func listSessionIDs(t *testing.T, home, runner string) []string {
 	t.Helper()
-	dir := sessionsRunnerDir(home, runner)
+	dir := sessionsRootDir(home)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -254,19 +268,35 @@ func listSessionIDs(t *testing.T, home, runner string) []string {
 	}
 	var ids []string
 	for _, e := range entries {
-		if e.IsDir() {
-			ids = append(ids, e.Name())
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
 		}
+		id := e.Name()
+		if runner != "" {
+			path := sessionMetaPath(home, runner, id)
+			data, err := os.ReadFile(path)
+			if err != nil {
+				continue
+			}
+			var m sessionMeta
+			if err := json.Unmarshal(data, &m); err != nil {
+				continue
+			}
+			if strings.TrimSpace(m.Runner) != runner {
+				continue
+			}
+		}
+		ids = append(ids, id)
 	}
 	return ids
 }
 
-// singleSessionID expects exactly one session directory under the runner.
+// singleSessionID expects exactly one matching session directory.
 func singleSessionID(t *testing.T, home, runner string) string {
 	t.Helper()
 	ids := listSessionIDs(t, home, runner)
 	if len(ids) != 1 {
-		t.Fatalf("expected exactly 1 session under sessions/%s/, got %d: %v", runner, len(ids), ids)
+		t.Fatalf("expected exactly 1 session under sessions/ (runner=%s), got %d: %v", runner, len(ids), ids)
 	}
 	return ids[0]
 }
@@ -292,7 +322,7 @@ func readSessionMeta(t *testing.T, home, runner, id string) sessionMeta {
 	return m
 }
 
-// seedStorageSession creates sessions/<runner>/<id>/meta.json so the id is taken.
+// seedStorageSession creates sessions/<id>/meta.json so the id is taken (flat layout).
 func seedStorageSession(t *testing.T, home, runner, id string) {
 	t.Helper()
 	dir := sessionDir(home, runner, id)
@@ -351,8 +381,8 @@ func runeCount(s string) int {
 	return utf8.RuneCountInString(s)
 }
 
-func Setup(t *testing.T, req *Request) error {
-	req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../../.."))
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../../.."))
 	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
 		return fmt.Errorf("repo root not found: %w", err)
 	}
@@ -361,7 +391,7 @@ func Setup(t *testing.T, req *Request) error {
 	if err := os.MkdirAll(req.Home, 0755); err != nil {
 		return fmt.Errorf("mkdir home: %w", err)
 	}
-	agentRun, fakeCodex, err := buildOnce(t)
+	agentRun, fakeCodex, err := buildOnce(t, d)
 	if err != nil {
 		return err
 	}

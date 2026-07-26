@@ -12,9 +12,13 @@ agent-run run --json --agent-runner commandcode-tty --agent-runner-binary <mock>
 1. Run with `--json` and `"Hello"` prompt.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{
 		"run", "--json",
 		"--agent-runner", "commandcode-tty",

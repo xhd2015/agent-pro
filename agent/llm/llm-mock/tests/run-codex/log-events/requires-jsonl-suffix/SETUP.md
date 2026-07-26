@@ -17,9 +17,11 @@ CLI validation error (.jsonl) -> no codex, no log file
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.LogEventsPath = filepath.Join(t.TempDir(), "events.log")
 	req.FakeCodexCmd = `sh -c 'echo CODEX_RAN; exit 0'`
 	req.ExpectedExit = 1

@@ -15,9 +15,12 @@ IsTransientIndexError("Unable to create '.../index.lock': File exists", nil) -> 
 1. Set `ClassifyOutput` to a representative git lock error.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClassifyOutput = "fatal: Unable to create '/repo/.git/index.lock': File exists."
 	req.WantTransient = true
 	return nil

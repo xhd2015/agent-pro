@@ -13,7 +13,7 @@ input with " and \ -> Escape -> \" and \\
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Input = `say "hi"\path`
 	return nil
 }

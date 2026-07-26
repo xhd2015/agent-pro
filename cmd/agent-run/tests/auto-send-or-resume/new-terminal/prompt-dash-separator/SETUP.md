@@ -21,9 +21,10 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "nt-prompt-dash-d4"
 	// Multi-token dash-leading prompt (joined with space as agent-run does).
 	req.FollowupPrompt = "-v explain"

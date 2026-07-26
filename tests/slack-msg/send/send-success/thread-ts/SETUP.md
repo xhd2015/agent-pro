@@ -11,9 +11,12 @@ slack-msg send --token --channel --thread TS MESSAGE -> PostMessage with thread_
 1. Pass `--thread` with a fixed parent timestamp.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{
 		"send",
 		"--token", slackTestToken,

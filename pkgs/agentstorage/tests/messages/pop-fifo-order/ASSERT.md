@@ -7,7 +7,7 @@
 ```go
 import "testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertNoError(t, err)
 	if len(resp.Messages) != 3 {
 		t.Fatalf("expected 3 popped messages, got %d", len(resp.Messages))

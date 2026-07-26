@@ -19,12 +19,14 @@ fake TUI holds 5s
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
+	"path/filepath"
 )
 
 const orderProbeMarker = "STREAM_ORDER_MARKER"
 const orderProbeGrokUUID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.GrokHome = filepath.Join(req.TempDir, "grok-home")
 	req.GrokSessionUUID = orderProbeGrokUUID
 	prompt := "stream order probe"

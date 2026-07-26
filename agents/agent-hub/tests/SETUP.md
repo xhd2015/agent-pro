@@ -22,6 +22,7 @@ import (
     "strings"
     "testing"
     "time"
+	"github.com/xhd2015/doctest/session"
 )
 
 func execCmd(t *testing.T, command string, args []string, dir string, env []string, stdin string) (*Response, error) {
@@ -157,8 +158,8 @@ func toInt(v any) (int64, bool) {
     return 0, false
 }
 
-func Setup(t *testing.T, req *Request) error {
-    req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../.."))
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+    req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../.."))
     if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
         return fmt.Errorf("repo root not found: %w", err)
     }

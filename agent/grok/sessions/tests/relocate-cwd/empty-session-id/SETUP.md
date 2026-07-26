@@ -22,7 +22,7 @@ import (
 	"testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	target := filepath.Join(req.TempDir, "ws-target")
 	mustMkdir(t, target)
 	req.TargetDir = absPath(t, target)

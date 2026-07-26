@@ -183,6 +183,12 @@ Parameter ranking (most → least significant):
 ## How to Run
 
 ```sh
+# Discovery skips labeled e2e/heavy/slow leaves by default.
+# Run e2e / full suite explicitly when needed:
+doctest test ./agent/llm/llm-mock/tests/run-grok                    # discovery (skips labeled e2e/heavy/slow)
+doctest test --label e2e ./agent/llm/llm-mock/tests/run-grok
+doctest test --label-all ./agent/llm/llm-mock/tests/run-grok
+
 # Plumbing tests (fake grok hook) — default CI
 doctest vet ./agent/llm/llm-mock/tests/run-grok
 doctest test ./agent/llm/llm-mock/tests/run-grok
@@ -218,6 +224,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request struct {
@@ -267,7 +275,7 @@ type Response struct {
 	Err               error
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	resp := &Response{}
 
 	workDir := req.WorkDir

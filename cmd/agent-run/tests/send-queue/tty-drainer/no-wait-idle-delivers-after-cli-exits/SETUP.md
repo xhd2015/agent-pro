@@ -17,9 +17,13 @@ idle stub-tty ServeSession (drainer running)
 3. Set `req.ExecTimeout = 30s` for inject poll after CLI exit.
 
 ```go
-import "time"
+import (
+	"time"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Action = "no-wait-idle-delivers-after-cli-exits"
 	req.SendMessage = "tty-drainer-idle-probe"
 	req.ExecTimeout = 30 * time.Second

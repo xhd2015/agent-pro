@@ -14,9 +14,12 @@ POST x2 -> Paris then follow-up
 3. Send second request → counter now 1, matches second exchange, returns "you asked for the French capital".
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     req.ConfigJSON = `{
   "port": 8080,
   "exchanges": [

@@ -28,7 +28,7 @@ import "testing"
 
 const signalsOnlySessionID = "019f283b-bbbb-7bbb-bbbb-bbbbbbbbbbbb"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = signalsOnlySessionID
 	summaryPath := writeGrokSessionOpts(t, req.GrokHome, signalsOnlySessionID,
 		"2026-07-03T14:00:00.000Z",

@@ -12,7 +12,10 @@ codex Working scrollback -> sendable: false + reason
 2. `Run` executes the scenario.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Action = "busy-screen-sendable-no"
 	req.RegistryDir = "codex-tty-registry"
 	req.FakePTYWrapScrollback = "CODEX_TTY_BANNER\nCodex ›\n• Working on it (esc to interrupt)\n"

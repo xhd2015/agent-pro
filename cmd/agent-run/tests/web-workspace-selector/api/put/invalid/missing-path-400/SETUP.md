@@ -21,9 +21,10 @@ PUT /workspace {"path":"/…/does-not-exist"}
 import (
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "missing-path-400"
 	missing := filepath.Join(req.TempDir, "workspaces", "does-not-exist")
 	req.Port = findFreePort(t)

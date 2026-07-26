@@ -20,9 +20,13 @@ GET ?limit=2&offset=4 -> [alpha]; has_more=false
 2. Three GET steps with limit=2 and offsets 0, 2, 4.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "limit-offset-page"
 	if err := seedSessions(t, req, defaultFiveSessions()); err != nil {
 		return err

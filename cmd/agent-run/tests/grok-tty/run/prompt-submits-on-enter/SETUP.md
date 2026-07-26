@@ -21,9 +21,13 @@ shows `run ls` in the input buffer without grok executing.
 2. Run `agent-run run --agent-runner grok-tty "run ls"`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	setGrokTTYCommand(req, fakeTUIRequiresCR())
 	req.Args = append(req.Args, "run ls")
 	return nil

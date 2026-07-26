@@ -33,9 +33,10 @@ new grok-tty chat
 import (
 	"net/http"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "ui"
 	prompt := "one word of France capital"
 	setGrokMockHook(t, req, llmMockGrokTTYTwoTurnHook(prompt, persistentGrokMockUUID))

@@ -16,9 +16,13 @@ codex session -> GET /terminal -> available false
 2. Fetch terminal status.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "codex"
 	req.SessionID = "non-tty-session"
 	writeSessionFixture(t, req, req.Runner, req.SessionID, "finished")

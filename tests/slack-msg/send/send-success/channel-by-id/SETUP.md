@@ -11,9 +11,12 @@ slack-msg send --token --channel C0ALE44K5J6 MESSAGE -> OK
 1. Channel ID instead of name.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{
 		"send",
 		"--token", slackTestToken,

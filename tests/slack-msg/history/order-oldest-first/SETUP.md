@@ -16,9 +16,12 @@ API newest-first messages -> slack-msg history -> human lines oldest→newest
 2. Leaf runs history for known channel.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClearSlackEnv = true
 	apiURL, err := ensureSlackTestServer(t)
 	if err != nil {

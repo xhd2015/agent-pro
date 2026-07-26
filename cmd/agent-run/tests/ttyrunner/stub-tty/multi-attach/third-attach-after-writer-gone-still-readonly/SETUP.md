@@ -12,7 +12,10 @@ writer gone -> third interactive attach -> permanent observer
 2. `Run` executes the scenario.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Action = "third-attach-after-writer-gone-still-readonly"
 	return nil
 }

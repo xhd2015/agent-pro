@@ -11,9 +11,12 @@ slack-msg history --limit 2 -> newest two from API -> print oldest of those firs
 1. Flags for token, channel, `--limit 2`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{
 		"history",
 		"--token", slackTestToken,

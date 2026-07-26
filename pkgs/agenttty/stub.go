@@ -193,7 +193,11 @@ func RunStubTTYMain() error {
 	}
 
 	<-framesDone
-	if waitForStubInput(reader) {
+	// Headless new sessions put the prompt on argv (Grok-style) and do not
+	// re-inject. Auto-complete the turn when argv has a prompt after
+	// __stub-tty; otherwise wait briefly for an injected newline.
+	shouldTurn := stubArgvHasPrompt() || waitForStubInput(reader, 3*time.Second)
+	if shouldTurn {
 		if sc.PromptLatencyMs > 0 {
 			time.Sleep(time.Duration(sc.PromptLatencyMs) * time.Millisecond)
 		}
@@ -211,15 +215,45 @@ func RunStubTTYMain() error {
 	return nil
 }
 
-func waitForStubInput(reader *bufio.Reader) bool {
-	for {
-		b, err := reader.ReadByte()
-		if err != nil {
+// stubArgvHasPrompt reports whether headless attached a trailing prompt after __stub-tty.
+func stubArgvHasPrompt() bool {
+	for i, a := range os.Args {
+		if a == "__stub-tty" {
+			if i+1 < len(os.Args) && strings.TrimSpace(os.Args[i+1]) != "" {
+				return true
+			}
 			return false
 		}
-		if b == '\n' || b == '\r' {
-			return true
+	}
+	return false
+}
+
+func waitForStubInput(reader *bufio.Reader, timeout time.Duration) bool {
+	if timeout <= 0 {
+		timeout = 3 * time.Second
+	}
+	type result struct {
+		ok bool
+	}
+	ch := make(chan result, 1)
+	go func() {
+		for {
+			b, err := reader.ReadByte()
+			if err != nil {
+				ch <- result{ok: false}
+				return
+			}
+			if b == '\n' || b == '\r' {
+				ch <- result{ok: true}
+				return
+			}
 		}
+	}()
+	select {
+	case r := <-ch:
+		return r.ok
+	case <-time.After(timeout):
+		return false
 	}
 }
 

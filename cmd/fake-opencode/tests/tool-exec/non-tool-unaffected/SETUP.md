@@ -6,9 +6,12 @@
 2. Run fake-opencode and verify these events pass through converted to opencode format.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_nontool","llm_events":[{"type":"message","text":"plain text message"},{"type":"error","text":"an error occurred"}]}`)
     return nil
 }

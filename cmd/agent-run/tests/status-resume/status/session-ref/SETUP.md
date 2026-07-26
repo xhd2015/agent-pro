@@ -21,9 +21,13 @@ seed meta.runner in {grok, grok-tty} + meta.runner_session_id = UUID
    `--grok-session-id`).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Grouping for session-ref form leaves (compound or --grok-session-id).
 	if req.Runner == "" {
 		req.Runner = defaultRunner

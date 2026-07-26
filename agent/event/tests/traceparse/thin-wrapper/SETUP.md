@@ -14,9 +14,12 @@ doctest harness -> Run Mode=thin_wrapper -> consolidated trace packages
 1. Descendant leaves set `req.Mode` to `thin_wrapper` (and wire-specific fields).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "thin_wrapper"
 	return nil
 }

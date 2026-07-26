@@ -14,9 +14,13 @@ agent-run status --grok-session-id ID [--json] -> meta-only resolve then probe
 2. `Run` executes status; assert exit code and layer fields.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Default to bare status; leaves override Args and seeds.
 	if len(req.Args) == 0 {
 		req.Args = []string{"status"}

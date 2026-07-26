@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Exit code 1.
@@ -12,9 +16,10 @@
 import (
 	"strings"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertExitCode(t, resp, 1)
 	if strings.Contains(resp.Stderr, "unrecognized flag") {
 		t.Fatalf("expected session-ref validation error, not flag parse failure:\n%s", resp.Stderr)

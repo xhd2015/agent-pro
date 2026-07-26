@@ -9,9 +9,10 @@ import (
     "os"
     "path/filepath"
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     sessDir := filepath.Join(req.TempDir, "opencode-config", "sessions", "sess_arg")
     if err := os.MkdirAll(sessDir, 0755); err != nil {
         return err

@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 - HTTP 400.
 - Response is JSON (not SSE).
@@ -6,9 +10,12 @@
 - Body does NOT contain `data:` (confirming SSE was not started).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     if resp.Err != nil && resp.ExitCode == 0 {
         t.Fatalf("unexpected run error: %v", resp.Err)
     }

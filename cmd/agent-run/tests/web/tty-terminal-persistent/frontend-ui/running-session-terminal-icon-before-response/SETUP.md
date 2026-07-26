@@ -21,9 +21,13 @@ web-created grok-tty running session + terminal_session_id session-N
 4. Assert terminal button visible before delayed response text appears.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "ui"
 	createRunningWebGrokTTYSessionThroughAPI(t, req)
 	waitForAnyRegistryID(t, req, 3_000_000_000)

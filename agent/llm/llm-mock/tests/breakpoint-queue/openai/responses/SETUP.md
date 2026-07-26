@@ -13,9 +13,12 @@ breakpoint slice -> responses.go encode -> output[] (reasoning, function_call, o
 3. `Assert` checks reasoning preamble, function_call wire, and codex tool remap.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Endpoint = "/v1/responses"
 	return nil
 }

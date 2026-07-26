@@ -18,7 +18,7 @@ import (
 	eventtypes "github.com/xhd2015/agent-pro/agent/event/types"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	words := []string{"The", " user", " wants", " me", " to", " act"}
 	for _, w := range words {
 		data, _ := json.Marshal(eventtypes.AgentEvent{

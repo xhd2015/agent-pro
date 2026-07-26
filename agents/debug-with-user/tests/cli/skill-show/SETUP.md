@@ -11,9 +11,12 @@ debug-with-user skill show -> stdout contains YAML frontmatter name
 1. Run `skill show` with no extra arguments.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"skill", "show"}
 	return nil
 }

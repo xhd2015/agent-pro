@@ -23,7 +23,7 @@ import (
     "testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     req.SessionID = ""
     req.Env = append(req.Env,
         "AGENT_PRO_SUBAGENT_TESTROLE_SESSION_ID=env_session_123",

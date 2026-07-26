@@ -21,6 +21,7 @@ scrollback: codex resume <uuid>
 ```go
 import (
 	"testing"
+
 	"github.com/xhd2015/doctest/session"
 )
 

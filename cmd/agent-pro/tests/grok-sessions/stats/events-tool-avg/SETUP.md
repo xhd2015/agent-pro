@@ -27,7 +27,7 @@ import "testing"
 
 const eventsToolAvgSessionID = "019f283b-cccc-7ccc-cccc-cccccccccccc"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = eventsToolAvgSessionID
 	summaryPath := writeGrokSessionOpts(t, req.GrokHome, eventsToolAvgSessionID,
 		"2026-07-03T14:10:00.000Z",

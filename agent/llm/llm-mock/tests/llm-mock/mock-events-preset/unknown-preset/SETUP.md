@@ -12,9 +12,12 @@ llm-mock --mock-events-preset=nonexistent -> startup error (no listener)
 2. Do not send HTTP requests.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.MockEventsPreset = "nonexistent"
 	return nil
 }

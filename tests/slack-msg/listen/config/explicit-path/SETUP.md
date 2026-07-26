@@ -11,10 +11,13 @@ slack-msg listen --config PATH -> Using config from: <absolute-path>
 1. Materialize valid-config fixture and pass `--config`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
-	if err := withConfigArg(t, req, "valid-config.json", false); err != nil {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	if err := withConfigArg(t, d, req, "valid-config.json", false); err != nil {
 		return err
 	}
 	req.Daemon = true

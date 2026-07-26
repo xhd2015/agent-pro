@@ -15,9 +15,10 @@ import (
 
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	faketoolexec "github.com/xhd2015/agent-pro/pkgs/fake-agent/fake-tool-exec"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	ec := 0
 	req.Events = []types.AgentEvent{{
 		ID:        "evt_bash",

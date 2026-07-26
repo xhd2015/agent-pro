@@ -24,9 +24,13 @@ POST follow-up "what did I say?"
 5. Fetch session detail and assert the follow-up is still running.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "followup"
 	req.FollowUpPrompt = "what did I say?"
 	req.RegistryTranscript = "followup-live-pty-ready\n"

@@ -24,7 +24,7 @@ import (
 	"github.com/xhd2015/agent-pro/pkgs/agentrunapi"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertNoError(t, err)
 	assertEqual(t, "Mode", resp.Mode, agentrunapi.ModeRun)
 	assertEqual(t, "Found", resp.Found, false)

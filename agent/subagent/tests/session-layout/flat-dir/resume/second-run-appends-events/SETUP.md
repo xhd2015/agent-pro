@@ -28,9 +28,11 @@ import (
 	"testing"
 
 	"github.com/xhd2015/agent-pro/agent/subagent"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionDir = filepath.Join(req.TempDir, "resume-session")
 	if err := os.MkdirAll(req.SessionDir, 0755); err != nil {
 		return err

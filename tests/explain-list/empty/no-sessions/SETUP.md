@@ -21,9 +21,12 @@ explain list -> stdout: "No explain sessions yet.\n" ; exit 0
 - Exact wording locked to `No explain sessions yet.` per requirement example.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"list"}
 	req.Sessions = nil
 	return nil

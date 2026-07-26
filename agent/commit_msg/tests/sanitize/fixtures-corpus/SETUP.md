@@ -20,9 +20,11 @@
 ```go
 import (
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	StageRepoWithChange(t, req)
 	// Placeholder: clean fixture so the mandatory Run path is well-formed.
 	WriteMockAgentText(t, req, "sess_corpus_placeholder", ReadAntiPatternIn(t, "clean_json_unchanged"))

@@ -22,9 +22,14 @@ agent-run run --agent-runner grok-tty --open "prompt"
 2. Leaves add prompt and specialize asserts (silence / id / registry / codex).
 
 ```go
-import "testing"
+import (
+	"testing"
+	"time"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "grok-tty"
 	req.OpenInstantAttach = true
 	req.Prompt = "open-lifecycle"

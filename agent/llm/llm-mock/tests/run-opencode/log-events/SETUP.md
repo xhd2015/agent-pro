@@ -32,9 +32,12 @@ fake/real opencode -> curl mock /v1/chat/completions -> log AgentEvent (message/
 - `installFakeOpencodeEchoArgv` — fake `opencode` on PATH for argv passthrough leaves (hook ignores argv).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.UseShortcut = false
 	return nil
 }

@@ -21,9 +21,12 @@ grok-show-usage -> fake grok (42%, December 25, 12:00 UTC) -> print
 - Verifies parsing is not hard-coded to the default `1%` / `July 9` values.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ShowUsageCommand = fakeTUICustom("42%", "December 25, 12:00 UTC")
 	return nil
 }

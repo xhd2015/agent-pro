@@ -29,7 +29,7 @@ import "testing"
 
 const formatPrettyDurationSessionID = "019f283b-4444-7444-4444-444444444444"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = formatPrettyDurationSessionID
 	summaryPath := writeGrokSessionOpts(t, req.GrokHome, formatPrettyDurationSessionID,
 		"2026-07-03T14:55:00.000Z",

@@ -13,9 +13,12 @@ POST /v1/responses stream -> reasoning + function_call (bash remapped)
 2. Send one streaming Responses API request.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.MockEventsPreset = "think-tool-message"
 	req.Requests = []string{
 		`{"model":"mock-model","input":[{"role":"user","content":"responses-reasoning-encode"}],"stream":true}`,

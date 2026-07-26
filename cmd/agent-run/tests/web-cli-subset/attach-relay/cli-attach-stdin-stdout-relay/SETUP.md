@@ -12,9 +12,14 @@ background stub-tty -> agent-run attach <terminal-id> + stdin -> marker echoed
 2. Run `agent-run attach` with stdin marker via CLI mode.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"time"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.TerminalSessionID = startStubTTYBackground(t, req)
 	req.CLIArgs = []string{"attach", req.TerminalSessionID}
 	req.CLIStdin = "CLI_ATTACH_MARKER\n"

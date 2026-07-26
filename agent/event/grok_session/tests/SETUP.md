@@ -36,7 +36,7 @@ import (
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.SessionID == "" {
 		req.SessionID = "sess_grok_test_001"
 	}

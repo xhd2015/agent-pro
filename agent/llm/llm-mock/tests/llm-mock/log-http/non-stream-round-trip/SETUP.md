@@ -16,9 +16,11 @@ POST /v1/chat/completions -> 200 JSON body -> 1 log-http line (stream=false)
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.LogHTTPFile = filepath.Join(t.TempDir(), "http-debug.jsonl")
 	req.ConfigJSON = `{
   "port": 8080,

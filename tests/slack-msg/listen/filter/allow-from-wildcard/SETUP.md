@@ -11,9 +11,12 @@ default allowFrom + app_mention from any user -> agent invoked
 1. Inject app_mention from slackTestOtherUserID (default allowFrom *).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.WantAgentCalls = 1
 	req.InjectEvents = []InjectedEvent{{
 		Kind:    "app_mention",

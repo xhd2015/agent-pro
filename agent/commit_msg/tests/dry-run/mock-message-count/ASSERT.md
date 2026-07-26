@@ -22,9 +22,11 @@ dry-run: would generate commit message for 2 staged file(s)
 import (
 	"strings"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatalf("Run returned error: %v", err)
 	}

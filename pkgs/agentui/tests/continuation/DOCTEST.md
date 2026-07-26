@@ -83,11 +83,13 @@ doctest test -v ./pkgs/agentui/tests/continuation/with-prior-history/build-promp
 
 ```go
 import (
+
 	"strings"
 	"testing"
 
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	"github.com/xhd2015/agent-pro/pkgs/agentui"
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request struct {
@@ -99,7 +101,7 @@ type Response struct {
 	BuiltPrompt string
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	t.Helper()
 	built := agentui.BuildContinuationPrompt(req.PriorEvents, req.NewPrompt)
 	return &Response{BuiltPrompt: strings.TrimSpace(built)}, nil

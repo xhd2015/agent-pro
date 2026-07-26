@@ -21,9 +21,13 @@ agent-run run --agent-runner grok-tty --open "hi"
 3. Assert registry file + TCP reachability.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Prompt = "hi"
 	req.Mode = "open-registry-after"
 	req.Args = []string{"run", "--agent-runner", "grok-tty", "--open", req.Prompt}

@@ -18,9 +18,13 @@ POST /api/agent-run/sessions -> GET detail -> session.workspace == web process c
 3. `Run` GETs session detail.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "web"
 	req.WebTokenMode = "explicit"
 	req.WebToken = "test"

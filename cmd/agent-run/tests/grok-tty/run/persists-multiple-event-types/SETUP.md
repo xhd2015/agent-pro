@@ -14,11 +14,16 @@ temp GROK_HOME session with full ACP sequence in updates.jsonl
 3. Assert `events.jsonl` contains user message, tool_call, assistant message, and think.
 
 ```go
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+
+	"github.com/xhd2015/doctest/session"
+)
 
 const persistGrokUUID = "33333333-3333-3333-3333-333333333333"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.GrokHome = filepath.Join(req.TempDir, "grok-home")
 	req.GrokSessionUUID = persistGrokUUID
 	prompt := "persist events"

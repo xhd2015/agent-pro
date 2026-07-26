@@ -8,9 +8,10 @@
 import (
     "path/filepath"
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     writeFile := filepath.Join(req.TempDir, "written.txt")
     writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_write","llm_events":[{"type":"tool_call","tool":"write","tool_input":{"path":"`+writeFile+`","content":"new file contents"}}]}`)
     return nil

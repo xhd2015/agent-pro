@@ -25,9 +25,10 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "nt-run-missing-d1"
 	req.FollowupPrompt = "create in iterm please"
 	req.WorkDir = req.TempDir

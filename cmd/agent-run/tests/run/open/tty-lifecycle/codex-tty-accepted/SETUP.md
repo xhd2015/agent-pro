@@ -15,9 +15,13 @@ agent-run run --agent-runner codex-tty --open "hi"
 3. Run `--open` with a short prompt.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "codex-tty"
 	req.OpenInstantAttach = true
 	req.Prompt = "hi"

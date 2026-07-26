@@ -14,9 +14,13 @@ meta without runner_session_id
 2. Run human status.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "test-unbound-s1"
 	req.MetaStatus = "finished"
 	req.InitialPrompt = "never bound"

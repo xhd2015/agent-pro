@@ -17,9 +17,10 @@ failure bind -> events.jsonl error "Cannot resolve session id: ..."
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Action = "error-card-on-bind-failure"
 	configureBindingFailureEnv(t, req, "ui error card probe")
 	startWebGrokSession(t, req)

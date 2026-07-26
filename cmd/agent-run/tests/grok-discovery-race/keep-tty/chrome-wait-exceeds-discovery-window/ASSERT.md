@@ -1,5 +1,5 @@
 ---
-label: slow
+label: e2e, slow
 explanation: empty-home bind may wait full 90s discovery window after fix
 ---
 
@@ -27,9 +27,10 @@ Non-zero or finished with error status is acceptable; timing assertion is primar
 import (
 	"strings"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

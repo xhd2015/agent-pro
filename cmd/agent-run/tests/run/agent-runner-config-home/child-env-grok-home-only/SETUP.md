@@ -14,9 +14,15 @@
 2. Run with `--agent-runner-config-home` and `--agent-runner-binary`.
 
 ```go
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.AgentRunnerConfigHome = filepath.Join(req.TempDir, "child-env-home")
 	if err := os.MkdirAll(req.AgentRunnerConfigHome, 0755); err != nil {
 		return err

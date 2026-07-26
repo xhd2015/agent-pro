@@ -14,9 +14,15 @@ agent-run run --agent-runner-binary <script> "argv probe"
 2. Run with `--agent-runner-binary` pointing at the script; hook env unset.
 
 ```go
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	binDir := filepath.Join(req.TempDir, "fake-bin")
 	if err := os.MkdirAll(binDir, 0755); err != nil {
 		return err

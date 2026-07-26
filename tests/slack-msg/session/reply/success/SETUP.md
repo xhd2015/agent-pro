@@ -26,11 +26,14 @@ seed sessions.json + CapturePosts slacktest
 - Channel: `C0ALE44K5J6`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
+	"github.com/xhd2015/doctest/session"
+)
 const sessionReplyFixtureID = "slack-channel-C0ALE44K5J6"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClearSlackEnv = true
 	req.CapturePosts = true
 	if err := isolateHome(t, req); err != nil {

@@ -19,7 +19,7 @@ ReadEvents(new session, offset=0) -> empty slice, offset 0, no error
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Action = "read_empty"
 	req.SessionID = "sess_empty_events"
 	return nil

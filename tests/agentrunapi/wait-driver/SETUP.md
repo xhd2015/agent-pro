@@ -21,7 +21,7 @@ OpenInNewTerminal(OpenTerminal hook) -> dir + followUp recorded
 - Package `github.com/xhd2015/agent-pro/pkgs/agentrunapi` P2 exports (classic RED
   until implementer lands them). See root DOCTEST planned API.
 - **No real agent-run binary, PATH LookPath, iTerm, or grok** in unit leaves.
-- Nested tree: `DOCTEST_ROOT` is `tests/agentrunapi/wait-driver`; module root is
+- Nested tree: `d.DOCTEST_ROOT` is `tests/agentrunapi/wait-driver`; module root is
   `../../..` relative to that root.
 - Parent P1 tree (`tests/agentrunapi` leaves outside this nested root) must stay
   GREEN independently.
@@ -43,7 +43,7 @@ import (
 	"testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.SessionID == "" && req.Mode != "status" && req.Mode != "source_wire" {
 		// wait_ready missing-session-id leaf clears SessionID after this when needed.
 		req.SessionID = "sess-wait-1"

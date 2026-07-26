@@ -14,9 +14,10 @@ import (
 	"testing"
 
 	opencode_types "github.com/xhd2015/agent-pro/agent/event/opencode_types"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Value = opencode_types.Event{
 		Type:      opencode_types.EvtReasoning,
 		SessionID: "sess_r1",

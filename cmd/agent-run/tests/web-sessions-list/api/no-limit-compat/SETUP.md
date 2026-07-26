@@ -21,9 +21,13 @@ GET /api/agent-run/sessions
 2. GET `/api/agent-run/sessions` with no query params.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "no-limit-compat"
 	if err := seedSessions(t, req, defaultFiveSessions()); err != nil {
 		return err

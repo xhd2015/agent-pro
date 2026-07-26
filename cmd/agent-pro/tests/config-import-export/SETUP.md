@@ -26,7 +26,7 @@ import (
 	agentconfig "github.com/xhd2015/agent-pro/pkgs/agentconfig"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.HomeDir = t.TempDir()
 	req.ZipPath = filepath.Join(req.HomeDir, "config.zip")
 	return nil

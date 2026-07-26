@@ -13,9 +13,12 @@ sessions.json entry + --session-id + --config + MESSAGE
 2. Args: session reply --session-id ID --config PATH MESSAGE.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if err := seedSessionsJSON(t, req.HomeDir, []sessionMapEntry{{
 		SessionID:  sessionReplyFixtureID,
 		ChannelID:  slackTestChannelID,
@@ -27,7 +30,7 @@ func Setup(t *testing.T, req *Request) error {
 		return err
 	}
 	req.ConfigFixture = "valid-config.json"
-	if err := materializeConfig(t, req); err != nil {
+	if err := materializeConfig(t, d, req); err != nil {
 		return err
 	}
 	req.Args = insertConfigAfterSubcommand([]string{

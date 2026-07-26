@@ -61,6 +61,12 @@ cmd/agent-run/tests/grok-tty/sync-worker/
 ## How to Run
 
 ```sh
+# Discovery skips labeled e2e/heavy/slow leaves by default.
+# Run e2e / full suite explicitly when needed:
+doctest test ./cmd/agent-run/tests/grok-tty/sync-worker                    # discovery (skips labeled e2e/heavy/slow)
+doctest test --label e2e ./cmd/agent-run/tests/grok-tty/sync-worker
+doctest test --label-all ./cmd/agent-run/tests/grok-tty/sync-worker
+
 doctest vet ./cmd/agent-run/tests/grok-tty/sync-worker
 doctest test ./cmd/agent-run/tests/grok-tty/sync-worker   # RED before implement
 
@@ -92,6 +98,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
 type GrokUpdatesSchedule struct {
@@ -153,7 +160,7 @@ type Response struct {
 	Err             error
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	switch req.Mode {
 	case "web-rapid-followups":
 		return runWebRapidFollowups(t, req)

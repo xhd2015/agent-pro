@@ -16,9 +16,13 @@ agent-run run --session X --session-id-from-prompt "prompt" → error, exit ≠ 
 2. Leaf sets both flags with a non-empty prompt.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "fake-codex"
 	// Prefix shared by conflict leaves; leaf adds session/auto/prompt.
 	req.Args = []string{"run", "--agent-runner", "fake-codex"}

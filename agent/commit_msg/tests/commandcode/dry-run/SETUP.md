@@ -21,9 +21,11 @@ staged -> gen-commit-msg --dry-run --agent-runner commandcode
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.DryRun = true
 	req.Commit = false
 	// Prove agent is not invoked under dry-run even for commandcode.

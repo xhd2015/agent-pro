@@ -16,7 +16,10 @@ agent-run tty send --help -> send-specific help
 3. `Assert` checks that help output lists the expected subcommands.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"tty", "--help"}
 	return nil
 }

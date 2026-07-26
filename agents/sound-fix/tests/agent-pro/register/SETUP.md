@@ -11,9 +11,12 @@ agent-pro skill sound-fix --show -> name: sound-fix in output
 1. Invoke `agent-pro skill sound-fix --show`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"skill", "sound-fix", "--show"}
 	return nil
 }

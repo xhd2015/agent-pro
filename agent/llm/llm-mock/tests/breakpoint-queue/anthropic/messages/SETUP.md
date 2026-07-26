@@ -12,9 +12,12 @@ genQueue dequeue -> messages.go -> content[] with thinking | tool_use | text blo
 2. `Assert` parses `content[]` block `type` fields.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Endpoint = "/v1/messages"
 	return nil
 }

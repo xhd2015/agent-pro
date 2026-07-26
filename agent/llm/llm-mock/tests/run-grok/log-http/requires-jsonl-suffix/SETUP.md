@@ -15,9 +15,11 @@ llm-mock run --log-http /tmp/http.log grok -> CLI error (grok not started)
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.LogHTTPPath = filepath.Join(t.TempDir(), "http.log")
 	req.FakeGrokCmd = `sh -c 'echo GROK_RAN; exit 0'`
 	return nil

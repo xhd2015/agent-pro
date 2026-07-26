@@ -17,7 +17,7 @@ BuildArgs(AgentRunner="", session, prompt) -> no --agent-runner flag
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "sess-no-runner"
 	req.Prompt = "no runner flag"
 	req.AgentRunner = ""

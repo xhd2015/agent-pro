@@ -14,9 +14,13 @@ exited bound meta -> agent-run resume <id>  (no followup, no --open)
 2. Run resume with only session id (no followup prompt).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "test-resume-noprompt-s1"
 	req.RunnerSessionID = "550e8400-e29b-41d4-a716-446655440422"
 	req.MetaStatus = "finished"

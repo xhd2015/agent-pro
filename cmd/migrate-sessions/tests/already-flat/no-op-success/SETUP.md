@@ -20,9 +20,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	writeFlatSession(t, req.Home, "sess_x", "fake-codex", "finished", "2026-07-02T00:00:00Z")
 	writeLayoutV2(t, req.Home)
 	// marker file to detect unwanted rewrite of session tree

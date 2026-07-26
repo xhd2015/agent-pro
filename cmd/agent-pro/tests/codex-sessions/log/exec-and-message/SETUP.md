@@ -23,7 +23,7 @@ terminal log with RUN and ASSISTANT labels
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "01900009-ffff-7fff-ffff-ffffffffffff"
 	lines := []string{
 		agentMessageLine("Hello from codex"),

@@ -7,9 +7,12 @@
 1. Inherit the fake-opencode binary and environment from the root SETUP.md.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     t.Log("setting up delay test group")
     return nil
 }

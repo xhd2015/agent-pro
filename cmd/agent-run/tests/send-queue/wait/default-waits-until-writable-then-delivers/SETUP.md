@@ -13,9 +13,13 @@ busy screen 12s -> idle prompt -> default send blocks >10s -> exit 0, delivered
 3. Set `req.ExecTimeout = 25s` to allow busy-then-idle transition.
 
 ```go
-import "time"
+import (
+	"time"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Action = "default-waits-until-writable-then-delivers"
 	req.SendMessage = "writable-wait-probe"
 	req.ExecTimeout = 25 * time.Second

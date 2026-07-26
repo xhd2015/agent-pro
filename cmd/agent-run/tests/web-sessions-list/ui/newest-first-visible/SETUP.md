@@ -20,9 +20,13 @@ open /
 2. Open home; wait for session-list; assert first row is newest.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 	req.Scenario = "newest-first-visible"
 	if err := seedSessions(t, req, defaultFiveSessions()); err != nil {

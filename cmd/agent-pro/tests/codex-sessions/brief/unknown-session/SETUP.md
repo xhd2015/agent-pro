@@ -22,7 +22,7 @@ codex session not found: <id>
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "01900008-eeee-7eee-eeee-eeeeeeeeeeee"
 	return nil
 }

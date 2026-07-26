@@ -21,9 +21,10 @@ POST session -> agentui.Run emit(message, timestamp) -> GET detail -> assistant 
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "web"
 	req.WebTokenMode = "explicit"
 	req.WebToken = "test"

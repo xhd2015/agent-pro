@@ -54,6 +54,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
 // pageSize is the product home list page size.
@@ -62,8 +63,8 @@ const pageSize = 30
 // seedBase is a fixed UTC base for deterministic updated_at ordering.
 var seedBase = time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
 
-func Setup(t *testing.T, req *Request) error {
-	req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../.."))
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../.."))
 	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
 		return fmt.Errorf("repo root not found: %w", err)
 	}

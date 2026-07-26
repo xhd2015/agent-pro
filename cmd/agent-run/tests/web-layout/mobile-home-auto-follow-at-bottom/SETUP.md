@@ -26,9 +26,10 @@ seed 20 home sessions → / at top → append 21st session dir → poll refresh 
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 
 	req.Layout = "home-auto-follow-at-bottom"

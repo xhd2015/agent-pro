@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Exit code 0.
@@ -10,9 +14,10 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertSuccess(t, resp)
 	if !strings.HasSuffix(resp.Stdout, "\n") {
 		t.Fatalf("expected trailing newline, got %q", resp.Stdout)

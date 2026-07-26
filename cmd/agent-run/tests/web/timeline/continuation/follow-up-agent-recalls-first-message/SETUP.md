@@ -21,9 +21,10 @@ POST "hi" -> finished -> POST "what did I ask?" -> finished -> GET detail
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.WebTokenMode = "explicit"
 	req.WebToken = "test"
 	req.WebPort = 0

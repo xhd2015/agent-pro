@@ -12,9 +12,12 @@
 2. Inject app_mention in other channel.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"--channel", slackTestChannelID}
 	req.WantAgentCalls = 0
 	req.InjectEvents = []InjectedEvent{{

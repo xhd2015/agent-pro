@@ -30,7 +30,7 @@ import (
 
 const activeSessionID = "019f283a-eeee-7eee-eeee-eeeeeeeeee05"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	oldWS := filepath.Join(req.TempDir, "ws-old")
 	newWS := filepath.Join(req.TempDir, "ws-new")
 	mustMkdir(t, oldWS)

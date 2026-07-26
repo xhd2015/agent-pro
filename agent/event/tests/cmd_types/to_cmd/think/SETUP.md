@@ -15,9 +15,14 @@ ActionThink(text="thinking...") -> {"role":"assistant","content":[{"type":"reaso
 2. Verify the output contains an assistant event with a `reasoning` block.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"github.com/xhd2015/agent-pro/agent/event/types"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Events = []types.AgentEvent{
 		{Type: types.ActionThink, Text: "thinking..."},
 	}

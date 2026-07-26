@@ -31,6 +31,7 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
 const bgBindDelayedUUID = "550e8400-e29b-41d4-a716-446655440802"
@@ -38,7 +39,7 @@ const bgBindDelayedUUID = "550e8400-e29b-41d4-a716-446655440802"
 // delay longer than instant-attach return, short enough for CI.
 const bgBindMaterializeDelay = 2 * time.Second
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	prompt := "bg bind wait"
 	req.OpenPrompt = prompt
 	req.InitialPrompt = prompt

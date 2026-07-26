@@ -12,7 +12,10 @@ agent-run tty status --json session-1 -> valid JSON object with pid, port, tty_t
 2. `req.Mode` = `"status-json"` for JSON parsing.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"tty", "status", "--json", req.RegistrySessionID}
 	req.Mode = "status-json"
 	return nil

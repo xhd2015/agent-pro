@@ -18,9 +18,13 @@ open /workspace at dirs-only fixture (alpha/, beta/ only)
 1. Open selector at dirs-only root; assert no show-files control.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 	req.Scenario = "show-files-control-hidden-when-no-files"
 	root := makeDirsOnlyFixture(t, req)

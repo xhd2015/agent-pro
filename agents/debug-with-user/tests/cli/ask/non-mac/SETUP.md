@@ -20,9 +20,10 @@ non-darwin + no DEBUG_WITH_USER_DRY_RUN -> ask -> exit 2, stderr explains macOS 
 import (
 	"runtime"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if runtime.GOOS == "darwin" {
 		t.Skip("non-mac error path is exercised on non-darwin CI; skip on macOS host")
 	}

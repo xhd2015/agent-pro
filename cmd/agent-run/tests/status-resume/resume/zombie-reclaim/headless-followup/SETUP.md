@@ -22,9 +22,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
+	"time"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "test-resume-zombie-s1"
 	req.TerminalSessionID = "test-resume-zombie-s1"
 	req.RunnerSessionID = "550e8400-e29b-41d4-a716-446655440702"

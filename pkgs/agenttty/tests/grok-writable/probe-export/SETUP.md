@@ -26,13 +26,15 @@ mini capture dir (captures.jsonl + snapshots/)
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func miniCaptureDir() string {
-	return filepath.Join(DOCTEST_ROOT, "probe-export", "capture-dir-round-trip", "testdata", "mini-capture")
+func miniCaptureDir(d *session.Doctest) string {
+	return filepath.Join(d.DOCTEST_ROOT, "probe-export", "capture-dir-round-trip", "testdata", "mini-capture")
 }
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.RunAllFixtures = false
 	req.FixtureFile = ""
 	return nil

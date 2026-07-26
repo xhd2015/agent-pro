@@ -13,7 +13,7 @@ harness PTY -> agent-term run grok -> grok banner visible -> no i/o timeout at 4
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Phase = "run-pty-probe"
 	req.StartDaemon = true
 	req.RequireGrok = true

@@ -34,9 +34,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.Mode != "" && req.Mode != "web" {
 		return fmt.Errorf("web group: unexpected Mode %q", req.Mode)
 	}

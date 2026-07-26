@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Target = "to_grok"
 	req.SessionID = "sess_test_001"
 	return nil

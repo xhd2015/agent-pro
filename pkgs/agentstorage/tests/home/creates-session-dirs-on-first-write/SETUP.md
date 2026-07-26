@@ -21,7 +21,7 @@ empty home -> AppendEvent(sessionID, ev) -> sessions/<sessionID>/events.jsonl ex
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Action = "creates_dirs"
 	req.SessionID = "sess_new"
 	return nil

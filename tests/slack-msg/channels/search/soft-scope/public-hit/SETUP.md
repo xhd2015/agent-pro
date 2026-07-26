@@ -14,9 +14,12 @@ slack-msg channels search --token "#GENERAL"
 1. Token + QUERY `#GENERAL` (contains match; avoids false positive on `agent-pro-debug` which is private and soft-skipped anyway).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{
 		"channels", "search",
 		"--token", slackTestToken,

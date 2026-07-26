@@ -15,7 +15,7 @@ test harness -> subagent.Run(SessionLayout.Dir) -> inspect session dir files
 
 ## Steps
 
-1. Resolve module root from `DOCTEST_ROOT`.
+1. Resolve module root from `d.DOCTEST_ROOT`.
 2. Build `fake-codex` binary into temp dir.
 3. Descendant `Setup` creates flat session dir and configures `SessionLayout`.
 
@@ -29,21 +29,23 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func moduleRoot(t *testing.T) string {
+func moduleRoot(t *testing.T, d *session.Doctest) string {
 	t.Helper()
-	return filepath.Clean(filepath.Join(DOCTEST_ROOT, "..", "..", "..", ".."))
+	return filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "..", "..", "..", ".."))
 }
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.TempDir = t.TempDir()
 	req.HomeDir = filepath.Join(req.TempDir, "home")
 	if err := os.MkdirAll(req.HomeDir, 0755); err != nil {
 		return err
 	}
 	req.FakeCodexBin = filepath.Join(req.TempDir, "fake-codex")
-	buildFakeCodex(t, moduleRoot(t), req.FakeCodexBin)
+	buildFakeCodex(t, moduleRoot(t, d), req.FakeCodexBin)
 	if req.AgentRunner == "" {
 		req.AgentRunner = "fake-codex"
 	}

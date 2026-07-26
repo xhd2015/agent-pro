@@ -16,9 +16,13 @@ SSE must not filter to message-only rows
 1. Grouping setup sets `req.Area = "web"` and `req.Mode = "sse"`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Area = "web"
 	req.Mode = "sse"
 	return nil

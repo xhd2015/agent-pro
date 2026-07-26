@@ -22,9 +22,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	writeNestedSession(t, req.Home, "fake-codex", "sess_a", "finished", "2026-07-01T10:00:00Z", "event-a")
 	writeNestedSession(t, req.Home, "fake-opencode", "sess_b", "running", "2026-07-01T11:00:00Z", "event-b")
 	// non-migrated tree

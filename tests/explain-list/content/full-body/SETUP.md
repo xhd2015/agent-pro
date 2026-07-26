@@ -26,9 +26,11 @@ explain list -> A body is the full 200 x string; no …; no rune cap
 import (
 	"strings"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"list"}
 	long := strings.Repeat("x", 200)
 	req.Sessions = []SessionSeed{

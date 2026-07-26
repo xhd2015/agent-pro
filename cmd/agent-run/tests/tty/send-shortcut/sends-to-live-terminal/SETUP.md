@@ -16,9 +16,14 @@ agent-run send session-1 "hello" -> resolveTerminal -> WS connect -> inject Ctrl
 5. Assert that the send command succeeds (captures response).
 
 ```go
-import "fmt"
+import (
+	"fmt"
+	"time"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.StartFakePTYWrap = true
 	req.FakePTYInputReceived = make(chan string, 10)
 	startFakePTYWrapServer(t, req)

@@ -26,9 +26,12 @@ send-queue correctly blocks injection (`ready=false`).
 - M2: open-ready is orthogonal to writable busy; RED on OpenReady/Classify until implementer.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.FixtureFile = fixtureModernBusy
 	return nil
 }

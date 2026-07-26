@@ -29,9 +29,12 @@ doctest <- provider.other AND permission still present; provider.newprov added
   `opencodecfg.ReadDir`/`Write` rather than overwriting the file.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.PreConfig = `{
   "provider": {
     "other": {

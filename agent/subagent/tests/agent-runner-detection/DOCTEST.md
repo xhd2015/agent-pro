@@ -168,11 +168,12 @@ doctest test -v ./external/agent-pro/agent/subagent/tests/agent-runner-detection
 
 ```go
 import (
-    "os"
-    "strings"
+
+    "sync"
     "testing"
 
     "github.com/xhd2015/agent-pro/agent/subagent"
+    "github.com/xhd2015/doctest/session"
 )
 
 
@@ -187,19 +188,41 @@ type Response struct {
     Detected bool
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
-    // Clean detection env vars that may leak from the host environment
-    os.Unsetenv("CODEX_THREAD_ID")
-    os.Unsetenv("PI_CODING_AGENT")
-
-    for _, e := range req.Env {
-        parts := splitEnv(e)
-        if len(parts) == 2 {
-            os.Setenv(parts[0], parts[1])
-        }
+// envLookup: force-unset detection keys, apply req.Env; request-scoped (no Setenv).
+// splitEnv is defined in SETUP.md.
+func envLookup(env []string, forceUnset ...string) func(string) (string, bool) {
+    overlay := map[string]*string{}
+    for _, k := range forceUnset {
+        overlay[k] = nil
     }
+    for _, e := range env {
+        parts := splitEnv(e)
+        if len(parts) != 2 {
+            continue
+        }
+        v := parts[1]
+        overlay[parts[0]] = &v
+    }
+    return func(key string) (string, bool) {
+        p, ok := overlay[key]
+        if !ok {
+            return "", false
+        }
+        if p == nil {
+            return "", true
+        }
+        return *p, true
+    }
+}
 
+// processNameHookMu serializes TestProcessNameFunc package-global mutation
+// (same class of residual as product Test hooks under t.Parallel).
+var processNameHookMu sync.Mutex
+
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
     if len(req.ProcessNames) > 0 {
+        processNameHookMu.Lock()
+        defer processNameHookMu.Unlock()
         callIdx := 0
         subagent.TestProcessNameFunc = func(pid int) string {
             if callIdx < len(req.ProcessNames) {
@@ -214,6 +237,7 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 
     runner, detected := subagent.TestExported_autoDetectAgentRunner(subagent.Config{
         AgentRunnerEnv: req.AgentRunnerEnv,
+        EnvLookup:      envLookup(req.Env, "CODEX_THREAD_ID", "PI_CODING_AGENT"),
     })
 
     return &Response{Runner: runner, Detected: detected}, nil

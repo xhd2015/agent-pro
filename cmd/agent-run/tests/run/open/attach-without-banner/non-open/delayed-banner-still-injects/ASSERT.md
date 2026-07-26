@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Combined output must **not** contain `banner not detected` (delayed banner still within wait).
@@ -22,9 +26,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	// Context deadline on the whole exec still fails the leaf.
 	if err != nil {
 		t.Fatalf("run failed: %v\nstdout:\n%s\nstderr:\n%s", err, resp.Stdout, resp.Stderr)

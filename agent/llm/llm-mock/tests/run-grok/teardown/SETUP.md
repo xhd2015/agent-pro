@@ -21,9 +21,13 @@ must NOT block ~60s in waitAndMirrorSessions when session dir lacks events.jsonl
 4. `Assert` expects exit 0 without context timeout.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"time"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.ExecTimeout <= 0 {
 		req.ExecTimeout = 5 * time.Second
 	}

@@ -1,12 +1,19 @@
+---
+label: e2e
+---
+
 ## Expected
 - HTTP 400.
 - Response body contains JSON with `error.message` = `"no matching exchange"`.
 - Response body contains `error.type` = `"no_match"`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     // Run may return a response even on HTTP errors
     if resp.Err != nil && resp.ExitCode == 0 {
         t.Fatalf("unexpected run error: %v", resp.Err)

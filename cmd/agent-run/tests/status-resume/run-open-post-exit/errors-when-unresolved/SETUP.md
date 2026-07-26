@@ -21,9 +21,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
+	"time"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.GrokHome = filepath.Join(req.TempDir, "empty-grok-home")
 	if err := os.MkdirAll(req.GrokHome, 0755); err != nil {
 		return err

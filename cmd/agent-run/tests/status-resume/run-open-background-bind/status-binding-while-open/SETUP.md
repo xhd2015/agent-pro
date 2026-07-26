@@ -25,12 +25,13 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
 const bgBindStatusUUID = "550e8400-e29b-41d4-a716-446655440804"
 const bgBindStatusSession = "open-bg-bind-status-1"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	prompt := "bg bind status probe"
 	req.OpenPrompt = prompt
 	req.InitialPrompt = prompt

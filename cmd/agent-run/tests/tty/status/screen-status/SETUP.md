@@ -20,7 +20,12 @@ agent-run tty status session-1 -> WS connect -> scrollback -> banner/input-box/i
 4. `Assert` checks that the screen status field matches the expected state.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"fmt"
+	"github.com/xhd2015/doctest/session"
+	"time"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.StartFakePTYWrap = true
 	startFakePTYWrapServer(t, req)
 	waitForPortOpen(t, fmt.Sprintf("127.0.0.1:%d", req.FakePTYWrapPort), 5*time.Second)

@@ -16,9 +16,10 @@ run --prepend-path /abs/missing-tools --agent-runner-binary env-logger "prompt"
 import (
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	prepareEnvLoggingRun(t, req)
 	// Soft-allow: path must not exist.
 	req.PrependPathDir = absPath(t, filepath.Join(req.TempDir, "missing-tools-dir"))

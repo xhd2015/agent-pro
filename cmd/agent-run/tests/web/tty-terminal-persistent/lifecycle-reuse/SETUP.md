@@ -24,9 +24,13 @@ navigation or follow-up -> same terminal_session_id session-1
   stale; that is not this branch.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.RegistryTranscript = "reused-terminal-session-1\n"
 	listenAddr := startMappedPtywrap(t, req)
 	writeMappedSessionFixture(t, req)

@@ -16,9 +16,13 @@ single assistant turn -> multiple phase rows -> identical id field
 2. Assert collects distinct ids among phased assistant rows — exactly one id.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.WebTokenMode = "explicit"
 	req.WebToken = "test"
 	req.WebPort = 0

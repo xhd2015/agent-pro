@@ -124,6 +124,12 @@ Parameter ranking (most → least significant):
 ## How to Run
 
 ```sh
+# Discovery skips labeled e2e/heavy/slow leaves by default.
+# Run e2e / full suite explicitly when needed:
+doctest test ./cmd/agent-run/tests/tty                    # discovery (skips labeled e2e/heavy/slow)
+doctest test --label e2e ./cmd/agent-run/tests/tty
+doctest test --label-all ./cmd/agent-run/tests/tty
+
 doctest vet ./cmd/agent-run/tests/tty
 doctest test ./cmd/agent-run/tests/tty
 doctest test -v ./cmd/agent-run/tests/tty/status/registry-entry-valid/human-readable
@@ -150,6 +156,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/xhd2015/doctest/session"
 )
 
 type RegistryEntryData struct {
@@ -199,7 +206,7 @@ type Response struct {
 	AttachProbeErr string
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	switch req.Mode {
 	case "status-json":
 		return runStatusJSON(t, req)

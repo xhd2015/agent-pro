@@ -31,9 +31,12 @@ slack-msg channels list -> every type missing_scope
 2. Assert hard-fail stderr and exit 1 (no partial channel stdout).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClearSlackEnv = true
 	return nil
 }

@@ -21,9 +21,13 @@ seed running session (user only, no live writer) -> session page -> SSE tails at
 4. Assert exactly **1** `.../events/stream` request, **0** aborted/cancelled stream requests, session-detail GET **≤ 3**.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 
 	req.Layout = "sse-persistence"

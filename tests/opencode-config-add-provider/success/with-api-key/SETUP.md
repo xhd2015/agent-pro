@@ -26,9 +26,12 @@ doctest <- provider.keyprov.options == { "baseURL": "...", "apiKey": "mysecret" 
 - `assertSuccessCommon` is inherited from `success/SETUP.md` (this leaf is under `success/`).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{
 		"opencode", "config", "add-provider",
 		"--id", "keyprov",

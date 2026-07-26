@@ -19,9 +19,12 @@ HTTP serve (prefix or random fallback) -> append AgentEvent JSONL per served eve
 3. `Run` starts server with `--agent-events-file`, sends HTTP requests, reads log file.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Endpoint = "/v1/chat/completions"
 	req.Method = "POST"
 	return nil

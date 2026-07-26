@@ -14,7 +14,7 @@ import (
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	exitErr := 2
 	req.Text = "Searching..."
 	req.Output = "found 3 matches"

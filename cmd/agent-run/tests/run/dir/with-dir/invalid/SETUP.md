@@ -12,9 +12,13 @@
 1. Leaves construct missing or file paths under TempDir.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Invalid --dir branch: leaves supply missing or non-directory paths.
 	t.Helper()
 	if req.TempDir == "" {

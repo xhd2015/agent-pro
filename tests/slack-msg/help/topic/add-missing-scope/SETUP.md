@@ -25,9 +25,12 @@ slack-msg --topic add-missing-scope --help
   brittle full golden (except trailing newline + exit 0 + empty stderr).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SlackAPIURL = ""
 	return nil
 }

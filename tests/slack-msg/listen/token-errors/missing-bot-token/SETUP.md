@@ -11,9 +11,12 @@ Caller -> slack-msg listen --app-token ... -> bot token required
 1. Provide app token only.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.AppToken = slackTestAppToken
 	return nil
 }

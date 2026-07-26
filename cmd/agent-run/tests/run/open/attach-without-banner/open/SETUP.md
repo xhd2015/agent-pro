@@ -23,9 +23,14 @@ agent-run run --agent-runner grok-tty --open ["prompt"]
 2. Leaves set empty vs with-prompt vs argv/stdin probe.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"time"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	clearOpenInstantAttach(req)
 	req.Runner = "grok-tty"
 	req.Mode = "open-registry-after"

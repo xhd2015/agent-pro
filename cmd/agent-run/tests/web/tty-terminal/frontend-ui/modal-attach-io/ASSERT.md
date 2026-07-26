@@ -1,5 +1,5 @@
 ---
-label: ui-automation
+label: e2e, ui-automation
 explanation: Uses browser automation and websocket-backed terminal fixture.
 ---
 
@@ -10,9 +10,13 @@ explanation: Uses browser automation and websocket-backed terminal fixture.
 - Keyboard input including Enter is forwarded.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	requirePlaywrightOK(t, resp, err)
 }
 ```

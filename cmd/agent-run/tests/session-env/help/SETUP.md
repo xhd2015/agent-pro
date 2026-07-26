@@ -13,9 +13,13 @@ agent-run resume --help -> --prepend-path, -e/--env
 2. Assert stdout mentions the new flags and ends with trailing `\n`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Leaves finalize Args; default to run --help as a safe baseline.
 	if len(req.Args) == 0 {
 		req.Args = []string{"run", "--help"}

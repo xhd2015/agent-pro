@@ -12,7 +12,7 @@
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Prompt = "what is the capital of France? answer in one word"
 	return nil
 }

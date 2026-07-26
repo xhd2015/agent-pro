@@ -28,9 +28,10 @@ seed Grok UUID; hold fake binary (sleep >> timeout)
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "import-detach-s1"
 	req.DetachFlag = true
 	// holdSec > timeout so headless-without-detach fails by deadline.

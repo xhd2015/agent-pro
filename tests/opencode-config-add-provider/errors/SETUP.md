@@ -33,9 +33,11 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Leaves under errors/ set req.Args (and req.PreConfig) in their own
 	// Setup. Verify the shared harness is ready for this subtree: the binary
 	// must have been built by the root Setup.

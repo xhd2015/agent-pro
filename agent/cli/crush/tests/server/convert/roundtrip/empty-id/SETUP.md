@@ -13,7 +13,7 @@
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.AgentEventsJSON = `[{"type":"message","text":"test","id":""}]`
 	return nil
 }

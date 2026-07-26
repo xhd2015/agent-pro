@@ -21,9 +21,12 @@ grok-show-usage -> fake grok (no Weekly limit/Next reset) -> parse failure
 - Distinguishes parse errors from timeout (TUI responds quickly with bad data).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ShowUsageCommand = fakeTUIMalformed()
 	return nil
 }

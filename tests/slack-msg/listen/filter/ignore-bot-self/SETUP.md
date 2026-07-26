@@ -11,9 +11,12 @@ bot user posts message -> filter drops -> no agent invocation
 1. Inject channel message with `user` = bot ID.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.WantAgentCalls = 0
 	req.InjectEvents = []InjectedEvent{{
 		Channel: slackTestChannelID,

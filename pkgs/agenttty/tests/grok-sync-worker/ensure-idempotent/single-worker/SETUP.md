@@ -20,7 +20,7 @@ import "testing"
 
 const idempotentUserPrompt = "idempotent-probe-prompt"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.InitialLines = []string{
 		acpUserMessageChunk(idempotentUserPrompt),
 		acpAgentMessageChunk("idempotent-reply"),

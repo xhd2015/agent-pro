@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Exit code 0.
@@ -38,9 +42,10 @@ import (
 	"testing"
 
 	"github.com/xhd2015/doctest/assert"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertSuccess(t, resp)
 	assertOutput(t, resp, "stdout", "pid", "12345", "port", "127.0.0.1:12345", "tty type", "grok-tty", "session id", "session-1", "session file path", "start time", "2026-07-03")
 }

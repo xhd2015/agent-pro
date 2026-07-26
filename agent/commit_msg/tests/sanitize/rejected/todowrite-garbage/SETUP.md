@@ -21,9 +21,11 @@ fake-opencode -> sanitize rejects as unusable -> non-zero
 import (
 	"strings"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	StageRepoWithChange(t, req)
 	head, err := execGitOutput(req.GitDir, "rev-parse", "HEAD")
 	if err != nil {

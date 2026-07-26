@@ -48,6 +48,9 @@ const (
 
 type Generator struct {
 	rng *rand.Rand
+	// WorkDir is the probe sandbox for relative file/grep ops. Empty = process cwd.
+	// File writes always land under probeWriteDir (temp), not WorkDir.
+	WorkDir string
 }
 
 func NewGenerator(seed int64) *Generator {
@@ -111,15 +114,27 @@ func (g *Generator) pickSuggestion(suggestions []probe.Suggestion) probe.Suggest
 	return suggestions[g.rng.Intn(len(suggestions))]
 }
 
+func (g *Generator) probeCwd() string {
+	if g.WorkDir != "" {
+		return g.WorkDir
+	}
+	return "."
+}
+
 func (g *Generator) execProbe(s probe.Suggestion) ([]Event, string) {
 	id := g.NextID()
+	cwd := g.probeCwd()
 	switch s.Kind {
 	case probe.KindToolCall:
-		stdout, _, exitCode, _ := faketoolexec.ExecuteBash(s.Value, "", nil)
+		stdout, _, exitCode, _ := faketoolexec.ExecuteBash(s.Value, cwd, nil)
 		return g.buildCmdEvents(id, s.Value, stdout, exitCode)
 	case probe.KindFileRead:
 		cmd := "cat " + s.Value
-		content, err := faketoolexec.ExecuteRead(s.Value)
+		path := s.Value
+		if !filepath.IsAbs(path) && cwd != "." {
+			path = filepath.Join(cwd, path)
+		}
+		content, err := faketoolexec.ExecuteRead(path)
 		if err != nil {
 			return g.buildCmdEvents(id, cmd, "", 1)
 		}
@@ -130,11 +145,11 @@ func (g *Generator) execProbe(s probe.Suggestion) ([]Event, string) {
 		faketoolexec.ExecuteWrite(writePath, "content written by agent")
 		return g.buildFileChangeEvents(id, s.Value, "add")
 	case probe.KindSearch:
-		cmd := "grep -rn " + s.Value + " ."
-		output, exitCode, _ := faketoolexec.ExecuteGrep(s.Value, ".")
+		cmd := "grep -rn " + s.Value + " " + cwd
+		output, exitCode, _ := faketoolexec.ExecuteGrep(s.Value, cwd)
 		return g.buildCmdEvents(id, cmd, output, exitCode)
 	default:
-		stdout, _, exitCode, _ := faketoolexec.ExecuteBash(s.Value, "", nil)
+		stdout, _, exitCode, _ := faketoolexec.ExecuteBash(s.Value, cwd, nil)
 		return g.buildCmdEvents(id, s.Value, stdout, exitCode)
 	}
 }

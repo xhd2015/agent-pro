@@ -9,7 +9,7 @@ pkgs/agentruncli/*.go (run_cmd / status)
 
 ## Preconditions
 
-- Module layout: DOCTEST_ROOT = tests/agentrunapi → `../../pkgs/agentruncli`.
+- Module layout: d.DOCTEST_ROOT = tests/agentrunapi → `../../pkgs/agentruncli`.
 - Production non-test sources only.
 
 ## Steps
@@ -19,7 +19,7 @@ pkgs/agentruncli/*.go (run_cmd / status)
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "source_wire"
 	req.SourceWireTarget = "agentruncli"
 	return nil

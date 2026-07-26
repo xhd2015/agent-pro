@@ -18,9 +18,12 @@ Caller -> slack-msg channels search [options] QUERY -> list + filter -> human/JS
 3. Unit leaves attach slacktest via grouping SETUP.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.WorkDir == "" {
 		req.WorkDir = t.TempDir()
 	}

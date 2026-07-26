@@ -14,9 +14,13 @@
 3. `Assert` walks `req.TempDir` and verifies no files exist outside `req.Home`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	_ = t
 	return nil
 }

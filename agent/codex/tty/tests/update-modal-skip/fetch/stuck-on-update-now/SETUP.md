@@ -26,8 +26,8 @@ import (
 	"testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
-	req.ShowStatusCommand = stuckUpdateNowFakeCommand(req)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	req.ShowStatusCommand = stuckUpdateNowFakeCommand(d, req)
 	req.SessionID = "codex-update-modal-stuck"
 	req.MarkerDir = filepath.Join(t.TempDir(), "markers")
 	req.FetchTimeoutSecs = 15

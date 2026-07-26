@@ -1,5 +1,5 @@
 ---
-label: grok
+label: e2e, grok
 explanation: Requires real grok CLI on PATH; for design verification and debugging.
 ---
 
@@ -19,9 +19,10 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

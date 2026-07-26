@@ -1,5 +1,5 @@
 ---
-label: codex, ui-automation, slow, flaky
+label: e2e, codex, ui-automation, slow, flaky
 explanation: Requires the real codex CLI, network/model availability, and Playwright browser automation.
 ---
 
@@ -24,9 +24,13 @@ explanation: Requires the real codex CLI, network/model availability, and Playwr
   is persisted/rendered as the chat assistant response.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

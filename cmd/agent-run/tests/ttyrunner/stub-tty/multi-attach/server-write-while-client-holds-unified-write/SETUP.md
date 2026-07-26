@@ -12,7 +12,10 @@ writer attached + tty send -> both succeed (two write planes)
 2. `Run` executes the scenario.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Action = "server-write-while-client-holds-unified-write"
 	return nil
 }

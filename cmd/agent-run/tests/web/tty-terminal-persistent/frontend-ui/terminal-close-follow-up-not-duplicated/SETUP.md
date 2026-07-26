@@ -29,9 +29,13 @@ running grok-tty chat
 7. Assert the visible follow-up user message count remains exactly one.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "ui"
 	createRunningWebGrokTTYSessionThroughAPI(t, req)
 	waitForAnyRegistryID(t, req, 3_000_000_000)

@@ -20,7 +20,10 @@ agent-run tty send <session-id> "msg" -> resolveTerminal -> WS inject -> capture
 4. `Assert` checks exit code and response capture.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.RegistryDir = "grok-tty-registry"
 	req.RegistrySessionID = "session-1"
 	writeMockRegistryEntry(t, req)

@@ -134,6 +134,12 @@ Related external compat (not under this root): `cmd/agent-run/tests/grok-tty/run
 ## How to Run
 
 ```sh
+# Discovery skips labeled e2e/heavy/slow leaves by default.
+# Run e2e / full suite explicitly when needed:
+doctest test ./cmd/agent-run/tests/run/open                    # discovery (skips labeled e2e/heavy/slow)
+doctest test --label e2e ./cmd/agent-run/tests/run/open
+doctest test --label-all ./cmd/agent-run/tests/run/open
+
 doctest vet ./cmd/agent-run/tests/run/open
 doctest test ./cmd/agent-run/tests/run/open
 doctest test -v ./cmd/agent-run/tests/run/open/help/run-help-lists-open
@@ -160,6 +166,7 @@ doctest test ./cmd/agent-run/tests/run/open/tty-lifecycle
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request struct {
@@ -200,7 +207,7 @@ type Response struct {
 	SessionID     string
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	return runAgentRun(t, req, req.Args...)
 }
 ```

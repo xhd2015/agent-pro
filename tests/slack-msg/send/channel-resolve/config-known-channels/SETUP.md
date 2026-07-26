@@ -11,11 +11,14 @@ slack-msg send --config cfg --channel #general -> knownChannels lookup -> C0ALE4
 1. Load valid-config fixture; pass `--config` + `--channel #general`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"send"}
-	if err := withConfigArg(t, req, "valid-config.json", false); err != nil {
+	if err := withConfigArg(t, d, req, "valid-config.json", false); err != nil {
 		return err
 	}
 	req.Args = append(req.Args, "--channel", "#general", "known map")

@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
 const (
@@ -28,7 +29,7 @@ const (
 	priorMarkerNew = "PRIOR_REJECT_NEW"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.GrokHome = filepath.Join(req.TempDir, "grok-home")
 	appendGrokHomeEnv(req)
 

@@ -18,9 +18,10 @@ pre-seed user + think + pending tool_call (synced quickly)
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "append-after-initial-stream-sync"
 	req.SessionID = "chat_tail_p2"
 	req.CompletionDelay = 2500 * time.Millisecond

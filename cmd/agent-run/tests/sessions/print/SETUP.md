@@ -28,6 +28,7 @@ agent-run sessions --print --grok-session-id UUID -> meta-only resolve (grok|gro
 ```go
 import (
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
 func printSessionArgs(sessionID string, extra ...string) []string {
@@ -41,7 +42,7 @@ func printGrokSessionArgs(grokSessionID string, extra ...string) []string {
 	return append(args, extra...)
 }
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.SessionRunner == "" {
 		req.SessionRunner = printRunner
 	}

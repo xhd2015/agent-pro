@@ -36,9 +36,9 @@ import (
 	"testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.FixturesDir == "" {
-		req.FixturesDir = filepath.Join(DOCTEST_ROOT, "testdata", "update-modal-skip")
+		req.FixturesDir = filepath.Join(d.DOCTEST_ROOT, "testdata", "update-modal-skip")
 	}
 	if req.FetchTimeoutSecs <= 0 {
 		req.FetchTimeoutSecs = 30

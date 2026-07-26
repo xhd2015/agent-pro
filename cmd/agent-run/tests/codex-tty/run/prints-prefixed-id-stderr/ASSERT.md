@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected Output
 
 Stderr contains a prefixed session id; stdout does not leak the registry prefix.
@@ -25,6 +29,7 @@ import (
 	"github.com/xhd2015/doctest/session"
 
 	"github.com/xhd2015/doctest/assert"
+	"github.com/xhd2015/doctest/session"
 )
 
 func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {

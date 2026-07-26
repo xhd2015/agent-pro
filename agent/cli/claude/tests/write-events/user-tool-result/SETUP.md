@@ -17,7 +17,7 @@ user-tool-result -> WriteClaudeLine(user tool_result) -> RawLog (0 AgentEvents)
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClaudeLines = []string{
 		`{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"output","is_error":false}]},"session_id":"sess"}`,
 	}

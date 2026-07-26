@@ -11,7 +11,7 @@ parse cmd/agent-run/*.go
 
 ## Preconditions
 
-- Module layout: DOCTEST_ROOT = tests/agentruncli → `../../cmd/agent-run`.
+- Module layout: d.DOCTEST_ROOT = tests/agentruncli → `../../cmd/agent-run`.
 
 ## Steps
 
@@ -20,7 +20,7 @@ parse cmd/agent-run/*.go
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	t.Helper()
 	req.Mode = "source_wire"
 	return nil

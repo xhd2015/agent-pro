@@ -18,9 +18,13 @@ follow-up -> same registry entry
 1. Grouping setup sets `req.Area = "lifecycle"` and `req.Runner = "codex-tty"`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Area = "lifecycle"
 	req.Runner = "codex-tty"
 	return nil

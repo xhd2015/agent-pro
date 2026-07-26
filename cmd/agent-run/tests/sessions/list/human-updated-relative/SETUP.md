@@ -25,9 +25,10 @@ seed sessions with known ages from wall clock
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	now := time.Now().UTC()
 	// Ages chosen so small wall-clock drift during the test cannot change the
 	// relative label (minutes-level headroom inside each unit boundary).

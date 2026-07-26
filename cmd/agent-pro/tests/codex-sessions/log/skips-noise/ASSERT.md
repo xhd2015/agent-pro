@@ -13,7 +13,7 @@ import (
 	"testing"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertSuccess(t, resp)
 	if strings.TrimSpace(resp.Output) != "" {
 		t.Fatalf("expected empty log output, got:\n%s", resp.Output)

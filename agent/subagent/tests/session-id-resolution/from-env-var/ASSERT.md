@@ -8,7 +8,7 @@ import (
     "testing"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     if !strings.Contains(resp.Stderr, "env_session_123") {
         t.Fatalf("expected session ID 'env_session_123' in stderr, got:\n%s", resp.Stderr)
     }

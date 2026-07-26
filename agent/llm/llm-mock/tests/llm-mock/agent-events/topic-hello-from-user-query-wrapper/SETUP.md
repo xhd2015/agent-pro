@@ -16,9 +16,12 @@ extractTopic stops at first newline -> topic "<user_query>" instead of "Hello"
 3. Assert think/message text references Hello, not the XML tag.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ConfigJSON = `{
   "port": 8080,
   "exchanges": []

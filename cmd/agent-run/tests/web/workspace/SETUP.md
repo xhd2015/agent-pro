@@ -19,9 +19,13 @@ POST create session -> GET detail -> session.workspace matches server cwd
 3. `Run` performs GET; `Assert` checks JSON `workspace` field.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.WebTokenMode == "" {
 		req.WebTokenMode = "explicit"
 	}

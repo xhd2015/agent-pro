@@ -20,7 +20,7 @@ WS attach as writer -> close 1000 -> ProcessAlive == false
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Phase = "lifecycle-writer-close"
 	req.WSCloseCode = 1000
 	return nil

@@ -20,9 +20,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	repoRoot := filepath.Join(req.TempDir, "repo")
 	subdir := filepath.Join(repoRoot, "task-hub")
 	promptPath := filepath.Join(subdir, "agents", "do-task", "PROMPT.md")

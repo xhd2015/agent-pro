@@ -22,9 +22,10 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	gone := filepath.Join(req.TempDir, "gone-ws")
 	// Ensure the path does not exist (never create; remove if leftover).
 	_ = os.RemoveAll(gone)

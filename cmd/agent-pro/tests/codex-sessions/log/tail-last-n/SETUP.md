@@ -22,7 +22,7 @@ PrintLog(path, w, 2)
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "0190000a-aaaa-7aaa-aaaa-aaaaaaaaaaaa"
 	req.Tail = 2
 	lines := []string{

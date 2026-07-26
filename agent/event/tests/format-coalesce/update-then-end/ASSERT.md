@@ -6,9 +6,11 @@
 import (
 	"strings"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if len(resp.Output) != 2 {
 		t.Fatalf("expected 2 outputs, got %d", len(resp.Output))
 	}

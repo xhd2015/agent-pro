@@ -13,9 +13,12 @@ two entries -> session list --limit 1
 2. Args: session list --limit 1.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if err := seedSessionsJSON(t, req.HomeDir, sessionListFixtureEntries()); err != nil {
 		return err
 	}

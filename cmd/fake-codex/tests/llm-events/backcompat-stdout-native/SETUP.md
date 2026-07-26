@@ -6,9 +6,12 @@
 1. Run fake codex with the mock config.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-codex","stdout_events":[{"type":"item.started","item":{"id":"1","type":"reasoning","text":"native format backcompat"}}]}`)
     return nil
 }

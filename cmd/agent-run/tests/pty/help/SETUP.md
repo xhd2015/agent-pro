@@ -20,9 +20,13 @@ agent-run pty <unknown> -> exit 1
 3. `Assert` checks exit code and expected help/error content.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Grouping default: pty --help (leaves override).
 	if len(req.Args) == 0 {
 		req.Args = []string{"pty", "--help"}

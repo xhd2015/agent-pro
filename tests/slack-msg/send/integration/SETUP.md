@@ -27,9 +27,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	cfgPath := filepath.Join(req.RepoRoot, "slack-config.json")
 	if _, err := os.Stat(cfgPath); err != nil {
 		t.Skipf("skipping integration: %s not found", cfgPath)

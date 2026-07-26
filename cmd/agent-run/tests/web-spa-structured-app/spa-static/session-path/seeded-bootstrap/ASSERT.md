@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - HTTP **200**.
@@ -10,9 +14,13 @@
 - Session files under `AGENT_RUN_HOME/sessions/spa-seed-bootstrap/`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatalf("Run error: %v", err)
 	}

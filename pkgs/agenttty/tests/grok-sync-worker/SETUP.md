@@ -46,7 +46,7 @@ import (
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.WorkerStartDelay <= 0 {
 		req.WorkerStartDelay = 150 * time.Millisecond
 	}

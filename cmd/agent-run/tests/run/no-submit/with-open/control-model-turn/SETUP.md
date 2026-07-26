@@ -30,9 +30,10 @@ agent-run run --agent-runner grok-tty --open "draft-no-submit-OPTIONC-probe-zz9"
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.NoSubmit = false
 	req.Prompt = defaultOptionCPrompt
 	req.Mode = "open-real-grok-after"

@@ -12,9 +12,13 @@ cwd=TempDir; --dir <abs workspace under TempDir>
 1. Leaves create an absolute workspace dir distinct from process cwd.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Absolute-path branch under with-dir; leaves create abs workspace fixtures.
 	t.Helper()
 	if req.TempDir == "" {

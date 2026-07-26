@@ -25,13 +25,13 @@ func sessionsBase(c Config, opts Options) (string, error) {
 	if debugEnv == "" {
 		debugEnv = "AGENT_PRO_SUBAGENT_DEBUG_SESSION_HOME"
 	}
-	if v := os.Getenv(debugEnv); v != "" {
+	if v := getenv(c, debugEnv); v != "" {
 		return v, nil
 	}
 	if opts.SessionBase != "" {
 		return opts.SessionBase, nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir(c)
 	if err != nil {
 		return "", fmt.Errorf("get home dir: %w", err)
 	}

@@ -14,9 +14,11 @@ IsTransientIndexError(empty message | hook failure) -> false
 import (
 	"fmt"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.Mode != "classify" {
 		return fmt.Errorf("non-transient classify requires Mode=classify")
 	}

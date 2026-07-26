@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - `agent-run attach session-1` does not stop at the stale grok-tty registry entry.

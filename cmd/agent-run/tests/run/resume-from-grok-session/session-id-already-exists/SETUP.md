@@ -22,9 +22,13 @@ seed agent-run session FIXED (runner=fake-codex; no runner_session_id = UUID)
 3. Run import with the same `--session-id`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "pre-existing-import-s1"
 	req.GrokCWD = absPath(t, req.WorkDir)
 	seedGrokSession(t, req.GrokHome, req.GrokCWD, req.GrokSessionID)

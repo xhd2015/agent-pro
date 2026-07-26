@@ -26,6 +26,8 @@ import (
 	"testing"
 
 	"github.com/xhd2015/agent-pro/agent/subagent"
+
+	"github.com/xhd2015/doctest/session"
 )
 
 func configureFlatDirFlagsOff(t *testing.T, req *Request) {
@@ -43,7 +45,7 @@ func configureFlatDirFlagsOff(t *testing.T, req *Request) {
 	req.MockConfigPath = mockPath
 }
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	configureFlatDirFlagsOff(t, req)
 	return nil
 }```

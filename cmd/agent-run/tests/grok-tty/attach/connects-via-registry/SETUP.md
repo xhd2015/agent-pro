@@ -13,9 +13,13 @@ background grok-tty run (sleep 30) → parse stderr id → attach probe via regi
 3. `Run` probes attach through registry `listen_addr`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.GrokTTYCommand = fakeTUILongRun()
 	req.GrokTTYPrompt = "hold"
 	startGrokTTYBackground(t, req)

@@ -20,7 +20,7 @@ InteractiveOpenOpts{Env: SLACK_MSG_SESSION_ID=…, SLACK_MSG_CONFIG=…}
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "interactive_open"
 	req.SessionID = "sess-io-env"
 	req.Prompt = "open with env"

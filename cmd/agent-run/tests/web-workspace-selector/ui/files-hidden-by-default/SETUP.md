@@ -20,9 +20,13 @@ open /workspace browse path = fixture root (has dirs + files)
 1. Build fixture; seed config; open `/workspace`; assert dirs only + toggle present.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 	req.Scenario = "files-hidden-by-default"
 	root := makeChooserOptimizeFixture(t, req)

@@ -23,9 +23,12 @@ codex-show-status -> resolve codex path -> not found
 - `tty-watch` remains on PATH via minimal PATH construction in `Run`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SkipFakeCommand = true
 	req.MinimalPATH = true
 	return nil

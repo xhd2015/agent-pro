@@ -25,9 +25,13 @@ argv-recorder as --agent-runner-binary
 3. Run import with fixed session id, binary, and non-empty followup.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "import-headless-argv-1"
 	req.FollowupPrompt = "resume-from-grok followup"
 	setupValidImport(t, req, true)

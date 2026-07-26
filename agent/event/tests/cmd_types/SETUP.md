@@ -19,11 +19,12 @@ cmd session events -> FromCmd -> []types.AgentEvent
 2. Group SETUPs set `req.Target` to `"from_cmd"` or `"cmd"`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
-	_ = assertContains
-	_ = assertNotContains
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	return nil
 }
 ```

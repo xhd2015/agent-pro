@@ -24,7 +24,7 @@ import (
 	"time"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Limit = 10
 	base, err := time.Parse(time.RFC3339, "2026-06-23T10:00:00.000Z")
 	if err != nil {

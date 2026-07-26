@@ -13,9 +13,12 @@ POST chat -> tool_calls bash, finish_reason tool_calls
 2. Send one chat completion request.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.MockEventsPreset = "tool-bash"
 	req.Requests = []string{
 		`{"model":"mock-model","messages":[{"role":"user","content":"chat-tool-bash-guard"}]}`,

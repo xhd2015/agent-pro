@@ -20,9 +20,10 @@ live grok-tty stream → message-list at bottom → assistant text grows → scr
 ```go
 import (
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 
 	req.Layout = "session-auto-follow-at-bottom"

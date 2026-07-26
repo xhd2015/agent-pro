@@ -17,9 +17,13 @@ seed finished bound meta (runner=grok|grok-tty, runner_session_id=UUID)
 2. Leaf sets `req.Args` to `status --grok-session-id …` (and error variants).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Grouping for --grok-session-id lookup leaves under status.
 	if req.Runner == "" {
 		req.Runner = defaultRunner

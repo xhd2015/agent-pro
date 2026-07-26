@@ -8,9 +8,12 @@
 3. The tool choices are deterministic (same seed always produces same sequence).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     req.Args = []string{"exec", "--json", "--seed", "999888777", "deterministic test prompt for seed check"}
     req.Env = append(req.Env, "CODEX_SANDBOX_SKIP=1")
     return nil

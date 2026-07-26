@@ -21,6 +21,7 @@ rollout JSONL response_item
 ```go
 import (
 	"testing"
+
 	"github.com/xhd2015/doctest/session"
 )
 

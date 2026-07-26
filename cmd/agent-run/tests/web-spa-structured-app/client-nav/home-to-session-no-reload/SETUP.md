@@ -19,9 +19,13 @@ seed session -> open / with token + __SPA_NAV_MARKER
 2. Start web; playwright: marker + token, goto `/`, click session-item, assert URL + chat-active + marker.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 	req.Scenario = "home-to-session-no-reload"
 	req.SessionID = "spa-nav-home-sess"

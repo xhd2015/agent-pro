@@ -18,9 +18,13 @@ open modal -> close -> navigate home -> reopen same session -> open modal -> cur
 4. Open modal again.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "codex-tty"
 	req.SessionID = "ui-modal-reattach"
 	req.RegistryTranscript = "reattach-terminal-state\n"

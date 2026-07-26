@@ -10,7 +10,7 @@
 ```go
 import "testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertSuccess(t, resp)
 	want := []string{
 		"01900003-0000-7000-8000-000000000003",

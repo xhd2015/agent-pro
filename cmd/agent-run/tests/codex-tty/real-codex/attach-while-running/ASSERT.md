@@ -1,5 +1,5 @@
 ---
-label: codex
+label: e2e, codex
 explanation: Requires real codex CLI on PATH; for design verification and debugging.
 ---
 

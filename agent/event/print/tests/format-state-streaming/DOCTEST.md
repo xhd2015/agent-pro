@@ -31,10 +31,12 @@ doctest test ./agent/event/print/tests/format-state-streaming/...
 
 ```go
 import (
+
 	"strings"
 	"testing"
 
 	"github.com/xhd2015/agent-pro/agent/event/print"
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request struct {
@@ -45,7 +47,7 @@ type Response struct {
 	Output string
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	var state print.FormatState
 	var buf strings.Builder
 	for _, line := range req.Lines {

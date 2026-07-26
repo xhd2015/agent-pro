@@ -1,12 +1,20 @@
+---
+label: e2e
+---
+
 ## Expected
 - The command succeeds.
 - stdout contains the event output.
 - stderr does NOT contain any deprecation warning.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"strings"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     assertSuccess(t, resp)
     assertContains(t, resp.Stdout, `"clean"`)
     if strings.Contains(resp.Stderr, "deprecat") || strings.Contains(resp.Stderr, "stdout_events") {

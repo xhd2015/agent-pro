@@ -23,9 +23,10 @@ seeded overflow grok-tty session → scroll up to detach → follow-up stream �
 ```go
 import (
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 
 	req.Layout = "session-jump-to-latest"

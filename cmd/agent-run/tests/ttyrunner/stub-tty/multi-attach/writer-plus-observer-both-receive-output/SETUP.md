@@ -12,7 +12,10 @@ PTY output -> writer + observer fan-out
 2. `Run` executes the scenario.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Action = "writer-plus-observer-both-receive-output"
 	return nil
 }

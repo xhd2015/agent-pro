@@ -13,9 +13,12 @@ fake opencode -> echo OPENCODE_CONFIG_DIR=$OPENCODE_CONFIG_DIR
 2. Fake opencode prints `OPENCODE_CONFIG_DIR` for assertion.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.OpencodeConfigDir = ""
 	req.OpencodeHome = ""
 	return nil

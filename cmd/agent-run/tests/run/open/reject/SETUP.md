@@ -17,9 +17,13 @@ agent-run run --open --json --agent-runner grok-tty "x" -> error
 2. Child dirs split non-TTY vs `--open`+`--json`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Leaves finalize flags; start from bare run.
 	if len(req.Args) == 0 {
 		req.Args = []string{"run"}

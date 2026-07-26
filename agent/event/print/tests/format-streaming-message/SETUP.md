@@ -18,7 +18,7 @@ import (
     eventtypes "github.com/xhd2015/agent-pro/agent/event/types"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     // Simulate an AgentEvent produced by FromPi from a streaming delta
     event := eventtypes.AgentEvent{
         Type:  eventtypes.ActionMessage,

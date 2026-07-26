@@ -23,7 +23,7 @@ import (
 	"time"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.HoldAfterSchedule <= 0 {
 		req.HoldAfterSchedule = 1200 * time.Millisecond
 	}

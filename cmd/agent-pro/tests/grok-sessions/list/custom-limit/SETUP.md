@@ -25,7 +25,7 @@ import (
 	"testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Limit = 3
 	for i := 0; i < 5; i++ {
 		id := fmt.Sprintf("01900002-0000-7000-8000-%012d", i+1)

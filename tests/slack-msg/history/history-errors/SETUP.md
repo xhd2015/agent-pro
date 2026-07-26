@@ -16,9 +16,12 @@ slack-msg history -> channel not found or API error -> stderr history failed: ->
 2. Assert `history failed:` prefix and exit 1.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClearSlackEnv = true
 	return nil
 }

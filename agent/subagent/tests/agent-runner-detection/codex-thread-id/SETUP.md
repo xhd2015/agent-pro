@@ -9,7 +9,7 @@
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     // Priority 2: CODEX_THREAD_ID detection — ensure no env override
     req.AgentRunnerEnv = ""
     return nil

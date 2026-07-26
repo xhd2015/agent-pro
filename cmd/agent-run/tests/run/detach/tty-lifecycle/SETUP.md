@@ -24,9 +24,10 @@ agent-run run --agent-runner grok-tty --detach "prompt"
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "grok-tty"
 	req.Prompt = "detach-lifecycle"
 	setGrokTTYCommand(req, fakeTUIHoldSeconds(30))

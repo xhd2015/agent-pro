@@ -21,9 +21,12 @@
 - exec.Command captures pipes → not a TTY → auto color off.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"list"}
 	req.EnvExtra = nil
 	req.Sessions = []SessionSeed{colorFixtureSession()}

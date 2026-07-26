@@ -23,8 +23,11 @@ seed map + messages.jsonl under HOME
 - Log fixture ids: `m1`, `m2`, `m3` (ts order oldest→newest already).
 
 ```go
-import "testing"
+import (
+	"testing"
 
+	"github.com/xhd2015/doctest/session"
+)
 const sessionHistoryFixtureID = "slack-channel-C0ALE44K5J6"
 
 func sessionHistoryFixtureMessages() []sessionLogMessage {
@@ -35,7 +38,7 @@ func sessionHistoryFixtureMessages() []sessionLogMessage {
 	}
 }
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClearSlackEnv = true
 	if err := isolateHome(t, req); err != nil {
 		return err

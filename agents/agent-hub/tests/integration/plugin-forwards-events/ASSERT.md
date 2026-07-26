@@ -6,9 +6,10 @@
 import (
     "encoding/json"
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     assertExitCode(t, resp, 0)
 
     fr, err := runAgentHub(t, req, "fetch", "--consumer-id", "e2e-"+t.Name(), "--limit", "5")

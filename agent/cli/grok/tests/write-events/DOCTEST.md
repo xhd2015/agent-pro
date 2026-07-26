@@ -50,12 +50,14 @@ doctest test ./agent/cli/grok/tests/write-events/...
 
 ```go
 import (
+
 	"bytes"
 	"encoding/json"
 	"testing"
 
 	"github.com/xhd2015/agent-pro/agent/cli/grok"
 	eventtypes "github.com/xhd2015/agent-pro/agent/event/types"
+	"github.com/xhd2015/doctest/session"
 )
 
 
@@ -67,7 +69,7 @@ type Response struct {
 	Lines []string
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	var buf bytes.Buffer
 	w := grok.NewGrokEventWriter(&buf)
 	for _, line := range req.GrokLines {

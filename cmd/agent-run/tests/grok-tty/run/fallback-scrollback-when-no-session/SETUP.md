@@ -16,9 +16,15 @@ GROK_HOME has no matching session dir
 3. Assert stderr warning plus error event; no scrollback `hi` in stdout/events.
 
 ```go
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.GrokHome = filepath.Join(req.TempDir, "empty-grok-home")
 	if err := os.MkdirAll(req.GrokHome, 0755); err != nil {
 		return err

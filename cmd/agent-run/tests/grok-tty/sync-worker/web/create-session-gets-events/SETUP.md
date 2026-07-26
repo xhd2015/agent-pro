@@ -23,6 +23,7 @@ empty chat because sync gated on pre-set `runner_session_id`.
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
 const (
@@ -30,7 +31,7 @@ const (
 	createSessionReply  = "create-session-sync-reply-marker"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "web-create-session-events"
 	req.PromptA = createSessionPrompt
 	req.ReplyA = createSessionReply

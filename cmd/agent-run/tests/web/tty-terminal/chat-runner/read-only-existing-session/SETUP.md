@@ -17,9 +17,13 @@ no enabled runner select on session page -> follow-up bound to route runner
 2. Verify runner metadata is visible and runner select is absent or disabled.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.PlaywrightScript = sessionBrowserScript(req, `
 await page.getByText('codex-tty').waitFor({ state: 'visible', timeout: 15000 });
 const enabledSelects = await page.locator('[data-testid="runner-select"]:enabled').count();

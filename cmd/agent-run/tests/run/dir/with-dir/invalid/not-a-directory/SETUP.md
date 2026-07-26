@@ -18,9 +18,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	filePath := filepath.Join(req.TempDir, "not-a-dir.txt")
 	if err := os.WriteFile(filePath, []byte("file\n"), 0o644); err != nil {
 		return err

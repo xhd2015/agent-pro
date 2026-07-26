@@ -14,9 +14,12 @@ doctest harness -> Run Mode=parse_messages -> consolidated trace packages
 1. Descendant leaves set `req.Mode` to `parse_messages` (and wire-specific fields).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "parse_messages"
 	return nil
 }

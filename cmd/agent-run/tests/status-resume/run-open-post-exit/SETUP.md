@@ -23,9 +23,13 @@ agent-run run --agent-runner grok-tty --open [prompt]
 3. Assert stderr session lines or not-resolved error.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.OpenInstantAttach = true
 	req.Runner = "grok-tty"
 	if req.GrokTTYCommand == "" {

@@ -40,8 +40,19 @@ type UsageInfo struct {
 }
 
 // Options configures FetchStatusWithOptions.
+// Env fields (Command, SessionID, TimeoutSeconds, TTYWatchHome) override the
+// corresponding process env vars when non-zero/non-empty so callers and tests
+// need not mutate global environment under t.Parallel().
 type Options struct {
 	Debug bool
+	// Command overrides CODEX_SHOW_STATUS_COMMAND (fake TUI hook for tests).
+	Command string
+	// SessionID overrides CODEX_SHOW_STATUS_SESSION_ID.
+	SessionID string
+	// TimeoutSeconds overrides CODEX_SHOW_STATUS_TIMEOUT when > 0.
+	TimeoutSeconds int
+	// TTYWatchHome overrides TTY_WATCH_HOME.
+	TTYWatchHome string
 }
 
 var (
@@ -67,16 +78,16 @@ func FetchStatusWithOptions(ctx context.Context, opts Options) (*UsageInfo, erro
 		},
 	})
 
-	codexArgv, err := buildCodexArgv(newExecEnv())
+	codexArgv, err := buildCodexArgv(newExecEnv(), opts)
 	if err != nil {
 		logCodexError("build_argv", err, nil)
 		return nil, err
 	}
 	extraPaths := commandExtraPaths(codexArgv)
-	v.command(append([]string{"ttywatch", "run", "--session-id", sessionIDFromEnv()}, codexArgv...))
+	sessionID := sessionIDFromOpts(opts)
+	v.command(append([]string{"ttywatch", "run", "--session-id", sessionID}, codexArgv...))
 
-	sessionID := sessionIDFromEnv()
-	home, err := ttyWatchHome()
+	home, err := ttyWatchHomeFromOpts(opts)
 	if err != nil {
 		logCodexError("tty_watch_home", err, nil)
 		return nil, err
@@ -94,6 +105,11 @@ func FetchStatusWithOptions(ctx context.Context, opts Options) (*UsageInfo, erro
 
 	session := ttywatch.NewEphemeralSession(home, sessionID, codexArgv)
 	session.ExtraPaths = extraPaths
+	// Pin default registry subdir. ServeSession falls back to ambient
+	// TTY_WATCH_REGISTRY_SUBDIR when RegistrySubdir is empty, which can redirect
+	// writes (e.g. grok-tty-registry from agent-run) away from the "registry"
+	// path WaitForRegistryEntry polls via DefaultRegistryConfig.
+	session.RegistrySubdir = "registry"
 	defer func() { _ = session.Kill() }()
 
 	debuglog.Log(debuglog.Entry{
@@ -120,7 +136,7 @@ func FetchStatusWithOptions(ctx context.Context, opts Options) (*UsageInfo, erro
 	v.phaseDone("start-session", startPhase)
 	v.stateChange("session-registered", sessionID)
 
-	fetchDeadline := deadlineForFetch(ctx)
+	fetchDeadline := deadlineForFetchOpts(ctx, opts)
 
 	waitPromptPhase := time.Now()
 	if err := waitForPrompt(ctx, session, fetchDeadline, v); err != nil {
@@ -238,7 +254,21 @@ func sessionIDFromEnv() string {
 	return defaultSessionID
 }
 
+func sessionIDFromOpts(opts Options) string {
+	if v := strings.TrimSpace(opts.SessionID); v != "" {
+		return v
+	}
+	return sessionIDFromEnv()
+}
+
 func ttyWatchHome() (string, error) {
+	return ttyWatchHomeFromOpts(Options{})
+}
+
+func ttyWatchHomeFromOpts(opts Options) (string, error) {
+	if v := strings.TrimSpace(opts.TTYWatchHome); v != "" {
+		return v, nil
+	}
 	if v := os.Getenv(envTTYWatchHome); v != "" {
 		return v, nil
 	}
@@ -266,7 +296,10 @@ func commandExtraPaths(argv []string) []string {
 	return []string{dir}
 }
 
-func buildCodexArgv(env *agentexec.Env) ([]string, error) {
+func buildCodexArgv(env *agentexec.Env, opts Options) ([]string, error) {
+	if hook := strings.TrimSpace(opts.Command); hook != "" {
+		return agenttty.ParseShellWords(hook)
+	}
 	if hook := strings.TrimSpace(os.Getenv(envShowStatusCommand)); hook != "" {
 		return agenttty.ParseShellWords(hook)
 	}
@@ -287,10 +320,21 @@ func buildCodexArgv(env *agentexec.Env) ([]string, error) {
 }
 
 func deadlineForFetch(ctx context.Context) time.Time {
+	return deadlineForFetchOpts(ctx, Options{})
+}
+
+func deadlineForFetchOpts(ctx context.Context, opts Options) time.Time {
 	if ctxDeadline, ok := ctx.Deadline(); ok {
 		return ctxDeadline
 	}
-	return time.Now().Add(timeoutFromEnv())
+	return time.Now().Add(timeoutFromOpts(opts))
+}
+
+func timeoutFromOpts(opts Options) time.Duration {
+	if opts.TimeoutSeconds > 0 {
+		return time.Duration(opts.TimeoutSeconds) * time.Second
+	}
+	return timeoutFromEnv()
 }
 
 // Signed PROTOCOL.md keys for Codex Update available menu auto-Skip.

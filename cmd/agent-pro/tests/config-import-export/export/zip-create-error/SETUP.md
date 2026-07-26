@@ -13,7 +13,7 @@ import (
 	"testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Operation = "export"
 	req.Agent = "opencode"
 	createSourceFile(t, req.HomeDir, ".local/share/opencode/auth.json", `{"key":"x"}`)

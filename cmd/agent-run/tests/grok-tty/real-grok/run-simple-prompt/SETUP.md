@@ -11,9 +11,13 @@ agent-run run --agent-runner grok-tty "say hi" → exit 0; stdout or events non-
 1. Run with prompt `say hi` against real grok TUI.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"run", "--agent-runner", "grok-tty", "say hi"}
 	return nil
 }

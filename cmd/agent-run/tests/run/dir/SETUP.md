@@ -40,9 +40,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Inherit run/ prefix: run --agent-runner fake-codex
 	// frontend-agent-run/dist is gitignored; ensure //go:embed can compile.
 	if err := ensureStubDistForDir(filepath.Join(req.RepoRoot, "frontend-agent-run", "dist")); err != nil {

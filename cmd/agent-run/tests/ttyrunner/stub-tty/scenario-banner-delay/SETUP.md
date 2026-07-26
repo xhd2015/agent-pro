@@ -12,7 +12,10 @@ banner_delay_ms:800 -> run waits before completing
 2. `Run` executes the scenario.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Action = "scenario-banner-delay"
 	return nil
 }

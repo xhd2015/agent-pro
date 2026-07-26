@@ -27,9 +27,14 @@ agent-run run --agent-runner grok-tty "hi"
 2. Leaves install banner argv/stdin probe fixtures + prompt.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"time"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	clearOpenInstantAttach(req)
 	req.Runner = "grok-tty"
 	req.Args = []string{"run", "--agent-runner", "grok-tty"}

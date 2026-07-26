@@ -22,7 +22,7 @@ import (
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.NewPrompt = "what did I ask?"
 	req.PriorEvents = []types.AgentEvent{
 		msgEvent("user", "hi"),

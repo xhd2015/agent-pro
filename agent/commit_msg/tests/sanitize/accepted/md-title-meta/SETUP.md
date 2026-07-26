@@ -18,9 +18,11 @@ fake-opencode -> sanitize strips meta + unwraps ticks -> clean title on stdout
 ```go
 import (
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	StageRepoWithChange(t, req)
 	WriteMockAgentText(t, req, "sess_md_meta", ReadAntiPatternIn(t, "md_title_char_annotation"))
 	req.Commit = false

@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 - The command succeeds.
 - stdout contains all three event types in order.
@@ -7,9 +11,10 @@
 import (
     "strings"
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     assertSuccess(t, resp)
     lines := strings.Split(strings.TrimSpace(resp.Stdout), "\n")
     if len(lines) == 0 {

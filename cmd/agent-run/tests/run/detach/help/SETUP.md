@@ -17,9 +17,13 @@ agent-run resume --help -> --detach
 2. Leaves run `run --help` or `resume --help`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = ""
 	return nil
 }

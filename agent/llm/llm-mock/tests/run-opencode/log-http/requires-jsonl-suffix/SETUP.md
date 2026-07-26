@@ -17,9 +17,11 @@ CLI validation error (.jsonl) -> no opencode, no log file
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.LogHTTPPath = filepath.Join(t.TempDir(), "http.log")
 	req.FakeOpencodeCmd = `sh -c 'echo OPENCODE_RAN; exit 0'`
 	req.ExpectedExit = 1

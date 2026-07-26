@@ -25,9 +25,13 @@ modal displays terminal bytes only, not control JSON
 5. Assert modal shows terminal transcript and does not show JSON control frame.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.RegistryTranscript = "mapped-terminal-ready\n"
 	listenAddr := startControlFramePtywrap(t, req)
 	writeMappedSessionFixture(t, req)

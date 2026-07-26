@@ -10,7 +10,7 @@ harness PTY -> agent-term run true -> attach exits -> stdout: session-N only
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Phase = "run-pty"
 	req.StartDaemon = true
 	req.RunCommand = []string{"true"}

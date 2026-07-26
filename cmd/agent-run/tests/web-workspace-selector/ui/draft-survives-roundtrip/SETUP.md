@@ -18,9 +18,13 @@ type composer draft -> open /workspace -> Cancel
 1. Start web; type draft; open selector; cancel; assert draft.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 	req.Scenario = "draft-survives-roundtrip"
 	req.Port = findFreePort(t)

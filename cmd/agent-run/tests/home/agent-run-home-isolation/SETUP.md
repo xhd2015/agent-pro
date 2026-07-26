@@ -16,9 +16,13 @@ agent-run run --json → no files outside AGENT_RUN_HOME under temp dir
 1. Run `agent-run run --json --agent-runner fake-codex "hi"` with isolated `AGENT_RUN_HOME`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"run", "--json", "--agent-runner", "fake-codex", "hi"}
 	return nil
 }

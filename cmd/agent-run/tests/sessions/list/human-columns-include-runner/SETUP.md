@@ -18,9 +18,13 @@ seed 2 sessions different runners -> sessions --limit 0
 2. Run `agent-run sessions --limit 0`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	seedFlatSessionMeta(t, req.Home, "demo_a", "fake-codex", "finished", "2026-07-12T08:00:00Z")
 	seedFlatSessionMeta(t, req.Home, "demo_b", "fake-opencode", "running", "2026-07-12T09:00:00Z")
 	req.Args = append(req.Args, "--limit", "0")

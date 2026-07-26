@@ -17,9 +17,13 @@ seed meta -> agent-run resume [flags] (<session-id> | --grok-session-id ID) ["fo
 2. `Run` executes CLI; assert gate errors, reclaim success, or argv/session success.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Leaves finalize seed + Args for resume invocations.
 	if len(req.Args) == 0 {
 		req.Args = []string{"resume"}

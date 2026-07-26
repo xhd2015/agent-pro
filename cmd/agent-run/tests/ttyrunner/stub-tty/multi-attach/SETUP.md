@@ -19,7 +19,10 @@ server tty send -> WriteInput (never client write slot)
 3. `Run` probes writer/observer/send behavior via WebSocket + CLI.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Operation = "multi-attach"
 	req.EnableStubTTY = true
 	req.StubScenarioJSON = stubScenarioKeepAliveJSON()

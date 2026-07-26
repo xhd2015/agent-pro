@@ -15,9 +15,12 @@ sessions/codex/same + sessions/grok/same -> keep newer bare same; rename loser s
 1. Leaf seeds colliding nested sessions and runs migrator.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SeedMode = "collision"
 	return nil
 }

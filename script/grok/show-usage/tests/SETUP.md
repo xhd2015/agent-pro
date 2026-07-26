@@ -37,18 +37,20 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if _, err := exec.LookPath("go"); err != nil {
 		t.Skipf("skipping: go not found in PATH")
 	}
-	repoRoot, err := findModuleRoot()
+	repoRoot, err := findModuleRoot(d.DOCTEST_ROOT)
 	if err != nil {
 		return err
 	}
 	req.RepoRoot = repoRoot
-	bin, err := buildShowUsage(t)
+	bin, err := buildShowUsage(t, d)
 	if err != nil {
 		return err
 	}

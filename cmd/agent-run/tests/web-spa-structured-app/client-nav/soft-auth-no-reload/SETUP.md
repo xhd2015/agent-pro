@@ -20,9 +20,13 @@ explicit --token; empty localStorage -> auth-page
 2. Playwright: clear token, set marker, open `/`, submit auth form, assert home + marker.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 	req.Scenario = "soft-auth-no-reload"
 	req.WebTokenMode = "explicit"

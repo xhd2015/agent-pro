@@ -25,7 +25,7 @@ import "testing"
 
 const knownInfoSessionID = "019f283a-aaaa-7aaa-aaaa-aaaaaaaaaaaa"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = knownInfoSessionID
 	lines := []string{
 		`{"type":"event_msg","payload":{"type":"task_started"}}`,

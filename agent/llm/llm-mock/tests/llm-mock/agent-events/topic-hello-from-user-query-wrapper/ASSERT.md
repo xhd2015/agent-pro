@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - HTTP 200 with generated think content.
@@ -9,9 +13,12 @@
 0
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertSuccess(t, resp)
 
 	if len(resp.Responses) != 1 || resp.Responses[0].StatusCode != 200 {

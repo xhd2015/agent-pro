@@ -17,9 +17,13 @@ agent-run run --json → stdout lines match sessions/<runner>/<id>/events.jsonl
 2. Locate `events.jsonl` under `AGENT_RUN_HOME/sessions/`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = append(req.Args, "--json", "hi")
 	return nil
 }

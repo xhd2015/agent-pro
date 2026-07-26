@@ -13,9 +13,13 @@ keep-tty run + partial updates.jsonl (user, think, pending tool_call)
 1. Grouping setup sets `req.Mode = "producer"` and keep-tty producer defaults.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "producer"
 	req.ExecTimeout = producerFinishTimeout
 	return nil

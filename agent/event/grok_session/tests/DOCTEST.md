@@ -128,12 +128,14 @@ doctest test ./agent/event/grok_session/tests/roundtrip/...
 
 ```go
 import (
+
 	"encoding/json"
 	"strings"
 	"testing"
 
 	grok_session "github.com/xhd2015/agent-pro/agent/event/grok_session"
 	types "github.com/xhd2015/agent-pro/agent/event/types"
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request struct {
@@ -154,7 +156,7 @@ type Response struct {
 	WireLines2 []string
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	resp := &Response{}
 	switch req.Target {
 	case "from_session":

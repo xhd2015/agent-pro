@@ -22,9 +22,12 @@ agent-pro opencode config add-provider --id p --base-url ... --model m1 -> error
   is covered by `invalid-api-shape`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{
 		"opencode", "config", "add-provider",
 		"--id", "p",

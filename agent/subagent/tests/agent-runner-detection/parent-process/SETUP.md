@@ -11,7 +11,7 @@
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     // Priority 4: parent-process detection — ensure no env override, no env detection vars
     req.AgentRunnerEnv = ""
     return nil

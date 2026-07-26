@@ -25,7 +25,7 @@ snapshot has "MCP startup incomplete" + main chat › + model ready
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.FixtureFile = fixtureMainPromptMCP
 	return nil
 }

@@ -18,9 +18,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	rel := "rel-ws"
 	ws := filepath.Join(req.TempDir, rel)
 	if err := os.MkdirAll(ws, 0o755); err != nil {

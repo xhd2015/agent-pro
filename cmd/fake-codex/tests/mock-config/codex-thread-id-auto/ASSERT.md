@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 - Exit code 0.
 - The marker file contains a non-empty CODEX_THREAD_ID starting with `codex_`.
@@ -8,9 +12,10 @@ import (
     "path/filepath"
     "strings"
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     assertSuccess(t, resp)
 
     marker := filepath.Join(req.TempDir, "thread-id.txt")

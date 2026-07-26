@@ -20,7 +20,7 @@ import (
 	"testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	t.Helper()
 	if len(req.PriorEvents) != 0 {
 		return fmt.Errorf("first-message leaf: expected empty PriorEvents, got %d", len(req.PriorEvents))

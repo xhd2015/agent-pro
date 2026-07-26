@@ -20,9 +20,13 @@ open / (deep) -> expand WorkspacePath -> click [data-testid="workspace-copy"]
 3. Read clipboard; must equal full workspace path.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 	req.Scenario = "home-long-copy-full-path"
 

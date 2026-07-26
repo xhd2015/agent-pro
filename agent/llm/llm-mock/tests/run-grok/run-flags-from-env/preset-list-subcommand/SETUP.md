@@ -15,9 +15,12 @@ llm-mock run grok -> ParseRunFlags -> catalog stdout, exit 0
 3. Do not set fake grok hook — grok must not run.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.OmitCLIRunFlags = true
 	req.RunFlagsEnv = "--mock-events-preset=list"
 	req.ListOnly = false

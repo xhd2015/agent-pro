@@ -21,9 +21,10 @@ init transport monitor -> create grok-tty session -> session page streams 8s -> 
 ```go
 import (
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 
 	req.Layout = "sse-transport"

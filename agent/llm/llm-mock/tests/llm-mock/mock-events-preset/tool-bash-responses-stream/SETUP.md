@@ -17,9 +17,12 @@ POST /v1/responses stream=true -> SSE must include function_call name=bash
 3. Send one streaming Responses API request (codex wire format).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Endpoint = "/v1/responses"
 	req.ConfigJSON = `{"port": 8080, "exchanges": []}`
 	req.MockEventsPreset = "tool-bash"

@@ -30,7 +30,7 @@ import (
 
 const customHomeSessionID = "019f283a-ffff-7fff-ffff-ffffffffff06"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	customHome := filepath.Join(req.TempDir, "custom-grok-home")
 	decoyHome := filepath.Join(req.TempDir, "decoy-grok-home")
 	mustMkdir(t, filepath.Join(customHome, "sessions"))

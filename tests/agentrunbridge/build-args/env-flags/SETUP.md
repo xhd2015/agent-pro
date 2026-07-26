@@ -19,7 +19,7 @@ RunOpts{Open, Env: SLACK_MSG_SESSION_ID=…, SLACK_MSG_CONFIG=…}
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "sess-env-1"
 	req.Prompt = "with env"
 	req.AgentRunner = "grok-tty"

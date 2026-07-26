@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 - HTTP 200.
 - `object` is `"list"`.
@@ -7,9 +11,12 @@
 - `data[0].owned_by` is `"llm-mock"`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     assertSuccess(t, resp)
 
     r := resp.Responses[0]

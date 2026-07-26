@@ -14,9 +14,12 @@
 3. Wait for PostMessage capture (`WantPosts = 1`).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = append(req.Args, "--session-mode", "stateless", "--reply-prefix", "[bot]")
 	req.WantPosts = 1
 	req.InjectEvents = []InjectedEvent{{

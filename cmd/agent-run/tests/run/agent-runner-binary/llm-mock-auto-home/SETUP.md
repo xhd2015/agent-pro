@@ -16,11 +16,16 @@ agent-run run --agent-runner-binary=llm-mock-run-grok (no config home)
 3. Run without `--agent-runner-config-home`.
 
 ```go
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+
+	"github.com/xhd2015/doctest/session"
+)
 
 const autoHomeUUID = "a1111111-1111-4111-8111-111111111111"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if err := buildLLMMockRunGrok(t, req); err != nil {
 		return err
 	}

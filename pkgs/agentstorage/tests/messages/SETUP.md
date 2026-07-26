@@ -29,7 +29,7 @@ PopMessages(sessionID) -> FIFO drain (oldest first), removes from queue
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Operation = "messages"
 	if req.Runner == "" {
 		req.Runner = "fake-opencode"

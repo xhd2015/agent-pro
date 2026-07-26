@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Registry entry found for parsed session id.
@@ -9,9 +13,13 @@
 - Background `agent-run run` started during Setup; killed on test cleanup.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

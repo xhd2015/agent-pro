@@ -15,9 +15,10 @@ POST codex-tty -> meta.terminal_session_id populated with registry id
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	createWebCodexTTYSession(t, req, "store terminal id")
 	waitForSessionStatus(t, req, req.Runner, req.ChatSessionID, "finished", 60*time.Second)
 	req.TerminalSessionID = waitForTerminalSessionID(t, req, req.Runner, req.ChatSessionID, 10*time.Second)

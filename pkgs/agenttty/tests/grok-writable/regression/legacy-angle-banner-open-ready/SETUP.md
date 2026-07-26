@@ -25,9 +25,12 @@ paths green when implementer switches `waitForBannerRemote` to `OpenReady`.
 - L1: documents that legacy markers still count as open-ready (compat, not a regression of markers).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.FixtureFile = fixtureLegacyAngleResponse
 	return nil
 }

@@ -1,12 +1,20 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Exactly one registry entry remains for codex-tty.
 - Registry id equals original `terminal_session_id` (no `session-2` allocation).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

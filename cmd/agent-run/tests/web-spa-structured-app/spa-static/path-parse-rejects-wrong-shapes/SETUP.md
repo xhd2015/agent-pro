@@ -24,9 +24,13 @@ seed spa-parse-id
 3. Multi-GET wrong shapes; Assert none include bootstrap.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "path-parse-rejects"
 	req.SessionID = "spa-parse-id"
 	if err := seedFlatSession(t, req.Home, req.SessionID, "fake-codex", "idle"); err != nil {

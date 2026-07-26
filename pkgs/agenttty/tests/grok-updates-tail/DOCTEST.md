@@ -81,6 +81,7 @@ doctest test ./cmd/agent-run/tests/grok-tty/run/streams-events-before-exit
 
 ```go
 import (
+
 	"context"
 	"fmt"
 	"os"
@@ -92,6 +93,7 @@ import (
 
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
+	"github.com/xhd2015/doctest/session"
 )
 
 type AppendSchedule struct {
@@ -116,7 +118,7 @@ type Response struct {
 	TailErr    error
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	req.TempDir = t.TempDir()
 	updatesPath := req.UpdatesPath
 	if updatesPath == "" {

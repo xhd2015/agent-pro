@@ -71,6 +71,12 @@ Parameter ranking (most → least significant):
 ## How to Run
 
 ```sh
+# Discovery skips labeled e2e/heavy/slow leaves by default.
+# Run e2e / full suite explicitly when needed:
+doctest test ./cmd/agent-run/tests/terminal-poll                    # discovery (skips labeled e2e/heavy/slow)
+doctest test --label e2e ./cmd/agent-run/tests/terminal-poll
+doctest test --label-all ./cmd/agent-run/tests/terminal-poll
+
 doctest vet ./cmd/agent-run/tests/terminal-poll
 doctest test -v ./cmd/agent-run/tests/terminal-poll
 doctest test -v ./cmd/agent-run/tests/terminal-poll/known-terminal-id/no-repeat-poll --label 'chromium && slow'
@@ -88,6 +94,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request struct {
@@ -147,7 +154,7 @@ func runPlaywrightScript(t *testing.T, script string) (string, string, int, erro
 	return stdout, stderr, 0, nil
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	requirePlaywright(t)
 
 	if req.webCmd == nil && req.Port > 0 {

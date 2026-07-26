@@ -15,9 +15,12 @@ IsTransientIndexError("fatal: unable to write new index file", nil) -> true
 1. Set `ClassifyOutput` to `fatal: unable to write new index file`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClassifyOutput = "fatal: unable to write new index file"
 	req.WantTransient = true
 	return nil

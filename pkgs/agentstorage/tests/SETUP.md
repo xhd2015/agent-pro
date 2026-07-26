@@ -44,7 +44,7 @@ import (
 
 var savedEnv = map[string]*string{}
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.TempDir = t.TempDir()
 	req.Home = filepath.Join(req.TempDir, ".agent-run")
 	req.Env = append(req.Env, "AGENT_RUN_HOME="+req.Home)
@@ -56,13 +56,15 @@ func Setup(t *testing.T, req *Request) error {
 
 func openStore(t *testing.T, req *Request) (agentstorage.Store, string, error) {
 	t.Helper()
-	home := req.Home
-	if v := os.Getenv("AGENT_RUN_HOME"); v != "" {
-		home = v
+	// Prefer explicit home; for env_override action pass empty constructor so
+	// product resolveHome reads AGENT_RUN_HOME (set only for that leaf).
+	homeArg := req.Home
+	if req.Action == "env_override" {
+		homeArg = ""
 	}
-	store, err := agentstorage.NewFileStore(home)
+	store, err := agentstorage.NewFileStore(homeArg)
 	if err != nil {
-		return nil, home, fmt.Errorf("NewFileStore(%q): %w", home, err)
+		return nil, homeArg, fmt.Errorf("NewFileStore(%q): %w", homeArg, err)
 	}
 	return store, store.Home(), nil
 }
@@ -87,6 +89,8 @@ func AssertHomeOnly(t *testing.T, home string, paths []string) {
 	}
 }
 
+// applyEnv is residual process mutation for leaves that exercise product
+// AGENT_RUN_HOME resolution (env_override). Prefer NewFileStore(explicitHome).
 func applyEnv(env []string) {
 	for _, e := range env {
 		parts := strings.SplitN(e, "=", 2)

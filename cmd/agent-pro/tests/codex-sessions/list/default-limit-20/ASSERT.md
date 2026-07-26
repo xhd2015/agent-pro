@@ -15,7 +15,7 @@
 ```go
 import "testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertSuccess(t, resp)
 	if len(resp.Sessions) != 20 {
 		t.Fatalf("len(sessions) = %d, want 20", len(resp.Sessions))

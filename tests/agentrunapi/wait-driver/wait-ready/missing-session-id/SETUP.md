@@ -13,7 +13,7 @@ WaitReady(SessionID="") -> error; StatusPollCalls==0
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "   "
 	req.StatusPollHold = statusReadyFixture()
 	return nil

@@ -12,9 +12,12 @@ POST -> finish_reason length
 3. The response includes `finish_reason: "length"`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     req.ConfigJSON = `{
   "port": 8080,
   "exchanges": [

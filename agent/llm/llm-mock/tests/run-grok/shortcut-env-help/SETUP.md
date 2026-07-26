@@ -14,9 +14,12 @@ llm-mock-run-grok -> ParseRunFlagsFromEnv -> help stdout, exit 0
 2. No grok argv; shortcut has no run-flag argv beyond env.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.UseShortcut = true
 	req.OmitCLIRunFlags = true
 	req.RunFlagsEnv = "--help"

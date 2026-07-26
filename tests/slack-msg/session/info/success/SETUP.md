@@ -19,8 +19,11 @@ seed map + messages.jsonl
 2. Leaf sets info flags or env.
 
 ```go
-import "testing"
+import (
+	"testing"
 
+	"github.com/xhd2015/doctest/session"
+)
 func sessionInfoFixtureEntry() sessionMapEntry {
 	return sessionMapEntry{
 		SessionID:          sessionInfoFixtureID,
@@ -43,7 +46,7 @@ func sessionInfoFixtureMessages() []sessionLogMessage {
 	}
 }
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClearSlackEnv = true
 	if err := isolateHome(t, req); err != nil {
 		return err

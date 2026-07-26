@@ -469,6 +469,12 @@ Parameter ranking (most → least significant):
 ## How to Run
 
 ```sh
+# Discovery skips labeled e2e/heavy/slow leaves by default.
+# Run e2e / full suite explicitly when needed:
+doctest test ./tests/slack-msg                    # discovery (skips labeled e2e/heavy/slow)
+doctest test --label e2e ./tests/slack-msg
+doctest test --label-all ./tests/slack-msg
+
 # Structure validation
 doctest vet ./tests/slack-msg
 
@@ -586,6 +592,8 @@ import (
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
 	"github.com/slack-go/slack/slacktest"
+
+	"github.com/xhd2015/doctest/session"
 )
 
 const (
@@ -781,8 +789,7 @@ var slackTestPublicChannels = []slack.Channel{
 //   C0ALE44K5J6  #general  public  member
 //   C0OTHERCHAN  #random  public  -
 
-func findModuleRoot() (string, error) {
-	start := DOCTEST_ROOT
+func findModuleRoot(start string) (string, error) {
 	for dir := start; ; dir = filepath.Dir(dir) {
 		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
 			return dir, nil
@@ -799,8 +806,8 @@ var (
 	buildErr  error
 )
 
-func sessionCacheDir() string {
-	return filepath.Join(os.TempDir(), "slack-msg-doctest-"+DOCTEST_SESSION_ID)
+func sessionCacheDir(sessionID string) string {
+	return filepath.Join(os.TempDir(), "slack-msg-doctest-"+sessionID)
 }
 
 func withFileLock(lockPath string, fn func() error) error {
@@ -824,15 +831,15 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-func buildSlackMsg(t *testing.T) (string, error) {
+func buildSlackMsg(t *testing.T, d *session.Doctest) (string, error) {
 	t.Helper()
 	buildOnce.Do(func() {
-		repoRoot, err := findModuleRoot()
+		repoRoot, err := findModuleRoot(d.DOCTEST_ROOT)
 		if err != nil {
 			buildErr = err
 			return
 		}
-		cacheDir := sessionCacheDir()
+		cacheDir := sessionCacheDir(d.DOCTEST_SESSION_ID)
 		if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 			buildErr = err
 			return
@@ -864,20 +871,20 @@ func buildSlackMsg(t *testing.T) (string, error) {
 	return builtBin, buildErr
 }
 
-func resolveFixturePath(name string) string {
+func resolveFixturePath(root, name string) string {
 	candidates := []string{
-		filepath.Join(DOCTEST_ROOT, "testdata", name),
-		filepath.Join(DOCTEST_ROOT, name),
+		filepath.Join(root, "testdata", name),
+		filepath.Join(root, name),
 	}
 	for _, c := range candidates {
 		if fileExists(c) {
 			return c
 		}
 	}
-	return filepath.Join(DOCTEST_ROOT, "testdata", name)
+	return filepath.Join(root, "testdata", name)
 }
 
-func materializeConfig(t *testing.T, req *Request) error {
+func materializeConfig(t *testing.T, d *session.Doctest, req *Request) error {
 	t.Helper()
 	if req.ConfigInline == "" && req.ConfigFixture == "" {
 		return nil
@@ -894,7 +901,7 @@ func materializeConfig(t *testing.T, req *Request) error {
 	if req.ConfigInline != "" {
 		data = []byte(req.ConfigInline)
 	} else {
-		data, err = os.ReadFile(resolveFixturePath(req.ConfigFixture))
+		data, err = os.ReadFile(resolveFixturePath(d.DOCTEST_ROOT, req.ConfigFixture))
 		if err != nil {
 			return fmt.Errorf("read fixture %s: %w", req.ConfigFixture, err)
 		}
@@ -1711,7 +1718,7 @@ func defaultListenArgs(req *Request) []string {
 	return args
 }
 
-func runSimple(t *testing.T, req *Request) (*Response, error) {
+func runSimple(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	if req.WorkDir == "" {
 		req.WorkDir = t.TempDir()
 	}
@@ -1720,7 +1727,7 @@ func runSimple(t *testing.T, req *Request) (*Response, error) {
 			return nil, err
 		}
 	}
-	if err := materializeConfig(t, req); err != nil {
+	if err := materializeConfig(t, d, req); err != nil {
 		return nil, err
 	}
 	var capturedPosts []CapturedPost
@@ -1821,11 +1828,11 @@ func runSimple(t *testing.T, req *Request) (*Response, error) {
 	return resp, err
 }
 
-func runListenQuick(t *testing.T, req *Request) (*Response, error) {
+func runListenQuick(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	if req.WorkDir == "" {
 		req.WorkDir = t.TempDir()
 	}
-	if err := materializeConfig(t, req); err != nil {
+	if err := materializeConfig(t, d, req); err != nil {
 		return nil, err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -1876,11 +1883,11 @@ func runListenQuick(t *testing.T, req *Request) (*Response, error) {
 	return resp, err
 }
 
-func runDaemon(t *testing.T, req *Request) (*Response, error) {
+func runDaemon(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	if req.WorkDir == "" {
 		req.WorkDir = t.TempDir()
 	}
-	if err := materializeConfig(t, req); err != nil {
+	if err := materializeConfig(t, d, req); err != nil {
 		return nil, err
 	}
 	if req.HomeDir != "" {
@@ -2026,7 +2033,7 @@ func assertExitCode(t *testing.T, resp *Response, want int) {
 	}
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	if req.Bin == "" {
 		return nil, fmt.Errorf("req.Bin not set; root Setup must build slack-msg")
 	}
@@ -2038,11 +2045,11 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 			req.AppToken = slackTestAppToken
 		}
 		if req.Daemon || req.SecondInstance {
-			return runDaemon(t, req)
+			return runDaemon(t, d, req)
 		}
-		return runListenQuick(t, req)
+		return runListenQuick(t, d, req)
 	}
-	return runSimple(t, req)
+	return runSimple(t, d, req)
 }
 
 func _dsnSlackEventsUnused() {

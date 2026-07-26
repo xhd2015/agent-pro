@@ -23,11 +23,13 @@ seed GROK_HOME + AGENT_RUN_GROK_TTY_GROK_SESSION_ID=<uuid>
 import (
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
+	"time"
 )
 
 const openBindGrokUUID = "550e8400-e29b-41d4-a716-446655440700"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.GrokHome = filepath.Join(req.TempDir, "grok-home")
 	req.GrokSessionUUID = openBindGrokUUID
 	prompt := "open bind"

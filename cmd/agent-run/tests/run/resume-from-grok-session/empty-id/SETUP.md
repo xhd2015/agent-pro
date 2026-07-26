@@ -13,9 +13,13 @@ agent-run run --resume-from-grok-session=
 1. Run with equals-form empty id (always parseable as empty string by flags).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Empty value after equals form — always parseable as empty string by flags.
 	req.Args = []string{"run", "--resume-from-grok-session="}
 	return nil

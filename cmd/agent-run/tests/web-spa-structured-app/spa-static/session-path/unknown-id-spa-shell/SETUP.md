@@ -16,9 +16,13 @@ GET /sessions/spa-unknown-id-xyz -> 200 HTML with #root, no bootstrap script
 2. `GET /sessions/spa-unknown-id-xyz`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "session-path-unknown"
 	req.SessionID = "spa-unknown-id-xyz"
 	req.Port = findFreePort(t)

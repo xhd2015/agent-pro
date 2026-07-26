@@ -1,11 +1,19 @@
+---
+label: e2e
+---
+
 ## Expected
 - The command succeeds.
 - stdout contains no events (empty or only newlines).
 
 ```go
-import "testing"
+import (
+	"testing"
+	"strings"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     assertSuccess(t, resp)
     trimmed := strings.TrimSpace(resp.Stdout)
     if trimmed != "" {

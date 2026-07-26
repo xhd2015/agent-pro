@@ -1,5 +1,5 @@
 ---
-label: ui-automation
+label: e2e, ui-automation
 explanation: Playwright home session list newest-first order
 ---
 
@@ -13,9 +13,13 @@ explanation: Playwright home session list newest-first order
 - Pre-impl: oldest-first sort puts alpha first (RED).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertPlaywrightOK(t, resp, err)
 	if req.Scenario != "newest-first-visible" {
 		t.Fatalf("expected scenario newest-first-visible, got %q", req.Scenario)

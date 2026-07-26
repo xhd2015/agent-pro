@@ -12,9 +12,13 @@ cwd=TempDir; --dir rel-ws
 1. Leaves create a relative workspace directory under process cwd.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Relative-path branch; process cwd is req.TempDir (root runAgentRun cmd.Dir).
 	t.Helper()
 	if req.TempDir == "" {

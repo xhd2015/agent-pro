@@ -19,9 +19,12 @@ llm-mock-run-codex [args] -> orchestrator
 2. Leaf `Setup` toggles `UseShortcut` for shortcut binary.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ConfigEnv = "file"
 	req.FakeCodexCmd = fakeCodexPrintHome
 	req.ConfigJSON = minimalMockConfigJSON(8080, "")

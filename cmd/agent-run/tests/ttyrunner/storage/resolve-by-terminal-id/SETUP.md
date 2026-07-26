@@ -12,7 +12,10 @@ registry session-1 + tty.json -> TTYSession with agent_session_id
 2. `Run` executes the scenario.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Action = "resolve-by-terminal-id"
 	return nil
 }

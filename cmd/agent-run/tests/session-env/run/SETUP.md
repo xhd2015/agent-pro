@@ -19,6 +19,8 @@ agent-run run --agent-runner grok-tty \
 import (
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
+	"path"
 )
 
 // prepareEnvLoggingRun writes the env-logger fake runner and records probe path.
@@ -33,7 +35,7 @@ func prepareEnvLoggingRun(t *testing.T, req *Request) {
 	}
 }
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Default TTY run prefix; leaves append flags, binary, and prompt.
 	req.Args = []string{"run", "--agent-runner", "grok-tty"}
 	return nil

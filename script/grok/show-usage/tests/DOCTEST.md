@@ -80,6 +80,12 @@ Parameter ranking (most → least significant):
 ## How to Run
 
 ```sh
+# Discovery skips labeled e2e/heavy/slow leaves by default.
+# Run e2e / full suite explicitly when needed:
+doctest test ./script/grok/show-usage/tests                    # discovery (skips labeled e2e/heavy/slow)
+doctest test --label e2e ./script/grok/show-usage/tests
+doctest test --label-all ./script/grok/show-usage/tests
+
 # CI / default — fake TUI only
 doctest vet ./script/grok/show-usage/tests
 doctest test ./script/grok/show-usage/tests
@@ -103,6 +109,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request struct {
@@ -129,8 +137,7 @@ var (
 	builtBinErr  error
 )
 
-func findModuleRoot() (string, error) {
-	start := os.Getenv("DOCTEST_ROOT")
+func findModuleRoot(start string) (string, error) {
 	if start == "" {
 		wd, err := os.Getwd()
 		if err != nil {
@@ -148,10 +155,10 @@ func findModuleRoot() (string, error) {
 	}
 }
 
-func buildShowUsage(t *testing.T) (string, error) {
+func buildShowUsage(t *testing.T, d *session.Doctest) (string, error) {
 	t.Helper()
 	builtBinOnce.Do(func() {
-		repoRoot, err := findModuleRoot()
+		repoRoot, err := findModuleRoot(d.DOCTEST_ROOT)
 		if err != nil {
 			builtBinErr = err
 			return
@@ -211,7 +218,7 @@ func mergeEnv(base []string, extra ...string) []string {
 	return out
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	if req.Bin == "" {
 		t.Fatal("req.Bin not set; root Setup must build grok-show-usage")
 	}

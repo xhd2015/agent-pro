@@ -22,10 +22,10 @@ agent-run run --open ... "one word of France capital"
 
 - Repository contains `cmd/agent-run` and `agent/llm/llm-mock/llm-mock-run-grok`.
 - Nested DOCTEST root: does not inherit parent `cmd/agent-run/tests` Setup/Run.
-- Repo root from this tree: `DOCTEST_ROOT/../../../..`
+- Repo root from this tree: `d.DOCTEST_ROOT/../../../..`
   (`open-resume-e2e` → `tests` → `agent-run` → `cmd` → module root).
 - Session-scoped binary cache:
-  `$TMPDIR/open-resume-e2e-doctest-<DOCTEST_SESSION_ID>/`
+  `$TMPDIR/open-resume-e2e-doctest-<d.DOCTEST_SESSION_ID>/`
   shares compiled `agent-run` + `llm-mock-run-grok` across parallel leaves.
 - Each leaf uses isolated temp tree:
 
@@ -83,6 +83,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
 const (
@@ -104,8 +105,8 @@ const (
 	defaultExecTimeout = 3 * time.Minute
 )
 
-func sessionCacheDir() string {
-	return filepath.Join(os.TempDir(), "open-resume-e2e-doctest-"+DOCTEST_SESSION_ID)
+func sessionCacheDir(d *session.Doctest) string {
+	return filepath.Join(os.TempDir(), "open-resume-e2e-doctest-"+d.DOCTEST_SESSION_ID)
 }
 
 func withFileLock(t *testing.T, lockPath string, fn func() error) error {
@@ -148,9 +149,9 @@ func ensureStubDist(distDir string) error {
 	return os.WriteFile(filepath.Join(distDir, "index.html"), []byte("stub\n"), 0644)
 }
 
-func ensureSessionBinaries(t *testing.T, repoRoot string) (agentRun, llmMock string) {
+func ensureSessionBinaries(t *testing.T, d *session.Doctest, repoRoot string) (agentRun, llmMock string) {
 	t.Helper()
-	cache := sessionCacheDir()
+	cache := sessionCacheDir(d)
 	agentRun = filepath.Join(cache, "agent-run")
 	llmMock = filepath.Join(cache, "llm-mock-run-grok")
 	ready := filepath.Join(cache, "binaries.ready")
@@ -899,8 +900,8 @@ func runOpenBindOnly(t *testing.T, req *Request) (*Response, error) {
 	return resp, nil
 }
 
-func Setup(t *testing.T, req *Request) error {
-	req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../.."))
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../.."))
 	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
 		return fmt.Errorf("repo root not found: %w", err)
 	}
@@ -918,7 +919,7 @@ func Setup(t *testing.T, req *Request) error {
 		return err
 	}
 
-	req.AgentRun, req.LLMMockRunGrok = ensureSessionBinaries(t, req.RepoRoot)
+	req.AgentRun, req.LLMMockRunGrok = ensureSessionBinaries(t, d, req.RepoRoot)
 	// Also place copies under leaf bin/ for isolation documentation / PATH.
 	leafBin := filepath.Join(req.TempDir, "bin")
 	if err := os.MkdirAll(leafBin, 0755); err != nil {

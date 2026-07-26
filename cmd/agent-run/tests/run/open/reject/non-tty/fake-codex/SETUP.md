@@ -13,9 +13,13 @@ agent-run run --agent-runner fake-codex --open "x"
 1. Invoke run with `--open`, `fake-codex`, and a short prompt.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "fake-codex"
 	req.Prompt = "x"
 	req.Args = []string{"run", "--agent-runner", "fake-codex", "--open", req.Prompt}

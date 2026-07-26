@@ -11,9 +11,12 @@ SLACK_MSG_SESSION_ID=ID (no --session-id) -> session info succeeds
 1. Set env only; args: session info.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Env = append(req.Env, "SLACK_MSG_SESSION_ID="+sessionInfoFixtureID)
 	req.Args = []string{"session", "info"}
 	return nil

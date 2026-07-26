@@ -21,11 +21,12 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
 const bgBindPreseedUUID = "550e8400-e29b-41d4-a716-446655440801"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	prompt := "bg bind preseed"
 	req.OpenPrompt = prompt
 	req.InitialPrompt = prompt

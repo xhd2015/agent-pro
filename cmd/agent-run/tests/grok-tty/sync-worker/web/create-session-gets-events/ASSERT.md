@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - `events.jsonl` exists under `AGENT_RUN_HOME/sessions/grok-tty/<id>/`.
@@ -19,9 +23,10 @@ N/A (HTTP integration probe)
 import (
 	"strings"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

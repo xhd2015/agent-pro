@@ -12,9 +12,13 @@ POST codex-tty -> terminal available running -> wait finished -> terminal still 
 2. Probe terminal status before and after finish.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	createWebCodexTTYSession(t, req, "keep tty availability")
 	req.Mode = "http"
 	return nil

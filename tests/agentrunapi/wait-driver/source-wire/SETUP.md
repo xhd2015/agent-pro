@@ -1,9 +1,9 @@
 # Scenario
 
-**Feature**: cmd/agent-run wires new-terminal FollowUp to agentrunapi.BuildFollowUpCommand
+**Feature**: agentruncli wires new-terminal FollowUp to agentrunapi.BuildFollowUpCommand
 
 ```
-cmd/agent-run/*.go
+pkgs/agentruncli/*.go
   -> pkgs/agentrunapi import
   -> BuildFollowUpCommand symbol
 ```
@@ -15,7 +15,7 @@ cmd/agent-run/*.go
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "source_wire"
 	return nil
 }

@@ -14,7 +14,7 @@ session manager -> pty.Start(cmd) -> child process in PTY
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Phase = "spawn-shell"
 	return nil
 }

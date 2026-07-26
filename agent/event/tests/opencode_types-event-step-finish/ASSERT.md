@@ -3,9 +3,12 @@
 - All step_finish fields including nested tokens/cache are populated with correct values.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertContains(t, resp.Output, "type=step_finish")
 	assertContains(t, resp.Output, "sessionID=sess_sf")
 	assertContains(t, resp.Output, "timestamp=1718200000456")

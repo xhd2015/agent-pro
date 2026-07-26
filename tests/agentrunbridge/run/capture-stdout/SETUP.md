@@ -18,7 +18,7 @@ Run(CaptureStdout=true, LaunchStdout="  hello out\\n") -> Result.Stdout == "hell
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Prompt = "capture me"
 	req.SessionID = "sess-capture"
 	req.KeepTTY = true

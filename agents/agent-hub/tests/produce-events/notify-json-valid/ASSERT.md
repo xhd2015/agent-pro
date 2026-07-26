@@ -7,9 +7,10 @@
 import (
     "encoding/json"
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     assertSuccess(t, resp)
     obj := parseJSON(t, resp.Stdout)
     eventID, _ := obj["event_id"].(string)

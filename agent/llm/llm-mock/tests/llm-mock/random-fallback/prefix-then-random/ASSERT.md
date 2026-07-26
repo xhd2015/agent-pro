@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Two HTTP 200 responses.
@@ -5,9 +9,12 @@
 - Second response is HTTP 200 with generated content (not `from-prefix`, not `no_match`).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertSuccess(t, resp)
 
 	if len(resp.Responses) != 2 {

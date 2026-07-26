@@ -28,9 +28,11 @@ import (
 	"os/exec"
 	"testing"
 	"time"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if _, err := exec.LookPath("codex"); err != nil {
 		t.Skip("codex not found in PATH")
 	}

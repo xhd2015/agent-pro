@@ -23,7 +23,7 @@ writeGrokSession + writeChatHistory -> List + FormatListTable
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Grep = ""
 	req.Limit = 10
 	// Color unused on classic path; leave default.

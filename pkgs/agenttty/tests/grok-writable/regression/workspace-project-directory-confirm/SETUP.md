@@ -26,9 +26,12 @@ cannot bind and writable must report not ready.
 - Complements F1 table row; explicit ASSERT for this regression alone (W2).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.FixtureFile = fixtureWorkspaceProjectDirectoryConfirm
 	return nil
 }

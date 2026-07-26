@@ -50,6 +50,12 @@ Parameter ranking (most → least significant):
 ## How to Run
 
 ```sh
+# Discovery skips labeled e2e/heavy/slow leaves by default.
+# Run e2e / full suite explicitly when needed:
+doctest test ./cmd/agent-run/tests/run/agent-runner-config-home                    # discovery (skips labeled e2e/heavy/slow)
+doctest test --label e2e ./cmd/agent-run/tests/run/agent-runner-config-home
+doctest test --label-all ./cmd/agent-run/tests/run/agent-runner-config-home
+
 doctest vet ./cmd/agent-run/tests/run/agent-runner-config-home
 doctest test ./cmd/agent-run/tests/run/agent-runner-config-home
 doctest test -v ./cmd/agent-run/tests/run/agent-runner-config-home/discovers-session
@@ -62,6 +68,7 @@ import (
 	"os/exec"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request struct {
@@ -88,7 +95,7 @@ type Response struct {
 	Err      error
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	return runAgentRun(t, req, req.Args...)
 }
 ```

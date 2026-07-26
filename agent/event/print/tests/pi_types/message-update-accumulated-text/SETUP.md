@@ -6,7 +6,7 @@
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Line = `{"type":"message_update","message":{"role":"assistant","content":[{"type":"text","text":"The user has given me a detailed requirement for creating a macOS menu bar app. I need to design a comprehensive doctest tree for this feature."}]},"assistantMessageEvent":{"type":"text_delta","delta":" feature."}}`
 	return nil
 }

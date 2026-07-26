@@ -22,9 +22,13 @@ agent-run pty kill-orphans --dry-run --exe <testbin>
 3. Assert exit 0, output mentions PID/session, process still alive, trailing `\n`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "kill-orphans"
 	req.SpawnServe = true
 	req.ServeHoldSecs = 120

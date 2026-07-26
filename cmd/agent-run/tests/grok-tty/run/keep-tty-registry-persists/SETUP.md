@@ -26,9 +26,10 @@ import (
 	"testing"
 	"os"
 	"path/filepath"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"run", "--agent-runner", "grok-tty", "--keep-tty", "hi"}
 	req.GrokTTYCommand = fakeTUIRespondHi()
 	setGrokTTYCommand(req, req.GrokTTYCommand)

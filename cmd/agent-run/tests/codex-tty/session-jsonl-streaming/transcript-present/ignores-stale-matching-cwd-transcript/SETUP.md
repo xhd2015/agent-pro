@@ -27,6 +27,7 @@ import (
 	"testing"
 	"github.com/xhd2015/doctest/session"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
 const codexStaleCWDText = "JSONL_STALE_CWD_SHOULD_NOT_STREAM"

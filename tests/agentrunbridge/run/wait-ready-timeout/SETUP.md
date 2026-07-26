@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Prompt = "wait timeout"
 	req.SessionID = "sess-wait-to"
 	req.AgentRunner = "grok-tty"

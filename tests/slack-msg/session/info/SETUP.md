@@ -28,11 +28,14 @@ Caller -> slack-msg session info [--session-id ID] [--json]
 - Empty dir: human `-`; JSON `""`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
+	"github.com/xhd2015/doctest/session"
+)
 const sessionInfoFixtureID = "slack-channel-C0INFO44K5J6"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.WorkDir == "" {
 		req.WorkDir = t.TempDir()
 	}

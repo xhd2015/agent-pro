@@ -1,12 +1,20 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - SSE stream includes appended assistant text `Tail appended while SSE open`.
 - Demonstrates file-tail delivery (WatchEvents), not poll-only replay.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

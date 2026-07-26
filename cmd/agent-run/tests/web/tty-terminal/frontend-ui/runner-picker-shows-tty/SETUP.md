@@ -16,9 +16,13 @@ GET runners -> home runner select -> options include codex-tty and grok-tty
 2. Inspect runner select options.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.PlaywrightScript = browserScript(req, `
 const select = page.locator('[data-testid="runner-select"]');
 await select.waitFor({ state: 'visible', timeout: 15000 });

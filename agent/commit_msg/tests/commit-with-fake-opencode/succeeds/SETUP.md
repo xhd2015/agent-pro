@@ -15,9 +15,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.GitDir = filepath.Join(req.TempDir, "repo")
 	InitGitRepo(t, req.GitDir)
 	WriteFile(t, filepath.Join(req.GitDir, "feature.go"), "package main\n")

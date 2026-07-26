@@ -19,7 +19,10 @@ enqueue A --no-wait -> enqueue B --no-wait
 3. `Assert` verifies injection order A before B.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Operation = "fifo"
 	req.EnableStubTTY = true
 	return nil

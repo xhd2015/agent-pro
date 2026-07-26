@@ -16,9 +16,13 @@ seed Grok session UUID under GROK_HOME
 2. Run with `--agent-runner grok` (distinct from `grok-tty`).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.GrokCWD = absPath(t, req.WorkDir)
 	seedGrokSession(t, req.GrokHome, req.GrokCWD, req.GrokSessionID)
 	req.AgentRunner = "grok"

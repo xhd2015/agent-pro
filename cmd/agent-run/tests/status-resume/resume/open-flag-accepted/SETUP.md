@@ -16,9 +16,14 @@ seed bound+exited meta
    can proceed if gates pass (no followup required with `--open`).
 
 ```go
-import "testing"
+import (
+	"testing"
+	"time"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "test-resume-open-s1"
 	req.RunnerSessionID = "550e8400-e29b-41d4-a716-446655440600"
 	req.MetaStatus = "finished"

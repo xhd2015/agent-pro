@@ -16,9 +16,12 @@ Caller -> slack-msg channels search --exact --prefix QUERY -> stderr -> exit 1
 2. Leaf sets both flags and a QUERY.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClearSlackEnv = true
 	req.SlackAPIURL = ""
 	return nil

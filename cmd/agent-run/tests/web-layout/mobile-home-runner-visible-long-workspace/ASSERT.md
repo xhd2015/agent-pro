@@ -1,5 +1,5 @@
 ---
-label: chromium
+label: e2e, chromium
 explanation: playwright mobile home header runner visibility
 ---
 
@@ -20,9 +20,10 @@ explanation: playwright mobile home header runner visibility
 import (
 	"strings"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatalf("Run error: %v\nstderr:\n%s", err, resp.PlaywrightStderr)
 	}

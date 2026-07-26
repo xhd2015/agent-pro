@@ -36,7 +36,7 @@ type Response struct {
 Root `Run` shells out to `agent-hub` or `fake-opencode`:
 
 ```go
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
     var cmd *exec.Cmd
     cmd = exec.Command(req.Command, req.Args...)
     cmd.Env = append(os.Environ(), "AGENT_HUB_HOME="+req.Home)
@@ -56,7 +56,7 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 }
 ```
 
-Leaves override `func Setup(t *testing.T, req *Request) error` to populate
+Leaves override `func Setup(t *testing.T, d *session.Doctest, req *Request) error` to populate
 `req.Command`, `req.Args`, `req.Stdin`, `req.Home` (via `t.TempDir()`), and
 if needed create mock config files. Leaves override `func Run` only when the
 command under test is `fake-opencode` (not `agent-hub`).

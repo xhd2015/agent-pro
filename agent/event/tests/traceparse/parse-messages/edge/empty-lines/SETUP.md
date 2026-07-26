@@ -13,9 +13,12 @@ trace JSONL -> adapter registry -> parsed event JSON
 1. Configure `Request` fields for this scenario.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.RawLines = nil
 	req.CreatedAt = "2026-05-25T18:26:22.524536+08:00"
 	return nil

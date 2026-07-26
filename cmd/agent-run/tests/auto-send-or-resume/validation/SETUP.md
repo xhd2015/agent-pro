@@ -17,9 +17,10 @@ run -h -> documents --auto-send-or-resume
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Validation leaves hit flag gates only; keep timeouts tight.
 	if req.ExecTimeout <= 0 {
 		req.ExecTimeout = 15 * time.Second

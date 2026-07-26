@@ -11,9 +11,12 @@ slack-msg session history -h|--help -> documents --session-id, --after-msg-id, -
 1. Leaf sets help flag after `session history`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClearSlackEnv = true
 	return nil
 }

@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 - Combined stdout+stderr contains "Paris" (the LLM response).
 - The mock server's events file records at least 1 request.
@@ -11,9 +15,10 @@ import (
     "encoding/json"
     "strings"
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     if err != nil {
         t.Fatalf("run failed: %v", err)
     }

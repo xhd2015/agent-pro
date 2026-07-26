@@ -27,12 +27,12 @@ import (
 	"testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.RunAllFixtures = true
 	req.FixtureFile = ""
 	if req.TestdataDir == "" {
 		if req.RepoRoot == "" {
-			req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "..", "..", "..", ".."))
+			req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "..", "..", "..", ".."))
 		}
 		req.TestdataDir = filepath.Join(req.RepoRoot, "pkgs", "agenttty", "testdata", "codex-writable")
 	}

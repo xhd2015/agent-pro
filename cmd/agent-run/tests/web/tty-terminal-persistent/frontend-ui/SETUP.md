@@ -23,9 +23,13 @@ fixture leaves (modal-renders-*, finished-status-*) keep seeded ptywrap only
 4. `Run` executes `playwright-debug run`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "ui"
 	return nil
 }

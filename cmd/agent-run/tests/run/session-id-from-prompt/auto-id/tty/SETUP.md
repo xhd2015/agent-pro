@@ -22,9 +22,13 @@ agent-run run --agent-runner grok-tty --session-id-from-prompt "prompt"
 3. Leaves add prompts / collision seeds.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "grok-tty"
 	req.KeepTTY = true
 	req.Args = append(req.Args, "--agent-runner", "grok-tty", "--keep-tty")

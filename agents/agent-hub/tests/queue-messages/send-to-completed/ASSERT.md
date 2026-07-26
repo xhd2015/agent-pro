@@ -3,9 +3,12 @@
 - session show returns status:"running".
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     r, err := runAgentHub(t, req, "session", "message", "send", "--runner", "fake-opencode", "--session-id", "s2", "--text", "reactivate")
     if err != nil {
         t.Fatalf("send error: %v", err)

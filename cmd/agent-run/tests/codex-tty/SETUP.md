@@ -54,6 +54,7 @@ import (
 
 	"github.com/creack/pty"
 	ptyclient "github.com/xhd2015/dot-pkgs/go-pkgs/shell/ptywrap/client"
+	"github.com/xhd2015/doctest/session"
 )
 
 const codexTTYBannerMarker = "CODEX_TTY_BANNER"

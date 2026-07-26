@@ -18,6 +18,8 @@ mock server -> log think on curl #1, message on curl #2 -> session.jsonl
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
 const fakeGrokCurlTwiceNoConfig = `sh -c '
@@ -28,7 +30,7 @@ echo "R1=$r1"
 echo "R2=$r2"
 '`
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ConfigJSON = ""
 	req.ConfigEnv = ""
 	req.FakeGrokCmd = fakeGrokCurlTwiceNoConfig

@@ -21,9 +21,10 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	override := filepath.Join(req.TempDir, "override-ws")
 	if err := os.MkdirAll(override, 0755); err != nil {
 		return err

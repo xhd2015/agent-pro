@@ -23,9 +23,13 @@ GET ?q=UNIQUE-QUERY-TOKEN&limit=30
 3. GET with `q` that matches only delta.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "counts-present"
 	if err := seedSessions(t, req, defaultFiveSessions()); err != nil {
 		return err

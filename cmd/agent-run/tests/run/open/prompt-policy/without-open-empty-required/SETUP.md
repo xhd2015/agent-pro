@@ -13,9 +13,13 @@ agent-run run --agent-runner fake-codex
 1. Run with a runner and no prompt args (and no `--open`).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "fake-codex"
 	// No prompt positional; no --open.
 	req.Args = []string{"run", "--agent-runner", "fake-codex"}

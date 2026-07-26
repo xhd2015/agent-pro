@@ -14,9 +14,12 @@ POST #1 -> GenerateEvents -> ActionThink (or next event) -> HTTP 200
 3. Server must return HTTP 200 (not HTTP 400 `no_match`).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ConfigJSON = `{
   "port": 8080,
   "exchanges": []

@@ -22,9 +22,10 @@ seed overflow idle grok-tty session → scroll up to detach → composer send �
 ```go
 import (
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 
 	req.Layout = "session-send-no-auto-scroll"

@@ -18,9 +18,13 @@ agent-run run --agent-runner fake-codex --session-id-from-prompt "prompt"
 2. Leaves add prompts and optional collision seeds.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "fake-codex"
 	req.Args = append(req.Args, "--agent-runner", "fake-codex")
 	return nil

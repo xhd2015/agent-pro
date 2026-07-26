@@ -26,9 +26,10 @@ seed idle turn-1 (user "run ls" + assistant) → /sessions/<id> → composer "wh
 ```go
 import (
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 
 	req.Layout = "follow-up-message-card-order"

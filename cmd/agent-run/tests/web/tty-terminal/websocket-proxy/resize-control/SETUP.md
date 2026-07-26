@@ -16,9 +16,13 @@ browser sends {"type":"resize","cols":100,"rows":32} -> ptywrap receives resize 
 2. Send JSON resize message before input.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.WSResizeJSON = `{"type":"resize","cols":100,"rows":32}`
 	req.WSInput = ""
 	return nil

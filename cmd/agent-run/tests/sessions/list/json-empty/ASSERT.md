@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Exit code 0.
@@ -9,9 +13,10 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertSuccess(t, resp)
 	if !strings.HasSuffix(resp.Stdout, "\n") {
 		t.Fatalf("expected trailing newline on stdout, got %q", resp.Stdout)

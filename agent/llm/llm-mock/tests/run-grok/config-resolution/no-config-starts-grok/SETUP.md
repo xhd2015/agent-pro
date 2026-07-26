@@ -15,9 +15,12 @@ orchestrator -> fake grok (exit 0)
 3. Fake grok prints `GROK_HOME=` and exits 0.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ConfigJSON = ""
 	req.ConfigEnv = ""
 	req.ExpectedExit = 0

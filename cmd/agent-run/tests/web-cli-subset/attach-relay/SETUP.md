@@ -19,9 +19,13 @@ tty-watch attach -> unchanged multi-writer attach semantics
 2. Leaves start fake ptywrap or live stub/codex sessions as needed.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Area = "attach-relay"
 	if req.RegistryTranscript == "" {
 		req.RegistryTranscript = "terminal-ready-from-pty"

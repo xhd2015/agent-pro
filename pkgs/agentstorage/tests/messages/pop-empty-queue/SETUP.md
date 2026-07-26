@@ -19,7 +19,7 @@ no AppendMessage -> PopMessages -> empty slice, no error
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Action = "pop_empty"
 	return nil
 }

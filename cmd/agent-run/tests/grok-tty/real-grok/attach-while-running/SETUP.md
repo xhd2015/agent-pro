@@ -13,9 +13,13 @@ background run --agent-runner grok-tty "say hi" → parse stderr id → attach c
 3. `Run` probes attach via registry (WS + snapshot).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.GrokTTYPrompt = "say hi"
 	req.Args = []string{"run", "--agent-runner", "grok-tty", "say hi"}
 	startGrokTTYBackground(t, req)

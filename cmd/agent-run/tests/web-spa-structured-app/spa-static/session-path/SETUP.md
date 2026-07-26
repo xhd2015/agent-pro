@@ -21,9 +21,13 @@ seed sessions/<id> -> GET /sessions/<id> -> #agent-run-session-bootstrap
 2. Leaves seed or skip seed, then HTTP GET the session page path.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Grouping marker — leaves set SessionID and seed policy.
 	if req.Scenario == "" {
 		req.Scenario = "session-path"

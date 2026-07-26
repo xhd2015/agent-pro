@@ -28,9 +28,11 @@ explain list [--limit K] -> newest first, at most effective_limit cards
 import (
 	"fmt"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.Bin == "" {
 		t.Fatalf("order-and-limit setup: explain binary not built")
 	}

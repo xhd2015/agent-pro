@@ -32,9 +32,11 @@ agent-run run --agent-runner grok-tty "hi"
 import (
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
+	"time"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	clearOpenInstantAttach(req)
 	req.Prompt = "hi"
 	probePath := filepath.Join(req.TempDir, "non-open-inject-probe.txt")

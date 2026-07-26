@@ -19,7 +19,10 @@ agent-run send <session-id> "msg" -> agentsend.Enqueue -> stdout msg_N\n
 4. `Assert` checks stdout id line and exit code.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Operation = "enqueue"
 	req.EnableStubTTY = true
 	return nil

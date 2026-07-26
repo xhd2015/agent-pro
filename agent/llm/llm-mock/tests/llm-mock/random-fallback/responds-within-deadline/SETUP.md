@@ -19,9 +19,11 @@ POST #1 must return HTTP 200 within 3s (not hang on grep/bash probes)
 import (
 	"testing"
 	"time"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ConfigJSON = `{
   "port": 8080,
   "exchanges": []

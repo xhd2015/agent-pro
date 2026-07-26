@@ -31,9 +31,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/xhd2015/agent-pro/agent/commit_msg"
+
 	"github.com/xhd2015/doctest/session"
 )
 
@@ -135,6 +137,15 @@ func WriteMockConfig(t *testing.T, req *Request, body string) {
 	WriteFile(t, req.MockConfigPath, body)
 }
 
+// commitMsgTestLogger writes Generate logs to stderr (same as product stderrLogger).
+type commitMsgTestLogger struct{}
+
+func (commitMsgTestLogger) Log(msg string)   { fmt.Fprintf(os.Stderr, "%s\n", msg) }
+func (commitMsgTestLogger) Error(msg string) { fmt.Fprintf(os.Stderr, "ERROR: %s\n", msg) }
+
+// captureIOMu serializes os.Stdout/os.Stderr redirection for parallel leaves.
+var captureIOMu sync.Mutex
+
 func captureRunGenCommitMsg(t *testing.T, req *Request) (*Response, error) {
 	t.Helper()
 
@@ -150,6 +161,10 @@ func captureRunGenCommitMsg(t *testing.T, req *Request) (*Response, error) {
 		req.GitDir = gitDir
 	}
 
+	// Serialize process stdout/stderr swaps under t.Parallel().
+	captureIOMu.Lock()
+	defer captureIOMu.Unlock()
+
 	stdoutR, stdoutW, err := os.Pipe()
 	if err != nil {
 		return nil, fmt.Errorf("stdout pipe: %w", err)
@@ -164,56 +179,83 @@ func captureRunGenCommitMsg(t *testing.T, req *Request) (*Response, error) {
 	os.Stdout = stdoutW
 	os.Stderr = stderrW
 
+	// Child agent env via GenerateOptions.AgentEnv (cmd.Env path) — no parent Setenv.
 	opencodeConfigDir := filepath.Join(req.TempDir, "opencode-config")
 	_ = os.MkdirAll(opencodeConfigDir, 0755)
-	oldMockConfig := os.Getenv("FAKE_OPENCODE_MOCK_CONFIG")
-	oldOpencodeConfigDir := os.Getenv("OPENCODE_CONFIG_DIR")
-	oldCommandCodeHook := os.Getenv("LLM_MOCK_RUN_COMMANDCODE_COMMAND")
+	agentEnv := map[string]string{
+		"OPENCODE_CONFIG_DIR": opencodeConfigDir,
+	}
 	if req.MockConfigPath != "" {
-		os.Setenv("FAKE_OPENCODE_MOCK_CONFIG", req.MockConfigPath)
+		agentEnv["FAKE_OPENCODE_MOCK_CONFIG"] = req.MockConfigPath
 	}
-	os.Setenv("OPENCODE_CONFIG_DIR", opencodeConfigDir)
 	if req.CommandCodeHook != "" {
-		os.Setenv("LLM_MOCK_RUN_COMMANDCODE_COMMAND", req.CommandCodeHook)
-	}
-	defer func() {
-		if oldMockConfig == "" {
-			os.Unsetenv("FAKE_OPENCODE_MOCK_CONFIG")
-		} else {
-			os.Setenv("FAKE_OPENCODE_MOCK_CONFIG", oldMockConfig)
-		}
-		if oldOpencodeConfigDir == "" {
-			os.Unsetenv("OPENCODE_CONFIG_DIR")
-		} else {
-			os.Setenv("OPENCODE_CONFIG_DIR", oldOpencodeConfigDir)
-		}
-		if oldCommandCodeHook == "" {
-			os.Unsetenv("LLM_MOCK_RUN_COMMANDCODE_COMMAND")
-		} else {
-			os.Setenv("LLM_MOCK_RUN_COMMANDCODE_COMMAND", oldCommandCodeHook)
-		}
-	}()
-
-	args := []string{
-		"--dir", gitDir,
-		"--model", req.Model,
-		"--agent-runner", req.AgentRunner,
-		"--agent-runner-binary", req.AgentRunnerBinary,
-	}
-	if req.Commit {
-		args = append(args, "--commit")
-	}
-	if req.NoVerify {
-		args = append(args, "--no-verify")
-	}
-	if req.DryRun {
-		args = append(args, "--dry-run")
-	}
-	if req.AddAll {
-		args = append(args, "--add-all")
+		agentEnv["LLM_MOCK_RUN_COMMANDCODE_COMMAND"] = req.CommandCodeHook
 	}
 
-	runErr := commit_msg.RunGenCommitMsg(args)
+	runner := req.AgentRunner
+	if runner == "" {
+		runner = "opencode"
+	}
+
+	var runErr error
+	if req.DryRun || req.Commit || req.AddAll || req.NoVerify {
+		// Flag combinations that need the full CLI entry (add-all / commit / dry-run).
+		// Residual process Setenv only for this path: RunGenCommitMsg has no AgentEnv
+		// option surface. Child still needs mock env; set + restore around the call.
+		prev := map[string]*string{}
+		for k, v := range agentEnv {
+			if old, ok := os.LookupEnv(k); ok {
+				o := old
+				prev[k] = &o
+			} else {
+				prev[k] = nil
+			}
+			_ = os.Setenv(k, v)
+		}
+		defer func() {
+			for k, old := range prev {
+				if old == nil {
+					_ = os.Unsetenv(k)
+				} else {
+					_ = os.Setenv(k, *old)
+				}
+			}
+		}()
+		args := []string{
+			"--dir", gitDir,
+			"--model", req.Model,
+			"--agent-runner", runner,
+			"--agent-runner-binary", req.AgentRunnerBinary,
+		}
+		if req.Commit {
+			args = append(args, "--commit")
+		}
+		if req.NoVerify {
+			args = append(args, "--no-verify")
+		}
+		if req.DryRun {
+			args = append(args, "--dry-run")
+		}
+		if req.AddAll {
+			args = append(args, "--add-all")
+		}
+		runErr = commit_msg.RunGenCommitMsg(args)
+	} else {
+		// Pure generate path: AgentEnv goes to child via tool_exec / opencode run options.
+		msg, genErr := commit_msg.Generate(gitDir, commit_msg.GenerateOptions{
+			Model:             req.Model,
+			AgentRunner:       runner,
+			AgentRunnerBinary: req.AgentRunnerBinary,
+			AgentEnv:          agentEnv,
+			Logger:            commitMsgTestLogger{},
+		})
+		runErr = genErr
+		if genErr == nil && msg != "" {
+			// Match RunGenCommitMsg stdout/stderr shape used by leaf asserts.
+			fmt.Fprintf(os.Stderr, "\n--- Generated Commit Message ---\n")
+			fmt.Fprintln(os.Stdout, msg)
+		}
+	}
 
 	stdoutW.Close()
 	stderrW.Close()

@@ -56,6 +56,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
+	"path"
 )
 
 // absPathNoEval matches sessions.RelocateCWD Abs encoding (no EvalSymlinks).
@@ -170,7 +172,7 @@ func pathExists(path string) bool {
 	return err == nil
 }
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Shared fixture for all relocate leaves: isolated Grok home, no ambient
 	// TTY command hook (argv probes must see real --resume), default timeout.
 	// Leaves still seed sessions / meta / --dir Args.

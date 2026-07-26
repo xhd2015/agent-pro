@@ -30,9 +30,13 @@ agent-run run --agent-runner grok-tty --open --no-submit "draft-no-submit-OPTION
 4. Assert exit 0, terminal id, and **no** turn evidence for the draft.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.NoSubmit = true
 	req.Prompt = defaultOptionCPrompt
 	req.Mode = "open-real-grok-after"

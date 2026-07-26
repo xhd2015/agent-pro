@@ -6,9 +6,12 @@
 1. Run fake opencode with the mock config.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_all","llm_events":[{"type":"think","text":"t1"},{"type":"tool_call","tool":"bash","mock":{"output":"hi"}},{"type":"message","text":"m1"},{"type":"error","text":"e1"},{"type":"done"},{"type":"step_start"},{"type":"step_finish"}]}`)
     return nil
 }

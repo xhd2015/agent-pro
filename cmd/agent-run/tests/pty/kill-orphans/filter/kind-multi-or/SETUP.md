@@ -25,9 +25,13 @@ agent-run pty kill-orphans --dry-run \
 4. Assert both PIDs appear in stdout; trailing `\n`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if !tempDirLooksLikeWorkdirAtTmp(req.TempDir) {
 		t.Skipf("kind-multi-or needs workdir-at-tmp temp layout; TempDir=%s", req.TempDir)
 	}

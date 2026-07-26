@@ -22,9 +22,12 @@ explain list -> 10 shown of 12, limit 10; includes question-11, excludes questio
 - Newest are higher indices from `seedNSessions` (hourBase 10 → times climb).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"list"}
 	req.Sessions = seedNSessions(12, 10)
 	return nil

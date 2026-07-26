@@ -12,7 +12,7 @@ import (
     "testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     baseDir := filepath.Join(t.TempDir(), "custom_base")
     sess1 := filepath.Join(baseDir, "testrole", "sessions", "sess_sessA")
     sess2 := filepath.Join(baseDir, "testrole", "sessions", "sess_sessB")

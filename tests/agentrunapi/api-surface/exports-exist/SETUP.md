@@ -21,7 +21,7 @@ agentrunapi.ModeRun/Send/Resume + Classify + AutoSendOrResume + Opts + ProbeRepo
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Mode already api_surface; no seed.
 	req.SeedMeta = false
 	req.SessionID = "api-surface-missing"

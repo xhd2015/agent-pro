@@ -16,7 +16,7 @@ import (
 	"github.com/xhd2015/agent-pro/agent/cli/grok"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	dir := t.TempDir()
 	sessDir := filepath.Join(dir, "sess_test")
 

@@ -44,7 +44,7 @@ var midBgCommand = strings.Repeat("m", 111) + "MID120_OK" // 111+9=120
 // longBgCommand is 220 runes; display must truncate (200 runes + …).
 var longBgCommand = strings.Repeat("L", 208) + "LONG220_TAIL" // 208+12=220
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if n := len([]rune(midBgCommand)); n != 120 {
 		t.Fatalf("midBgCommand rune len = %d, want 120", n)
 	}

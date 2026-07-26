@@ -13,9 +13,13 @@ agent-run run --agent-runner grok-tty --detach --no-submit "x"
 1. Invoke run with `--detach --no-submit` on a TTY runner (no `--open`).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "grok-tty"
 	req.Prompt = "x"
 	setGrokTTYCommand(req, fakeTUIRespondHi())

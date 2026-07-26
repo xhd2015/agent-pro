@@ -9,7 +9,7 @@
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     req.Env = []string{"TEST_AGENT_RUNNER=pi"}
     return nil
 }

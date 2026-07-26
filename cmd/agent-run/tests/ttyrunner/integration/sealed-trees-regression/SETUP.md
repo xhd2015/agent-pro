@@ -12,7 +12,10 @@ doctest test tty/ + grok-tty/ + codex-tty/ -> unchanged pass
 2. `Run` executes the scenario.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Operation = "integration"
 	req.Action = "sealed-trees-regression"
 	return nil

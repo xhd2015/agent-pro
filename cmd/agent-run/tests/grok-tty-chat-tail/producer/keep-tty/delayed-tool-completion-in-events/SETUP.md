@@ -18,9 +18,10 @@ pre-seed user + think + pending tool_call
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "delayed-tool-completion-in-events"
 	req.SessionID = "chat_tail_p1"
 	req.CompletionDelay = 3000 * time.Millisecond

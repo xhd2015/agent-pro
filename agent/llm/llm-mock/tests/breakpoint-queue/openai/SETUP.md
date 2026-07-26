@@ -19,9 +19,12 @@ DequeueToBreakpoint -> openai/chat or openai/responses encoder -> HTTP JSON/SSE
 3. `Assert` checks OpenAI-specific wire fields.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ConfigJSON = `{"port": 8080, "exchanges": []}`
 	req.Method = "POST"
 	return nil

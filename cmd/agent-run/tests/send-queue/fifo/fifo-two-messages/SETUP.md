@@ -12,9 +12,13 @@
 2. Harness must not issue a third default/blocking send to "wake" a CLI drainer.
 
 ```go
-import "time"
+import (
+	"time"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ExecTimeout = 60 * time.Second
 	return nil
 }

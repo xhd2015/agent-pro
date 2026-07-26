@@ -1,5 +1,5 @@
 ---
-label: ui-automation
+label: e2e, ui-automation
 explanation: Playwright poll for error-card on bind failure; no assistant fallback bubble
 ---
 
@@ -10,9 +10,13 @@ explanation: Playwright poll for error-card on bind failure; no assistant fallba
 - No `[data-testid="assistant-message"]` bubble from PTY scrollback fallback.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	requirePlaywrightOK(t, resp, err)
 }
 ```

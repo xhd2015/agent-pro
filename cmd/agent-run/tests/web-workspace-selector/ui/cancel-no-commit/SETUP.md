@@ -21,9 +21,10 @@ selected = A; open selector; browse to B via recent; Cancel
 import (
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 	req.Scenario = "cancel-no-commit"
 	a := makeSelectDir(t, req, "cancel-a")

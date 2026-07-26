@@ -53,7 +53,7 @@ const (
 	reconcileSkipReply    = "reconcile-skip-reply-marker"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.ReconcileTimeout <= 0 {
 		req.ReconcileTimeout = 10 * time.Second
 	}

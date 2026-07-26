@@ -117,6 +117,7 @@ doctest test ./agent/event/tests/traceparse
 
 ```go
 import (
+
 	"encoding/json"
 	"reflect"
 	"testing"
@@ -129,6 +130,7 @@ import (
 	traceview "github.com/xhd2015/agent-pro/agent/event/traceview"
 
 	_ "github.com/xhd2015/agent-pro/agent/event/traceparse"
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request struct {
@@ -147,7 +149,7 @@ type Response struct {
 	AliasOK bool
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	switch req.Mode {
 	case "parse_line":
 		parsed, ok := traceparse.ParseTraceLine([]byte(req.RawLine))

@@ -20,7 +20,7 @@ BuildArgs(filled) == launch argv from RunInteractiveDetach  # single code path
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "interactive_detach_vs_run"
 	req.SessionID = "sess-id-compose"
 	req.Prompt = "compose detach"

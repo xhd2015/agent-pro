@@ -19,9 +19,10 @@ configure partial updates.jsonl + chrome hook
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "sse-delivers-delayed-assistant"
 	req.Mode = "sse"
 	configureProducerKeepTTYEnv(t, req)

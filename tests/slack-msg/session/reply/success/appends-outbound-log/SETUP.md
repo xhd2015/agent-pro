@@ -13,9 +13,12 @@ reply success -> sessions/<id>/messages.jsonl gains direction=out + text
 3. Assert outbound log line.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if err := seedSessionsJSON(t, req.HomeDir, []sessionMapEntry{{
 		SessionID: sessionReplyFixtureID,
 		ChannelID: slackTestChannelID,

@@ -10,7 +10,7 @@ harness PTY -> agent-term run sh -> daemon PTY -> echo RUN_OK visible on harness
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Phase = "run-pty"
 	req.StartDaemon = true
 	req.RunCommand = []string{"sh", "-c", "echo RUN_OK; exit 0"}

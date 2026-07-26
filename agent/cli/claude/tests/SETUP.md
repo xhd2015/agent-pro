@@ -46,7 +46,7 @@ import (
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Validate that Operation is set; default to ask if unset
 	if req.Operation == "" {
 		req.Operation = OpAsk

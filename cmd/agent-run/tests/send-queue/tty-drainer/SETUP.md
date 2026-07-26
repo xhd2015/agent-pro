@@ -25,7 +25,10 @@ agent-run send <session-id> "msg" --no-wait -> Enqueue -> stdout msg_N -> exit 0
 4. `Assert` checks fast CLI return (where applicable), inject, status delivered, queue empty.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Operation = "tty-drainer"
 	req.EnableStubTTY = true
 	return nil

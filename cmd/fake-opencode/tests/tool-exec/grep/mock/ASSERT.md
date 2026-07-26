@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 - The event output is `"fake grep result\nfake_file.txt:1: fake match"` — the mock value.
 - The output does **not** contain `REAL_MATCH` (proving mock bypassed real grep).
@@ -6,9 +10,10 @@
 import (
     "strings"
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     assertSuccess(t, resp)
     events := parseJSONLines(t, resp.Stdout)
     if len(events) == 0 {

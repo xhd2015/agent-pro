@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Operation = "import"
 	req.Agent = "opencode"
 	if err := os.WriteFile(req.ZipPath, []byte("this is not a zip file"), 0644); err != nil {

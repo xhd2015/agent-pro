@@ -16,9 +16,13 @@ agent-run web -> GET / -> 200 text/html containing id="root"
 2. Probe `GET /`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "root-html-has-root"
 	req.Port = findFreePort(t)
 	if err := startWebBackground(t, req); err != nil {

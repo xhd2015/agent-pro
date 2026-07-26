@@ -26,9 +26,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "mru-move-to-front-and-cap"
 	n := maxRecentWorkspaces + 1 // 13
 	paths := make([]string, 0, n)

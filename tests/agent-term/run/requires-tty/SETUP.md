@@ -10,7 +10,7 @@ piped stdin/stdout -> agent-term run bash -> error: interactive terminal require
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Phase = "run-requires-tty"
 	req.StartDaemon = true
 	req.RunCommand = []string{"bash"}

@@ -12,9 +12,10 @@ import (
     "fmt"
     "path/filepath"
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     marker := filepath.Join(req.TempDir, "thread-id.txt")
     writeMockConfig(t, req, fmt.Sprintf(`{"version":"agent-pro.fake-runner.v1","runner":"fake-codex","hook_command":"echo $CODEX_THREAD_ID > %s","hooks":[{"at":"before_start","event":"capture","payload":{}}],"llm_events":[{"type":"message","text":"done"}]}`, marker))
     return nil

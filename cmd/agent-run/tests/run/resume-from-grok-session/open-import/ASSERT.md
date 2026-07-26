@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Exit code 0 within ExecTimeout (open + instant attach must not wait for hold sleep).
@@ -10,9 +14,13 @@
 0
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatalf("run failed (expect --open + instant attach to finish before hold timeout): %v\nstdout:\n%s\nstderr:\n%s",
 			err, resp.Stdout, resp.Stderr)

@@ -11,9 +11,12 @@ Caller -> slack-msg --topic add-missing-scope --help -> same topic body -> exit 
 1. Args `["--topic", "add-missing-scope", "--help"]`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"--topic", "add-missing-scope", "--help"}
 	return nil
 }

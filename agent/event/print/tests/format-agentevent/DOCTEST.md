@@ -112,12 +112,14 @@ doctest test -v ./agent/event/print/tests/...
 
 ```go
 import (
+
 	"strings"
 	"testing"
 
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 
 	"github.com/xhd2015/agent-pro/agent/event/print"
+	"github.com/xhd2015/doctest/session"
 )
 
 
@@ -134,7 +136,7 @@ type Response struct {
 	Output string
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	event := types.AgentEvent{
 		Type:     req.Type,
 		Text:     req.Text,

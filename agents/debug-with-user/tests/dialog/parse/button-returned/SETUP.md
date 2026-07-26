@@ -13,7 +13,7 @@ button returned:Yes — window opened -> button label extracted
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Input = "button returned:Yes — window opened\n"
 	return nil
 }

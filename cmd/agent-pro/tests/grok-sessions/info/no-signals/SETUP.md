@@ -25,7 +25,7 @@ import "testing"
 
 const noSignalsSessionID = "019f283a-bbbb-7bbb-bbbb-bbbbbbbbbbbb"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = noSignalsSessionID
 	writeGrokSessionOpts(t, req.GrokHome, noSignalsSessionID,
 		"2026-07-03T14:00:00.000Z",

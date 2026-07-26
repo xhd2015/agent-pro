@@ -13,9 +13,13 @@ seed bound+exited (dead terminal)
 1. Clear grok-tty command hook so `--agent-runner-binary` argv is visible.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.GrokTTYCommand = ""
 	req.Env = withoutEnvKey(req.Env, envGrokTTYCommand)
 	req.MetaStatus = "finished"

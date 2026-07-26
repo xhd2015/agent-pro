@@ -23,7 +23,7 @@ BuildArgs(session + grok-tty + auto-send + Detach + prompt)
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "sess-detach-1"
 	req.Prompt = "detach me"
 	req.AgentRunner = "grok-tty"

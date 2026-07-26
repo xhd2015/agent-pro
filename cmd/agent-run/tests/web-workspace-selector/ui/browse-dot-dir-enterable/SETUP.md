@@ -19,9 +19,13 @@ open /workspace at fixture with .hidden-dir/
 1. Open selector at fixture; assert `.hidden-dir` visible; enter it.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 	req.Scenario = "browse-dot-dir-enterable"
 	root := makeChooserOptimizeFixture(t, req)

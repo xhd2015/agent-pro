@@ -17,7 +17,7 @@ staged diff -> gen-commit-msg -> fake-opencode dirty payload
 - Sanitize is not implemented yet (classic TDD: leaves assert desired clean / reject behavior → RED).
 
 ## Steps
-1. Resolve the anti-patterns fixture directory relative to `DOCTEST_ROOT`.
+1. Resolve the anti-patterns fixture directory relative to `d.DOCTEST_ROOT`.
 2. Provide helpers to load fixtures and write escaped mock agent text.
 3. Leaves stage a git repo and set `req.Commit` when the leaf needs git subject / HEAD checks.
 

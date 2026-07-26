@@ -12,9 +12,12 @@ missing session id | unknown session -> stderr; exit 1
 2. Leaf sets invalid args.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClearSlackEnv = true
 	if err := isolateHome(t, req); err != nil {
 		return err

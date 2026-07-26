@@ -11,9 +11,12 @@ slack-msg send --channel #missing -> channel not found -> send failed
 1. Use slacktest default server (no `missing` channel in list).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	apiURL, err := ensureSlackTestServer(t)
 	if err != nil {
 		return err

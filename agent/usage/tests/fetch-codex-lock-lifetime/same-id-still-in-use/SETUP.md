@@ -30,7 +30,7 @@ peer ReserveCustomSessionID(codex-status-usage) -> error "already in use"
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SameIDProbe = true
 	return nil
 }

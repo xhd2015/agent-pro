@@ -16,9 +16,13 @@ agent-run run --agent-runner grok-tty "hi" → not rejected as unknown runner; e
 2. Run `agent-run run --agent-runner grok-tty "hi"`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.GrokTTYCommand = fakeTUIRespondHi()
 	req.Args = []string{"run", "--agent-runner", "grok-tty", "hi"}
 	return nil

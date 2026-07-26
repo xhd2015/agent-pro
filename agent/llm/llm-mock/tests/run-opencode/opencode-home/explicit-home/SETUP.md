@@ -16,9 +16,11 @@ orchestrator -> OPENCODE_CONFIG_CONTENT with baseURL -> mock
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	base := t.TempDir()
 	req.OpencodeHome = filepath.Join(base, "explicit-opencode-home")
 	req.OpencodeConfigDir = filepath.Join(base, "explicit-opencode-config")

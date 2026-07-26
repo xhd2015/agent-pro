@@ -20,9 +20,13 @@ web cwd=short -> open / -> workspace label non-empty
 2. Assert collapsed label matches `shortWorkspaceLabel` and runner stays visible.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 	req.Scenario = "home-short-collapsed-readable"
 

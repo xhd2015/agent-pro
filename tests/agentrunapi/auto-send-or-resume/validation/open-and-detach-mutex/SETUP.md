@@ -20,7 +20,7 @@ AutoSendOrResume(Opts{SessionID, Open:true, Detach:true})
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "sess-mutex-1"
 	req.Open = true
 	req.Detach = true

@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertSuccess(t, resp)
 	assertFileMode(t, filepath.Join(req.HomeDir, ".pi/agent/auth.json"), 0600)
 	assertFileMode(t, filepath.Join(req.HomeDir, ".config/opencode/opencode.jsonc"), 0600)

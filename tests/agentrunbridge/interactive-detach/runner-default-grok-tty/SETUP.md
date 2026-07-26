@@ -13,7 +13,7 @@ RunInteractiveDetach(AgentRunner="") -> --agent-runner=grok-tty in launch argv
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "interactive_detach"
 	req.SessionID = "sess-id-runner"
 	req.Prompt = "default runner"

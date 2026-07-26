@@ -42,9 +42,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Keep shared helpers referenced so classify-only packages still compile
 	// the full helper set from root SETUP.
 	_ = initGitRepo

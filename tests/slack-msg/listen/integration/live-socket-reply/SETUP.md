@@ -12,9 +12,12 @@ slack-msg listen --config <repo>/slack-config.json -> connects -> logs config pa
 2. No injected events; probe startup + short run.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.InjectEvents = nil
 	req.WantAgentCalls = 0
 	return nil

@@ -18,9 +18,14 @@ seed zombie: session_id == terminal_session_id == test-open-v7
 3. Run `resume --open <id> "hello"` with instant attach + fake TUI.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"time"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Mirror production bug: --session-id made terminal id == agent session id.
 	req.SessionID = "test-open-v7"
 	req.TerminalSessionID = "test-open-v7"

@@ -17,9 +17,13 @@ agent-run pty --help -> stats, kill-orphans
 3. `Assert` checks exit 0, lists stats and kill-orphans, trailing newline.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"pty", "--help"}
 	return nil
 }

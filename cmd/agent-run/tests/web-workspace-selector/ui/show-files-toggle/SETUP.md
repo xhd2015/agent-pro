@@ -21,9 +21,13 @@ open /workspace at fixture with files (default hidden)
 1. Open selector; expand; assert files + disabled; collapse; assert hidden.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 	req.Scenario = "show-files-toggle"
 	root := makeChooserOptimizeFixture(t, req)

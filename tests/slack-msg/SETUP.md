@@ -25,12 +25,12 @@ slacktest Socket Mode + mock agent-run (SLACK_LISTEN_AGENT_RUN; handles tty stat
 - `go` available in PATH.
 - Implementer lands `cmd/slack-msg` (RED until then — build fails).
 - Root `testdata/`: `valid-config.json`, `empty-token-config.json`, `empty-app-token-config.json`, `default-channel-name.json`.
-- Session cache dir: `$TMPDIR/slack-msg-doctest-<DOCTEST_SESSION_ID>/` (shared binary + slacktest URLs).
+- Session cache dir: `$TMPDIR/slack-msg-doctest-<d.DOCTEST_SESSION_ID>/` (shared binary + slacktest URLs).
 - Unit leaves require: `less-flags` CLI, explicit `--config` only, `SLACK_API_URL` hook, chronological history, listen `--token` (not `--bot-token`).
 
 ## Steps
 
-1. Resolve module root from `DOCTEST_ROOT` upward.
+1. Resolve module root from `d.DOCTEST_ROOT` upward.
 2. Build `slack-msg` once per session into cache dir from `./cmd/slack-msg`.
 3. Leaf/grouping `Setup` sets `req.Args`, config fixture, `SlackAPIURL`, listen flags, or injected events.
 4. `Run` materializes config, executes binary (quick or daemon), captures output.
@@ -52,18 +52,20 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if _, err := exec.LookPath("go"); err != nil {
 		t.Skipf("skipping: go not found in PATH")
 	}
-	repoRoot, err := findModuleRoot()
+	repoRoot, err := findModuleRoot(d.DOCTEST_ROOT)
 	if err != nil {
 		return err
 	}
 	req.RepoRoot = repoRoot
-	bin, err := buildSlackMsg(t)
+	bin, err := buildSlackMsg(t, d)
 	if err != nil {
 		return err
 	}
@@ -93,14 +95,14 @@ func assertOutputContains(t *testing.T, resp *Response, substr string) {
 	}
 }
 
-func withConfigArg(t *testing.T, req *Request, fixtureOrInline string, isInline bool) error {
+func withConfigArg(t *testing.T, d *session.Doctest, req *Request, fixtureOrInline string, isInline bool) error {
 	t.Helper()
 	if isInline {
 		req.ConfigInline = fixtureOrInline
 	} else {
 		req.ConfigFixture = fixtureOrInline
 	}
-	if err := materializeConfig(t, req); err != nil {
+	if err := materializeConfig(t, d, req); err != nil {
 		return err
 	}
 	if !req.ListenMode {

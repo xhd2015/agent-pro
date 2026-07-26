@@ -19,13 +19,13 @@ resolveSessionID(Config, flag, prompt) -> sessionIDSources | error | generated
 ## Steps
 1. `Setup` at root is a no-op; intermediate nodes configure `req.Operation` and request fields.
 2. `Run` dispatches: `"logf"` → runLogf, `"session_base"` → runSessionBase, `"session_id_resolution"` → runSessionIDResolution, default → runSubagentOp.
-3. `splitEnv` is a shared helper for parsing KEY=VALUE pairs.
+3. `splitEnv` / `envLookup` are shared helpers; env isolation uses request-scoped `Config.EnvLookup` and `Config.HomeDir` (no process Setenv).
 
 ## Context
 - `Req.RoleName`: the sub-agent role name (e.g. "implementer", "designer", "test_role")
 - `Req.SessionBase`: passed to `Options.SessionBase`
 - `Req.SessionID`: passed to `Options.SessionID`
-- `Req.Env`: environment variables for the test
+- `Req.Env`: environment variables for the test (via Config.EnvLookup, not os.Setenv)
 - `Req.Operation`: one of "debug_session_env", "session_env_var", "session_meta_field", "list_sessions", "show_status", "trace_session", "logf", "session_base", "session_id_resolution"
 - `Req.LogMessage` / `Req.LogArgs`: for Logf tests
 - `Req.PreCreateDirs`: paths to pre-create as session directories (for testing session listing/status)
@@ -40,17 +40,19 @@ import (
     "path/filepath"
     "strconv"
     "strings"
+    "sync"
     "testing"
 
     "github.com/xhd2015/agent-pro/agent/subagent"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     _ = runLogf
     _ = runSessionBase
     _ = runSessionIDResolution
     _ = runSubagentOp
     _ = splitEnv
+    _ = envLookup
     return nil
 }
 
@@ -63,48 +65,82 @@ func splitEnv(e string) []string {
     return []string{e}
 }
 
+// envLookup builds a request-scoped EnvLookup: force-unset keys return ("", true);
+// req.Env KEY=VALUE pairs return (value, true); other keys fall through to process env.
+func envLookup(env []string, forceUnset ...string) func(string) (string, bool) {
+    overlay := map[string]*string{}
+    for _, k := range forceUnset {
+        overlay[k] = nil
+    }
+    for _, e := range env {
+        parts := splitEnv(e)
+        if len(parts) != 2 {
+            continue
+        }
+        v := parts[1]
+        overlay[parts[0]] = &v
+    }
+    return func(key string) (string, bool) {
+        p, ok := overlay[key]
+        if !ok {
+            return "", false
+        }
+        if p == nil {
+            return "", true
+        }
+        return *p, true
+    }
+}
+
 func runLogf(t *testing.T, req *Request) (*Response, error) {
     message := req.LogMessage
-
-    old := os.Stdout
-    r, w, err := os.Pipe()
+    stdout, _, err := captureStdoutStderr(func() error {
+        subagent.Logf("%s", fmt.Sprintf(message, req.LogArgs...))
+        return nil
+    })
     if err != nil {
-        return nil, fmt.Errorf("create pipe: %w", err)
+        return nil, err
     }
-    os.Stdout = w
+    return &Response{Stdout: stdout}, nil
+}
 
-    subagent.Logf("%s", fmt.Sprintf(message, req.LogArgs...))
+// captureStdoutStderr serializes os.Stdout/os.Stderr swaps so parallel leaves
+// do not steal each other's pipes (process-global streams).
+var captureIOMu sync.Mutex
 
-    w.Close()
-    os.Stdout = old
+func captureStdoutStderr(fn func() error) (stdout, stderr string, err error) {
+    captureIOMu.Lock()
+    defer captureIOMu.Unlock()
 
-    var buf bytes.Buffer
-    if _, readErr := buf.ReadFrom(r); readErr != nil {
-        return nil, fmt.Errorf("read pipe: %w", readErr)
+    oldOut, oldErr := os.Stdout, os.Stderr
+    rOut, wOut, e := os.Pipe()
+    if e != nil {
+        return "", "", fmt.Errorf("stdout pipe: %w", e)
     }
+    rErr, wErr, e := os.Pipe()
+    if e != nil {
+        wOut.Close()
+        rOut.Close()
+        return "", "", fmt.Errorf("stderr pipe: %w", e)
+    }
+    os.Stdout, os.Stderr = wOut, wErr
 
-    return &Response{Stdout: buf.String()}, nil
+    err = fn()
+
+    wOut.Close()
+    wErr.Close()
+    os.Stdout, os.Stderr = oldOut, oldErr
+
+    var bufOut, bufErr bytes.Buffer
+    bufOut.ReadFrom(rOut)
+    bufErr.ReadFrom(rErr)
+    return bufOut.String(), bufErr.String(), err
 }
 
 func runSessionBase(t *testing.T, req *Request) (*Response, error) {
     homeDir := req.HomeDir
     if homeDir == "" {
         homeDir = t.TempDir()
-    }
-    os.Setenv("HOME", homeDir)
-
-    for _, e := range req.Env {
-        parts := splitEnv(e)
-        if len(parts) == 2 {
-            os.Setenv(parts[0], parts[1])
-        }
-    }
-    os.Unsetenv("AGENT_PRO_SUBAGENT_DEBUG_SESSION_HOME")
-    for _, e := range req.Env {
-        parts := splitEnv(e)
-        if len(parts) == 2 && parts[0] == "AGENT_PRO_SUBAGENT_DEBUG_SESSION_HOME" {
-            os.Setenv(parts[0], parts[1])
-        }
     }
 
     for _, dir := range req.PreCreateDirs {
@@ -118,27 +154,20 @@ func runSessionBase(t *testing.T, req *Request) (*Response, error) {
         }
     }
 
-    old := os.Stdout
-    r, w, err := os.Pipe()
-    if err != nil {
-        return nil, fmt.Errorf("create pipe: %w", err)
-    }
-    os.Stdout = w
-
-    runErr := subagent.Run(context.Background(), subagent.Config{
-        RoleName: req.RoleName,
-    }, subagent.Options{
-        ListSessions: true,
-        SessionBase:  req.SessionBase,
+    var runErr error
+    stdout, _, _ := captureStdoutStderr(func() error {
+        runErr = subagent.Run(context.Background(), subagent.Config{
+            RoleName:  req.RoleName,
+            HomeDir:   homeDir,
+            EnvLookup: envLookup(req.Env, "AGENT_PRO_SUBAGENT_DEBUG_SESSION_HOME"),
+        }, subagent.Options{
+            ListSessions: true,
+            SessionBase:  req.SessionBase,
+        })
+        return nil
     })
 
-    w.Close()
-    os.Stdout = old
-
-    var buf bytes.Buffer
-    buf.ReadFrom(r)
-
-    return &Response{Stdout: buf.String(), Err: runErr}, nil
+    return &Response{Stdout: stdout, Err: runErr}, nil
 }
 
 func runSessionIDResolution(t *testing.T, req *Request) (*Response, error) {
@@ -147,69 +176,28 @@ func runSessionIDResolution(t *testing.T, req *Request) (*Response, error) {
         roleName = "testrole"
     }
 
-    os.Unsetenv("AGENT_PRO_SUBAGENT_" + strings.ToUpper(roleName) + "_SESSION_ID")
-    os.Unsetenv("CODEX_THREAD_ID")
+    roleEnv := "AGENT_PRO_SUBAGENT_" + strings.ToUpper(roleName) + "_SESSION_ID"
 
-    for _, e := range req.Env {
-        parts := splitEnv(e)
-        if len(parts) == 2 {
-            os.Setenv(parts[0], parts[1])
-        }
-    }
-
-    oldOut := os.Stdout
-    rOut, wOut, _ := os.Pipe()
-    os.Stdout = wOut
-
-    oldErr := os.Stderr
-    rErr, wErr, _ := os.Pipe()
-    os.Stderr = wErr
-
-    runErr := subagent.Run(context.Background(), subagent.Config{
-        RoleName:              roleName,
-        AutoGenerateSessionID: req.AutoGenerateSessionID,
-    }, subagent.Options{
-        Status:    true,
-        SessionID: req.SessionID,
+    var runErr error
+    stdout, stderr, _ := captureStdoutStderr(func() error {
+        runErr = subagent.Run(context.Background(), subagent.Config{
+            RoleName:              roleName,
+            AutoGenerateSessionID: req.AutoGenerateSessionID,
+            EnvLookup:             envLookup(req.Env, roleEnv, "CODEX_THREAD_ID"),
+        }, subagent.Options{
+            Status:    true,
+            SessionID: req.SessionID,
+        })
+        return nil
     })
 
-    wOut.Close()
-    wErr.Close()
-    os.Stdout = oldOut
-    os.Stderr = oldErr
-
-    var bufOut bytes.Buffer
-    bufOut.ReadFrom(rOut)
-    var bufErr bytes.Buffer
-    bufErr.ReadFrom(rErr)
-
-    return &Response{Stdout: bufOut.String(), Stderr: bufErr.String(), Err: runErr}, nil
+    return &Response{Stdout: stdout, Stderr: stderr, Err: runErr}, nil
 }
 
 func runSubagentOp(t *testing.T, req *Request) (*Response, error) {
-    for _, e := range req.Env {
-        parts := splitEnv(e)
-        if len(parts) == 2 {
-            os.Setenv(parts[0], parts[1])
-        }
-    }
-
     homeDir := req.HomeDir
     if homeDir == "" {
         homeDir = t.TempDir()
-    }
-    os.Setenv("HOME", homeDir)
-
-    os.Unsetenv("DOCTEST_DEBUG_SESSION_HOME")
-    os.Unsetenv("AGENT_PRO_SUBAGENT_DEBUG_SESSION_HOME")
-    os.Unsetenv("AGENT_PRO_SUBAGENT_"+strings.ToUpper(req.RoleName)+"_SESSION_ID")
-    os.Unsetenv("CODEX_THREAD_ID")
-
-    for _, e := range req.Env {
-        parts := splitEnv(e)
-        if len(parts) == 2 {
-            os.Setenv(parts[0], parts[1])
-        }
     }
 
     for _, dir := range req.PreCreateDirs {
@@ -227,58 +215,51 @@ func runSubagentOp(t *testing.T, req *Request) (*Response, error) {
         }
     }
 
-    oldOut := os.Stdout
-    rOut, wOut, _ := os.Pipe()
-    os.Stdout = wOut
-
-    oldErr := os.Stderr
-    rErr, wErr, _ := os.Pipe()
-    os.Stderr = wErr
-
     roleName := req.RoleName
     if roleName == "" {
         roleName = "testrole"
     }
 
+    roleEnv := "AGENT_PRO_SUBAGENT_" + strings.ToUpper(roleName) + "_SESSION_ID"
     cfg := subagent.Config{
         RoleName:         roleName,
         SessionEnvVar:    req.SessionEnvVar,
         SessionMetaField: req.SessionMetaField,
         DebugSessionEnv:  req.DebugSessionEnv,
+        HomeDir:          homeDir,
+        EnvLookup: envLookup(req.Env,
+            "DOCTEST_DEBUG_SESSION_HOME",
+            "AGENT_PRO_SUBAGENT_DEBUG_SESSION_HOME",
+            roleEnv,
+            "CODEX_THREAD_ID",
+        ),
     }
 
     var runErr error
-    if req.Status {
-        runErr = subagent.Run(context.Background(), cfg, subagent.Options{
-            Status:      true,
-            SessionID:   req.SessionID,
-            SessionBase: req.SessionBase,
-        })
-    } else if req.ListSessions {
-        runErr = subagent.Run(context.Background(), cfg, subagent.Options{
-            ListSessions: true,
-            SessionBase:  req.SessionBase,
-        })
-    } else if req.CatchUp {
-        runErr = subagent.Run(context.Background(), cfg, subagent.Options{
-            CatchUp:     true,
-            SessionID:   req.SessionID,
-            SessionBase: req.SessionBase,
-        })
-    } else {
-        runErr = fmt.Errorf("no operation mode set")
-    }
+    stdout, stderr, _ := captureStdoutStderr(func() error {
+        if req.Status {
+            runErr = subagent.Run(context.Background(), cfg, subagent.Options{
+                Status:      true,
+                SessionID:   req.SessionID,
+                SessionBase: req.SessionBase,
+            })
+        } else if req.ListSessions {
+            runErr = subagent.Run(context.Background(), cfg, subagent.Options{
+                ListSessions: true,
+                SessionBase:  req.SessionBase,
+            })
+        } else if req.CatchUp {
+            runErr = subagent.Run(context.Background(), cfg, subagent.Options{
+                CatchUp:     true,
+                SessionID:   req.SessionID,
+                SessionBase: req.SessionBase,
+            })
+        } else {
+            runErr = fmt.Errorf("no operation mode set")
+        }
+        return nil
+    })
 
-    wOut.Close()
-    wErr.Close()
-    os.Stdout = oldOut
-    os.Stderr = oldErr
-
-    var bufOut bytes.Buffer
-    bufOut.ReadFrom(rOut)
-    var bufErr bytes.Buffer
-    bufErr.ReadFrom(rErr)
-
-    return &Response{Stdout: bufOut.String(), Stderr: bufErr.String(), Err: runErr}, nil
+    return &Response{Stdout: stdout, Stderr: stderr, Err: runErr}, nil
 }
 ```

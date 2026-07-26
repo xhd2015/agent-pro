@@ -15,9 +15,11 @@ first listen --lock-file PATH acquires lock -> second listen same PATH -> exit n
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.LockFile = filepath.Join(req.WorkDir, "slack-msg.lock")
 	req.Daemon = true
 	req.SecondInstance = true

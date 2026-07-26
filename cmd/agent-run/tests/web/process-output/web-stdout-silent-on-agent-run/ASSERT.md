@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected Output
 
 Startup stderr should include the listen URL. Neither web process stdout nor stderr should contain human-readable agent event lines.
@@ -18,9 +22,10 @@ import (
 	"testing"
 
 	"github.com/xhd2015/doctest/assert"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

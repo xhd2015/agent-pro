@@ -19,9 +19,12 @@ Run{Target:"claude_headless", ClaudePath:"/nonexistent/claude"} -> error referen
 - If `CLAUDE_SKIP_INTEGRATION=1` is set the test may skip instead.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClaudePath = "/nonexistent/claude"
 	req.Prompt = "test"
 	return nil

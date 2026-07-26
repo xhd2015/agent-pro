@@ -108,6 +108,7 @@ doctest test ./agent/subagent/tests/timeout
 
 ```go
 import (
+
     "bytes"
     "fmt"
     "os"
@@ -115,6 +116,7 @@ import (
     "time"
 
     "github.com/xhd2015/agent-pro/agent/subagent"
+    "github.com/xhd2015/doctest/session"
 )
 
 
@@ -128,7 +130,8 @@ type Response struct {
     Err      error
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
+    _ = d
     oldErr := os.Stderr
     rErr, wErr, err := os.Pipe()
     if err != nil {
@@ -136,7 +139,7 @@ func Run(t *testing.T, req *Request) (*Response, error) {
     }
     os.Stderr = wErr
 
-    d, parseErr := subagent.ParseTimeoutDuration(req.Input)
+    dur, parseErr := subagent.ParseTimeoutDuration(req.Input)
 
     wErr.Close()
     os.Stderr = oldErr
@@ -145,7 +148,7 @@ func Run(t *testing.T, req *Request) (*Response, error) {
     bufErr.ReadFrom(rErr)
 
     return &Response{
-        Duration: d,
+        Duration: dur,
         Stderr:   bufErr.String(),
         Err:      parseErr,
     }, nil

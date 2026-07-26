@@ -38,7 +38,7 @@ const formatTopSubRichSessionID = "019f283b-7003-7703-7703-770377037703"
 const formatTopSubRichSubID = "019f283b-sa01-7a01-a001-a001a001a001"
 const formatTopSubRichDesc = "[designer] design rich top subagent tables"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = formatTopSubRichSessionID
 	summaryPath := writeGrokSessionOpts(t, req.GrokHome, formatTopSubRichSessionID,
 		"2026-07-03T14:59:00.000Z",

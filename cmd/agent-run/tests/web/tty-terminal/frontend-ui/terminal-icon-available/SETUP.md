@@ -17,9 +17,13 @@ codex-tty chat + live registry -> top bar terminal button with accessible label
 3. Wait for terminal button.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "codex-tty"
 	req.SessionID = "ui-terminal-available"
 	req.RegistryTranscript = "ui-terminal-ready\n"

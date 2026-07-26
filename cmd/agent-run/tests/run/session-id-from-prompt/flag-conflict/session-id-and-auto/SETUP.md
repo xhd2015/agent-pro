@@ -12,9 +12,13 @@ agent-run run --session-id X --session-id-from-prompt "p"
 1. Parent sets `run --agent-runner fake-codex`; leaf adds both conflicting flags + prompt.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Prompt = "conflict prompt"
 	req.Args = append(req.Args,
 		"--session-id", "explicit-id",

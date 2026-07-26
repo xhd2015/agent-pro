@@ -43,7 +43,7 @@ cmd/agent-run/*.go import pkgs/agentrunapi
 
 - Default session id for seeded leaves: `sess-api-1` (leaves may override).
 - Default prompt for auto dispatch: `hello agentrunapi`.
-- `DOCTEST_ROOT` is this tree (`tests/agentrunapi`); module root is `../..`.
+- `d.DOCTEST_ROOT` is this tree (`tests/agentrunapi`); module root is `../..`.
 
 ```go
 import (
@@ -52,7 +52,7 @@ import (
 	"testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.Home == "" {
 		req.Home = filepath.Join(t.TempDir(), ".agent-run")
 	}

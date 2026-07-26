@@ -1,5 +1,5 @@
 ---
-label: ui-automation
+label: e2e, ui-automation
 explanation: playwright mobile home workspace collapsed default + runner viewport
 ---
 
@@ -17,9 +17,13 @@ explanation: playwright mobile home workspace collapsed default + runner viewpor
 - Web process `cmd.Dir` = deep workspace for the leaf duration.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertPlaywrightOK(t, resp, err)
 	if req.Scenario != "home-long-collapsed-default" {
 		t.Fatalf("expected scenario home-long-collapsed-default, got %q", req.Scenario)

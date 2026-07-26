@@ -1,12 +1,20 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Both terminal status responses are available.
 - Both responses identify the same runner/session and do not imply a new backend terminal.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

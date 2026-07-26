@@ -19,7 +19,7 @@ N/A
 ```go
 import "testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertNoError(t, err)
 	assertEqual(t, "Screen", resp.Screen, "starting")
 	assertEqual(t, "Sendable", resp.Sendable, "no")

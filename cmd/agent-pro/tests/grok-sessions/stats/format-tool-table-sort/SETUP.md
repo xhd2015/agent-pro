@@ -26,7 +26,7 @@ import "testing"
 
 const formatToolTableSortSessionID = "019f283b-5555-7555-5555-555555555555"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = formatToolTableSortSessionID
 	summaryPath := writeGrokSessionOpts(t, req.GrokHome, formatToolTableSortSessionID,
 		"2026-07-03T14:56:00.000Z",

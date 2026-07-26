@@ -23,7 +23,7 @@ Converter.Flush / turn_completed -> ActionDone + turn_index increment
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Target = "from_session"
 	return nil
 }

@@ -26,9 +26,12 @@ banner markers are present.
 - M3: desired open-ready for modern idle (RED on OpenReady/Classify until implementer).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.FixtureFile = fixtureModernIdle
 	return nil
 }

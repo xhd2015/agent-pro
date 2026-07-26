@@ -31,7 +31,7 @@ const (
 	discoverBootstrapReply    = "discover-bootstrap-reply-marker"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "discover-bootstrap-test"
 	req.InitialPrompt = discoverBootstrapPrompt
 	req.SessionCreatedAt = time.Now().Add(-1 * time.Second)

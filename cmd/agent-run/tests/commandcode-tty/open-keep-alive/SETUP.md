@@ -17,9 +17,10 @@ agent-run run --open --agent-runner commandcode-tty --agent-runner-binary <mock>
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{
 		"run",
 		"--open",

@@ -23,9 +23,12 @@ doctest <- provider.prov-a.name == "My Display"
   the explicit `--name` override so the two paths are mutually exclusive.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{
 		"opencode", "config", "add-provider",
 		"--id", "prov-a",

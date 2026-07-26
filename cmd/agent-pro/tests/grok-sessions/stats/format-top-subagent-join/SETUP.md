@@ -35,7 +35,7 @@ import "testing"
 const formatTopSubJoinSessionID = "019f283b-7004-7704-7704-770477047704"
 const formatTopSubJoinSubID = "019f283b-solo-7b0b-b00b-b00bb00bb00b"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = formatTopSubJoinSessionID
 	summaryPath := writeGrokSessionOpts(t, req.GrokHome, formatTopSubJoinSessionID,
 		"2026-07-03T15:00:00.000Z",

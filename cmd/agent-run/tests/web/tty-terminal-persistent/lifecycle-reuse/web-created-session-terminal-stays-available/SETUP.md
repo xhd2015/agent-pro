@@ -20,9 +20,13 @@ finished session -> GET /terminal still available true
 3. Probe `/api/agent-run/sessions/grok-tty/<generated>/terminal`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	createWebGrokTTYSessionThroughAPI(t, req)
 	req.Mode = "http"
 	req.HTTPPath = terminalStatusPath(req.Runner, req.ChatSessionID)

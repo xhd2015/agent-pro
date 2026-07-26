@@ -31,7 +31,7 @@ harness cancel -> session.Kill -> registry entry gone
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Parent already set Mode, Provider, blocking command, session ids.
 	req.SameIDProbe = false
 	return nil

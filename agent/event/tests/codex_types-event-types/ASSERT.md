@@ -3,9 +3,12 @@
 - The marshaled JSON contains proper codex event structure with `item.completed`, `command_execution`, and the command output.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertContains(t, resp.Output, "EventStarted=item.started")
 	assertContains(t, resp.Output, "EventUpdated=item.updated")
 	assertContains(t, resp.Output, "EventCompleted=item.completed")

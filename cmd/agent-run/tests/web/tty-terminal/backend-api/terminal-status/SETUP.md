@@ -19,9 +19,13 @@ sessions/<runner>/<session-id>/meta.json + <runner>-registry/<session-id>.json
 3. `Run` fetches terminal status.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.Runner == "" {
 		req.Runner = "codex-tty"
 	}

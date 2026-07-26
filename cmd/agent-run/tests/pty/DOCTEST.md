@@ -121,6 +121,12 @@ Parameter ranking (most → least significant):
 ## How to Run
 
 ```sh
+# Discovery skips labeled e2e/heavy/slow leaves by default.
+# Run e2e / full suite explicitly when needed:
+doctest test ./cmd/agent-run/tests/pty                    # discovery (skips labeled e2e/heavy/slow)
+doctest test --label e2e ./cmd/agent-run/tests/pty
+doctest test --label-all ./cmd/agent-run/tests/pty
+
 doctest vet ./cmd/agent-run/tests/pty
 doctest test ./cmd/agent-run/tests/pty
 doctest test -v ./cmd/agent-run/tests/pty/stats/prints-summary
@@ -144,6 +150,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
 // ServeSpawnSpec describes a test __serve process started before kill-orphans.
@@ -228,7 +235,7 @@ type Response struct {
 	RegistryListenAddr string
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	switch req.Mode {
 	case "kill-orphans":
 		return runKillOrphansFlow(t, req)

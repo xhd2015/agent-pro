@@ -13,9 +13,13 @@ permanently busy + --max-wait 2s -> exit 1, stderr timeout, queue lacks msg id
 3. Set `req.ExecTimeout = 10s`.
 
 ```go
-import "time"
+import (
+	"time"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Action = "max-wait-times-out-removes-message"
 	req.SendMessage = "timeout-probe"
 	req.ExecTimeout = 10 * time.Second

@@ -18,11 +18,12 @@ seed running session -> --print enters follow (WatchEvents)
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
 const chatTailCLIFollowMarker = "CHAT_TAIL_CLI_FOLLOW_MARKER"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "cli-follow-delivers-after-finished"
 	req.Runner = "grok-tty"
 	req.SessionID = "chat_tail_cli_follow"

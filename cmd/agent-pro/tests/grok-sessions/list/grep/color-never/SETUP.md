@@ -22,7 +22,7 @@ ListWithGrep + FormatListTableWithHits(colorMode=never)
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Grep = "GREP_COLOR_TOKEN"
 	req.Limit = 10
 	req.Color = "never"

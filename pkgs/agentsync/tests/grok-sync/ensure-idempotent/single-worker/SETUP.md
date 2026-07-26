@@ -16,11 +16,15 @@ pre-seeded updates line on disk
 3. Hold until events flushed.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 const idempotentUserPrompt = "idempotent-probe-prompt"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	_ = d
 	req.InitialLines = []string{
 		acpUserMessageChunk(idempotentUserPrompt),
 		acpAgentMessageChunk("idempotent-reply"),

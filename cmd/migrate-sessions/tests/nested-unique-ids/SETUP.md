@@ -17,9 +17,12 @@ sessions/fake-codex/a + sessions/fake-opencode/b -> sessions/a + sessions/b
 2. Leaf seeds two nested sessions and runs migrator.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SeedMode = "nested_unique"
 	return nil
 }

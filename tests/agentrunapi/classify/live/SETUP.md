@@ -21,7 +21,7 @@ Classify(store, id, probe{RunnerExited=false})
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "sess-live-1"
 	req.SeedMeta = true
 	req.Runner = "grok-tty"

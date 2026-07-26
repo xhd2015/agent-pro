@@ -12,9 +12,12 @@ channel message + --no-require-mention -> agent invoked
 2. Inject plain channel message.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"--no-require-mention"}
 	req.WantAgentCalls = 1
 	req.InjectEvents = []InjectedEvent{{

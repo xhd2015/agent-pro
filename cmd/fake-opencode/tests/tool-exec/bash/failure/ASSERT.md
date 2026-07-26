@@ -1,11 +1,18 @@
+---
+label: e2e
+---
+
 ## Expected
 - The tool_use event has `exit_code` 3 (or non-zero).
 - The overall fake-opencode process still exits 0 (tool failures don't cause runner to fail).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     assertSuccess(t, resp)
     events := parseJSONLines(t, resp.Stdout)
     if len(events) == 0 {

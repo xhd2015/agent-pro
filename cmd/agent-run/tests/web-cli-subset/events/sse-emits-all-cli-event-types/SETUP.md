@@ -15,9 +15,10 @@ POST fake-codex -> SSE after=0 -> includes terminal done event type
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	startAgentRunWeb(t, req)
 	req.Runner = "fake-codex"
 	req.Prompt = "emit done event"

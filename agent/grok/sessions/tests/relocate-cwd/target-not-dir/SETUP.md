@@ -27,7 +27,7 @@ import (
 
 const targetNotDirSessionID = "019f283a-dddd-7ddd-dddd-dddddddddd04"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	oldWS := filepath.Join(req.TempDir, "ws-old")
 	mustMkdir(t, oldWS)
 	req.OldCWD = absPath(t, oldWS)

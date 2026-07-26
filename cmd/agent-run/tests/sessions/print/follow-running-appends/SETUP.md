@@ -23,11 +23,12 @@ import (
 
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
+	"github.com/xhd2015/doctest/session"
 )
 
 const followSessionID = "follow_append"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	store := openAgentStore(t, req)
 	seedSessionMeta(t, store, followSessionID, "running")
 	appendAgentMessage(t, store, followSessionID, "First running event")

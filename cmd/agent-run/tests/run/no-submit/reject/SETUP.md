@@ -17,9 +17,13 @@ agent-run run --open --no-submit --agent-runner fake-codex "x" -> error (non-TTY
 2. Child dirs split missing `--open` vs non-TTY under open family.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Leaves finalize flags; start from bare run.
 	if len(req.Args) == 0 {
 		req.Args = []string{"run"}

@@ -1,5 +1,5 @@
 ---
-label: ui-automation
+label: e2e, ui-automation
 explanation: Playwright poll for progress-card with resolve think text
 ---
 
@@ -9,9 +9,13 @@ explanation: Playwright poll for progress-card with resolve think text
   `Resolve session id`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	requirePlaywrightOK(t, resp, err)
 }
 ```

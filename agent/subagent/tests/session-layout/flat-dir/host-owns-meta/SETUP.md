@@ -27,6 +27,8 @@ import (
 	"testing"
 
 	"github.com/xhd2015/agent-pro/agent/subagent"
+
+	"github.com/xhd2015/doctest/session"
 )
 
 func enableHostOwnsMeta(t *testing.T, req *Request) {
@@ -43,7 +45,7 @@ func wireOnAgentComplete(req *Request) {
 	}
 }
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	enableHostOwnsMeta(t, req)
 	wireOnAgentComplete(req)
 	return nil

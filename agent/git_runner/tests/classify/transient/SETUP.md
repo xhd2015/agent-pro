@@ -14,9 +14,11 @@ IsTransientIndexError(index-write or index.lock message) -> true
 import (
 	"fmt"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.Mode != "classify" {
 		return fmt.Errorf("transient classify requires Mode=classify")
 	}

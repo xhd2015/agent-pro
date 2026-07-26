@@ -16,6 +16,7 @@ func AutoDetectAgentRunner(c Config) (runner string, detected bool) {
 
 	return agentrunner.Detect(agentrunner.Options{
 		AgentRunnerEnv: c.agentRunnerEnv(),
+		EnvLookup:      c.EnvLookup,
 	})
 }
 

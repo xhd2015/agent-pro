@@ -8,7 +8,7 @@ import (
     "testing"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     if !strings.Contains(resp.Stderr, "my_sid_custom") {
         t.Fatalf("expected 'my_sid_custom' in stderr (custom env var used), got:\n%s", resp.Stderr)
     }

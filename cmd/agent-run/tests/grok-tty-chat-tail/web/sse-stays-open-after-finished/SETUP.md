@@ -19,11 +19,12 @@ seed finished session in AGENT_RUN_HOME
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
 const chatTailSSEAfterFinishedMarker = "CHAT_TAIL_SSE_AFTER_FINISHED_MARKER"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "sse-stays-open-after-finished"
 	req.Mode = "sse-finished-append"
 	req.SessionID = "chat_tail_sse_finished"

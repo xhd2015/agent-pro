@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Exit code 0.
@@ -7,9 +11,10 @@
 import (
 	"testing"
 	"strings"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if resp.JSONBody == nil {
 		t.Fatal("expected JSON body, got nil")
 	}

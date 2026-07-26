@@ -1,5 +1,5 @@
 ---
-label: ui-automation
+label: e2e, ui-automation
 explanation: Playwright Use this folder commits PUT and returns home
 ---
 
@@ -13,9 +13,13 @@ explanation: Playwright Use this folder commits PUT and returns home
 - Pre-impl: Use CTA / PUT missing (RED).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertPlaywrightOK(t, resp, err)
 	// Optional disk check if server wrote config.
 	cfg := readHomeConfigMap(t, req.Home)

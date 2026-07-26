@@ -54,7 +54,7 @@ type opencodeMessageOpts struct {
 	Cost         float64
 }
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.DataDir = filepath.Join(t.TempDir(), ".local", "share", "opencode")
 	now, err := time.Parse(time.RFC3339, fixedNow)
 	if err != nil {

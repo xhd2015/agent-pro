@@ -18,9 +18,10 @@ import (
 
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "fake-codex"
 	req.SessionID = "watch-events-print"
 	seedRunningSessionForPrint(t, req, req.Runner, req.SessionID)

@@ -87,11 +87,13 @@ doctest test -v ./pkgs/agentstorage/tests/reltime/zero-stops-chain
 
 ```go
 import (
+
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
+	"github.com/xhd2015/doctest/session"
 )
 
 // FormatCase is one (target, want) pair under a shared fixed now.
@@ -110,7 +112,7 @@ type Response struct {
 	Got []string
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	t.Helper()
 	if len(req.Cases) == 0 {
 		return nil, fmt.Errorf("req.Cases must be set by leaf Setup")

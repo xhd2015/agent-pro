@@ -16,9 +16,13 @@ agent-run run --help -> usage lists --session-id-from-prompt
 2. Leaf runs `run --help` and asserts flag text.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Help path: no agent-runner; clear any accidental runner defaults.
 	req.Runner = ""
 	req.Args = []string{"run", "--help"}

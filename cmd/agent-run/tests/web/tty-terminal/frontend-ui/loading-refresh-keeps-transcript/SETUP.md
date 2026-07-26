@@ -19,9 +19,13 @@ chat transcript visible -> trigger terminal status/session refresh -> transcript
 4. Verify transcript text remains visible.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "codex-tty"
 	req.SessionID = "ui-refresh-keeps-chat"
 	req.RegistryTranscript = "refresh-terminal\n"

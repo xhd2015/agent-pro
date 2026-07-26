@@ -32,9 +32,12 @@ fake codex -> curl mock -> preset genQueue dequeue order
 - `Request.LogEventsPath` — optional; pass-through leaf sets this to prove preset dequeue via AgentEvent JSONL.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.UseShortcut = false
 	return nil
 }

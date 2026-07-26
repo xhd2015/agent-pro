@@ -1,5 +1,5 @@
 ---
-label: chromium
+label: e2e, chromium
 explanation: playwright; multi-tool progress compaction preserves start order
 ---
 
@@ -10,9 +10,13 @@ explanation: playwright; multi-tool progress compaction preserves start order
 - First card contains merged output from tool A; second card is tool B slot.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

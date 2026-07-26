@@ -35,9 +35,12 @@ LLM_MOCK_RUN_FLAGS=--log-events a.jsonl + llm-mock run --log-events b.jsonl grok
 - `parseAgentEventMaps` — reused from root `SETUP.md` for log-events leaves.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.UseShortcut = false
 	return nil
 }

@@ -4,9 +4,12 @@
 - PhaseEnd (index 2): SKIPPED.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if len(resp.Skipped) != 3 {
 		t.Fatalf("expected 3 results, got %d", len(resp.Skipped))
 	}

@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Exit code non-zero.
@@ -7,9 +11,10 @@
 import (
 	"strings"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertNoError(t, err)
 	if resp.ExitCode == 0 { t.Fatal("expected non-zero exit on send timeout") }
 	combined := resp.MultiAttachProbe.SendTimeoutReason

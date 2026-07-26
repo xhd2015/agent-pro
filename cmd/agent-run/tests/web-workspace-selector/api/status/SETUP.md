@@ -17,9 +17,13 @@ GET /api/agent-run/status -> workspace, process_cwd, home, recent_workspaces
 1. Leaves set cwd and/or PUT steps, then probe status.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Status group: leaves compose GET /status (and optional PUT) steps.
 	if req.Scenario == "" {
 		req.Scenario = "status"

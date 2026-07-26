@@ -6,7 +6,7 @@
 2. Each leaf pre-creates a session directory with meta.json and optionally events/pids.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     req.Status = true
     req.Operation = "show_status"
     return nil

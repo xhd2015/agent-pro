@@ -19,6 +19,8 @@ two grok session dirs under same encoded cwd
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
+	"path/filepath"
 )
 
 const (
@@ -28,7 +30,7 @@ const (
 	discoveryMarkerB   = "DISCOVERY_MATCH_B"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.GrokHome = filepath.Join(req.TempDir, "grok-home")
 	appendGrokHomeEnv(req)
 

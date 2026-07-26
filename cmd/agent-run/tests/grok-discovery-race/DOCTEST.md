@@ -71,6 +71,12 @@ Parameter ranking (most → least significant):
 ## How to Run
 
 ```sh
+# Discovery skips labeled e2e/heavy/slow leaves by default.
+# Run e2e / full suite explicitly when needed:
+doctest test ./cmd/agent-run/tests/grok-discovery-race                    # discovery (skips labeled e2e/heavy/slow)
+doctest test --label e2e ./cmd/agent-run/tests/grok-discovery-race
+doctest test --label-all ./cmd/agent-run/tests/grok-discovery-race
+
 doctest vet ./cmd/agent-run/tests/grok-discovery-race
 doctest test ./cmd/agent-run/tests/grok-discovery-race
 doctest test -v ./cmd/agent-run/tests/grok-discovery-race/keep-tty/delayed-session-streams
@@ -88,6 +94,7 @@ import (
 	"os/exec"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request struct {
@@ -136,7 +143,7 @@ type Response struct {
 	EarlyContextCancel bool
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	return runKeepTTYEventsProbe(t, req)
 }
 ```

@@ -39,7 +39,7 @@ import (
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.TailStartDelay <= 0 {
 		req.TailStartDelay = 150 * time.Millisecond
 	}

@@ -21,9 +21,13 @@ agent-run web --token test-token
 3. Assert neither response is the SPA shell success body.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "api-not-spa-html"
 	req.WebTokenMode = "explicit"
 	req.Token = "test-token"

@@ -16,11 +16,15 @@ CreateSession(finished) without AppendEvent -> --print -> header 0 lines + (no e
 2. Run print for that bare session id.
 
 ```go
-import "testing"
+import (
+	"testing"
+
+	"github.com/xhd2015/doctest/session"
+)
 
 const noEventsSessionID = "print_no_events"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	store := openAgentStore(t, req)
 	seedSessionMeta(t, store, noEventsSessionID, "finished")
 	req.SessionID = noEventsSessionID

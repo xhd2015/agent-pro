@@ -10,9 +10,13 @@ open Paris → resume --open "hello" (without /exit)
 ## Steps
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "resume-while-live-denied"
 	req.SessionID = "e2e-resume-live-deny"
 	req.GrokSessionUUID = "b2222222-2222-4222-8222-222222222205"

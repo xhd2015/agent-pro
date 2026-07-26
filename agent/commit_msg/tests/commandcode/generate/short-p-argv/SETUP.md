@@ -23,9 +23,12 @@ repo/ (large staged) -> gen-commit-msg --agent-runner commandcode --agent-runner
 3. Record HEAD subject; run without `--commit`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	StageCommandCodeRepoLargeDiff(t, req)
 	InstallCommandCodeArgvRecorder(t, req)
 	req.HEADSubjectBefore = GitHEADSubjectCmd(t, req.GitDir)

@@ -31,9 +31,12 @@ fake/real opencode -> curl /v1/chat/completions -> log request+response -> http.
 - `parseHTTPExchangeMaps` — validates each line has `request`/`response` HTTP exchange shape.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.UseShortcut = false
 	return nil
 }

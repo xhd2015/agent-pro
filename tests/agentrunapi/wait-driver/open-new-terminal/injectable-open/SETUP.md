@@ -18,7 +18,7 @@ OpenInNewTerminal(
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.FollowUpLine = ""
 	req.WorkspaceDir = "/tmp/ws-iterm"
 	req.SessionID = "sess-iterm-1"

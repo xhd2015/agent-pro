@@ -11,9 +11,10 @@
 import (
     "testing"
     "fmt"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     for i := 0; i < 5; i++ {
         notifyEvent(t, req, "agent.session.started", "fake-opencode", fmt.Sprintf("s_replay_%d", i))
     }

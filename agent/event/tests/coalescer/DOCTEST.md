@@ -94,10 +94,12 @@ doctest test ./agent/event/tests/coalescer
 
 ```go
 import (
+
 	"testing"
 
 	print "github.com/xhd2015/agent-pro/agent/event/print"
 	types "github.com/xhd2015/agent-pro/agent/event/types"
+	"github.com/xhd2015/doctest/session"
 )
 
 
@@ -109,7 +111,7 @@ type Response struct {
 	Skipped []bool
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	var c print.Coalescer
 	skipped := make([]bool, len(req.Events))
 	for i, ev := range req.Events {

@@ -12,9 +12,13 @@ agent-run run --open --json --agent-runner grok-tty "x" -> exit ≠ 0
 2. Leaf uses a TTY runner so failure is the flag conflict, not non-TTY.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// JSON conflict class: leaf sets --open + --json on a TTY runner.
 	if len(req.Args) == 0 || req.Args[0] != "run" {
 		req.Args = []string{"run"}

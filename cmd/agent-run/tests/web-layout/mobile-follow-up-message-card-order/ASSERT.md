@@ -1,5 +1,5 @@
 ---
-label: chromium, slow
+label: e2e, chromium, slow
 explanation: Seeded idle + one live grok-tty follow-up; order poll ≤60s + reload
 ---
 
@@ -24,9 +24,13 @@ explanation: Seeded idle + one live grok-tty follow-up; order poll ≤60s + relo
 - Playwright process exits 0.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

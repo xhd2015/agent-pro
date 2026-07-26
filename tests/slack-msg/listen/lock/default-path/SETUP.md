@@ -19,9 +19,11 @@ first listen (no --lock-file / no --no-lock) holds default lock
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.HomeDir = filepath.Join(req.WorkDir, "home")
 	req.UseDefaultLock = true
 	req.Daemon = true

@@ -12,9 +12,13 @@ agent-run run --auto-send-or-resume --session-id-from-prompt "hello"
 1. Pass both flags with a prompt (no explicit --session-id).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{
 		"run",
 		"--auto-send-or-resume",

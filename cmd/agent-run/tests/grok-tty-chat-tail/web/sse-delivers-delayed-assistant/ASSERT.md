@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - SSE stream includes assistant `message` with `CHAT_TAIL_ASSISTANT_MARKER`.
@@ -8,9 +12,13 @@
 - Must not end SSE before delayed assistant when session status flips `finished`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

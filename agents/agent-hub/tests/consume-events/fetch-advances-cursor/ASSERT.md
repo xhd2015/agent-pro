@@ -3,9 +3,12 @@
 - Second fetch returns event at offset 1.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     cid := "ca-" + t.Name()
 
     r, err := runAgentHub(t, req, "fetch", "--consumer-id", cid, "--limit", "1")

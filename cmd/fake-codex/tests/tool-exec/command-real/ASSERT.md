@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 - The event's `aggregated_output` contains `"hello real codex"` (real bash output).
 - The `exit_code` is 0.
@@ -6,9 +10,10 @@
 import (
     "strings"
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     assertSuccess(t, resp)
     stdout := resp.Stdout
     if !strings.Contains(stdout, "hello real codex") {

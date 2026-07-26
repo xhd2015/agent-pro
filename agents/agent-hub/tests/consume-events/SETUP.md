@@ -9,9 +9,12 @@
 3. Replay to reset consumer cursors.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     _ = t
     return nil
 }

@@ -23,9 +23,13 @@ agent-run sessions [--json] [--limit N]
 2. Leaf adds flags such as `--json` / `--limit N` and seeds sessions as needed.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"sessions"}
 	return nil
 }

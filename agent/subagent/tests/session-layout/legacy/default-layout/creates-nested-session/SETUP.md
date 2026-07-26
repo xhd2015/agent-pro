@@ -20,9 +20,12 @@ subagent.Run -> events + messages + questions/ + progress/ in nested dir
 - Inner session id from mock: `inner_legacy_sess`
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.SessionID == "" {
 		configureLegacyBase(t, req)
 	}

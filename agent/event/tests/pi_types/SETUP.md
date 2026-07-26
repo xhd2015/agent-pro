@@ -25,9 +25,10 @@ import (
 
 	pi_types "github.com/xhd2015/agent-pro/agent/event/pi_types"
 	types "github.com/xhd2015/agent-pro/agent/event/types"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	_ = assertContains
 	_ = assertNotContains
 	return nil

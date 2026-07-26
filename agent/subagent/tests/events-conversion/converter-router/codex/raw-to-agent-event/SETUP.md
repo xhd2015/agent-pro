@@ -12,7 +12,7 @@ import (
     "testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     req.AgentRunner = "codex"
     req.RawJSON = `[{"type":"item.started","item":{"id":"c1","type":"command_execution"}},{"type":"item.completed","item":{"id":"c1","type":"command_execution","command":"ls","aggregated_output":"file1.txt\nfile2.txt","exit_code":0,"status":"completed"}},{"type":"item.completed","item":{"id":"m1","type":"message","text":"Codex says hello","status":"completed"}}]`
     return nil

@@ -15,9 +15,12 @@
 2. Call `FromCmd` via the root `Run` dispatch.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.CmdInput = `{"id":"evt_3","timestamp":"2026-07-01T00:00:00Z","sessionId":"sess_cmd","parentId":"parent_3","role":"assistant","content":[{"type":"tool-call","toolCallId":"call_1","toolName":"bash","input":{"command":"echo hi"}}]}`
 	return nil
 }

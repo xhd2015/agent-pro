@@ -20,9 +20,12 @@ Caller -> slack-msg send --config PATH ... -> load JSON -> stderr failed to load
 - Bad path fails before send; empty token fails with `botToken is empty in`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClearSlackEnv = true
 	req.SlackAPIURL = ""
 	return nil

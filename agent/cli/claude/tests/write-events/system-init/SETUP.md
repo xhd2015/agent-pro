@@ -17,7 +17,7 @@ system-init -> WriteClaudeLine(system init) -> RawLog (1 AgentEvent "step_start"
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClaudeLines = []string{
 		`{"type":"system","subtype":"init","cwd":"/tmp","session_id":"sess","model":"claude-sonnet","tools":[],"permissionMode":"default"}`,
 	}

@@ -5,9 +5,10 @@
 ```go
 import (
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     assertHomeDir(t, req, resp, err)
 }
 ```

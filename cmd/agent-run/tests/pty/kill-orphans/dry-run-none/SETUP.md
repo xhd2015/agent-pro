@@ -18,9 +18,10 @@ agent-run pty kill-orphans --dry-run --exe /tmp/no-such-agent-run-pty-test-bin
 import (
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "kill-orphans"
 	req.SpawnServe = false
 	// Unique path under leaf temp dir — never equals a real agent-run on the host.

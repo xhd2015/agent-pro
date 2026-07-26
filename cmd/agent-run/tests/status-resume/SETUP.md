@@ -35,10 +35,10 @@ agent-run run --open (+ instant attach + delayed GROK_HOME materialization)
 
 - Repository contains `cmd/agent-run`.
 - Nested DOCTEST root: does not inherit parent `cmd/agent-run/tests` Setup/Run.
-- Repo root from this tree: `DOCTEST_ROOT/../../../..`
+- Repo root from this tree: `d.DOCTEST_ROOT/../../../..`
   (`status-resume` → `tests` → `agent-run` → `cmd` → module root).
 - Each leaf uses isolated `AGENT_RUN_HOME` under `t.TempDir()`.
-- Session-scoped build cache: `$TMPDIR/agent-run-status-resume-doctest-<DOCTEST_SESSION_ID>/`
+- Session-scoped build cache: `$TMPDIR/agent-run-status-resume-doctest-<d.DOCTEST_SESSION_ID>/`
   shares the compiled `agent-run` binary across parallel leaves.
 - `frontend-agent-run/dist` (and `frontend/dist` if present) may be absent
   (gitignored). Build Setup stubs a minimal `index.html` so `//go:embed dist`
@@ -88,6 +88,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
+	"github.com/xhd2015/doctest/session"
 )
 
 const (
@@ -101,8 +102,8 @@ const (
 
 var fakePTYWrapUpgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
 
-func sessionCacheDir() string {
-	return filepath.Join(os.TempDir(), "agent-run-status-resume-doctest-"+DOCTEST_SESSION_ID)
+func sessionCacheDir(d *session.Doctest) string {
+	return filepath.Join(os.TempDir(), "agent-run-status-resume-doctest-"+d.DOCTEST_SESSION_ID)
 }
 
 func withFileLock(t *testing.T, lockPath string, fn func() error) error {
@@ -148,13 +149,13 @@ func ensureStubDist(distDir string) error {
 	return os.WriteFile(filepath.Join(distDir, "index.html"), []byte("stub\n"), 0644)
 }
 
-func buildOnce(t *testing.T) (agentRun string, err error) {
+func buildOnce(t *testing.T, d *session.Doctest) (agentRun string, err error) {
 	t.Helper()
-	cache := sessionCacheDir()
+	cache := sessionCacheDir(d)
 	agentRun = filepath.Join(cache, "agent-run")
 	lock := filepath.Join(cache, "build.lock")
 	ready := filepath.Join(cache, "binaries.ready")
-	repoRoot := filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../.."))
+	repoRoot := filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../.."))
 	err = withFileLock(t, lock, func() error {
 		if fileExists(ready) && fileExists(agentRun) {
 			return nil
@@ -1114,8 +1115,8 @@ func jsonPathBool(obj map[string]any, keys ...string) (bool, bool) {
 	return b, ok
 }
 
-func Setup(t *testing.T, req *Request) error {
-	req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../.."))
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../.."))
 	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
 		return fmt.Errorf("repo root not found: %w", err)
 	}
@@ -1124,7 +1125,7 @@ func Setup(t *testing.T, req *Request) error {
 	if err := os.MkdirAll(req.Home, 0755); err != nil {
 		return fmt.Errorf("mkdir home: %w", err)
 	}
-	cached, err := buildOnce(t)
+	cached, err := buildOnce(t, d)
 	if err != nil {
 		return err
 	}

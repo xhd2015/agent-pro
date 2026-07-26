@@ -20,7 +20,7 @@ AutoSendOrResume(ResumeReady probe, hooks)
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "sess-auto-resume-1"
 	req.SeedMeta = true
 	req.Runner = "grok-tty"

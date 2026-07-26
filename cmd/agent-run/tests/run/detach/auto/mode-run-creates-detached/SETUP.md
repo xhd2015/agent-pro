@@ -18,9 +18,10 @@ no meta for id
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "auto-detach-new-r1"
 	req.Prompt = "create detached please"
 	req.WorkDir = req.TempDir

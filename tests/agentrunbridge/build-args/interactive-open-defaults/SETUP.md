@@ -19,7 +19,7 @@ BuildArgs(session + grok-tty + auto-send + new-terminal + open + prompt)
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "sess-open-1"
 	req.Prompt = "open me"
 	req.AgentRunner = "grok-tty"

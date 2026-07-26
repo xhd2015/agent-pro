@@ -12,9 +12,11 @@
 ```go
 import (
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Lines = []string{
 		`{"type":"message","phase":"end","id":"m2","text":"done"}`,
 	}

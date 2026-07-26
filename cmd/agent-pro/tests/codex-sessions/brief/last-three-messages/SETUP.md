@@ -23,7 +23,7 @@ SessionBrief.RecentMessages (len=3)
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "01900006-cccc-7ccc-cccc-cccccccccccc"
 	req.LastN = 3
 	lines := []string{

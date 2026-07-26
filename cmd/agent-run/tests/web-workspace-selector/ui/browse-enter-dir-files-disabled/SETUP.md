@@ -22,9 +22,13 @@ open /workspace with browse path = fixture root
 1. Build fixture; seed selected=fixture; open selector; expand files; assert disabled; enter dir.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	requirePlaywright(t)
 	req.Scenario = "browse-enter-dir-files-disabled"
 	root := makeFixtureTree(t, req)

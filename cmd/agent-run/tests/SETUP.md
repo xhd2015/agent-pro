@@ -3,7 +3,8 @@
 **Feature**: `agent-run` CLI — headless run, web server on localhost, session storage
 
 ```
-go build agent-run + fake-codex → execCmd / runAgentRun
+# default (e2e / process): lazy go build agent-run + fake-codex → execCmd / runAgentRun
+# short-path L2: Mode "handle" → agentruncli.Handle (no binary; help / unknown / early validation)
 AGENT_RUN_HOME = filepath.Join(tempDir, ".agent-run")
 web tests: startWebServer (background) → httpGet → stop in defer
 ```
@@ -13,13 +14,15 @@ web tests: startWebServer (background) → httpGet → stop in defer
 - Repository contains `cmd/agent-run` and `cmd/fake-codex` (build may fail until implemented).
 - Each test uses an isolated `AGENT_RUN_HOME` under `t.TempDir()`.
 - `fake-codex` is on `PATH` for runner integration tests.
+- Short-path leaves (`help/*`, pure cli-edge) set `req.Mode = "handle"` and call
+  `pkgs/agentruncli.Handle` in-process (no binary build).
 
 ## Steps
 
-1. Root `Setup` builds binaries, sets `AGENT_RUN_HOME`, prepends `bin/` to `PATH`.
+1. Root `Setup` prepares TempDir / `AGENT_RUN_HOME` / bin paths / env (binary build is lazy).
 2. Grouping `Setup` sets partial `req.Args` (subcommand prefix).
-3. Leaf `Setup` finalizes `req.Args` and mode-specific fields.
-4. `Run` executes `req.AgentRun` with `req.Args` (or performs HTTP probe for web mode).
+3. Leaf `Setup` finalizes `req.Args` and mode-specific fields (`Mode: "handle"` for L2 short-path).
+4. `Run`: `Mode "handle"` → in-process Handle; else builds binaries if needed and execs / HTTP.
 5. Leaf `Assert` checks exit code, output, HTTP status, or filesystem isolation.
 
 ```go
@@ -38,9 +41,17 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/xhd2015/agent-pro/pkgs/agentruncli"
+	"github.com/xhd2015/doctest/session"
 )
+
+// handleStdoutMu serializes os.Stdout/os.Stderr redirect around agentruncli.Handle
+// so parallel Mode "handle" leaves do not race.
+var handleStdoutMu sync.Mutex
 
 func execCmd(t *testing.T, command string, args []string, dir string, env []string, stdin string, timeout time.Duration) (*Response, error) {
 	t.Helper()
@@ -80,6 +91,9 @@ func execCmd(t *testing.T, command string, args []string, dir string, env []stri
 
 func runAgentRun(t *testing.T, req *Request, args ...string) (*Response, error) {
 	t.Helper()
+	if err := ensureAgentRunBinaries(t, req); err != nil {
+		return nil, err
+	}
 	if len(args) == 0 {
 		args = req.Args
 	}
@@ -89,8 +103,141 @@ func runAgentRun(t *testing.T, req *Request, args ...string) (*Response, error) 
 	return execCmd(t, req.AgentRun, args, req.TempDir, req.Env, "", req.ExecTimeout)
 }
 
-func Setup(t *testing.T, req *Request) error {
-	req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../.."))
+// runHandleInProcess calls agentruncli.Handle with stdout/stderr capture.
+// Maps errors like thin cmd/agent-run main: stderr "agent-run: …\n", ExitCode 1.
+// Used by short-path L2 leaves (help, unknown command, early validation).
+func runHandleInProcess(t *testing.T, req *Request) (*Response, error) {
+	t.Helper()
+	args := req.Args
+	if args == nil {
+		args = []string{}
+	}
+
+	// Apply production isolation env for Handle paths that touch AGENT_RUN_HOME
+	// (short-path leaves typically do not need it; restore always).
+	restoreEnv := applyHandleEnv(req.Env)
+	defer restoreEnv()
+
+	stdout, stderr, handleErr := callHandleCaptured(args)
+	resp := &Response{
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+	if handleErr != nil {
+		// Mirror cmd/agent-run main: print error prefix to stderr, exit 1.
+		msg := fmt.Sprintf("agent-run: %v\n", handleErr)
+		resp.Stderr = stderr + msg
+		resp.ExitCode = 1
+		resp.Err = handleErr
+		return resp, nil
+	}
+	resp.ExitCode = 0
+	return resp, nil
+}
+
+func applyHandleEnv(extra []string) (restore func()) {
+	type prior struct {
+		key string
+		val string
+		ok  bool
+	}
+	var stacked []prior
+	for _, e := range extra {
+		key, val, ok := strings.Cut(e, "=")
+		if !ok || key == "" {
+			continue
+		}
+		old, had := os.LookupEnv(key)
+		stacked = append(stacked, prior{key: key, val: old, ok: had})
+		_ = os.Setenv(key, val)
+	}
+	return func() {
+		for i := len(stacked) - 1; i >= 0; i-- {
+			p := stacked[i]
+			if p.ok {
+				_ = os.Setenv(p.key, p.val)
+			} else {
+				_ = os.Unsetenv(p.key)
+			}
+		}
+	}
+}
+
+func callHandleCaptured(args []string) (stdout, stderr string, handleErr error) {
+	handleStdoutMu.Lock()
+	defer handleStdoutMu.Unlock()
+
+	rOut, wOut, err := os.Pipe()
+	if err != nil {
+		return "", "", err
+	}
+	rErr, wErr, err := os.Pipe()
+	if err != nil {
+		_ = rOut.Close()
+		_ = wOut.Close()
+		return "", "", err
+	}
+
+	oldOut, oldErr := os.Stdout, os.Stderr
+	os.Stdout, os.Stderr = wOut, wErr
+
+	var outBuf, errBuf bytes.Buffer
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		_, _ = io.Copy(&outBuf, rOut)
+	}()
+	go func() {
+		defer wg.Done()
+		_, _ = io.Copy(&errBuf, rErr)
+	}()
+
+	handleErr = agentruncli.Handle(args)
+
+	_ = wOut.Close()
+	_ = wErr.Close()
+	os.Stdout, os.Stderr = oldOut, oldErr
+	wg.Wait()
+	_ = rOut.Close()
+	_ = rErr.Close()
+
+	return outBuf.String(), errBuf.String(), handleErr
+}
+
+// ensureAgentRunBinaries builds agent-run + fake-codex once per leaf TempDir when
+// process exec is needed. Mode "handle" leaves never call this.
+func ensureAgentRunBinaries(t *testing.T, req *Request) error {
+	t.Helper()
+	if req.RepoRoot == "" {
+		return fmt.Errorf("req.RepoRoot not set")
+	}
+	if req.AgentRun == "" || req.FakeCodex == "" {
+		return fmt.Errorf("req.AgentRun/FakeCodex paths not set")
+	}
+	if _, err := os.Stat(req.AgentRun); err == nil {
+		if _, err2 := os.Stat(req.FakeCodex); err2 == nil {
+			return nil
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(req.AgentRun), 0755); err != nil {
+		return fmt.Errorf("mkdir bin: %w", err)
+	}
+	build := exec.Command("go", "build", "-o", req.AgentRun, "./cmd/agent-run")
+	build.Dir = req.RepoRoot
+	if out, err := build.CombinedOutput(); err != nil {
+		return fmt.Errorf("build agent-run: %w\n%s", err, string(out))
+	}
+	build2 := exec.Command("go", "build", "-o", req.FakeCodex, "./cmd/fake-codex")
+	build2.Dir = req.RepoRoot
+	if out, err := build2.CombinedOutput(); err != nil {
+		return fmt.Errorf("build fake-codex: %w\n%s", err, string(out))
+	}
+	return nil
+}
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../.."))
 	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
 		return fmt.Errorf("repo root not found: %w", err)
 	}
@@ -99,21 +246,8 @@ func Setup(t *testing.T, req *Request) error {
 	req.AgentRun = filepath.Join(req.TempDir, "bin", "agent-run")
 	req.FakeCodex = filepath.Join(req.TempDir, "bin", "fake-codex")
 
-	if err := os.MkdirAll(filepath.Dir(req.AgentRun), 0755); err != nil {
-		return fmt.Errorf("mkdir bin: %w", err)
-	}
-
-	build := exec.Command("go", "build", "-o", req.AgentRun, "./cmd/agent-run")
-	build.Dir = req.RepoRoot
-	if out, err := build.CombinedOutput(); err != nil {
-		return fmt.Errorf("build agent-run: %w\n%s", err, string(out))
-	}
-
-	build2 := exec.Command("go", "build", "-o", req.FakeCodex, "./cmd/fake-codex")
-	build2.Dir = req.RepoRoot
-	if out, err := build2.CombinedOutput(); err != nil {
-		return fmt.Errorf("build fake-codex: %w\n%s", err, string(out))
-	}
+	// Binary build is deferred to ensureAgentRunBinaries (process paths only).
+	// Mode "handle" short-path leaves stay L2 without go build.
 
 	req.Env = append(req.Env,
 		"AGENT_RUN_HOME="+req.Home,
@@ -332,6 +466,9 @@ func appendWebTokenArgs(args []string, req *Request) []string {
 
 func startWebServer(t *testing.T, req *Request) {
 	t.Helper()
+	if err := ensureAgentRunBinaries(t, req); err != nil {
+		t.Fatalf("ensure binaries for web: %v", err)
+	}
 	args := appendWebTokenArgs([]string{"web", "--no-open"}, req)
 	switch {
 	case req.WebPort == 0:

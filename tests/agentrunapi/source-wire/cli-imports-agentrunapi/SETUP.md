@@ -9,7 +9,7 @@ parse cmd/agent-run/*.go imports
 
 ## Preconditions
 
-- Module layout: DOCTEST_ROOT = tests/agentrunapi → `../../cmd/agent-run`.
+- Module layout: d.DOCTEST_ROOT = tests/agentrunapi → `../../cmd/agent-run`.
 
 ## Steps
 
@@ -18,7 +18,7 @@ parse cmd/agent-run/*.go imports
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Parent set source_wire; nothing else.
 	if req.Mode != "source_wire" {
 		req.Mode = "source_wire"

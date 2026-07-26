@@ -20,7 +20,7 @@ Handle(["not-a-real-command"]) -> error
 
 - Package `github.com/xhd2015/agent-pro/pkgs/agentruncli` (P1 surface; RED until created).
 - Public entry pinned: `func Handle(args []string) error`.
-- `DOCTEST_ROOT` is `tests/agentruncli`; module root is `../..`.
+- `d.DOCTEST_ROOT` is `tests/agentruncli`; module root is `../..`.
 - No real agent-run binary build, PATH LookPath, iTerm, web server, or network.
 - Handle smoke captures stdout/stderr via temporary `os.Stdout`/`os.Stderr`
   redirect under a process-wide mutex (parallel leaf safe).
@@ -50,7 +50,7 @@ import (
 	"testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	t.Helper()
 	if req == nil {
 		return fmt.Errorf("nil Request")

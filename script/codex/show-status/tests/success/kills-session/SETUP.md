@@ -23,9 +23,12 @@ codex-show-status -> tty-watch run/send/snapshot/kill -> registry pruned
 - Verifies cleanup runs on success paths, not only error paths.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ShowStatusCommand = fakeTUIDefault()
 	req.SessionID = "codex-status-usage"
 	return nil

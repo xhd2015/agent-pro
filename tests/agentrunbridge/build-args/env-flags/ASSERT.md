@@ -33,7 +33,7 @@ N/A (package call)
 ```go
 import "testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertNoError(t, err)
 	assertNoAPIError(t, resp)
 	want := []string{

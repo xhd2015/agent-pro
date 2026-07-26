@@ -14,9 +14,12 @@ POST #1 -> tool_calls response, finish_reason tool_calls
 3. Send one chat completion request.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ConfigJSON = `{"port": 8080, "exchanges": []}`
 	req.MockEventsPreset = "tool-bash"
 	req.Requests = []string{

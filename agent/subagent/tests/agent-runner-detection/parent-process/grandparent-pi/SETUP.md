@@ -11,7 +11,7 @@
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     // Grandparent walk for pi — ppid is non-agent, pppid is "pi"
     req.AgentRunnerEnv = ""
     return nil

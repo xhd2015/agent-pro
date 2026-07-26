@@ -11,9 +11,12 @@ DEBUG_WITH_USER_DRY_RUN_DISMISSED=1 -> exit 1, no success JSON
 1. Enable dismissed simulation env var.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Env = append(req.Env, "DEBUG_WITH_USER_DRY_RUN_DISMISSED=1")
 	return nil
 }

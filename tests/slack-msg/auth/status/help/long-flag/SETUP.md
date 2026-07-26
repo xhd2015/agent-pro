@@ -11,9 +11,12 @@ Caller -> slack-msg auth status --help -> usage stdout -> exit 0
 1. Args `["auth", "status", "--help"]`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"auth", "status", "--help"}
 	return nil
 }

@@ -13,9 +13,13 @@ live bound session -> agent-run resume <id> "followup"
 2. Run `resume <id> "followup"`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "test-resume-live-s1"
 	req.RunnerSessionID = "550e8400-e29b-41d4-a716-446655440411"
 	req.TerminalSessionID = "term-resume-live-1"

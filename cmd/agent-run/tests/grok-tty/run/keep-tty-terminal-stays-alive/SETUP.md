@@ -21,9 +21,18 @@ agent-run run --agent-runner grok-tty --keep-tty "hi"
 4. Process is killed on test cleanup.
 
 ```go
-import "testing"
+import (
+	"bytes"
+	"context"
+	"os"
+	"os/exec"
+	"testing"
+	"time"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.GrokTTYCommand = fakeTUIRespondHi()
 	req.GrokTTYPrompt = "keep-alive probe"
 

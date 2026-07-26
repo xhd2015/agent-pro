@@ -17,7 +17,7 @@ meta finished, no events.jsonl, grok updates pre-seeded
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "reconcile-heal"
 	req.SessionID = "reconcile-heal-test"
 	req.InitialPrompt = reconcileHealPrompt

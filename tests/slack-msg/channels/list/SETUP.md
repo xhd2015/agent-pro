@@ -17,9 +17,12 @@ Caller -> slack-msg channels list [options] -> conversations.list -> sorted huma
 3. Unit leaves attach slacktest via grouping SETUP.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.WorkDir == "" {
 		req.WorkDir = t.TempDir()
 	}

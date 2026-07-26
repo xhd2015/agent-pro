@@ -3,9 +3,12 @@
 - If any type mismatches, the output shows `[FAIL] <type>` with orig and rt JSON for diagnosis.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertContains(t, resp.Output, "ALL MATCH")
 }
 ```

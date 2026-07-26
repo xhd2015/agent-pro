@@ -6,9 +6,12 @@
 2. Fetch with --consumer-id c1 --limit 3.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     for i := 0; i < 5; i++ {
         notifyEvent(t, req, "agent.session.started", "fake-opencode", "s_limit_"+string(rune('0'+i)))
     }

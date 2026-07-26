@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "sess-wait-timeout"
 	req.ReadyTimeout = 40 * time.Millisecond
 	req.ReadyPollInterval = 5 * time.Millisecond

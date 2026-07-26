@@ -18,7 +18,7 @@ Run(Binary="") -> LookPath("agent-run") -> launch ok
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Prompt = "default binary"
 	req.SessionID = "sess-bin-default"
 	req.Binary = ""

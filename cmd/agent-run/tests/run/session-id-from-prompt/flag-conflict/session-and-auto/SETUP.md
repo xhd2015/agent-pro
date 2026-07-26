@@ -13,9 +13,13 @@ agent-run run --agent-runner fake-codex --session my-id --session-id-from-prompt
 1. Invoke run with both flags and a short prompt.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Prompt = "x"
 	req.Args = append(req.Args,
 		"--session", "my-id",

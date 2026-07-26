@@ -10,7 +10,7 @@
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     req.AgentRunnerEnv = "TEST_AGENT_RUNNER"
     req.Env = []string{
         "TEST_AGENT_RUNNER=pi",

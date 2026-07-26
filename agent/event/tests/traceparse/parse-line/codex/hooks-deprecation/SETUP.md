@@ -14,17 +14,14 @@ trace JSONL -> adapter registry -> parsed event JSON
 
 ```go
 import (
-	"os"
-	"strings"
 	"testing"
-)
 
-func Setup(t *testing.T, req *Request) error {
-	b, err := os.ReadFile("warning-line.jsonl")
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.RawLine = strings.TrimSpace(string(b))
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	_ = d
+	// Fixture inlined: warning-line.jsonl is gitignored (*.jsonl).
+	req.RawLine = `{"type":"item.completed","item":{"id":"item_0","type":"error","message":"` + "`[features].codex_hooks` is deprecated. Use `[features].hooks` instead." + `"}}`
 	return nil
 }
 ```

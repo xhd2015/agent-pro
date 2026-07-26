@@ -6,9 +6,12 @@
 2. Run fake-opencode and verify exit_code 42 and stderr appear in the event.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     writeMockConfig(t, req, `{"version":"agent-pro.fake-runner.v1","runner":"fake-opencode","session_id":"sess_bash_mock_exit","llm_events":[{"type":"tool_call","tool":"bash","mock":{"exit_code":42,"stderr":"custom error message"}}]}`)
     return nil
 }

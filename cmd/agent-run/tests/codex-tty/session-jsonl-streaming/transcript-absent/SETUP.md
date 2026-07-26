@@ -21,6 +21,7 @@ fake Codex TUI prints resume UUID
 ```go
 import (
 	"testing"
+
 	"github.com/xhd2015/doctest/session"
 )
 

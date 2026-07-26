@@ -18,7 +18,7 @@ BuildFollowUpCommand(
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.DriverBinary = "/usr/local/bin/spl-helper"
 	req.DriverArgsPrefix = []string{"local-bot", "agent-exec"}
 	req.SessionID = "sess-fu-custom"

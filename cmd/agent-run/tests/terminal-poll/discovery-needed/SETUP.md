@@ -20,9 +20,13 @@ running tty session without terminal_session_id in detail
 3. Monitor terminal GET traffic; assert bounded polls that stop after available.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "discovery-needed"
 	return nil
 }

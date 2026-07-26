@@ -21,9 +21,13 @@ browser WS /api/agent-run/sessions/<runner>/<id>/terminal/ws
 3. `Run` attaches through the agent-run web websocket endpoint.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "websocket"
 	req.Runner = "codex-tty"
 	req.SessionID = "tty-session-1"

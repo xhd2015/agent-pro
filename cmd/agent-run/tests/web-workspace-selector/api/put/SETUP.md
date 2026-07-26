@@ -19,9 +19,13 @@ PUT /api/agent-run/workspace {"path":"..."}
 1. Leaves create dirs/files and set PUT HTTPSteps.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.Scenario == "" {
 		req.Scenario = "put"
 	}

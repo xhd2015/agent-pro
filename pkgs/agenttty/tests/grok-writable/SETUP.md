@@ -15,7 +15,7 @@ tty-watch snapshot <session> -> rendered scrollback text
 - Package `github.com/xhd2015/agent-pro/pkgs/agenttty` registers `grok-tty` with `CheckWritable`.
 - Fixtures live at `pkgs/agenttty/testdata/grok-writable/` (`grok-*.txt` + `expectations.jsonl`).
 - Fixtures are **rendered** snapshot text (same bytes `tty-watch snapshot` prints), not raw PTY ANSI.
-- `DOCTEST_ROOT` resolves to this tree root; module root is `DOCTEST_ROOT/../../../..`.
+- `d.DOCTEST_ROOT` resolves to this tree root; module root is `d.DOCTEST_ROOT/../../../..`.
 - Open-ready leaves require exported `OpenReady`, `ClassifyGrokScreen`, and `BannerDetected`
   (RED until implementer adds them). Shared `Run` only calls `CheckWritable` so F1 stays buildable.
 
@@ -41,6 +41,8 @@ import (
 	"testing"
 
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
+
+	"github.com/xhd2015/doctest/session"
 )
 
 const (
@@ -54,9 +56,9 @@ const (
 	fixtureLegacyAngleResponse             = "grok-regression-idle-legacy-angle-response.txt"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.RepoRoot == "" {
-		req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "..", "..", "..", ".."))
+		req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "..", "..", "..", ".."))
 	}
 	if req.TestdataDir == "" {
 		req.TestdataDir = filepath.Join(req.RepoRoot, "pkgs", "agenttty", "testdata", "grok-writable")

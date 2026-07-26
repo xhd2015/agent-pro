@@ -28,11 +28,14 @@ Caller -> slack-msg session update [--session-id ID] --dir PATH [--json]
 - Errors: session id required / not found / nothing to update / dir does not exist / not a directory.
 
 ```go
-import "testing"
+import (
+	"testing"
 
+	"github.com/xhd2015/doctest/session"
+)
 const sessionUpdateFixtureID = "slack-channel-C0UPD44K5J6"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.WorkDir == "" {
 		req.WorkDir = t.TempDir()
 	}

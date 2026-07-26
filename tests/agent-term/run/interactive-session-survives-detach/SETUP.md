@@ -10,7 +10,7 @@ harness PTY -> agent-term run sleep 60 -> SIGINT -> session still running in lis
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Phase = "run-detach-survives"
 	req.StartDaemon = true
 	return nil

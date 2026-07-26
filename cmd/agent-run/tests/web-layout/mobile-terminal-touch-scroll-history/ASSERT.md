@@ -1,5 +1,5 @@
 ---
-label: ui-automation
+label: e2e, ui-automation
 explanation: mobile touch pan reveals older terminal LINE_* history
 ---
 
@@ -9,9 +9,13 @@ explanation: mobile touch pan reveals older terminal LINE_* history
 - After synthetic touch pan, min visible `LINE_*` index decreases (or equivalent scrollTop move into history).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

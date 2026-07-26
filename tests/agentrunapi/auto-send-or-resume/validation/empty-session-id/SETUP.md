@@ -20,7 +20,7 @@ AutoSendOrResume(Opts{SessionID: "  "})
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "   \t  "
 	req.SeedMeta = false
 	return nil

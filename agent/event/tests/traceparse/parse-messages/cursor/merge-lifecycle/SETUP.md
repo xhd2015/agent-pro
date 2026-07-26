@@ -13,9 +13,12 @@ trace JSONL -> adapter registry -> parsed event JSON
 1. Configure `Request` fields for this scenario.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.RawLines = []string{
 		`{"type":"tool_call","subtype":"started","call_id":"cursor_1","tool_call":{"shellToolCall":{"args":{"command":"go test ./..."}}}}`,
 		`{"type":"tool_call","subtype":"completed","call_id":"cursor_1","tool_call":{"shellToolCall":{"result":{"exit_code":0,"output":"ok"}}}}`,

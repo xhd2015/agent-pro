@@ -15,9 +15,10 @@ POST grok-tty -> finished -> open chat -> click terminal -> xterm receives GROK_
 import (
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	createWebGrokTTYSession(t, req, "modal attach probe")
 	waitForSessionStatus(t, req, req.Runner, req.ChatSessionID, "finished", 60*time.Second)
 	req.SessionID = req.ChatSessionID

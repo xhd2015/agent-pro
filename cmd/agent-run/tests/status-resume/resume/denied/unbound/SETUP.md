@@ -12,9 +12,13 @@ meta without runner_session_id -> resume <id> "x" -> exit 1, not bound
 2. Run resume with followup.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "test-resume-unbound-s1"
 	req.MetaStatus = "finished"
 	req.InitialPrompt = "unbound prior"

@@ -98,18 +98,20 @@ type Message struct {
 }
 
 func resolveHome(constructorHome string) (string, error) {
+	// Explicit constructor home wins so library callers and parallel-safe tests
+	// can pass an isolated path without mutating process env. AGENT_RUN_HOME
+	// applies only when constructor home is empty (CLI / production default).
+	if constructorHome != "" {
+		return filepath.Clean(constructorHome), nil
+	}
 	if v := os.Getenv("AGENT_RUN_HOME"); v != "" {
 		return filepath.Clean(v), nil
 	}
-	home := constructorHome
-	if home == "" {
-		dir, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		home = filepath.Join(dir, ".agent-run")
+	dir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
 	}
-	return filepath.Clean(home), nil
+	return filepath.Clean(filepath.Join(dir, ".agent-run")), nil
 }
 
 func nowRFC3339() string {

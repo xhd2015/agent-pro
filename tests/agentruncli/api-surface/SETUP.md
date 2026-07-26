@@ -22,7 +22,7 @@ import github.com/xhd2015/agent-pro/pkgs/agentruncli
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	t.Helper()
 	// Default grouping mode; not-package-main leaf overrides.
 	if req.Mode == "" {

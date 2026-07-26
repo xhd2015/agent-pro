@@ -16,9 +16,12 @@ Caller -> slack-msg history --channel CH (no token) -> bot token required -> exi
 2. Provide channel only.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClearSlackEnv = true
 	req.SlackAPIURL = ""
 	return nil

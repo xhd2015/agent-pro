@@ -25,7 +25,7 @@ writeGrokSession(title with token) + writeGrokSession(unrelated) -> ListWithGrep
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Grep = "GREP_TITLE_TOKEN"
 	req.Limit = 10
 	req.Color = "never"

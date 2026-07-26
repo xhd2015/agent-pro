@@ -29,7 +29,8 @@ type Store interface {
 	ListMessages(sessionID string) ([]Message, error)
 }
 
-// NewFileStore opens the default file-backed store. AGENT_RUN_HOME overrides home.
+// NewFileStore opens the file-backed store at home. Non-empty home wins;
+// empty home falls back to AGENT_RUN_HOME or ~/.agent-run.
 func NewFileStore(home string) (Store, error) {
 	resolved, err := resolveHome(home)
 	if err != nil {

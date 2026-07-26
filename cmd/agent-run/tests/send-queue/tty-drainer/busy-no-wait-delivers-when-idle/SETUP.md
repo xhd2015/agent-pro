@@ -17,9 +17,13 @@ busy-then-idle stub (~12s busy frames) ServeSession (drainer waiting for writabl
 3. Set `req.ExecTimeout = 35s` to cover busy→idle transition + inject.
 
 ```go
-import "time"
+import (
+	"time"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Action = "busy-no-wait-delivers-when-idle"
 	req.SendMessage = "tty-drainer-busy-probe"
 	req.ExecTimeout = 35 * time.Second

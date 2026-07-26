@@ -17,7 +17,10 @@ LookupSession(home, terminal-id) -> search providers in order -> skip stale -> r
 2. `Run` calls `ttyrunner.LookupSession`.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Operation = "lookup"
 	req.RegistrySessionID = "session-1"
 	return nil

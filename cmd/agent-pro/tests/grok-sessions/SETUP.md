@@ -89,7 +89,7 @@ import (
 
 const fixedNow = "2026-07-03T15:00:00.000Z"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.GrokHome = filepath.Join(t.TempDir(), ".grok")
 	now, err := time.Parse(time.RFC3339, fixedNow)
 	if err != nil {

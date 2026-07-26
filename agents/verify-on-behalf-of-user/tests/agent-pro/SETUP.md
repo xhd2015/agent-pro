@@ -13,7 +13,7 @@ agent-pro skill --install -> SKILL.md + scripts/
 
 ## Steps
 
-1. Resolve repo root from `DOCTEST_ROOT/../../../..`.
+1. Resolve repo root from `d.DOCTEST_ROOT/../../../..`.
 2. Create stub `frontend/dist/index.html` before build.
 3. Build `agent-pro` binary into temp dir.
 4. Leaf runs the scenario-specific `agent-pro` command.
@@ -25,10 +25,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
-	req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../.."))
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../.."))
 	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
 		return fmt.Errorf("repo root not found at %s: %w", req.RepoRoot, err)
 	}

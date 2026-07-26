@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Exit code 0 within 5 seconds (no `ExecTimeout` context deadline exceeded).
@@ -12,9 +16,11 @@
 import (
 	"strings"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if resp.ExitCode == -1 {
 		t.Fatalf("orchestrator hung after grok exit (ExecTimeout %s exceeded; likely waitAndMirrorSessions 60s poll when session lacks events.jsonl)\nstdout:\n%s\nstderr:\n%s",
 			req.ExecTimeout, resp.Stdout, resp.Stderr)

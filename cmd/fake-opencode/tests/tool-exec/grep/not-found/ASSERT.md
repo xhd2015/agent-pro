@@ -1,11 +1,18 @@
+---
+label: e2e
+---
+
 ## Expected
 - The event output is empty or does not contain any matches.
 - grep with no matches returns exit_code 1 but the event is still "completed" (no error for no-match).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     assertSuccess(t, resp)
     events := parseJSONLines(t, resp.Stdout)
     if len(events) == 0 {

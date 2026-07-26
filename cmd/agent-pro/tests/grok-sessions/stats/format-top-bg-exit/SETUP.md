@@ -30,7 +30,7 @@ import "testing"
 
 const formatTopBgExitSessionID = "019f283b-7002-7702-7702-770277027702"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = formatTopBgExitSessionID
 	summaryPath := writeGrokSessionOpts(t, req.GrokHome, formatTopBgExitSessionID,
 		"2026-07-03T14:58:00.000Z",

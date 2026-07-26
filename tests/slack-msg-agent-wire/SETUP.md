@@ -17,7 +17,7 @@ runAgentStateless -> agentrunbridge.Run(Stateless+CaptureStdout) OK
 ## Preconditions
 
 - Source under test: `cmd/slack-msg/agent.go` relative to agent-pro module root.
-- `DOCTEST_ROOT` is `tests/slack-msg-agent-wire` → module root `../..`.
+- `d.DOCTEST_ROOT` is `tests/slack-msg-agent-wire` → module root `../..`.
 - Classic RED until interactive open imports/calls agentrunapi.
 - No network, no Slack API, no real agent-run process in these leaves.
 - Large `tests/slack-msg/**` suite is separate regression (not inherited here).
@@ -42,8 +42,8 @@ import (
 	"testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
-	// Source path is resolved in Run via DOCTEST_ROOT; groupings/leaves set Mode.
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	// Source path is resolved in Run via d.DOCTEST_ROOT; groupings/leaves set Mode.
 	t.Helper()
 	if req == nil {
 		return fmt.Errorf("nil Request")

@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - Three HTTP 200 responses (no `no_match` on the second user turn).
@@ -5,9 +9,12 @@
 - Request 3 returns HTTP 200 with generated content for `"what's wrong with me?"` (not HTTP 400 `no_match`).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertSuccess(t, resp)
 
 	if len(resp.Responses) != 3 {

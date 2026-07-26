@@ -3,9 +3,12 @@
 - text:"exact message", runner_session_id matches.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     r, err := runAgentHub(t, req, "session", "message", "pop", "--runner", "fake-opencode", "--session-id", "srt1")
     if err != nil {
         t.Fatalf("pop error: %v", err)

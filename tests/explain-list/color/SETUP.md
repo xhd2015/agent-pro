@@ -24,9 +24,12 @@ explain list [--color] (+ optional NO_COLOR) -> ANSI on or off per policy
 - Bodies remain uncolored.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.Bin == "" {
 		t.Fatalf("color setup: explain binary not built")
 	}

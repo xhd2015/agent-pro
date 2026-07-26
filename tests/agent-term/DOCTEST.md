@@ -106,15 +106,18 @@ doctest test ./tests/agent-term/...
 
 ```go
 import (
+
 	"testing"
 
-	"github.com/xhd2015/agent-pro/cmd/agent-term/termtest"
+	"github.com/xhd2015/agent-pro/cmd-doctest-harness/agent-term/termtest"
+	"github.com/xhd2015/doctest/session"
 )
 
 type Request = termtest.Request
 type Response = termtest.Response
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
+	_ = d
 	return termtest.Run(t, req)
 }
 

@@ -22,7 +22,7 @@ empty or whitespace-only output
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = "01900012-3333-7333-8333-333333333333"
 	lines := []string{
 		`{"type":"event_msg","payload":{"type":"token_count","input_tokens":10,"output_tokens":5}}`,

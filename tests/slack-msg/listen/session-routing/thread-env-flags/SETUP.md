@@ -19,14 +19,16 @@ listen --config PATH + app_mention
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.WorkDir == "" {
 		req.WorkDir = t.TempDir()
 	}
 	req.HomeDir = filepath.Join(req.WorkDir, "home")
-	if err := withConfigArg(t, req, "valid-config.json", false); err != nil {
+	if err := withConfigArg(t, d, req, "valid-config.json", false); err != nil {
 		return err
 	}
 	threadTS := "1710000740.000100"

@@ -39,6 +39,7 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+	"github.com/xhd2015/doctest/session"
 )
 
 const hardRequireNoGrokHomeUUID = "550e8400-e29b-41d4-a716-446655440811"
@@ -46,7 +47,7 @@ const hardRequireNoGrokHomeUUID = "550e8400-e29b-41d4-a716-446655440811"
 // delay longer than soft 750ms and longer than instant-attach return.
 const hardRequireNoGrokHomeDelay = 2 * time.Second
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	prompt := "hard require via prompt"
 	req.OpenPrompt = prompt
 	req.InitialPrompt = prompt

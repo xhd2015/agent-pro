@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - `events.jsonl` contains a `think` event with text exactly `Resolve session id...`.
@@ -8,9 +12,13 @@
 - `events.jsonl` also contains user message and protocol-derived assistant content from mock `updates.jsonl`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

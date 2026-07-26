@@ -12,7 +12,10 @@ agent-run tty attach -> missing session id error + usage hint
 2. Exit code 1, stderr mentions missing session id.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"tty", "attach"}
 	return nil
 }

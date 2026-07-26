@@ -11,7 +11,7 @@ keep-tty: tail must survive tailState.streamed; WatchEvents until ctx done
 ## Preconditions
 
 - Repository contains `cmd/agent-run` and `agent/llm/llm-mock/llm-mock-run-grok`.
-- Session-scoped cache under `$TMPDIR/grok-tty-chat-tail-doctest-<DOCTEST_SESSION_ID>/`
+- Session-scoped cache under `$TMPDIR/grok-tty-chat-tail-doctest-<d.DOCTEST_SESSION_ID>/`
   shares compiled binaries across parallel leaves.
 - Each leaf uses isolated `AGENT_RUN_HOME` under `t.TempDir()`.
 - Harness reuses ACP builders and delayed-scheduler patterns from
@@ -57,6 +57,7 @@ import (
 
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
+	"github.com/xhd2015/doctest/session"
 )
 
 const (
@@ -70,14 +71,14 @@ const (
 	sseFinishTimeout        = 75 * time.Second
 )
 
-func Setup(t *testing.T, req *Request) error {
-	req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../.."))
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../.."))
 	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
 		return fmt.Errorf("repo root not found: %w", err)
 	}
 	req.TempDir = t.TempDir()
 	req.Home = filepath.Join(req.TempDir, ".agent-run")
-	req.AgentRun, req.LLMMockRunGrok = ensureSessionBinaries(t, req.RepoRoot)
+	req.AgentRun, req.LLMMockRunGrok = ensureSessionBinaries(t, d, req.RepoRoot)
 	req.Runner = "grok-tty"
 	req.WebToken = "test"
 	req.Env = append(req.Env,
@@ -87,8 +88,8 @@ func Setup(t *testing.T, req *Request) error {
 	return nil
 }
 
-func sessionCacheDir() string {
-	return filepath.Join(os.TempDir(), "grok-tty-chat-tail-doctest-"+DOCTEST_SESSION_ID)
+func sessionCacheDir(d *session.Doctest) string {
+	return filepath.Join(os.TempDir(), "grok-tty-chat-tail-doctest-"+d.DOCTEST_SESSION_ID)
 }
 
 func withFileLock(t *testing.T, lockPath string, fn func() error) error {
@@ -108,9 +109,9 @@ func withFileLock(t *testing.T, lockPath string, fn func() error) error {
 	return fn()
 }
 
-func ensureSessionBinaries(t *testing.T, repoRoot string) (agentRun, llmMock string) {
+func ensureSessionBinaries(t *testing.T, d *session.Doctest, repoRoot string) (agentRun, llmMock string) {
 	t.Helper()
-	cache := sessionCacheDir()
+	cache := sessionCacheDir(d)
 	agentRun = filepath.Join(cache, "agent-run")
 	llmMock = filepath.Join(cache, "llm-mock-run-grok")
 	ready := filepath.Join(cache, "binaries.ready")

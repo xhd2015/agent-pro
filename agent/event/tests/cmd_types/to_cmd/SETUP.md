@@ -18,9 +18,12 @@ Events -> ToCmd -> []cmd_types.Event JSON
 2. Leaf SETUPs populate `req.Events` and `req.SessionID`.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Target = "cmd"
 	if req.SessionID == "" {
 		req.SessionID = "sess_cmd"

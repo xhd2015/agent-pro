@@ -11,9 +11,12 @@ inject app_mention (C, ts, text) then message (C, ts, same text) -> 1 agent laun
 1. Inject dual events with identical channel, ts, and mention text.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	ts := "1710000500.000100"
 	text := "<@" + slackTestBotUserID + "> hi from channel"
 	req.WantAgentCalls = 1

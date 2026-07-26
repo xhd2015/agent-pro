@@ -11,7 +11,7 @@
 ```go
 import "testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertSuccess(t, resp)
 	assertContains(t, resp.Output, "SESSION ID")
 	assertContains(t, resp.Output, "LAST ACTIVE")

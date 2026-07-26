@@ -11,9 +11,12 @@ IsTransientIndexError("Aborting commit due to empty commit message.", nil) -> fa
 1. Set `ClassifyOutput` to git's empty-message abort text.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClassifyOutput = "Aborting commit due to empty commit message."
 	req.WantTransient = false
 	return nil

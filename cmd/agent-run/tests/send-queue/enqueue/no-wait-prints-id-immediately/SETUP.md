@@ -12,7 +12,10 @@ busy terminal + --no-wait -> stdout msg_N\n within ~1s
 2. Set `req.SendMessage = "no-wait-probe"`.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Action = "no-wait-prints-id-immediately"
 	req.SendMessage = "no-wait-probe"
 	return nil

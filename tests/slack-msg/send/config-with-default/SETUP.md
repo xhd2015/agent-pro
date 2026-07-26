@@ -23,9 +23,12 @@ Caller -> slack-msg send --config PATH MESSAGE -> load JSON -> resolve defaults 
 - Name-shaped `defaultChannelId` resolved like `--channel` names.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ClearSlackEnv = true
 	apiURL, err := ensureSlackTestServer(t)
 	if err != nil {

@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 - The generated events contain command_execution items with real output.
 - The old hardcoded fake strings (e.g., `"src/\n  main.go\n  utils.go"`) are NOT present.
@@ -8,9 +12,10 @@ import (
     "encoding/json"
     "strings"
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     assertSuccess(t, resp)
     stdout := resp.Stdout
     if strings.TrimSpace(stdout) == "" {

@@ -9,7 +9,7 @@
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Agent = "pi"
 	req.Query = `pi -p "one word of French capital" --mode json --approve`
 	return nil

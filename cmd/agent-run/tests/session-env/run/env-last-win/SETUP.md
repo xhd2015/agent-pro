@@ -13,9 +13,13 @@ run --env A=1 -e A=2 --agent-runner-binary env-logger "prompt"
 2. Pass both `--env A=1` and `-e A=2` (alias + last-win).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	prepareEnvLoggingRun(t, req)
 	req.SessionID = "sess-env-last-win"
 	req.Prompt = "env last win"

@@ -19,9 +19,13 @@ Leaf `grok-mock-run-post-turn` uses a fake grok TUI that replays the post-turn
 PTY redraw observed with real `llm-mock-run-grok` (deterministic in CI).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	_ = t
 	return nil
 }

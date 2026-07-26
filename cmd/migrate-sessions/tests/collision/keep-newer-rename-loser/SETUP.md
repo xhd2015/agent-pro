@@ -18,9 +18,12 @@ fake-codex/shared (older) + fake-opencode/shared (newer)
 2. Run migrator.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	writeNestedSession(t, req.Home, "fake-codex", "shared", "finished", "2026-07-01T10:00:00Z", "from-codex")
 	writeNestedSession(t, req.Home, "fake-opencode", "shared", "finished", "2026-07-01T12:00:00Z", "from-opencode")
 	req.Args = []string{"--home", req.Home}

@@ -18,9 +18,13 @@ meta.status=finished + initial_prompt + grok updates on disk
 1. Grouping leaves choose heal vs skip-when-worker-active mode.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	_ = d
 	if req.ReconcileTimeout <= 0 {
 		req.ReconcileTimeout = 10 * time.Second
 	}

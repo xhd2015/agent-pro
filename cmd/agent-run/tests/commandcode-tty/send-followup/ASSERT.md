@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 
 - `send` prints `msg_1` and exits 0.
@@ -15,9 +19,10 @@ import (
 	"time"
 
 	"github.com/xhd2015/doctest/assert"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	sessionID := req.SessionID
 
 	// Step 1: open session with --session-id

@@ -13,7 +13,10 @@ agent-run attach bogus-id vs agent-run tty attach bogus-id -> same error message
 3. Stderr output should match the tty attach equivalent.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"attach", "session-nonexistent"}
 	return nil
 }

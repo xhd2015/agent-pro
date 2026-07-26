@@ -1,9 +1,9 @@
 # Scenario
 
-**Feature**: agent-run sources call BuildFollowUpCommand for new-terminal path
+**Feature**: agentruncli sources call BuildFollowUpCommand for new-terminal path
 
 ```
-scan cmd/agent-run/*.go for BuildFollowUpCommand + agentrunapi import
+scan pkgs/agentruncli/*.go for BuildFollowUpCommand + agentrunapi import
 ```
 
 ## Steps
@@ -13,7 +13,7 @@ scan cmd/agent-run/*.go for BuildFollowUpCommand + agentrunapi import
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.Mode != "source_wire" {
 		req.Mode = "source_wire"
 	}

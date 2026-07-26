@@ -12,7 +12,10 @@ first interactive -> writer; second interactive -> observer (input dropped)
 2. `Run` executes the scenario.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Action = "first-attach-writes-second-readonly"
 	return nil
 }

@@ -11,7 +11,7 @@ import (
     "testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     // Grouping node: warning-range inputs — leaves set req.Input
     _ = t
     return nil

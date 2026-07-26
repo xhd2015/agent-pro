@@ -14,7 +14,7 @@ doctest <- stdout / stderr / exit code
 
 - `go` is available in PATH (to build `./cmd/explain`). Tests skip otherwise.
 - `cmd/explain` exists; implementer adds `list` dispatch + formatting (RED until then).
-- Session cache dir: `$TMPDIR/explain-list-doctest-<DOCTEST_SESSION_ID>/`
+- Session cache dir: `$TMPDIR/explain-list-doctest-<d.DOCTEST_SESSION_ID>/`
   (shared `explain` binary + fake agent stub across parallel leaves).
 - Per-leaf isolation: each leaf gets its own `ConfigHome` under `t.TempDir()`.
 - Parent env `NO_COLOR` / `FORCE_COLOR` / `CLICOLOR_FORCE` are stripped in `Run`
@@ -24,7 +24,7 @@ doctest <- stdout / stderr / exit code
 
 ## Steps
 
-1. Resolve module root from `DOCTEST_ROOT` upward (`go.mod` + `cmd/explain`).
+1. Resolve module root from `d.DOCTEST_ROOT` upward (`go.mod` + `cmd/explain`).
 2. Build `explain` once per session into the session cache (file-locked).
 3. Ensure fake agent stub exists in the same cache.
 4. Create isolated `ConfigHome` for this leaf; default `Args` to `["list"]`.
@@ -46,25 +46,27 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if _, err := exec.LookPath("go"); err != nil {
 		t.Skipf("skipping: go not found in PATH")
 	}
-	repoRoot, err := findModuleRoot()
+	repoRoot, err := findModuleRoot(d.DOCTEST_ROOT)
 	if err != nil {
 		return err
 	}
 	req.RepoRoot = repoRoot
 
-	bin, err := buildExplainOnce(t)
+	bin, err := buildExplainOnce(t, d)
 	if err != nil {
 		return err
 	}
 	req.Bin = bin
 
-	fake, err := ensureFakeAgent(t)
+	fake, err := ensureFakeAgent(t, d)
 	if err != nil {
 		return err
 	}

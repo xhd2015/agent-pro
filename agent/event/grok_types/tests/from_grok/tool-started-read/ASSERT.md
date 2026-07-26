@@ -9,7 +9,7 @@ import (
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	var events []types.AgentEvent
 	if err := json.Unmarshal([]byte(resp.Output), &events); err != nil {
 		t.Fatalf("unmarshal: %v", err)

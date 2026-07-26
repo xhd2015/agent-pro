@@ -24,9 +24,10 @@ WebWorkingDir=/…/proc-cwd; no selected_workspace
 import (
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Scenario = "fresh-defaults-to-cwd"
 	cwd := mustMkdir(t, filepath.Join(req.TempDir, "proc-cwd"))
 	req.WebWorkingDir = cwd

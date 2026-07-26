@@ -37,7 +37,7 @@ import (
 // fixedNow is the shared clock for all reltime leaves (overridable per leaf).
 var fixedNow = time.Date(2026, 7, 12, 12, 0, 0, 0, time.UTC)
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.Now.IsZero() {
 		req.Now = fixedNow
 	}

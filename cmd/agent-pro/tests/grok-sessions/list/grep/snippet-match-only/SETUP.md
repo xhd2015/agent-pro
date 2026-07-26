@@ -33,7 +33,7 @@ import (
 	"testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	longMatch := strings.Repeat("X", 1100)
 	req.Grep = longMatch
 	req.Limit = 10

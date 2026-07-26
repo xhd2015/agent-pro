@@ -17,9 +17,10 @@ import (
 	"testing"
 
 	opencode_types "github.com/xhd2015/agent-pro/agent/event/opencode_types"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	raw := `{"type":"step_start","timestamp":1718200000123,"sessionID":"sess_ss","part":{"id":"p1","sessionID":"sess_ss","messageID":"msg_1","type":"step-start","snapshot":"snap_abc"}}`
 	var evt opencode_types.Event
 	if err := json.Unmarshal([]byte(raw), &evt); err != nil {

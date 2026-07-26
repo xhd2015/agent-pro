@@ -1,3 +1,7 @@
+---
+label: e2e
+---
+
 ## Expected
 - Valid JSONL event lines with recognizable structure.
 - Events include reasoning, command_execution, and a final message.
@@ -8,9 +12,10 @@ import (
     "encoding/json"
     "strings"
     "testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
     assertSuccess(t, resp)
     stdout := resp.Stdout
     if strings.TrimSpace(stdout) == "" {

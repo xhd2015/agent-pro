@@ -10,7 +10,7 @@ import (
     "testing"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     req.Operation = "session_env_var"
     req.Status = true
     return nil

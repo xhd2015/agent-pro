@@ -89,22 +89,22 @@ type sessionIDSources struct {
 
 func resolveSessionID(c Config, flagSessionID, prompt string) (*sessionIDSources, error) {
 	if flagSessionID != "" {
-		codexID := os.Getenv("CODEX_THREAD_ID")
+		codexID := getenv(c, "CODEX_THREAD_ID")
 		return &sessionIDSources{
 			sessionID:         flagSessionID,
 			codexThreadID:     codexID,
 			explicitSessionID: flagSessionID,
 		}, nil
 	}
-	if v := os.Getenv(c.sessionEnvVar()); v != "" {
-		codexID := os.Getenv("CODEX_THREAD_ID")
+	if v := getenv(c, c.sessionEnvVar()); v != "" {
+		codexID := getenv(c, "CODEX_THREAD_ID")
 		return &sessionIDSources{
 			sessionID:     v,
 			codexThreadID: codexID,
 			implSessionID: v,
 		}, nil
 	}
-	if v := os.Getenv("CODEX_THREAD_ID"); v != "" {
+	if v := getenv(c, "CODEX_THREAD_ID"); v != "" {
 		return &sessionIDSources{
 			sessionID:     v,
 			codexThreadID: v,
@@ -151,6 +151,8 @@ func resolveInnerSessionID(captureID string, isNew bool, srcs *sessionIDSources)
 	if s := strings.TrimSpace(captureID); s != "" {
 		return s
 	}
+	// Child runners inherit process env for FAKE_CODEX_MOCK_CONFIG; product also
+	// sets it via os.Setenv before spawn. Lookup here is process-global.
 	if s := readMockConfigSessionID(os.Getenv("FAKE_CODEX_MOCK_CONFIG")); s != "" {
 		return s
 	}

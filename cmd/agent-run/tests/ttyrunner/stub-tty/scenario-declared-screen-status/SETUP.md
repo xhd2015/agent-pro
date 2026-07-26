@@ -12,7 +12,10 @@ screen_status:idle -> tty status screen_status idle
 2. `Run` executes the scenario.
 
 ```go
-func Setup(t *testing.T, req *Request) error {
+import (
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Action = "scenario-declared-screen-status"
 	return nil
 }

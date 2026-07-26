@@ -1,5 +1,5 @@
 ---
-label: real-codex, slow
+label: e2e, real-codex, slow
 explanation: Requires real codex CLI on PATH; headless LLM round-trip up to 60s.
 ---
 
@@ -17,9 +17,12 @@ explanation: Requires real codex CLI on PATH; headless LLM round-trip up to 60s.
 0
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Assert(t *testing.T, req *Request, resp *Response, err error) {
+	"github.com/xhd2015/doctest/session"
+)
+func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}

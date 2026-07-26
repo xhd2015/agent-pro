@@ -14,7 +14,7 @@ BuildFollowUpCommand(DriverBinary="", Open, SessionID, Prompt)
 ```go
 import "testing"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.DriverBinary = ""
 	req.SessionID = "sess-fu-default"
 	req.Prompt = "open me"

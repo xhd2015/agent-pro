@@ -14,9 +14,13 @@ POST session runner=grok-tty -> mock wrapper invoked -> grok data under home
 3. `Run` waits for session finished and reads argv probe log.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	startWebWithGrokMock(t, req)
 	req.SessionID = postCreateSession(t, req.WebBaseURL, req.WebToken, req.SessionRunner, req.CreatePrompt)
 	return nil

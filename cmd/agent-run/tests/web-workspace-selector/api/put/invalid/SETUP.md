@@ -23,9 +23,10 @@ PUT missing path | PUT existing file
 import (
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	// Baseline selected path so we can prove invalid PUT does not clobber it.
 	baseline := makeSelectDir(t, req, "baseline-ws")
 	req.SelectPath = baseline // reused as "should remain" for invalid leaves

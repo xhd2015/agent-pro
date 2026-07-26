@@ -23,9 +23,13 @@ seed AGENT_RUN_HOME meta: runner=grok-tty, runner_session_id=UUID
 3. Run import flag without overriding runner (omitted → grok-tty).
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.GrokCWD = absPath(t, req.WorkDir)
 	seedGrokSession(t, req.GrokHome, req.GrokCWD, req.GrokSessionID)
 	req.MappedSessID = "mapped-import-s1"

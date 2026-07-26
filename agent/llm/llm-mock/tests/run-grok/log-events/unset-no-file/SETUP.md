@@ -14,9 +14,12 @@ fake grok curls mock once -> no session-log-events.jsonl under workdir
 3. Assert no `*.jsonl` files appear under workdir after run.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ConfigEnv = "file"
 	req.FakeGrokCmd = fakeGrokCurlOnce
 	req.ConfigJSON = minimalMockConfigJSON(8080, "")

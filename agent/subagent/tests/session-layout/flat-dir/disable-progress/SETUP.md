@@ -24,9 +24,11 @@ import (
 	"testing"
 
 	"github.com/xhd2015/agent-pro/agent/subagent"
+
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	configureFlatDirBase(t, req)
 	req.Layout = subagent.SessionLayout{
 		Dir:              req.SessionDir,

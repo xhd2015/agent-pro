@@ -21,9 +21,12 @@ codex-show-status -> fake codex -> status lines
 - Baseline happy-path test for the CLI.
 
 ```go
-import "testing"
+import (
+	"testing"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.ShowStatusCommand = fakeTUIDefault()
 	return nil
 }
