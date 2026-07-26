@@ -8,6 +8,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     container:
+      # Match go.work / go.mod (GOTOOLCHAIN=local in official images rejects lower runtimes).
       image: golang:1.25.10
     steps:
       - uses: actions/checkout@v4
