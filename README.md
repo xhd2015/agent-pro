@@ -1,4 +1,4 @@
-# agent-traces
+# agent-pro
 
 Standalone web UI for headless agent execution traces.
 
