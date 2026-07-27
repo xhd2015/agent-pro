@@ -62,6 +62,49 @@ func waitForBannerRemote(ctx context.Context, listenAddr, sessionID, provider st
 	return fmt.Errorf("%s TUI banner not detected", provider)
 }
 
+// acceptCodexTrustRemote soft-polls for the directory trust modal and sends Enter.
+// Used by --open (which does not hard-wait on banner) so sendable is not blocked
+// by trust or a false "update available" classification of the enter footer.
+// Returns when trust is gone or timeout/ctx elapses (never hard-fails open).
+func acceptCodexTrustRemote(ctx context.Context, listenAddr, sessionID, provider string, timeout time.Duration) {
+	if !isCodexProvider(provider) {
+		return
+	}
+	if timeout <= 0 {
+		timeout = 45 * time.Second
+	}
+	deadline := time.Now().Add(timeout)
+	accepted := false
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		snapshot, err := ttywatch.SnapshotText(listenAddr, sessionID)
+		if err != nil {
+			time.Sleep(bannerPollInterval)
+			continue
+		}
+		scrollback := []byte(snapshot)
+		if codexTrustPromptDetected(scrollback, provider) {
+			if !accepted {
+				_ = ttywatch.SendMessage(listenAddr, sessionID, "", true)
+				accepted = true
+			}
+			time.Sleep(bannerPollInterval)
+			continue
+		}
+		// Trust cleared; optionally wait briefly for idle chrome.
+		plain := stripPlain(scrollback)
+		if strings.Contains(plain, "›") || strings.Contains(plain, "\u203a") ||
+			strings.Contains(plain, "OpenAI Codex") || bannerDetectedConfig(scrollback, provider, nil) {
+			return
+		}
+		time.Sleep(bannerPollInterval)
+	}
+}
+
 func bannerDetectedConfig(scrollback []byte, provider string, markers []string) bool {
 	plain := stripPlain(scrollback)
 	if provider == "stub" {

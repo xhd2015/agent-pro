@@ -32,14 +32,15 @@ lives under `agent/codex/tty/tests/update-modal-skip/`.
 import (
 	"path/filepath"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.RepoRoot == "" {
-		req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "..", "..", "..", ".."))
+		req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "..", "..", "..", ".."))
 	}
 	if req.FixturesDir == "" {
-		req.FixturesDir = filepath.Join(DOCTEST_ROOT, "testdata", "update-modal-skip")
+		req.FixturesDir = filepath.Join(d.DOCTEST_ROOT, "testdata", "update-modal-skip")
 	}
 	return nil
 }

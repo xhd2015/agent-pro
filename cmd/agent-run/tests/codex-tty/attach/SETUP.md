@@ -21,9 +21,13 @@ agent-run attach <id>
 4. `Assert` checks connection success or missing-session error.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"github.com/xhd2015/doctest/session"
+)
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	_ = d
 	_ = t
 	return nil
 }

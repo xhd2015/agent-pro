@@ -21,12 +21,14 @@ fake Codex TUI prints resume UUID then sleeps
 ```go
 import (
 	"testing"
+	"github.com/xhd2015/doctest/session"
 	"time"
 )
 
 const codexPreExitStreamText = "JSONL_STREAM_BEFORE_PTY_EXIT"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	_ = d
 	req.CodexTTYCommand = fakeTUICodexResumeThenSleep(5)
 	seedCodexTranscript(t, req)
 	req.CodexTranscriptSchedules = []CodexTranscriptSchedule{

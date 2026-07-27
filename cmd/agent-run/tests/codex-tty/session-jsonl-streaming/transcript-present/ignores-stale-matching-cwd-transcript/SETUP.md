@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 	"time"
 )
 
@@ -51,7 +52,8 @@ func writeStaleCodexTranscript(t *testing.T, req *Request) {
 	}
 }
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	_ = d
 	req.CodexTTYCommand = fakeTUINoResumeUntilLate(5)
 	writeStaleCodexTranscript(t, req)
 	req.CodexTranscriptSchedules = []CodexTranscriptSchedule{

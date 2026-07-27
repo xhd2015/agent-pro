@@ -94,7 +94,13 @@ cmd/agent-run/tests/codex-tty/
 │   ├── lists-attach/                  # top-level help lists attach subcommand
 │   ├── lists-send/                    # top-level help lists send subcommand
 │   └── lists-codex-tty-runner/        # runner help lists codex-tty backend
-└── real-codex/                        # label: codex (skipped by default)
+├── mock-ui/                           # label: codex — real Codex TUI + llm-mock-run-codex
+│   ├── trust/
+│   │   └── open-reaches-idle-prompt/  # --open auto-clears trust; sendable idle ›
+│   └── send/
+│       ├── submits-followup-turn/     # send delivers turn (not draft-only text+\r)
+│       └── no-submit-stays-draft/     # --no-submit leaves text in composer
+└── real-codex/                        # label: codex (skipped by default; live API)
     ├── banner-appears/                # real codex banner detected before inject
     ├── attach-while-running/          # background run → attach connects, output visible
     ├── prompt-executes-not-stuck/     # real codex run ls exits or produces visible output
@@ -144,6 +150,9 @@ Parameter ranking (most → least significant):
 | 25 | `session-jsonl-streaming/transcript-present/ignores-function-call-output` | `function_call_output` text is not emitted as an assistant message by default |
 | 26 | `session-jsonl-streaming/transcript-absent/falls-back-to-scrollback` | No rollout transcript keeps existing cleaned scrollback fallback |
 | 27 | `run/concurrent-runs-unique-session-ids` | Concurrent codex-tty processes sharing one home print unique registry session ids |
+| 28 | `mock-ui/trust/open-reaches-idle-prompt` | `llm-mock-run-codex` open clears trust; idle sendable prompt (`label: codex`) |
+| 29 | `mock-ui/send/submits-followup-turn` | `send` submits follow-up; mock reply visible, not stuck in › (`label: codex`) |
+| 30 | `mock-ui/send/no-submit-stays-draft` | `send --no-submit` leaves draft in composer (`label: codex`) |
 
 ## How to Run
 
@@ -176,6 +185,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/xhd2015/doctest/session"
 )
 
 type CodexTTYRegistryEntry struct {
@@ -208,7 +219,17 @@ type Request struct {
 	BackgroundCmd    *exec.Cmd
 	BackgroundStderr *bytes.Buffer
 	BackgroundStdout *bytes.Buffer
-	SkipFakeTUI      bool // real-codex: do not set AGENT_RUN_CODEX_TTY_COMMAND
+	SkipFakeTUI      bool // real-codex / mock-ui: do not set AGENT_RUN_CODEX_TTY_COMMAND
+	// mock-ui: real Codex TUI + llm-mock-run-codex (sibling llm-mock required).
+	UseLLMMockCodex  bool
+	LLMMockRunCodex  string // path to llm-mock-run-codex binary
+	LLMMockServer    string // path to sibling llm-mock binary
+	MockConfigFile   string // LLM_MOCK_CONFIG_FILE
+	WorkspaceDir     string
+	SessionID        string // explicit --session-id for open/send leaves
+	MockUISendText   string // follow-up text for send leaves
+	MockUINoSubmit   bool   // send --no-submit
+	MockUIExpectReply string // mock assistant marker expected after submit
 }
 
 type CodexTranscriptSchedule struct {
@@ -235,9 +256,16 @@ type Response struct {
 	StreamProbeSeen       bool
 	StreamProbeBeforeExit bool
 	StreamProbeStdout     string
+	// mock-ui probes
+	Snapshot     string
+	StatusText   string
+	SendStdout   string
+	SendStderr   string
+	SessionID    string
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
+	_ = d
 	switch req.Mode {
 	case "registry-while-running":
 		return runRegistryWhileRunning(t, req)
@@ -253,6 +281,10 @@ func Run(t *testing.T, req *Request) (*Response, error) {
 		return runCodexJSONLStreamProbe(t, req)
 	case "concurrent-run-unique-ids":
 		return runConcurrentCodexTTYRuns(t, req)
+	case "mock-ui-open-idle":
+		return runMockUIOpenIdle(t, req)
+	case "mock-ui-send":
+		return runMockUISend(t, req)
 	default:
 		return runAgentRun(t, req, req.Args...)
 	}

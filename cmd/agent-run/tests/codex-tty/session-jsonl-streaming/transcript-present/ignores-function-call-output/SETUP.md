@@ -18,12 +18,16 @@ rollout JSONL response_item.function_call_output
 2. Assert stdout includes the assistant message but not the function output marker.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"github.com/xhd2015/doctest/session"
+)
 
 const codexFunctionOutputText = "JSONL_FUNCTION_OUTPUT_SHOULD_NOT_PRINT"
 const codexAssistantAfterFunctionText = "JSONL_ASSISTANT_AFTER_FUNCTION_OUTPUT"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	_ = d
 	seedCodexTranscript(t, req,
 		codexFunctionCallOutputLine(codexFunctionOutputText),
 		codexAgentMessageLine(codexAssistantAfterFunctionText),

@@ -18,9 +18,13 @@ agent-run run --agent-runner codex-tty → validateRunner accepts codex-tty (not
 3. `Assert` verifies the run is not rejected as an unknown runner.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"github.com/xhd2015/doctest/session"
+)
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	_ = d
 	_ = t
 	return nil
 }

@@ -18,11 +18,15 @@ rollout JSONL event_msg.agent_message "final"
 2. Assert stdout contains the final answer exactly once.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"github.com/xhd2015/doctest/session"
+)
 
 const codexDedupedFinalText = "JSONL_DEDUPED_FINAL_MESSAGE"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	_ = d
 	seedCodexTranscript(t, req,
 		codexAgentMessageLine(codexDedupedFinalText),
 		codexTaskCompleteLine(codexDedupedFinalText),

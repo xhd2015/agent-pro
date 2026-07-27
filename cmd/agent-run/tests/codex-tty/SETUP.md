@@ -49,6 +49,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 	"time"
 
 	"github.com/creack/pty"
@@ -535,27 +536,38 @@ func runAttachInteractiveProbe(t *testing.T, req *Request) (*Response, error) {
 
 func findCodexTTYEventsJSONL(t *testing.T, home string) (string, []string) {
 	t.Helper()
-	root := filepath.Join(home, "sessions", "codex-tty")
+	// Prefer legacy sessions/codex-tty/, then flat sessions/sess_*/ layout.
+	candidates := []string{
+		filepath.Join(home, "sessions", "codex-tty"),
+		filepath.Join(home, "sessions"),
+	}
 	var found string
 	var lines []string
-	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return nil
-		}
-		if info.Name() == "events.jsonl" {
-			found = path
-			data, readErr := os.ReadFile(path)
-			if readErr != nil {
-				t.Fatalf("read %s: %v", path, readErr)
+	for _, root := range candidates {
+		_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info == nil || info.IsDir() {
+				return nil
 			}
-			for _, line := range strings.Split(string(data), "\n") {
-				if strings.TrimSpace(line) != "" {
-					lines = append(lines, line)
+			if info.Name() == "events.jsonl" {
+				found = path
+				data, readErr := os.ReadFile(path)
+				if readErr != nil {
+					t.Fatalf("read %s: %v", path, readErr)
 				}
+				lines = nil
+				for _, line := range strings.Split(string(data), "\n") {
+					if strings.TrimSpace(line) != "" {
+						lines = append(lines, line)
+					}
+				}
+				return filepath.SkipAll
 			}
+			return nil
+		})
+		if found != "" {
+			break
 		}
-		return nil
-	})
+	}
 	return found, lines
 }
 
@@ -863,8 +875,8 @@ func assertExitCode(t *testing.T, resp *Response, want int) {
 	}
 }
 
-func Setup(t *testing.T, req *Request) error {
-	req.RepoRoot = filepath.Clean(filepath.Join(DOCTEST_ROOT, "../../../.."))
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../.."))
 	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
 		return fmt.Errorf("repo root not found: %w", err)
 	}
@@ -893,5 +905,248 @@ func httpGetHealth(listenAddr string) (int, error) {
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, resp.Body)
 	return resp.StatusCode, nil
+}
+
+// ensureLLMMockCodex builds llm-mock-run-codex and sibling llm-mock into req.TempDir/bin.
+// Sibling llm-mock is required: orchestrator looks next to the run-codex binary for the server.
+func ensureLLMMockCodex(t *testing.T, req *Request) {
+	t.Helper()
+	binDir := filepath.Join(req.TempDir, "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	req.LLMMockRunCodex = filepath.Join(binDir, "llm-mock-run-codex")
+	req.LLMMockServer = filepath.Join(binDir, "llm-mock")
+	builds := []struct {
+		out  string
+		pkg  string
+	}{
+		{req.LLMMockRunCodex, "./agent/llm/llm-mock/llm-mock-run-codex"},
+		{req.LLMMockServer, "./agent/llm/llm-mock"},
+	}
+	for _, b := range builds {
+		if _, err := os.Stat(b.out); err == nil {
+			continue
+		}
+		cmd := exec.Command("go", "build", "-o", b.out, b.pkg)
+		cmd.Dir = req.RepoRoot
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("build %s: %v\n%s", b.pkg, err, out)
+		}
+	}
+}
+
+func writeDefaultMockCodexConfig(t *testing.T, req *Request) {
+	t.Helper()
+	if req.MockConfigFile == "" {
+		req.MockConfigFile = filepath.Join(req.TempDir, "llm-mock-config.json")
+	}
+	const body = `{
+  "exchanges": [
+    {
+      "request": {"role": "user", "content": "follow-up-two", "index": -1},
+      "response": {"content": "SECOND_MOCK_REPLY", "finish_reason": "stop"}
+    },
+    {
+      "request": {"role": "user", "content": "draft-only-text", "index": -1},
+      "response": {"content": "SHOULD_NOT_SEE_DRAFT_REPLY", "finish_reason": "stop"}
+    }
+  ]
+}
+`
+	if err := os.WriteFile(req.MockConfigFile, []byte(body), 0644); err != nil {
+		t.Fatalf("write mock config: %v", err)
+	}
+	req.Env = withoutEnvKey(req.Env, "LLM_MOCK_CONFIG_FILE")
+	req.Env = withoutEnvKey(req.Env, "LLM_MOCK_CONFIG")
+	req.Env = append(req.Env, "LLM_MOCK_CONFIG_FILE="+req.MockConfigFile)
+}
+
+func plainSnapshotText(raw string) string {
+	// Strip common CSI / OSC for assertions.
+	reCSI := regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
+	reOSC := regexp.MustCompile(`\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)`)
+	s := reCSI.ReplaceAllString(raw, "")
+	s = reOSC.ReplaceAllString(s, "")
+	reOther := regexp.MustCompile(`\x1b.`)
+	return reOther.ReplaceAllString(s, "")
+}
+
+func execAgentRunEnv(t *testing.T, req *Request, timeout time.Duration, args ...string) (*Response, error) {
+	t.Helper()
+	if timeout <= 0 {
+		timeout = 60 * time.Second
+	}
+	return execCmd(t, req.AgentRun, args, req.WorkspaceDir, req.Env, timeout)
+}
+
+func ttySnapshot(t *testing.T, req *Request, sessionID string) string {
+	t.Helper()
+	resp, err := execAgentRunEnv(t, req, 15*time.Second, "tty", "snapshot", sessionID)
+	if err != nil {
+		t.Logf("tty snapshot err: %v stdout=%s stderr=%s", err, resp.Stdout, resp.Stderr)
+	}
+	if resp == nil {
+		return ""
+	}
+	return resp.Stdout
+}
+
+func ttyStatus(t *testing.T, req *Request, sessionID string) string {
+	t.Helper()
+	resp, err := execAgentRunEnv(t, req, 15*time.Second, "tty", "status", sessionID)
+	if err != nil && resp == nil {
+		return err.Error()
+	}
+	if resp == nil {
+		return ""
+	}
+	return resp.Stdout + resp.Stderr
+}
+
+func runMockUIOpenIdle(t *testing.T, req *Request) (*Response, error) {
+	t.Helper()
+	if req.SessionID == "" {
+		req.SessionID = fmt.Sprintf("mock-ui-%d", time.Now().UnixNano())
+	}
+	if req.WorkspaceDir == "" {
+		req.WorkspaceDir = filepath.Join(req.TempDir, "ws")
+		if err := os.MkdirAll(req.WorkspaceDir, 0755); err != nil {
+			return nil, err
+		}
+		// git init helps some codex workspace checks; ignore errors.
+		_ = exec.Command("git", "init", "-q", req.WorkspaceDir).Run()
+		_ = os.WriteFile(filepath.Join(req.WorkspaceDir, "README.md"), []byte("ok\n"), 0644)
+	}
+	args := []string{
+		"run",
+		"--agent-runner", "codex-tty",
+		"--agent-runner-binary", req.LLMMockRunCodex,
+		"--session-id", req.SessionID,
+		"--dir", req.WorkspaceDir,
+		"--open",
+	}
+	openResp, err := execAgentRunEnv(t, req, 90*time.Second, args...)
+	out := &Response{
+		SessionID: req.SessionID,
+		Stdout:    "",
+		Stderr:    "",
+	}
+	if openResp != nil {
+		out.Stdout = openResp.Stdout
+		out.Stderr = openResp.Stderr
+		out.ExitCode = openResp.ExitCode
+	}
+	if err != nil {
+		out.Err = err
+		return out, err
+	}
+	// Poll until trust is gone and sendable (or timeout).
+	deadline := time.Now().Add(60 * time.Second)
+	var snap, status string
+	for time.Now().Before(deadline) {
+		snap = ttySnapshot(t, req, req.SessionID)
+		status = ttyStatus(t, req, req.SessionID)
+		plain := plainSnapshotText(snap)
+		low := strings.ToLower(plain)
+		trustVisible := strings.Contains(low, "do you trust the contents") ||
+			strings.Contains(low, "yes, continue")
+		if !trustVisible && (strings.Contains(status, "sendable: yes") ||
+			(strings.Contains(plain, "›") && strings.Contains(low, "openai codex"))) {
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
+	out.Snapshot = snap
+	out.StatusText = status
+	return out, nil
+}
+
+func runMockUISend(t *testing.T, req *Request) (*Response, error) {
+	t.Helper()
+	openResp, err := runMockUIOpenIdle(t, req)
+	if err != nil {
+		return openResp, err
+	}
+	sendArgs := []string{"send", "--max-wait", "45s", req.SessionID}
+	if req.MockUINoSubmit {
+		sendArgs = []string{"send", "--no-submit", "--max-wait", "20s", req.SessionID}
+	}
+	text := req.MockUISendText
+	if text == "" {
+		text = "follow-up-two"
+	}
+	sendArgs = append(sendArgs, text)
+	sendResp, sendErr := execAgentRunEnv(t, req, 60*time.Second, sendArgs...)
+	if openResp == nil {
+		openResp = &Response{SessionID: req.SessionID}
+	}
+	if sendResp != nil {
+		openResp.SendStdout = sendResp.Stdout
+		openResp.SendStderr = sendResp.Stderr
+		openResp.ExitCode = sendResp.ExitCode
+	}
+	// Poll until submit evidence appears (composer cleared / assistant chrome), or timeout.
+	deadline := time.Now().Add(45 * time.Second)
+	if req.MockUINoSubmit {
+		deadline = time.Now().Add(4 * time.Second)
+	}
+	var snap string
+	for {
+		snap = ttySnapshot(t, req, req.SessionID)
+		if req.MockUINoSubmit {
+			break
+		}
+		if mockUISubmitted(snap, text, req.MockUIExpectReply) {
+			break
+		}
+		if time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
+	openResp.Snapshot = snap
+	openResp.StatusText = ttyStatus(t, req, req.SessionID)
+	if sendErr != nil {
+		openResp.Err = sendErr
+		return openResp, sendErr
+	}
+	return openResp, nil
+}
+
+// mockUISubmitted reports whether scrollback shows the send was submitted (not draft-only).
+func mockUISubmitted(raw, sendText, expectReply string) bool {
+	plain := plainSnapshotText(raw)
+	low := strings.ToLower(plain)
+	if expectReply != "" && strings.Contains(plain, expectReply) {
+		return true
+	}
+	if strings.Contains(low, "no matching exchange") {
+		return true
+	}
+	if strings.Contains(plain, "•") || strings.Contains(low, "esc to interrupt") {
+		return true
+	}
+	// Composer empty after the user line: submitted, awaiting/idle.
+	// Draft-only failure mashes text into the footer line: "› follow-up-twogpt-…"
+	if sendText != "" && strings.Contains(plain, sendText) {
+		if strings.Contains(plain, "›"+sendText) || strings.Contains(plain, "› "+sendText) {
+			// still looks like active draft if glued to model footer without newline gap
+			idx := strings.Index(plain, sendText)
+			if idx >= 0 {
+				after := plain[idx+len(sendText):]
+				if strings.HasPrefix(strings.TrimLeft(after, " \t"), "gpt-") ||
+					strings.HasPrefix(strings.TrimLeft(after, " \t"), "gpt‑") {
+					return false
+				}
+			}
+		}
+		// empty prompt line after the text is a strong submit signal
+		if strings.Contains(plain, "›\n") || strings.Contains(plain, "› \n") ||
+			strings.Contains(plain, "›\r") {
+			return true
+		}
+	}
+	return false
 }
 ```

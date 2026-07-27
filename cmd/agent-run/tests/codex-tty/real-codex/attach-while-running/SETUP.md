@@ -13,9 +13,13 @@ background run --agent-runner codex-tty "say hi" → parse stderr id → attach 
 3. `Run` probes attach via registry (WS + snapshot).
 
 ```go
-import "testing"
+import (
+	"testing"
+	"github.com/xhd2015/doctest/session"
+)
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	_ = d
 	req.CodexTTYPrompt = "say hi"
 	req.Args = []string{"run", "--agent-runner", "codex-tty", "say hi"}
 	startCodexTTYBackground(t, req)

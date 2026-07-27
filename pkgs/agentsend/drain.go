@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
-	"github.com/xhd2015/tty-watch/pkgs/ttywatch"
 )
 
 const sessionDrainerIdlePoll = 150 * time.Millisecond
@@ -105,7 +104,9 @@ func drainStep(home string, sess Session, provider agenttty.Provider) bool {
 	if submit && sess.Runner == "grok-tty" && !strings.Contains(payload, "\n") {
 		payload += "\n"
 	}
-	if err := ttywatch.SendMessage(sess.ListenAddr, sess.TerminalSessionID, payload, submit); err != nil {
+	// codex-tty: one-shot text+\r only types into the composer on real Codex TUI;
+	// InjectMessage types then sends a separate Enter.
+	if err := agenttty.InjectMessage(sess.ListenAddr, sess.TerminalSessionID, sess.Runner, payload, submit); err != nil {
 		return true
 	}
 	if err := dequeueHead(path); err != nil {

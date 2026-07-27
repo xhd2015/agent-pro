@@ -19,9 +19,13 @@ Signed fixture `01-update-modal-default.snapshot.txt` (SHA-256 in PROTOCOL.md).
 PROTOCOL step `detect_modal`. Default selection is **1. Update now**.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"github.com/xhd2015/doctest/session"
+)
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	_ = d
 	req.FixtureFile = "01-update-modal-default.snapshot.txt"
 	return nil
 }

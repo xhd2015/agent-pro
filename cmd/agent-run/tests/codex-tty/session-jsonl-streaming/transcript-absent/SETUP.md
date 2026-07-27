@@ -19,11 +19,15 @@ fake Codex TUI prints resume UUID
 3. Assert the fallback line reaches stdout.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"github.com/xhd2015/doctest/session"
+)
 
 const codexScrollbackFallbackText = "SCROLLBACK_FALLBACK_WITHOUT_TRANSCRIPT"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	_ = d
 	req.CodexTTYCommand = fakeTUICodexResumeWithFallback(codexScrollbackFallbackText)
 	req.Env = withoutEnvKey(req.Env, "FAKE_CODEX_FALLBACK_TEXT")
 	req.Env = append(req.Env, "FAKE_CODEX_FALLBACK_TEXT="+codexScrollbackFallbackText)

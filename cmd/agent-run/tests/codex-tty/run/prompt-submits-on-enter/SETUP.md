@@ -21,9 +21,13 @@ shows `run ls` in the input buffer without codex executing.
 2. Run `agent-run run --agent-runner codex-tty "run ls"`.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"github.com/xhd2015/doctest/session"
+)
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	_ = d
 	setCodexTTYCommand(req, fakeTUIRequiresCR())
 	req.Args = append(req.Args, "run ls")
 	return nil

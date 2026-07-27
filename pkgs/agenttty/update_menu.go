@@ -3,8 +3,11 @@ package agenttty
 import "strings"
 
 // IsBlockingUpdateMenu reports whether text is the Codex full-screen
-// "Update available" menu modal (numbered Skip options / press enter to continue).
+// "Update available" menu modal (numbered Skip / Update now options).
 // Residual banners that still say "Update available" without menu options return false.
+//
+// Directory trust prompts also show "Press enter to continue" and must NOT match
+// (they would otherwise block send as "codex update available").
 func IsBlockingUpdateMenu(text string) bool {
 	if strings.TrimSpace(text) == "" {
 		return false
@@ -12,31 +15,39 @@ func IsBlockingUpdateMenu(text string) bool {
 	lower := strings.ToLower(text)
 	compact := compactWritableText(lower)
 
-	hasUpdate := strings.Contains(lower, "update available") ||
-		strings.Contains(compact, "updateavailable")
-	if !hasUpdate {
-		// Menu options alone still count as the blocking modal.
-		if !(strings.Contains(lower, "skip until next version") ||
-			strings.Contains(compact, "skipuntilnextversion") ||
-			strings.Contains(lower, "press enter to continue") ||
-			strings.Contains(compact, "pressentertocontinue")) {
-			return false
-		}
+	// Trust modal is not the update menu even though both use an enter footer.
+	if strings.Contains(compact, "doyoutrustthecontentsofthisdirectory") ||
+		(strings.Contains(lower, "do you trust the contents") &&
+			(strings.Contains(lower, "yes, continue") || strings.Contains(compact, "yescontinue"))) {
+		return false
 	}
 
-	// Modal signals: footer and/or numbered menu options.
-	if strings.Contains(lower, "skip until next version") ||
-		strings.Contains(compact, "skipuntilnextversion") ||
-		strings.Contains(lower, "press enter to continue") ||
-		strings.Contains(compact, "pressentertocontinue") {
-		return true
-	}
+	hasUpdate := strings.Contains(lower, "update available") ||
+		strings.Contains(compact, "updateavailable")
+	hasSkipUntil := strings.Contains(lower, "skip until next version") ||
+		strings.Contains(compact, "skipuntilnextversion")
 	hasNumberedUpdate := strings.Contains(lower, "1. update") ||
 		strings.Contains(compact, "1.update") ||
-		strings.Contains(lower, "1. update now")
+		strings.Contains(lower, "1. update now") ||
+		strings.Contains(lower, "update now")
 	hasNumberedSkip := strings.Contains(lower, "2. skip") ||
 		strings.Contains(compact, "2.skip")
-	return hasUpdate && hasNumberedUpdate && hasNumberedSkip
+	hasEnterFooter := strings.Contains(lower, "press enter to continue") ||
+		strings.Contains(compact, "pressentertocontinue")
+
+	// Explicit skip-until option is update-menu only.
+	if hasSkipUntil {
+		return true
+	}
+	// Numbered Update now + Skip is the classic modal.
+	if hasNumberedUpdate && hasNumberedSkip {
+		return true
+	}
+	// "Update available" chrome with enter footer or numbered options.
+	if hasUpdate && (hasEnterFooter || hasNumberedUpdate || hasNumberedSkip) {
+		return true
+	}
+	return false
 }
 
 // UpdateMenuSelection returns which menu option the › / U+203A marker is on:

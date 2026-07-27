@@ -83,6 +83,11 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	if runnerID == "commandcode-tty" {
 		opts.KeepTerminalAlive = true
 	}
+	// codex-tty headless: keep serve alive through inject+turn. Without keep-alive,
+	// /input can 404 mid-inject on short-lived serve teardown ("inject endpoint not found").
+	if runnerID == "codex-tty" && !opts.Open && !opts.Detach {
+		opts.KeepTerminalAlive = true
+	}
 	// Empty prompt OK for open / detach / keep-alive reopen (e.g. resume without followup).
 	if strings.TrimSpace(opts.Prompt) == "" && !opts.Open && !opts.Detach && !opts.KeepTerminalAlive {
 		return "", "", fmt.Errorf("prompt is required")
@@ -126,14 +131,15 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	// New session (no --resume): pass initial prompt as trailing positional arg
 	// (grok [PROMPT]). Resume follow-ups stay inject-only so argv keeps --resume.
 	// NoSubmit: never put draft on argv (real Grok auto-submits positional PROMPT).
-	// Headless still injects after banner for turn completion with fake TUI scripts.
+	// codex-tty: do NOT put prompt on argv — real Codex often only drafts positional
+	// text; fake TUI hooks also read stdin. Prompt is injected after banner instead.
 	// commandcode-tty headless: inject -p so cmd runs in non-interactive print mode
 	// and works with the mock server; open mode omits -p for interactive use.
 	if strings.TrimSpace(opts.ResumeSessionID) == "" && !opts.NoSubmit {
 		if p := strings.TrimSpace(opts.Prompt); p != "" {
 			if runnerID == "commandcode-tty" && !opts.Open {
 				argv = append(argv, "-p", p)
-			} else {
+			} else if runnerID != "codex-tty" {
 				argv = append(argv, p)
 			}
 		}
@@ -190,18 +196,21 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	// Prompt on argv for new sessions when non-empty and not NoSubmit (same as non-open).
 	// Resume follow-up injects after soft banner wait; empty prompt is reopen-only.
 	if opts.Detach {
-		if promptText != "" && (isResume || opts.NoSubmit) {
+		if promptText != "" && (isResume || opts.NoSubmit || runnerID == "codex-tty") {
 			if readyErr := waitForBannerRemote(ctx, listenAddr, sessionID, provider.BannerProvider, provider.BannerMarkers); readyErr != nil {
 				if ctx.Err() != nil {
 					return "", terminalSessionID, ctx.Err()
 				}
 				// Soft: skip inject on banner timeout; still leave daemon alive.
-			} else if err := ttywatch.SendMessage(listenAddr, sessionID, promptText, !opts.NoSubmit); err != nil {
+			} else if err := InjectMessage(listenAddr, sessionID, runnerID, promptText, !opts.NoSubmit); err != nil {
 				return "", terminalSessionID, err
 			}
 		} else {
 			// Brief soft ready so registry/PTY is fully up before parent exits.
 			_ = waitForOpenReady(ctx, listenAddr, sessionID, 3*time.Second)
+			if isCodexProvider(provider.BannerProvider) || runnerID == "codex-tty" {
+				acceptCodexTrustRemote(ctx, listenAddr, sessionID, provider.BannerProvider, 45*time.Second)
+			}
 			select {
 			case <-ctx.Done():
 				return "", terminalSessionID, ctx.Err()
@@ -231,6 +240,11 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	// returns immediately under that env).
 	if opts.Open {
 		_ = waitForOpenReady(ctx, listenAddr, sessionID, 3*time.Second)
+		// Codex open: soft-accept directory trust so follow-up send is not blocked
+		// (trust was misclassified as update menu; banner hard-wait is not used for open).
+		if isCodexProvider(provider.BannerProvider) || runnerID == "codex-tty" {
+			acceptCodexTrustRemote(ctx, listenAddr, sessionID, provider.BannerProvider, 45*time.Second)
+		}
 
 		select {
 		case <-ctx.Done():
@@ -239,19 +253,19 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 		}
 
 		// Inject policy under --open:
-		// - New session (default): initial prompt already on argv when non-empty → do not re-inject.
-		// - New session + NoSubmit: draft not on argv → inject with suffixCR=false.
+		// - Grok new session: prompt on argv → do not re-inject.
+		// - codex-tty: always inject after ready (no argv prompt).
+		// - New session + NoSubmit: draft inject without Enter.
 		// - Resume + non-empty follow-up: wait inject-ready then inject if ready; banner
 		//   timeout must not fail open — still attach.
 		// - Empty prompt: no inject.
-		// - NoSubmit: when inject happens, suffixCR=false.
-		if promptText != "" && (isResume || opts.NoSubmit) {
+		if promptText != "" && (isResume || opts.NoSubmit || runnerID == "codex-tty") {
 			if readyErr := waitForBannerRemote(ctx, listenAddr, sessionID, provider.BannerProvider, provider.BannerMarkers); readyErr != nil {
 				if ctx.Err() != nil {
 					return "", terminalSessionID, ctx.Err()
 				}
 				// Soft: skip inject on banner/OpenReady timeout; proceed to attach.
-			} else if err := ttywatch.SendMessage(listenAddr, sessionID, promptText, !opts.NoSubmit); err != nil {
+			} else if err := InjectMessage(listenAddr, sessionID, runnerID, promptText, !opts.NoSubmit); err != nil {
 				return "", terminalSessionID, err
 			}
 		}
@@ -287,12 +301,13 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	case <-time.After(200 * time.Millisecond):
 	}
 
-	// New session already has prompt on argv (real Grok auto-submits).
-	// Re-injecting double-submits. Inject only for resume follow-up or NoSubmit.
+	// Grok new session: prompt already on argv (auto-submits) — do not re-inject.
+	// codex-tty: always inject (argv omitted above); resume/NoSubmit inject for all.
 	// NoSubmit: inject without trailing Enter (suffixCR=false).
-	shouldInject := promptText != "" && (isResume || opts.NoSubmit)
+	// codex-tty uses InjectMessage (type then separate Enter) when submitting.
+	shouldInject := promptText != "" && (isResume || opts.NoSubmit || runnerID == "codex-tty")
 	if shouldInject {
-		if err := ttywatch.SendMessage(listenAddr, sessionID, promptText, !opts.NoSubmit); err != nil {
+		if err := InjectMessage(listenAddr, sessionID, runnerID, promptText, !opts.NoSubmit); err != nil {
 			return "", terminalSessionID, err
 		}
 	}
@@ -310,8 +325,8 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	var autoExitCancel context.CancelFunc
 	if isCodexProvider(provider.BannerProvider) || runnerID == "codex-tty" {
 		// NoSubmit must not force Enter via retry submit path.
-		// Argv-only new sessions: do not force re-submit (would double-submit).
-		if shouldInject && !opts.NoSubmit {
+		// Retry Enter when prompt may still sit in the composer (inject or argv draft).
+		if promptText != "" && !opts.NoSubmit {
 			go retryCodexSubmitRemote(ctx, listenAddr, sessionID, promptText)
 		}
 		if !opts.KeepTerminalAlive {

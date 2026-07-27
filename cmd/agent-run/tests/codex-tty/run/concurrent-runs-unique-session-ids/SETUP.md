@@ -15,9 +15,13 @@ agent-run run --agent-runner codex-tty "run ls" x 3 in the same AGENT_RUN_HOME
 3. Collect each prefixed session id from stderr.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"github.com/xhd2015/doctest/session"
+)
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	_ = d
 	req.Mode = "concurrent-run-unique-ids"
 	req.ConcurrentRuns = 3
 	req.CodexTTYCommand = `sh -c 'printf "CODEX_TTY_BANNER\nCodex › "; read line; printf "Response: %s\n" "$line"; sleep 0.5'`

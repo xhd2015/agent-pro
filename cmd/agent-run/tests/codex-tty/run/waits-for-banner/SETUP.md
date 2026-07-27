@@ -17,9 +17,13 @@ fake TUI delays banner 300ms → run still succeeds (no banner timeout error)
 2. Run with prompt `hi`.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"github.com/xhd2015/doctest/session"
+)
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	_ = d
 	req.CodexTTYCommand = fakeTUIDelayedBanner()
 	req.Args = append(req.Args, "hi")
 	return nil

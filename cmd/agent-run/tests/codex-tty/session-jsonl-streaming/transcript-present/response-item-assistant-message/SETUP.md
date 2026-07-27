@@ -19,11 +19,15 @@ rollout JSONL response_item
 2. Assert output text content is emitted to stdout.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"github.com/xhd2015/doctest/session"
+)
 
 const codexResponseItemText = "JSONL_RESPONSE_ITEM_ASSISTANT"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	_ = d
 	seedCodexTranscript(t, req, codexAssistantResponseItemLine(codexResponseItemText))
 	req.StreamProbeSubstring = codexResponseItemText
 	return nil

@@ -29,11 +29,13 @@ fake Codex TUI prints resume UUID in scrollback
 import (
 	"fmt"
 	"testing"
+	"github.com/xhd2015/doctest/session"
 )
 
 const codexJSONLSessionID = "019f20fd-8569-7910-ab0b-9d898d66e3e6"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	_ = d
 	req.Args = []string{"run", "--agent-runner", "codex-tty", "run ls"}
 	req.CodexHome = filepath.Join(req.TempDir, ".codex")
 	req.CodexTranscriptSessionID = codexJSONLSessionID

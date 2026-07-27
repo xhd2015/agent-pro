@@ -23,9 +23,13 @@ agent-run attach session-1 -> skip stale grok candidate -> attach live codex can
 4. Run `agent-run attach session-1` through the CLI, without direct registry fallback.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"github.com/xhd2015/doctest/session"
+)
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	_ = d
 	writeStaleGrokTTYRegistry(t, req.Home, "session-1")
 	req.CodexTTYCommand = fakeTUILongRun()
 	req.CodexTTYPrompt = "hold"

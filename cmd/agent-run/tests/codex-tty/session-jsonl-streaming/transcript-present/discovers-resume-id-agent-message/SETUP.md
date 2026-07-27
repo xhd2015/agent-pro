@@ -19,11 +19,15 @@ scrollback: codex resume <uuid>
 2. Assert the seeded assistant message reaches stdout.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"github.com/xhd2015/doctest/session"
+)
 
 const codexAgentMessageText = "JSONL_DISCOVERED_AGENT_MESSAGE"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	_ = d
 	seedCodexTranscript(t, req, codexAgentMessageLine(codexAgentMessageText))
 	req.StreamProbeSubstring = codexAgentMessageText
 	return nil

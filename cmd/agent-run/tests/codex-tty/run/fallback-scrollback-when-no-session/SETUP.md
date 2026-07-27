@@ -14,9 +14,13 @@ fake TUI emits Response: hi
 2. Assert scrollback capture on stdout/events without relying on a structured sidecar.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"github.com/xhd2015/doctest/session"
+)
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	_ = d
 	req.SkipCodexSessionDir = true
 	req.CodexTTYCommand = fakeTUIRespondHi()
 	req.Args = append(req.Args, "hi")

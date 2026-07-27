@@ -23,12 +23,14 @@ fake Codex TUI starts without printing codex resume
 ```go
 import (
 	"testing"
+	"github.com/xhd2015/doctest/session"
 	"time"
 )
 
 const codexActiveCWDText = "JSONL_ACTIVE_CWD_BEFORE_RESUME_FOOTER"
 
-func Setup(t *testing.T, req *Request) error {
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	_ = d
 	req.CodexTTYCommand = fakeTUINoResumeUntilLate(5)
 	path := ensureCodexTranscriptPath(t, req)
 	req.CodexTranscriptSchedules = []CodexTranscriptSchedule{

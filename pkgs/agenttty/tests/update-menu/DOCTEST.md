@@ -43,14 +43,16 @@ pkgs/agenttty/tests/update-menu/
      ├── blocking-menu/
      │    ├── default-update-now/        # 01 → UPDATE_NOW
      │    └── skip-selected/             # 02 → SKIP
-     └── residual-banner/
-          ├── menu-dismissed/            # 03b → not menu; reason ≠ update available
-          └── banner-alone-idle/         # 04 stripped → idle
+     ├── residual-banner/
+     │    ├── menu-dismissed/            # 03b → not menu; reason ≠ update available
+     │    └── banner-alone-idle/         # 04 stripped → idle
+     └── trust-prompt/
+          └── not-update-menu/           # 06 trust ≠ update menu; not sendable as update
 ```
 
 Parameter ranking (most → least significant):
 
-1. **Screen kind** — blocking menu vs residual banner
+1. **Screen kind** — blocking menu vs residual banner vs directory trust
 2. **Selection / banner variant** — UPDATE_NOW vs SKIP; dismissed vs banner-alone idle
 3. **Fixture file** — which signed capture
 
@@ -62,6 +64,7 @@ Parameter ranking (most → least significant):
 | 2 | `classify/blocking-menu/skip-selected` | `02` → blocking + `SKIP` + writable not idle |
 | 3 | `classify/residual-banner/menu-dismissed` | `03b` → not blocking; reason not update-available |
 | 4 | `classify/residual-banner/banner-alone-idle` | banner without model:loading → idle ready |
+| 5 | `classify/trust-prompt/not-update-menu` | trust modal ≠ update menu; writable not "update available" |
 
 ## How to Run
 
@@ -81,6 +84,7 @@ import (
 	"testing"
 
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
+	"github.com/xhd2015/doctest/session"
 )
 
 // Request drives classify leaves for update-menu classifiers.
@@ -100,7 +104,8 @@ type Response struct {
 	WritableReason string
 }
 
-func Run(t *testing.T, req *Request) (*Response, error) {
+func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
+	_ = d
 	if strings.TrimSpace(req.FixtureFile) == "" {
 		return nil, fmt.Errorf("FixtureFile required")
 	}
@@ -146,15 +151,7 @@ func fixturesDir(req *Request) string {
 	if req != nil && strings.TrimSpace(req.FixturesDir) != "" {
 		return req.FixturesDir
 	}
-	candidates := []string{
-		filepath.Join(DOCTEST_ROOT, "testdata", "update-modal-skip"),
-		filepath.Join(DOCTEST_ROOT, "..", "testdata", "update-modal-skip"),
-	}
-	for _, c := range candidates {
-		if st, err := os.Stat(c); err == nil && st.IsDir() {
-			return c
-		}
-	}
-	return filepath.Join(DOCTEST_ROOT, "testdata", "update-modal-skip")
+	// Root Setup always sets FixturesDir from d.DOCTEST_ROOT; fallback is empty.
+	return ""
 }
 ```
