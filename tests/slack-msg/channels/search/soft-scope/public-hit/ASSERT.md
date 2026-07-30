@@ -37,7 +37,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	assertExitCode(t, resp, 0)
 	assertStderrContains(t, resp, "warning: skipped private channels (missing groups:read); see: slack-msg --help --topic add-missing-scope")
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
 C0ALE44K5J6  #general  public  member
 `)

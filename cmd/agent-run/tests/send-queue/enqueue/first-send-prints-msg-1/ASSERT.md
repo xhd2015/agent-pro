@@ -24,7 +24,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	assertNoError(t, err)
 	assertSuccess(t, resp)
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
 msg_1
 `)

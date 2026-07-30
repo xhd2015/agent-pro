@@ -39,9 +39,9 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	}
 	// v2: escape balanced [...] so lines match literally as regex; leave () alone.
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
-slack-msg: Slack messaging CLI.
+slack-msg: Slack messaging CLI\.
 
 Usage:
   slack-msg <command> \[options\]
@@ -56,7 +56,7 @@ Commands:
   session   Session-bound reply and history
 
 Help topics:
-  add-missing-scope  How to grant missing OAuth scopes (e.g. groups:read)
+  add-missing-scope  How to grant missing OAuth scopes \(e\.g\. groups:read\)
 
 Options:
   -h, --help     Show help

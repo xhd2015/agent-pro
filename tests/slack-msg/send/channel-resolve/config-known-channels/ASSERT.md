@@ -31,7 +31,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 		t.Fatalf("expected empty stderr, got:\n%s", resp.Stderr)
 	}
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 __CONFIG__: type=string, example=/tmp/work/slack-config.json, absolute config path
 __TS__: type=number, example=1783398010.628649, message timestamp
 ---

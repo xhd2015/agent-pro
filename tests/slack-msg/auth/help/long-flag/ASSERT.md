@@ -26,9 +26,9 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 		t.Fatalf("expected empty stderr, got:\n%s", resp.Stderr)
 	}
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
-slack-msg auth: inspect bot or app token status.
+slack-msg auth: inspect bot or app token status\.
 
 Usage:
   slack-msg auth <command> [options]

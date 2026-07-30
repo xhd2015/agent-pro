@@ -6,9 +6,9 @@ label: e2e
 
 ```
 ---
-version: 2
+version: 3
 ---
-No explain sessions yet.
+No explain sessions yet\.
 ```
 
 ## Expected
@@ -48,9 +48,9 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	assertNoANSI(t, resp.Stdout)
 	assertNotContains(t, resp.Stderr, "FAKE_AGENT_INVOKED")
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
-No explain sessions yet.
+No explain sessions yet\.
 `)
 }
 ```

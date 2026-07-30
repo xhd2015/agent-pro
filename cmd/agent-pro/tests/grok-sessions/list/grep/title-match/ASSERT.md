@@ -2,11 +2,11 @@
 
 ```
 ---
-version: 2
+version: 3
 ---
 SESSION ID                              LAST ACTIVE   TITLE                                        MSGS  CWD
 01900010-aaaa-7aaa-aaaa-aaaaaaaaaaaa    30m ago       Implement GREP_TITLE_TOKEN feature              0  /tmp/grep-title-match
-  summary.json:1:title: Implement GREP_TITLE_TOKEN feature
+  summary\.json:1:title: Implement GREP_TITLE_TOKEN feature
 ```
 
 ## Expected
@@ -41,10 +41,10 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 
 	// No trailing newline: matches FormatListTable TrimRight style.
 	assert.Output(t, resp.Output, `---
-version: 2
+version: 3
 ---
 SESSION ID                              LAST ACTIVE   TITLE                                        MSGS  CWD
 01900010-aaaa-7aaa-aaaa-aaaaaaaaaaaa    30m ago       Implement GREP_TITLE_TOKEN feature              0  /tmp/grep-title-match
-  summary.json:1:title: Implement GREP_TITLE_TOKEN feature`)
+  summary\.json:1:title: Implement GREP_TITLE_TOKEN feature`)
 }
 ```

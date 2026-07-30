@@ -2,11 +2,11 @@
 
 ```
 ---
-version: 2
+version: 3
 ---
 SESSION ID                              LAST ACTIVE   TITLE                                        MSGS  CWD
 01900021-aaaa-7aaa-aaaa-aaaaaaaaaaaa    30m ago       Ship GREP_SNIP_SHORT_TOKEN quickly              0  /tmp/grep-snippet-short
-  summary.json:1:title: Ship GREP_SNIP_SHORT_TOKEN quickly
+  summary\.json:1:title: Ship GREP_SNIP_SHORT_TOKEN quickly
 ```
 
 ## Expected
@@ -73,10 +73,10 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	assertNotContains(t, resp.Output, "\x1b[")
 	// Full formatted output: short hit line has full title, no ellipsis in snippet portion.
 	assert.Output(t, resp.Output, `---
-version: 2
+version: 3
 ---
 SESSION ID                              LAST ACTIVE   TITLE                                        MSGS  CWD
 01900021-aaaa-7aaa-aaaa-aaaaaaaaaaaa    30m ago       Ship GREP_SNIP_SHORT_TOKEN quickly              0  /tmp/grep-snippet-short
-  summary.json:1:title: Ship GREP_SNIP_SHORT_TOKEN quickly`)
+  summary\.json:1:title: Ship GREP_SNIP_SHORT_TOKEN quickly`)
 }
 ```

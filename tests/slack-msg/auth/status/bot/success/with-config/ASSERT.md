@@ -51,16 +51,16 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 		t.Fatalf("stdout must not contain raw bot token %q:\n%s", raw, resp.Stdout)
 	}
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 __CONFIG__: type=string, example=/tmp/work/slack-config.json, absolute config path
 ---
 Using config from: __CONFIG__
 kind: bot
 ok: true
-team: SlackTest Team (T024BE7LD)
-user: Egon Spengler (W012A3CDE)
+team: SlackTest Team \(T024BE7LD\)
+user: Egon Spengler \(W012A3CDE\)
 bot_id: B0TESTBOTID
-url: https://localhost.localdomain/
+url: https://localhost\.localdomain/
 token: xoxb-...oken
 `)
 	if !strings.Contains(resp.Stdout, "Using config from: "+req.ConfigPath) {

@@ -26,9 +26,9 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 		t.Fatalf("expected empty stderr, got:\n%s", resp.Stderr)
 	}
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
-slack-msg channels: list or search workspace channels.
+slack-msg channels: list or search workspace channels\.
 
 Usage:
   slack-msg channels <command> [options]

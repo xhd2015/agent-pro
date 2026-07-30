@@ -51,9 +51,9 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 		}
 	}
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
-slack-msg session: session-bound management, reply and history.
+slack-msg session: session-bound management, reply and history\.
 
 Usage:
   slack-msg session <command> [options]
@@ -61,7 +61,7 @@ Usage:
 Commands:
   list     List sessions from the local map
   info     Show details for one session
-  update   Update session fields (e.g. workspace dir)
+  update   Update session fields \(e\.g\. workspace dir\)
   reply    Post a channel reply for the bound session
   history  Show local session message history
 

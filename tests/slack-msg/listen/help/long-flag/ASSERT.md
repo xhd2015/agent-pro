@@ -30,9 +30,9 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 		t.Fatalf("help must use --token, not --bot-token:\n%s", resp.Stdout)
 	}
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
-slack-msg listen: Slack Socket Mode inbound bridge.
+slack-msg listen: Slack Socket Mode inbound bridge\.
 
 Usage:
   slack-msg listen [options]

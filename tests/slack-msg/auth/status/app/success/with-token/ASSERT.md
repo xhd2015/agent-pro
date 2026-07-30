@@ -47,13 +47,13 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 		t.Fatalf("stdout must not contain raw app token %q:\n%s", slackTestAppToken, resp.Stdout)
 	}
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
-Using config from: (none)
+Using config from: \(none\)
 kind: app
 ok: true
 token: xapp-...oken
-note: app-level token (Socket Mode / connections); not used for channels/send/history
+note: app-level token \(Socket Mode / connections\); not used for channels/send/history
 `)
 }
 ```

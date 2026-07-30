@@ -6,9 +6,9 @@ label: e2e
 
 ```
 ---
-version: 2
+version: 3
 ---
-Recent explain sessions (2 shown of 2, limit 10)
+Recent explain sessions \(2 shown of 2, limit 10\)
 
 ── 1 ──  2026-07-13 14:30:05  ·  opencode / deepseek-chat  ·  1 turn
    Q  newer question
@@ -56,9 +56,9 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	assertStdoutEndsWithNewline(t, resp.Stdout)
 	assertNoANSI(t, resp.Stdout)
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
-Recent explain sessions (2 shown of 2, limit 10)
+Recent explain sessions \(2 shown of 2, limit 10\)
 
 ── 1 ──  2026-07-13 14:30:05  ·  opencode / deepseek-chat  ·  1 turn
    Q  newer question
