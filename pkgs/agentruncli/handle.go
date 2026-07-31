@@ -2,6 +2,7 @@ package agentruncli
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
@@ -24,6 +25,7 @@ Commands:
   sessions   list stored sessions or print one session's events
   status     show agent-run home or multi-layer session status
   assets     frontend asset status and ensure (download)
+  focus      focus iTerm2 window/tab for a session (tree TTYs + FindByTTY)
   tty        TTY session helpers (status, attach, send, snapshot, watch)
   pty        PTY resource stats and kill orphan __serve processes
 
@@ -100,6 +102,8 @@ func Handle(args []string) error {
 		return runStatus(sub)
 	case "assets":
 		return runAssets(sub)
+	case "focus":
+		return RunFocus(sub, os.Stdout, os.Stderr)
 	default:
 		return fmt.Errorf("unknown command: %s", cmd)
 	}
