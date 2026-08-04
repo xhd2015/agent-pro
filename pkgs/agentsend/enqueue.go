@@ -35,7 +35,7 @@ func EnqueueWith(home string, sess Session, text string, opts EnqueueOptions) (s
 	}
 	entry := Entry{
 		ID:                id,
-		Text:              text,
+		Text:              normalizeSendText(text),
 		TerminalSessionID: sess.TerminalSessionID,
 		Runner:            sess.Runner,
 		EnqueuedAt:        time.Now().UTC(),

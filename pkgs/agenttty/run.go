@@ -130,19 +130,9 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	}
 	// New session (no --resume): pass initial prompt as trailing positional arg
 	// (grok [PROMPT]). Resume follow-ups stay inject-only so argv keeps --resume.
-	// NoSubmit: never put draft on argv (real Grok auto-submits positional PROMPT).
-	// codex-tty: do NOT put prompt on argv — real Codex often only drafts positional
-	// text; fake TUI hooks also read stdin. Prompt is injected after banner instead.
-	// commandcode-tty headless: inject -p so cmd runs in non-interactive print mode
-	// and works with the mock server; open mode omits -p for interactive use.
-	if strings.TrimSpace(opts.ResumeSessionID) == "" && !opts.NoSubmit {
-		if p := strings.TrimSpace(opts.Prompt); p != "" {
-			if runnerID == "commandcode-tty" && !opts.Open {
-				argv = append(argv, "-p", p)
-			} else if runnerID != "codex-tty" {
-				argv = append(argv, p)
-			}
-		}
+	// See appendNewSessionPrompt for runner-specific rules and UTF-8 contract.
+	if strings.TrimSpace(opts.ResumeSessionID) == "" {
+		argv = appendNewSessionPrompt(argv, runnerID, opts.Prompt, opts.NoSubmit, opts.Open)
 	}
 
 	configHome := ResolveAgentRunnerConfigHome(opts.AgentRunnerConfigHome)
@@ -189,7 +179,9 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	}
 
 	runStart := time.Now()
-	promptText := strings.TrimSpace(opts.Prompt)
+	// Normalize before inject paths (resume / NoSubmit / codex). New-session argv
+	// also normalizes inside appendNewSessionPrompt.
+	promptText := normalizeRunnerPrompt(strings.TrimSpace(opts.Prompt))
 	isResume := strings.TrimSpace(opts.ResumeSessionID) != ""
 
 	// --detach: keep-alive daemon only — no attach, no event stream, no wait for turn.

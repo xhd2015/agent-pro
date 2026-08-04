@@ -206,7 +206,59 @@ func runAgentRun(t *testing.T, req *Request, args ...string) (*Response, error) 
 	if len(args) == 0 {
 		args = req.Args
 	}
+	if req.WallClockLimit > 0 {
+		return execCmdWallClock(t, req.AgentRun, args, req.TempDir, req.Env, req.WallClockLimit)
+	}
 	return execCmd(t, req.AgentRun, args, req.TempDir, req.Env, req.ExecTimeout)
+}
+
+// execCmdWallClock starts command, waits up to limit, then stops waiting.
+// If the process exits earlier, returns its real exit code/output.
+// If still running after limit, kills it and returns exit 0 + captured stdout/stderr
+// (oracle: "survived wall-clock window without needing soft-bind to finish").
+func execCmdWallClock(t *testing.T, command string, args []string, dir string, env []string, limit time.Duration) (*Response, error) {
+	t.Helper()
+	if limit <= 0 {
+		return execCmd(t, command, args, dir, env, 0)
+	}
+	cmd := exec.Command(command, args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), env...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		return &Response{Err: err}, err
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+
+	select {
+	case err := <-done:
+		resp := &Response{
+			Stdout: stdout.String(),
+			Stderr: stderr.String(),
+			Err:    err,
+		}
+		if err == nil {
+			return resp, nil
+		}
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			resp.ExitCode = exitErr.ExitCode()
+			return resp, nil
+		}
+		return resp, err
+	case <-time.After(limit):
+		// Still running after wall-clock budget — stop waiting (soft-bind can take 60s).
+		_ = cmd.Process.Kill()
+		<-done
+		return &Response{
+			Stdout:   stdout.String(),
+			Stderr:   stderr.String(),
+			ExitCode: 0,
+		}, nil
+	}
 }
 
 func writeLLMMockRunGrokHarness(t *testing.T, path, prompt, sessionUUID, assistantMarker, grokHomeProbe string) error {
@@ -310,8 +362,10 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if err := os.MkdirAll(filepath.Dir(req.AgentRun), 0755); err != nil {
 		return fmt.Errorf("mkdir bin: %w", err)
 	}
-	build := exec.Command("go", "build", "-o", req.AgentRun, "./cmd/agent-run")
-	build.Dir = req.RepoRoot
+	// agent-run lives under the nested cmd/ module (cmd/go.mod), not the root
+	// module. Build with -C cmd so `./agent-run` resolves.
+	build := exec.Command("go", "build", "-o", req.AgentRun, "./agent-run")
+	build.Dir = filepath.Join(req.RepoRoot, "cmd")
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("build agent-run: %w\n%s", err, string(out))
 	}
