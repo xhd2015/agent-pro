@@ -1,0 +1,10 @@
+╭----------------------------------------------------------╮
+│ >_ OpenAI Codex (v0.146.0)                               │
+│                                                          │
+│ model:       gpt-5.5 medium   /model to change           │
+│ directory:   ~/project                                   │
+│ permissions: YOLO mode                                   │
+╰----------------------------------------------------------╯
+⚠ MCP client for `computer-use` failed to start: MCP startup failed: No suchfile or directory (os error 2)
+⚠ MCP startup incomplete (failed: computer-use)
+» Summarize recent commits

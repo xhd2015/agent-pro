@@ -97,7 +97,7 @@ func acceptCodexTrustRemote(ctx context.Context, listenAddr, sessionID, provider
 		}
 		// Trust cleared; optionally wait briefly for idle chrome.
 		plain := stripPlain(scrollback)
-		if strings.Contains(plain, "›") || strings.Contains(plain, "\u203a") ||
+		if hasCodexPromptMarker(plain) ||
 			strings.Contains(plain, "OpenAI Codex") || bannerDetectedConfig(scrollback, provider, nil) {
 			return
 		}
@@ -126,24 +126,25 @@ func bannerDetectedConfig(scrollback []byte, provider string, markers []string) 
 		if codexModelLoadingScreen(compact) {
 			return false
 		}
-		if strings.Contains(plain, "Codex ›") || strings.Contains(plain, "Codex \u203a") {
+		if strings.Contains(plain, "Codex ›") || strings.Contains(plain, "Codex \u203a") ||
+			strings.Contains(plain, "Codex »") || strings.Contains(plain, "Codex \u00bb") {
 			return true
 		}
-		if strings.Contains(lower, "codex") && strings.Contains(plain, "›") {
+		if strings.Contains(lower, "codex") && hasCodexPromptMarker(plain) {
 			return true
 		}
 		if strings.Contains(lower, "codex") && strings.Contains(lower, "ready") {
 			return true
 		}
 		if strings.Contains(compact, "openaicodex") &&
-			strings.Contains(plain, "›") &&
+			hasCodexPromptMarker(plain) &&
 			(strings.Contains(compact, "writetestsfor@filename") ||
 				(strings.Contains(compact, "model:") && strings.Contains(compact, "directory:"))) &&
 			!strings.Contains(compact, "bootingmcpserver") &&
 			!strings.Contains(compact, "startingmcpservers") {
 			return true
 		}
-		if strings.Contains(plain, "›") &&
+		if hasCodexPromptMarker(plain) &&
 			strings.Contains(compact, "writetestsfor@filename") &&
 			strings.Contains(compact, "gpt-") {
 			return true

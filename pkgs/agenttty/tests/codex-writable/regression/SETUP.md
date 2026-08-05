@@ -19,7 +19,8 @@ load single regression fixture
 
 ## Context
 
-- F2–F5 are narrow guards complementing the full fixture table (F1).
+- F2–F7 are narrow guards complementing the full fixture table (F1).
+- F4 keeps legacy `›` idle GREEN; F6–F7 lock Codex 0.146 `»` idle (RED before implementer).
 
 ```go
 import "testing"

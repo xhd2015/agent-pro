@@ -9,12 +9,14 @@ rendered tty-watch snapshot text fixtures under `pkgs/agenttty/testdata/codex-wr
 
 - **codex TTY session** — interactive OpenAI Codex process inside a tty-watch PTY; scrollback
   accumulates boot chrome, update modals, MCP warnings, model status, and the main chat prompt
-  (`›`, status lines, …).
+  (`›` U+203A legacy, `»` U+00BB Codex 0.146+, status lines, …).
 - **tty-watch snapshot** — `SnapshotText` / `tty-watch snapshot` returns rendered printable
   text (ANSI stripped for detection) passed to writable checks.
 - **checkCodexWritable** — codex-tty `Provider.CheckWritable` heuristic: classifies scrollback
   into `WritableStatus` (`ready`, `state`, `reason`). Consumers such as `FetchStatus`
   `waitForPrompt` treat `ready=true` && `state=idle` as safe to inject `/status`.
+- **DetectScreenStatus** — codex-tty screen classifier (`idle` / `banner` / `unknown` / …);
+  main-chat prompt glyphs must not leave status stuck at `unknown`.
 - **Update available modal** — full-screen picker (`Update available`, menu options under `›`,
   `Press enter to continue`); **not** the main chat prompt — must not be classified idle.
 - **Fixture manifest** — `expectations.jsonl` maps each `codex-*.txt` to expected
@@ -28,13 +30,17 @@ rendered tty-watch snapshot text fixtures under `pkgs/agenttty/testdata/codex-wr
 - `model: loading` (compact `model:loading`) → `state=loading`, `ready=false`.
 - Update modal / update-available picker (or menu under `›` that is not chat) →
   `state=loading` (non-idle), `ready=false` — **must not** be `idle`.
-- MCP startup incomplete without main `›` → `loading`; with main chat `›` present → `idle`.
-- Main chat prompt `›` visible without busy/loading signals → `state=idle`, `ready=true`.
+- MCP startup incomplete without main prompt glyph → `loading`; with main chat `›` **or**
+  `»` present → `idle`.
+- Main chat prompt `›` (U+203A) **or** `»` (U+00BB) visible without busy/loading signals →
+  `state=idle`, `ready=true`.
+- DetectScreenStatus for idle chat with only `›` or only `»` → not `unknown`
+  (`banner` or `idle`, matching ›-only class today).
 - Busy: queued follow-up, working / esc-to-interrupt → `state=busy`.
 
 ## Version
 
-0.0.2
+0.0.3
 
 ## Decision Tree
 
@@ -47,28 +53,33 @@ pkgs/agenttty/tests/codex-writable/
 │   └── all-expectations-match/              # F1: glob codex-*.txt + expectations.jsonl
 └── regression/
     ├── SETUP.md
-    ├── update-modal-not-idle/               # F2: live update picker → not idle (RED before fix)
+    ├── update-modal-not-idle/               # F2: live update picker → not idle
     ├── model-loading-not-idle/              # F3: update banner + model loading → loading
-    ├── main-prompt-idle/                    # F4: MCP incomplete + main › → idle
-    └── empty-snapshot-unknown/              # F5: empty bytes → unknown
+    ├── main-prompt-idle/                    # F4: MCP incomplete + main › → idle (compat GREEN)
+    ├── empty-snapshot-unknown/              # F5: empty bytes → unknown
+    ├── double-angle-prompt-idle/            # F6: Codex 0.146 » only → idle (RED before fix)
+    └── double-angle-mcp-idle/               # F7: MCP incomplete + » only → idle (RED before fix)
 ```
 
 Parameter ranking (most → least significant):
 
 1. **Scenario class** — full fixture table vs targeted regression
 2. **Writable outcome** — not-idle (loading) vs idle vs unknown
-3. **Snapshot source** — live update modal vs model-loading vs main prompt vs empty
-4. **Fixture variant** — which live capture within an outcome class
+3. **Snapshot source** — live update modal vs model-loading vs main prompt vs empty vs double-angle
+4. **Prompt glyph** — legacy `›` (U+203A) vs Codex 0.146+ `»` (U+00BB)
+5. **Fixture variant** — which live/synthetic capture within an outcome class
 
 ## Test Index
 
 | # | Leaf | Description |
 |---|------|-------------|
 | 1 | `fixture-table/all-expectations-match` | Every `codex-*.txt` matches `expectations.jsonl` (F1) |
-| 2 | `regression/update-modal-not-idle` | Live update picker → `ready=false`, not `idle` (F2, RED before fix) |
+| 2 | `regression/update-modal-not-idle` | Live update picker → `ready=false`, not `idle` (F2) |
 | 3 | `regression/model-loading-not-idle` | Update banner + `model: loading` → `state=loading` (F3) |
-| 4 | `regression/main-prompt-idle` | MCP incomplete + main `›` → `ready=true`, `idle` (F4) |
+| 4 | `regression/main-prompt-idle` | MCP incomplete + main `›` → `ready=true`, `idle` (F4, compat) |
 | 5 | `regression/empty-snapshot-unknown` | Empty bytes → `state=unknown` (F5) |
+| 6 | `regression/double-angle-prompt-idle` | Usage-limit + main `»` only → idle + screen≠unknown (F6, RED before fix) |
+| 7 | `regression/double-angle-mcp-idle` | MCP incomplete + main `»` only → idle (F7, RED before fix) |
 
 ## How to Run
 
@@ -76,6 +87,8 @@ Parameter ranking (most → least significant):
 doctest vet ./pkgs/agenttty/tests/codex-writable
 doctest test ./pkgs/agenttty/tests/codex-writable
 doctest test -v ./pkgs/agenttty/tests/codex-writable/regression/update-modal-not-idle
+doctest test -v ./pkgs/agenttty/tests/codex-writable/regression/double-angle-prompt-idle
+doctest test -v ./pkgs/agenttty/tests/codex-writable/regression/double-angle-mcp-idle
 doctest test -v ./pkgs/agenttty/tests/codex-writable/fixture-table/all-expectations-match
 ```
 

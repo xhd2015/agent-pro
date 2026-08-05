@@ -32,12 +32,18 @@ pkgs/agenttty/testdata/codex-writable/
 | `codex-mcp-incomplete-prompt.txt` | MCP incomplete + main chat `›` → `ready=true`, `idle` |
 | `codex-main-prompt-mcp-incomplete.txt` | Alternate main prompt + MCP incomplete → `ready=true`, `idle` |
 | `codex-empty-snapshot.txt` | Empty bytes → `unknown` |
+| `codex-double-angle-prompt-idle.txt` | Codex 0.146 idle with only `»` (U+00BB) + usage-limit bullet → `ready=true`, `idle` |
+| `codex-double-angle-mcp-incomplete.txt` | MCP incomplete + only `»` (no `›`) → `ready=true`, `idle` |
 
-Sources copied from `/tmp/codex-status-fixtures-for-req/` during design (content preserved).
+Sources: live captures from `/tmp/codex-status-fixtures-for-req/` (content preserved) plus
+synthetic Codex 0.146 double-angle fixtures from the SeaTalk incident.
 
-**Critical bug (pre-fix):** update-available modal was classified `ready=true` / `state=idle`
-because of `›` on the menu option line, so `FetchStatus` / `waitForPrompt` sent `/status`
-into the modal.
+**Critical bugs:**
+
+1. Update-available modal was classified `ready=true` / `state=idle` because of `›` on the
+   menu option line, so `FetchStatus` / `waitForPrompt` sent `/status` into the modal.
+2. Codex **v0.146.0** main-chat prompt is `»` (U+00BB); heuristics that only match `›`
+   (U+203A) leave `ready=false` / `state=unknown` until timeout.
 
 ## Verify
 

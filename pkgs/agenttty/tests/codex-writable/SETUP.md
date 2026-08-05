@@ -27,6 +27,8 @@ tty-watch snapshot <session> -> rendered scrollback text
 - FetchStatus bug: **Update available** modal contains `›` on the menu option line and was
   classified `ready=true` / `state=idle`, so `/status` was injected into the modal.
 - Post-fix: update modal → non-idle (`loading`); main chat `›` after boot remains idle.
+- Codex **0.146.0** main-chat prompt may be `»` (U+00BB) instead of `›` (U+203A); both must
+  classify as idle when present without busy/loading signals.
 - `reason` in `expectations.jsonl` is a **substring** expectation (implementer-chosen full reason).
 
 ```go
@@ -39,10 +41,12 @@ import (
 )
 
 const (
-	fixtureUpdateModal   = "codex-update-available-modal.txt"
-	fixtureModelLoading  = "codex-update-plus-model-loading.txt"
-	fixtureMainPromptMCP = "codex-mcp-incomplete-prompt.txt"
-	fixtureEmptySnapshot = "codex-empty-snapshot.txt"
+	fixtureUpdateModal      = "codex-update-available-modal.txt"
+	fixtureModelLoading     = "codex-update-plus-model-loading.txt"
+	fixtureMainPromptMCP    = "codex-mcp-incomplete-prompt.txt"
+	fixtureEmptySnapshot    = "codex-empty-snapshot.txt"
+	fixtureDoubleAngleIdle  = "codex-double-angle-prompt-idle.txt"
+	fixtureDoubleAngleMCP   = "codex-double-angle-mcp-incomplete.txt"
 )
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {

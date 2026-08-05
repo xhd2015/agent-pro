@@ -46,8 +46,15 @@ func detectGenericScreenStatus(scrollback []byte, markers []string) string {
 	return "unknown"
 }
 
-func hasPromptMarker(plain string) bool {
+// hasCodexPromptMarker reports main-chat composer glyphs used by Codex:
+// legacy › (U+203A) and Codex 0.146+ » (U+00BB).
+func hasCodexPromptMarker(plain string) bool {
 	return strings.Contains(plain, "\u203a") || strings.Contains(plain, "›") ||
+		strings.Contains(plain, "\u00bb") || strings.Contains(plain, "»")
+}
+
+func hasPromptMarker(plain string) bool {
+	return hasCodexPromptMarker(plain) ||
 		strings.Contains(plain, "❯") ||
 		strings.Contains(plain, "Grok >") || strings.Contains(plain, "> ")
 }
@@ -128,7 +135,7 @@ func checkCodexWritable(scrollback []byte) WritableStatus {
 		return WritableStatus{Reason: "codex MCP servers starting", State: "loading"}
 	}
 	if strings.Contains(compact, "mcpstartupincomplete") || strings.Contains(lower, "mcp startup incomplete") {
-		if !strings.Contains(plain, "\u203a") && !strings.Contains(plain, "›") {
+		if !hasCodexPromptMarker(plain) {
 			return WritableStatus{Reason: "codex MCP startup incomplete", State: "loading"}
 		}
 	}
@@ -146,7 +153,7 @@ func checkCodexWritable(scrollback []byte) WritableStatus {
 	if strings.Contains(lower, "•") && (strings.Contains(lower, "working") || strings.Contains(lower, "esc to interrupt")) {
 		return WritableStatus{Reason: "codex still working (esc to interrupt)", State: "busy"}
 	}
-	if strings.Contains(plain, "\u203a") {
+	if hasCodexPromptMarker(plain) {
 		if strings.Contains(lower, "response:") || strings.Contains(lower, "submitted:") {
 			return WritableStatus{Ready: true, State: "idle"}
 		}

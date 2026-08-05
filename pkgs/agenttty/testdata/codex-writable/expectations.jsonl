@@ -3,3 +3,5 @@
 {"file":"codex-mcp-incomplete-prompt.txt","ready":true,"state":"idle","reason":"","tags":["live","main-prompt","mcp-incomplete","idle"],"source":"/tmp/codex-status-fixtures-for-req/mcp-incomplete-idle-prompt.txt"}
 {"file":"codex-main-prompt-mcp-incomplete.txt","ready":true,"state":"idle","reason":"","tags":["live","main-prompt","mcp-incomplete","idle"],"source":"/tmp/codex-status-fixtures-for-req/main-prompt-mcp-incomplete.txt"}
 {"file":"codex-empty-snapshot.txt","ready":false,"state":"unknown","reason":"no terminal output","tags":["empty","boot","unknown"],"source":"empty"}
+{"file":"codex-double-angle-prompt-idle.txt","ready":true,"state":"idle","reason":"","tags":["synthetic","main-prompt","double-angle","codex-0.146","idle","regression"],"source":"SeaTalk incident: Codex v0.146.0 composer prompt » (U+00BB)"}
+{"file":"codex-double-angle-mcp-incomplete.txt","ready":true,"state":"idle","reason":"","tags":["synthetic","main-prompt","double-angle","mcp-incomplete","codex-0.146","idle","regression"],"source":"MCP incomplete + only » prompt (no ›)"}

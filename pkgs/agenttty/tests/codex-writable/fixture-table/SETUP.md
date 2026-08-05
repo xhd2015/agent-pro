@@ -11,7 +11,7 @@ glob testdata/codex-writable/codex-*.txt
 
 ## Preconditions
 
-- `expectations.jsonl` has one entry per `codex-*.txt` fixture (5 rows in current seed).
+- `expectations.jsonl` has one entry per `codex-*.txt` fixture (7 rows: 5 legacy + 2 double-angle).
 
 ## Steps
 

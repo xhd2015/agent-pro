@@ -1,0 +1,9 @@
+╭----------------------------------------------------------╮
+│ >_ OpenAI Codex (v0.146.0)                               │
+│                                                          │
+│ model:       gpt-5.5 medium   /model to change           │
+│ directory:   ~/project                                   │
+│ permissions: YOLO mode                                   │
+╰----------------------------------------------------------╯
+• You have 2 usage limit resets available
+» Explain this codebase
