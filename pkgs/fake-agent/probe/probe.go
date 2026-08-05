@@ -46,7 +46,9 @@ var patterns = []pattern{
 var defaultSuggestions = []Suggestion{
 	{KindToolCall, "ls -la"},
 	{KindToolCall, "git status"},
-	{KindToolCall, "go test ./..."},
+	// Keep short-lived: GenerateSession actually execs these. "go test ./..."
+	// recurses into the full suite and hangs CI for the package timeout.
+	{KindToolCall, "go version"},
 	{KindFileRead, "README.md"},
 	{KindSearch, "TODO"},
 }

@@ -10,6 +10,11 @@ jobs:
     container:
       # Match go.work / go.mod (GOTOOLCHAIN=local in official images rejects lower runtimes).
       image: golang:1.25.10
+    env:
+      # Nested go build in tests fails under Actions with:
+      #   error obtaining VCS status: exit status 128
+      # GOFLAGS is inherited by those child builds.
+      GOFLAGS: -buildvcs=false
     steps:
       - uses: actions/checkout@v4
       - name: Go test cmd

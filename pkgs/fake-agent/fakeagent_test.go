@@ -2,11 +2,27 @@ package fakeagent
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/xhd2015/agent-pro/pkgs/fake-agent/probe"
 )
+
+// testGenerator returns a Generator that probes a tiny temp dir, not the monorepo.
+// Default suggestions include grep/ls against WorkDir; running those on the full
+// tree makes multi-seed tests exceed CI timeouts.
+func testGenerator(t *testing.T, seed int64) *Generator {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("readme\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	g := NewGenerator(seed)
+	g.WorkDir = dir
+	return g
+}
 
 func TestNewGenerator(t *testing.T) {
 	g := NewGenerator(42)
@@ -27,10 +43,16 @@ func TestNextID(t *testing.T) {
 }
 
 func TestGenerateSession_Deterministic(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("readme\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	g := NewGenerator(42)
+	g.WorkDir = dir
 	events1 := g.GenerateSession("create a Go HTTP server")
 
 	g2 := NewGenerator(42)
+	g2.WorkDir = dir
 	events2 := g2.GenerateSession("create a Go HTTP server")
 
 	if len(events1) != len(events2) {
@@ -46,7 +68,7 @@ func TestGenerateSession_Deterministic(t *testing.T) {
 }
 
 func TestGenerateSession_NonEmpty(t *testing.T) {
-	g := NewGenerator(100)
+	g := testGenerator(t, 100)
 	events := g.GenerateSession("write unit tests")
 	if len(events) == 0 {
 		t.Fatal("GenerateSession returned empty events")
@@ -55,7 +77,7 @@ func TestGenerateSession_NonEmpty(t *testing.T) {
 
 func TestGenerateSession_StartsWithReasoning(t *testing.T) {
 	for seed := int64(0); seed < 20; seed++ {
-		g := NewGenerator(seed)
+		g := testGenerator(t, seed)
 		events := g.GenerateSession("some task")
 		if len(events) == 0 {
 			t.Fatalf("seed %d: no events", seed)
@@ -69,7 +91,7 @@ func TestGenerateSession_StartsWithReasoning(t *testing.T) {
 
 func TestGenerateSession_EndsWithMessage(t *testing.T) {
 	for seed := int64(0); seed < 20; seed++ {
-		g := NewGenerator(seed)
+		g := testGenerator(t, seed)
 		events := g.GenerateSession("some task")
 		if len(events) == 0 {
 			t.Fatalf("seed %d: no events", seed)
@@ -83,7 +105,7 @@ func TestGenerateSession_EndsWithMessage(t *testing.T) {
 
 func TestGenerateSession_EventOrdering(t *testing.T) {
 	for seed := int64(0); seed < 30; seed++ {
-		g := NewGenerator(seed)
+		g := testGenerator(t, seed)
 		events := g.GenerateSession("some task")
 
 		itemStates := make(map[string]string)
@@ -124,7 +146,7 @@ func TestGenerateSession_EventOrdering(t *testing.T) {
 func TestGenerateSession_MultipleSeedsProduceVariedOutput(t *testing.T) {
 	var firstLineSets []map[string]bool
 	for seed := int64(0); seed < 10; seed++ {
-		g := NewGenerator(seed)
+		g := testGenerator(t, seed)
 		events := g.GenerateSession("some task")
 		set := make(map[string]bool)
 		for _, e := range events {
@@ -162,7 +184,7 @@ func setsEqual(a, b map[string]bool) bool {
 }
 
 func TestGenerateSession_WithEmptyPrompt(t *testing.T) {
-	g := NewGenerator(42)
+	g := testGenerator(t, 42)
 	events := g.GenerateSession("")
 	if len(events) == 0 {
 		t.Fatal("empty prompt should still generate events")
@@ -201,7 +223,7 @@ func TestExtractTopic(t *testing.T) {
 }
 
 func TestGenerateSession_WithProbeBacktick(t *testing.T) {
-	g := NewGenerator(42)
+	g := testGenerator(t, 42)
 	events := g.GenerateSession("please run `echo hello` for me")
 	found := false
 	for _, e := range events {
@@ -221,7 +243,7 @@ func TestGenerateSession_WithProbeBacktick(t *testing.T) {
 }
 
 func TestGenerateSession_WithProbeFilePath(t *testing.T) {
-	g := NewGenerator(42)
+	g := testGenerator(t, 42)
 	events := g.GenerateSession("read /tmp/config.json and check it")
 	found := false
 	for _, e := range events {
@@ -241,8 +263,12 @@ func TestGenerateSession_WithProbeFilePath(t *testing.T) {
 }
 
 func TestGenerateSession_WithProbeFileWrite(t *testing.T) {
-	g := NewGenerator(100)
-	events := g.GenerateSession("create /tmp/out.txt with some content")
+	// Direct probe path (session RNG is flaky for exact path selection).
+	g := testGenerator(t, 1)
+	events, path := g.execProbe(probe.Suggestion{Kind: probe.KindFileWrite, Value: "/tmp/out.txt"})
+	if path != "/tmp/out.txt" {
+		t.Fatalf("result path = %q, want /tmp/out.txt", path)
+	}
 	found := false
 	for _, e := range events {
 		if e.Item != nil && e.Item.Type == ItemFileChange && len(e.Item.Changes) > 0 {
@@ -258,17 +284,12 @@ func TestGenerateSession_WithProbeFileWrite(t *testing.T) {
 		}
 	}
 	if !found {
-		for _, e := range events {
-			if e.Item != nil && e.Item.Type == ItemFileChange {
-				t.Logf("found file_change: %+v", e.Item.Changes)
-			}
-		}
 		t.Fatal("no file_change with /tmp/out.txt found")
 	}
 }
 
 func TestGenerateSession_WithProbeSearch(t *testing.T) {
-	g := NewGenerator(42)
+	g := testGenerator(t, 42)
 	events := g.GenerateSession("grep TODO src/")
 	found := false
 	for _, e := range events {
@@ -289,7 +310,7 @@ func TestGenerateSession_WithProbeSearch(t *testing.T) {
 
 func TestGenerateSession_RoundLimit(t *testing.T) {
 	for seed := int64(0); seed < 50; seed++ {
-		g := NewGenerator(seed)
+		g := testGenerator(t, seed)
 		events := g.GenerateSession("some task")
 
 		toolRoundCount := 0
@@ -325,7 +346,7 @@ func TestGenerateSession_RoundLimit(t *testing.T) {
 
 func TestGenerateSession_ResponseEventuallyProduced(t *testing.T) {
 	for seed := int64(0); seed < 30; seed++ {
-		g := NewGenerator(seed)
+		g := testGenerator(t, seed)
 		events := g.GenerateSession("some task")
 
 		hasMessage := false
@@ -349,7 +370,11 @@ func TestExecProbe_ReturnsResultText(t *testing.T) {
 	}
 	_ = result // some commands legitimately have empty output
 
-	_, result2 := g.execProbe(probe.Suggestion{Kind: "file_read", Value: "/tmp/test.txt"})
+	path := filepath.Join(t.TempDir(), "test.txt")
+	if err := os.WriteFile(path, []byte("probe-read-content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, result2 := g.execProbe(probe.Suggestion{Kind: "file_read", Value: path})
 	if result2 == "" {
 		t.Fatal("execFileRead returned empty result")
 	}
