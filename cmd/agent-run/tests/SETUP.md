@@ -49,8 +49,9 @@ import (
 	"github.com/xhd2015/doctest/session"
 )
 
-// handleStdoutMu serializes os.Stdout/os.Stderr redirect around agentruncli.Handle
-// so parallel Mode "handle" leaves do not race.
+// handleStdoutMu serializes env apply + os.Stdout/os.Stderr redirect around
+// agentruncli.Handle so parallel Mode "handle" leaves do not race on
+// AGENT_RUN_HOME or stdio.
 var handleStdoutMu sync.Mutex
 
 func execCmd(t *testing.T, command string, args []string, dir string, env []string, stdin string, timeout time.Duration) (*Response, error) {
@@ -113,12 +114,9 @@ func runHandleInProcess(t *testing.T, req *Request) (*Response, error) {
 		args = []string{}
 	}
 
-	// Apply production isolation env for Handle paths that touch AGENT_RUN_HOME
-	// (short-path leaves typically do not need it; restore always).
-	restoreEnv := applyHandleEnv(req.Env)
-	defer restoreEnv()
-
-	stdout, stderr, handleErr := callHandleCaptured(args)
+	// Env apply + stdio capture share handleStdoutMu so parallel leaves cannot
+	// clobber AGENT_RUN_HOME mid-Handle (apply outside the lock races Setenv).
+	stdout, stderr, handleErr := callHandleCaptured(args, req.Env)
 	resp := &Response{
 		Stdout: stdout,
 		Stderr: stderr,
@@ -163,9 +161,12 @@ func applyHandleEnv(extra []string) (restore func()) {
 	}
 }
 
-func callHandleCaptured(args []string) (stdout, stderr string, handleErr error) {
+func callHandleCaptured(args []string, env []string) (stdout, stderr string, handleErr error) {
 	handleStdoutMu.Lock()
 	defer handleStdoutMu.Unlock()
+
+	restoreEnv := applyHandleEnv(env)
+	defer restoreEnv()
 
 	rOut, wOut, err := os.Pipe()
 	if err != nil {

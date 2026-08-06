@@ -19,6 +19,8 @@ agent-run sessions [--json] [--limit N]
 agent-run sessions <session_id> --print
 agent-run sessions --print --grok-session-id ID
 agent-run status
+agent-run kill [--dry-run] <session-id>
+agent-run tty kill [--dry-run] <session-id>
 ```
 
 **Web mode** binds `127.0.0.1` only. Default port **8192**. Static SPA assets are
@@ -83,7 +85,22 @@ cmd/agent-run/tests/
 │   ├── unknown-subcommand/          exit 1
 │   └── unknown-agent-runner/        run with bad runner, stderr mentions unknown
 ├── help/
-│   └── top-level/                   lists web, run, sessions, status, --agent-runner
+│   └── top-level/                   lists web, run, sessions, status, kill, --agent-runner
+├── kill/                            top-level kill + tty kill (L2 Mode handle)
+│   ├── help/
+│   │   ├── kill-help/               kill --help: usage, session-id, --dry-run
+│   │   ├── top-level-lists-kill/    --help lists kill
+│   │   └── tty-lists-kill/          tty --help lists kill
+│   ├── args/
+│   │   ├── missing-session-id/      kill alone → non-zero
+│   │   └── unknown-session/         kill no-such-id → not found
+│   ├── dry-run/
+│   │   └── would-stop/              dry-run live fixture; process stays up
+│   ├── stop/
+│   │   ├── live-then-idle/          kill live → stopped; registry gone
+│   │   └── double-kill/             second kill → exit 0 + warning not running
+│   └── tty/
+│       └── kill-alias/              tty kill same success path as kill
 ├── run/
 │   ├── json-fake-codex-hi/          run --json --agent-runner fake-codex "hi"
 │   ├── events-persisted-to-home/    stdout NDJSON lines match events.jsonl
@@ -170,8 +187,8 @@ cmd/agent-run/tests/
     ├── attach/                      registry lookup + WS attach
     ├── help/                        attach + codex-tty runner docs
     └── real-codex/                  label: codex — real Codex CLI on PATH
-└── tty/                             nested root: tty status/attach/send subcommands (see tty/DOCTEST.md)
-    ├── help/lists-subcommands/      tty --help lists status, attach, send
+└── tty/                             nested root: tty status/attach/send/kill subcommands (see tty/DOCTEST.md)
+    ├── help/lists-subcommands/      tty --help lists status, attach, send, kill
     ├── status/                      registry read + screen detection
     ├── attach/                      tty attach + shortcut alias
     ├── attach-shortcut/             agent-run attach delegates to tty attach
@@ -184,7 +201,16 @@ cmd/agent-run/tests/
 |---|------|-------------|
 | 1 | `cli-edge/unknown-subcommand` | Unknown subcommand exits 1 |
 | 2 | `cli-edge/unknown-agent-runner` | `run --agent-runner bogus` exits 1, stderr mentions unknown |
-| 3 | `help/top-level` | `--help` lists web, run, sessions, status, `--agent-runner` |
+| 3 | `help/top-level` | `--help` lists web, run, sessions, status, kill, `--agent-runner` |
+| 50 | `kill/help/kill-help` | `kill --help` documents usage, session-id, `--dry-run` |
+| 51 | `kill/help/top-level-lists-kill` | top-level `--help` lists `kill` |
+| 52 | `kill/help/tty-lists-kill` | `tty --help` lists `kill` |
+| 53 | `kill/args/missing-session-id` | `kill` alone → non-zero |
+| 54 | `kill/args/unknown-session` | `kill no-such-id` → not found / expired |
+| 55 | `kill/dry-run/would-stop` | `--dry-run` on live fixture; process stays alive |
+| 56 | `kill/stop/live-then-idle` | kill live fixture → `stopped`; registry gone |
+| 57 | `kill/stop/double-kill` | second kill → exit 0 + `warning:` not running |
+| 58 | `kill/tty/kill-alias` | `tty kill` same stop success path as top-level |
 | 4 | `run/json-fake-codex-hi` | `run --json --agent-runner fake-codex "hi"` → valid NDJSON, last event type `done` |
 | 5 | `run/events-persisted-to-home` | Same run; `events.jsonl` under home matches stdout lines |
 | 6 | `run/human-readable-no-json` | `run` without `--json` uses human-readable print, not all JSON lines |

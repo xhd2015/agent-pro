@@ -26,7 +26,8 @@ Commands:
   status     show agent-run home or multi-layer session status
   assets     frontend asset status and ensure (download)
   focus      focus iTerm2 window/tab for a session (tree TTYs + FindByTTY)
-  tty        TTY session helpers (status, attach, send, snapshot, watch)
+  kill       stop a live TTY session by registry id
+  tty        TTY session helpers (status, attach, send, snapshot, watch, kill)
   pty        PTY resource stats and kill orphan __serve processes
 
 Options:
@@ -38,7 +39,7 @@ Run agent-run <command> --help for command-specific options.
 
 // Handle is the full agent-run CLI entrypoint for args after the program name
 // (os.Args[1:]). Same command surface as today's cmd/agent-run: web, run,
-// resume, attach, send, msg, snapshot, watch, sessions, status, tty, pty,
+// resume, attach, send, msg, snapshot, watch, sessions, status, kill, tty, pty,
 // top-level help, --agent-runner, and internal serve/stub paths.
 // Success (including help) returns nil; failures return an error for the
 // thin main to print and exit 1.
@@ -104,6 +105,8 @@ func Handle(args []string) error {
 		return runAssets(sub)
 	case "focus":
 		return RunFocus(sub, os.Stdout, os.Stderr)
+	case "kill":
+		return runKill(sub)
 	default:
 		return fmt.Errorf("unknown command: %s", cmd)
 	}

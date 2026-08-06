@@ -8,9 +8,9 @@ shortcut aliases.
 
 **Participants**
 
-- **agent-run CLI** — dispatches `tty status`, `tty attach`, `tty send`, and
-  `attach` (alias for `tty attach`) and `send` (alias for `tty send`) against
-  TTY runner sessions.
+- **agent-run CLI** — dispatches `tty status`, `tty attach`, `tty send`, `tty kill`,
+  and `attach` (alias for `tty attach`) and `send` (alias for `tty send`) against
+  TTY runner sessions. Top-level `kill` mirrors `tty kill`.
 - **TTY session registry** — JSON files at `AGENT_RUN_HOME/<runner>-registry/<session-id>.json`
   mapping session id to `pid`, `listen_addr`, and `created_at`. Persists while
   the terminal is alive; normally removed on run exit unless `--keep-tty` is set.
@@ -53,7 +53,7 @@ cmd/agent-run/tests/tty/
 ├── DOCTEST.md
 ├── SETUP.md                           # build agent-run, registry + fake ptywrap helpers
 ├── help/
-│   └── lists-subcommands/             # tty --help lists status, attach, send
+│   └── lists-subcommands/             # tty --help lists status, attach, send, kill
 ├── status/                            # agent-run tty status <session-id>
 │   ├── SETUP.md                       # writes mock registry entry (no live server needed)
 │   ├── missing-session-id/            # no positional arg → error
@@ -99,7 +99,7 @@ Parameter ranking (most → least significant):
 
 | # | Leaf | Description |
 |---|------|-------------|
-| 1 | `help/lists-subcommands` | `tty --help` lists status, attach, send subcommands |
+| 1 | `help/lists-subcommands` | `tty --help` lists status, attach, send, kill subcommands |
 | 2 | `status/missing-session-id` | `tty status` without session id → error, usage hint |
 | 3 | `status/session-not-found` | `tty status bogus-id` → error, session not found |
 | 4 | `status/registry-entry-valid/human-readable` | Valid registry → pid, port, tty type, session id, path, start time, tcp reachable |

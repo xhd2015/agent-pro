@@ -5,7 +5,7 @@ label: e2e
 ## Expected
 
 - Exit code 0.
-- Stdout lists `status`, `attach`, and `send` subcommands.
+- Stdout lists `status`, `attach`, `send`, and `kill` subcommands.
 
 ## Expected Output
 
@@ -19,6 +19,9 @@ label: e2e
 </start-with>
 <start-with>
   send
+</start-with>
+<start-with>
+  kill
 </start-with>
 </contains>
 ```
@@ -43,6 +46,9 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 </start-with>
 <start-with>
   send
+</start-with>
+<start-with>
+  kill
 </start-with>
 </contains>`)
 }

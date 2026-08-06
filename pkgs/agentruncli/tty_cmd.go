@@ -23,6 +23,7 @@ Subcommands:
   send      send a message to a live TTY session
   snapshot  print a sanitized snapshot of a live TTY session
   watch     stream readonly output from a live TTY session
+  kill      stop a live TTY session by registry id
 
 Options:
   -h, --help   show help
@@ -118,6 +119,8 @@ func runTty(args []string) error {
 		return runTtySnapshot(sub)
 	case "watch":
 		return runTtyWatch(sub)
+	case "kill":
+		return runKill(sub)
 	default:
 		return fmt.Errorf("unknown tty subcommand: %s", cmd)
 	}

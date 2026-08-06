@@ -3,7 +3,7 @@
 **Feature**: `tty --help` and `tty <cmd> --help` display subcommand help
 
 ```
-agent-run tty --help -> status, attach, send
+agent-run tty --help -> status, attach, send, kill
 agent-run tty status --help -> status-specific help
 agent-run tty attach --help -> attach-specific help
 agent-run tty send --help -> send-specific help

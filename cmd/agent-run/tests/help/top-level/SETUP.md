@@ -1,6 +1,6 @@
 # Scenario
 
-**Feature**: top-level `--help` lists subcommands and flags
+**Feature**: top-level `--help` lists subcommands and flags (including `kill`)
 
 ```
 # L2 in-process (Mode handle): agentruncli.Handle(["--help"])
