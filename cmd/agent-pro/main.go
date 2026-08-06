@@ -842,6 +842,7 @@ Commands:
   files  <session-id>   list regular files in the session directory
   stats  <session-id>   analyse counts, latency, tools, and tasks for one session
   view   <session-id>   print or web-view session messages (in-memory convert)
+  prompts [session-id]  list user prompts (one session or recent multi)
   fork   <session-id>   fork via grok --resume … --fork-session (no agent-run map)
   backup <session-id>   backup session tree to a self-describing directory
   bookmark <session-id> pin session into multi-runner bookmark catalog
@@ -850,6 +851,32 @@ Commands:
   log    <session-id>   print session log (not implemented yet)
 
 Run agent-pro grok session <command> --help for command-specific options.
+`
+
+const grokSessionPromptsHelp = `
+Usage:
+  agent-pro grok session prompts <session-id>
+  agent-pro grok session prompts [--recent <window>] [--limit N]
+
+Show user prompts only as compact lines:
+  [YYYY-MM-DD HH:MM:SS] prompt text…
+
+Single mode: all user prompts for one session (full history).
+Multi mode (no session id): newest sessions by last_active, with selection matrix:
+
+  (no flags)              last 10 sessions, full prompt history each
+  --limit N               last N sessions
+  --recent Nd|Nh|Nm       all sessions with ≥1 in-window user prompt (no default cap)
+  --recent W --limit N    in-window sessions only, stop at N
+
+Options:
+  --recent WINDOW   time window: Nd, Nh, or Nm (e.g. 1d, 2h, 30m)
+  --limit N         session limit (see matrix above)
+  -h,--help         show help
+
+Notes:
+  - session-id cannot be combined with --recent or --limit
+  - sessions with zero in-window prompts are skipped when --recent is set
 `
 
 const grokSessionForkHelp = `
@@ -975,6 +1002,8 @@ func handleGrokSession(args []string) error {
 		return handleGrokSessionStats(args[1:])
 	case "view":
 		return handleGrokSessionView(args[1:])
+	case "prompts":
+		return handleGrokSessionPrompts(args[1:])
 	case "fork":
 		return handleGrokSessionFork(args[1:])
 	case "backup":
@@ -990,6 +1019,85 @@ func handleGrokSession(args []string) error {
 	default:
 		return fmt.Errorf("unknown grok session command: %s", args[0])
 	}
+}
+
+func handleGrokSessionPrompts(args []string) error {
+	var recentFlag *string
+	var limitFlag *int
+	remaining, err := flags.String("--recent", &recentFlag).
+		Int("--limit", &limitFlag).
+		Help("-h,--help", grokSessionPromptsHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+
+	recentSet := recentFlag != nil
+	limitSet := limitFlag != nil
+	var recent time.Duration
+	if recentSet {
+		w, err := groksessions.ParseRecentWindow(*recentFlag)
+		if err != nil {
+			return err
+		}
+		recent = w
+	}
+	limit := 0
+	if limitSet {
+		limit = *limitFlag
+		if limit < 0 {
+			return fmt.Errorf("--limit must be >= 0")
+		}
+	}
+
+	// Single-session mode: exactly one id, no --recent/--limit.
+	if len(remaining) > 1 {
+		return fmt.Errorf("expected at most one session id, got %d arguments", len(remaining))
+	}
+	if len(remaining) == 1 {
+		if recentSet || limitSet {
+			return fmt.Errorf("session id cannot be combined with --recent or --limit")
+		}
+		sessionID := strings.TrimSpace(remaining[0])
+		if sessionID == "" {
+			return fmt.Errorf("session id is required")
+		}
+		grokHome := agenttty.GrokHome()
+		sp, err := groksessions.Prompts(grokHome, sessionID)
+		if err != nil {
+			return err
+		}
+		out := groksessions.FormatPromptsText(sp, groksessions.FormatPromptsOptions{
+			Now:  time.Now(),
+			Home: homeDir(),
+		})
+		fmt.Print(out)
+		return nil
+	}
+
+	// Multi mode: no session id; apply selection matrix.
+	now := time.Now()
+	list, err := groksessions.ListPrompts(agenttty.GrokHome(), groksessions.ListPromptsOptions{
+		Now:       now,
+		Recent:    recent,
+		RecentSet: recentSet,
+		Limit:     limit,
+		LimitSet:  limitSet,
+		Home:      homeDir(),
+	})
+	if err != nil {
+		return err
+	}
+	out := groksessions.FormatPromptsListText(list, groksessions.FormatPromptsOptions{
+		Now:       now,
+		Home:      homeDir(),
+		Window:    recent,
+		Limit:     limit,
+		RecentSet: recentSet,
+		LimitSet:  limitSet,
+	})
+	fmt.Print(out)
+	return nil
 }
 
 // grokSessionOpenInNewTerminal is injectable for tests (default: iTerm ForceNew).

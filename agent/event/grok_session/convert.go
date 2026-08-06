@@ -16,6 +16,8 @@ type toolCallMeta struct {
 // Converter converts grok session updates to AgentEvents with chunk coalescing.
 type Converter struct {
 	pendingUser      strings.Builder
+	pendingUserTS    int64 // wire ms of first chunk of coalesced user message; 0 if unknown
+	pendingUserTSSet bool  // true once first non-empty user chunk was seen (even if ts unknown)
 	pendingThink     strings.Builder
 	pendingAssistant strings.Builder
 	toolMeta         map[string]toolCallMeta
@@ -50,6 +52,13 @@ func (c *Converter) ProcessLine(line string) []types.AgentEvent {
 	if !ok {
 		return nil
 	}
+	// Enrich nested-envelope lines: timestamps may sit on the outer object.
+	if wireTS := sessionUpdateTimestampMs(upd); wireTS == 0 {
+		if ms := extractTimestampFromRawLine(line); ms > 0 {
+			v := ms
+			upd.AgentTimestampMs = &v
+		}
+	}
 	return c.processUpdate(upd)
 }
 
@@ -83,6 +92,11 @@ func (c *Converter) processUpdate(upd SessionUpdate) []types.AgentEvent {
 		text := TextContent(upd.Content)
 		if text == "" {
 			return out
+		}
+		// First chunk of a coalesced user message wins for timestamp.
+		if !c.pendingUserTSSet {
+			c.pendingUserTS = sessionUpdateTimestampMs(upd)
+			c.pendingUserTSSet = true
 		}
 		c.pendingUser.WriteString(text)
 		return out
@@ -165,12 +179,21 @@ func (c *Converter) flushUser() []types.AgentEvent {
 	}
 	text := c.pendingUser.String()
 	c.pendingUser.Reset()
-	return []types.AgentEvent{c.withGrokSession(types.AgentEvent{
+	ts := c.pendingUserTS
+	c.pendingUserTS = 0
+	c.pendingUserTSSet = false
+	// Historical user messages: use wire timestamp when present; keep 0 when
+	// unknown (do not stamp convert-time Now — callers format zero as [—]).
+	ev := c.withGrokSession(types.AgentEvent{
 		Type:      types.ActionMessage,
 		Role:      "user",
 		Text:      text,
-		Timestamp: time.Now().UnixMilli(),
-	}, "")}
+		Timestamp: ts,
+	}, "")
+	if ts == 0 {
+		ev.Timestamp = 0
+	}
+	return []types.AgentEvent{ev}
 }
 
 func (c *Converter) flushThink() []types.AgentEvent {
@@ -210,6 +233,151 @@ func (c *Converter) withGrokSession(ev types.AgentEvent, status string) types.Ag
 		ev.Timestamp = time.Now().UnixMilli()
 	}
 	return ev
+}
+
+// sessionUpdateTimestampMs prefers agentTimestampMs / _meta ms, else top-level timestamp.
+func sessionUpdateTimestampMs(upd SessionUpdate) int64 {
+	if upd.AgentTimestampMs != nil && *upd.AgentTimestampMs > 0 {
+		return normalizeUnixMs(*upd.AgentTimestampMs)
+	}
+	if len(upd.Meta) > 0 {
+		var meta map[string]any
+		if err := json.Unmarshal(upd.Meta, &meta); err == nil {
+			for _, key := range []string{"agentTimestampMs", "timestampMs", "timestamp_ms", "timestamp"} {
+				if v, ok := meta[key]; ok {
+					if ms := anyToUnixMs(v); ms > 0 {
+						return ms
+					}
+				}
+			}
+		}
+	}
+	if len(upd.Timestamp) > 0 {
+		return rawTimestampToMs(upd.Timestamp)
+	}
+	return 0
+}
+
+// extractTimestampFromRawLine scans a full JSONL line (flat or nested envelope)
+// for timestamp / agentTimestampMs fields.
+func extractTimestampFromRawLine(line string) int64 {
+	var root map[string]any
+	if err := json.Unmarshal([]byte(line), &root); err != nil {
+		return 0
+	}
+	if ms := mapTimestampMs(root); ms > 0 {
+		return ms
+	}
+	// Nested wire envelope: method + params.update
+	if params, ok := root["params"].(map[string]any); ok {
+		if ms := mapTimestampMs(params); ms > 0 {
+			return ms
+		}
+		if upd, ok := params["update"].(map[string]any); ok {
+			return mapTimestampMs(upd)
+		}
+	}
+	return 0
+}
+
+func mapTimestampMs(m map[string]any) int64 {
+	if m == nil {
+		return 0
+	}
+	if v, ok := m["agentTimestampMs"]; ok {
+		if ms := anyToUnixMs(v); ms > 0 {
+			return ms
+		}
+	}
+	if meta, ok := m["_meta"].(map[string]any); ok {
+		for _, key := range []string{"agentTimestampMs", "timestampMs", "timestamp_ms", "timestamp"} {
+			if v, ok := meta[key]; ok {
+				if ms := anyToUnixMs(v); ms > 0 {
+					return ms
+				}
+			}
+		}
+	}
+	if v, ok := m["timestamp"]; ok {
+		return anyToUnixMs(v)
+	}
+	return 0
+}
+
+func rawTimestampToMs(raw json.RawMessage) int64 {
+	if len(raw) == 0 {
+		return 0
+	}
+	var n float64
+	if err := json.Unmarshal(raw, &n); err == nil {
+		return normalizeUnixMsFloat(n)
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return 0
+		}
+		for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+			if t, err := time.Parse(layout, s); err == nil {
+				return t.UnixMilli()
+			}
+		}
+	}
+	return 0
+}
+
+func anyToUnixMs(v any) int64 {
+	switch x := v.(type) {
+	case float64:
+		return normalizeUnixMsFloat(x)
+	case json.Number:
+		f, err := x.Float64()
+		if err != nil {
+			return 0
+		}
+		return normalizeUnixMsFloat(f)
+	case int64:
+		return normalizeUnixMs(x)
+	case int:
+		return normalizeUnixMs(int64(x))
+	case string:
+		s := strings.TrimSpace(x)
+		if s == "" {
+			return 0
+		}
+		for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+			if t, err := time.Parse(layout, s); err == nil {
+				return t.UnixMilli()
+			}
+		}
+		var f float64
+		if err := json.Unmarshal([]byte(s), &f); err == nil {
+			return normalizeUnixMsFloat(f)
+		}
+	}
+	return 0
+}
+
+// normalizeUnixMs treats values below 1e12 as seconds (common wire ambiguity).
+func normalizeUnixMs(v int64) int64 {
+	if v <= 0 {
+		return 0
+	}
+	if v < 1_000_000_000_000 {
+		return v * 1000
+	}
+	return v
+}
+
+func normalizeUnixMsFloat(v float64) int64 {
+	if v <= 0 {
+		return 0
+	}
+	if v < 1e12 {
+		return int64(v * 1000)
+	}
+	return int64(v)
 }
 
 func toolOutput(raw json.RawMessage) string {

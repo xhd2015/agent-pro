@@ -10,6 +10,10 @@ type SessionUpdate struct {
 	Kind          string          `json:"kind,omitempty"`
 	Title         string          `json:"title,omitempty"`
 	Status        string          `json:"status,omitempty"`
+	// Optional wire timing. Prefer AgentTimestampMs / _meta ms; else Timestamp.
+	Timestamp        json.RawMessage `json:"timestamp,omitempty"`
+	AgentTimestampMs *int64          `json:"agentTimestampMs,omitempty"`
+	Meta             json.RawMessage `json:"_meta,omitempty"`
 }
 
 // ToOptions controls reverse conversion wire shape.
