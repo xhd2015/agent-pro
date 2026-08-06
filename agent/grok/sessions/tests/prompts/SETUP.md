@@ -5,18 +5,22 @@
 ```
 # fixture grok home under t.TempDir (never real ~/.grok)
 writePromptSession(summary + updates.jsonl with wire timestamps)
-  -> Prompts | ListPrompts | ParseRecentWindow
+  -> Prompts | ListPrompts | FilterUserPrompts | ParseRecentWindow
   -> optional FormatPromptsText | FormatPromptsListText
 
 # fixed clock for relative windows and format
 req.Now = 2026-07-03T15:00:00Z ; Location = time.UTC
+
+# optional filter pipeline (zero-value = no filter)
+grep keep -> exclude drop -> head|tail slice -> format markers / highlight
 ```
 
 ## Preconditions
 
-- Package will export (RED until implementer):
-  - `UserPrompt`, `SessionPrompts`, `ListPromptsOptions`, `FormatPromptsOptions`
-  - `ParseRecentWindow`, `Prompts`, `ListPrompts`
+- Package exports (base GREEN; filter fields/API RED until implementer):
+  - `UserPrompt`, `SessionPrompts` (+ `OmittedBefore`/`OmittedAfter`)
+  - `ListPromptsOptions`, `FormatPromptsOptions`, `FilterUserPromptsOptions`
+  - `ParseRecentWindow`, `Prompts`, `ListPrompts`, `FilterUserPrompts`
   - `FormatPromptsText`, `FormatPromptsListText`
 - Session layout matches existing Find rules:
   `{grokHome}/sessions/{url.PathEscape(abs_cwd)}/{uuid}/`
@@ -24,13 +28,15 @@ req.Now = 2026-07-03T15:00:00Z ; Location = time.UTC
   wire timestamps (top-level `timestamp` ms, or `_meta` / `agentTimestampMs`
   when implementer supports them). Coalesced user message uses **first** chunk
   timestamp.
+- Filter matcher: case-insensitive literal on `UserPrompt.Text` only.
+- Pipeline order: recent window → grep keep → exclude drop → head **or** tail.
 - Tests never call `t.Setenv`, `os.Chdir`, or hijack `os.Stdout`.
 - Tests never read real `~/.grok`.
 
 ## Steps
 
 1. Root `Setup` allocates temp `.grok` home and injects fixed `Now` + UTC location.
-2. Leaf Setup writes session fixtures and sets `Op` / selection flags.
+2. Leaf Setup writes session fixtures and sets `Op` / selection / filter flags.
 3. Root `Run` calls the intended package API for `req.Op`.
 4. Leaf `Assert` checks structured results and/or formatted text.
 
@@ -44,6 +50,7 @@ req.Now = 2026-07-03T15:00:00Z ; Location = time.UTC
 - Compact timestamp layout: `2006-01-02 15:04:05` in `FormatPromptsOptions.Location`
 - Empty friendly phrase: `No user prompts found`
 - Missing timestamp marker: `[—]` (em dash U+2014)
+- Head/tail omission marker: `(...M omitted...)` with `M = total_after_filters − N`
 
 ```go
 import (
@@ -78,7 +85,32 @@ const (
 	idFormatMultiB   = "019f283a-dddd-7ddd-dddd-dddddddddd12"
 	idFullHistory    = "019f283a-dddd-7ddd-dddd-dddddddddd20"
 	idLastActiveOnly = "019f283a-dddd-7ddd-dddd-dddddddddd30"
+
+	// Filter fixture session ids (filter/** leaves)
+	idFilterSingle   = "019f283a-ffff-7fff-ffff-ffffffffffff01"
+	idFilterHead     = "019f283a-ffff-7fff-ffff-ffffffffffff02"
+	idFilterGrepA    = "019f283a-ffff-7fff-ffff-ffffffffffff10"
+	idFilterGrepB    = "019f283a-ffff-7fff-ffff-ffffffffffff11"
+	idFilterGrepC    = "019f283a-ffff-7fff-ffff-ffffffffffff12"
 )
+
+// omissionMarker returns the virtual formatter line `(...M omitted...)`.
+func omissionMarker(m int) string {
+	return fmt.Sprintf("(...%d omitted...)", m)
+}
+
+// chronoPromptUpdates builds N chrono user prompts p1..pN (or custom texts)
+// spaced 1 minute apart ending at endTS (last prompt at endTS).
+func chronoPromptUpdates(endTS time.Time, texts ...string) string {
+	n := len(texts)
+	lines := make([]string, 0, n*2)
+	for i, text := range texts {
+		// oldest first: endTS - (n-1-i)*minute
+		ts := endTS.Add(-time.Duration(n-1-i) * time.Minute)
+		lines = append(lines, userChunkAt(text, ts), turnCompleted())
+	}
+	return updatesJSONL(lines...)
+}
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	_ = d

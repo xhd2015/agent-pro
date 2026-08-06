@@ -872,13 +872,15 @@ Run agent-pro grok session <command> --help for command-specific options.
 const grokSessionPromptsHelp = `
 Usage:
   agent-pro grok session prompts <session-id>
-  agent-pro grok session prompts [--recent <window>] [--limit N] [--color|--no-color]
+    [--grep P] [--exclude Q] [--head N | --tail N] [--color|--no-color]
+  agent-pro grok session prompts [--recent <window>] [--limit N]
+    [--grep P] [--exclude Q] [--head N | --tail N] [--color|--no-color]
   agent-pro grok sessions prompts …   (alias)
 
 Show user prompts only as compact lines:
   [YYYY-MM-DD HH:MM:SS] prompt text…
 
-Single mode: all user prompts for one session (full history).
+Single mode: all user prompts for one session (full history), optional text filters.
 Multi mode (no session id): newest sessions by last_active, with selection matrix:
 
   (no flags)              last 10 sessions that have prompts
@@ -886,17 +888,26 @@ Multi mode (no session id): newest sessions by last_active, with selection matri
   --recent Nd|Nh|Nm       all sessions with ≥1 in-window user prompt (no default cap)
   --recent W --limit N    in-window sessions only, stop at N
 
+Filter pipeline (per session, after recent window): grep keep → exclude drop → head|tail.
+Sessions with zero survivors are skipped and do not count toward --limit.
+Head and tail are mutually exclusive; N >= 1. Empty --grep/--exclude patterns error.
+
 Multi layout: session header, prompt lines, separator rule between sessions, footer.
 Output streams session-by-session (not buffered until the end).
 
 Options:
   --recent WINDOW   time window: Nd, Nh, or Nm (e.g. 1d, 2h, 30m)
   --limit N         session limit (see matrix above; must be >= 1)
+  --grep P          keep prompts whose text matches P (case-insensitive literal)
+  --exclude Q       drop prompts whose text matches Q (case-insensitive literal)
+  --head N          first N prompts per session after text filters (N >= 1)
+  --tail N          last N prompts per session after text filters (N >= 1)
   --color           force ANSI color on (even when stdout is not a TTY)
   --no-color        force ANSI color off
   -h,--help         show help
 
 Color (auto by default): TTY on unless NO_COLOR is set; --color/--no-color override.
+With --grep and color on, match spans are bold-red; omission markers are dim.
 Headers, timestamps, separators, and footer are dim when color is on.
 
 Notes:
@@ -1049,10 +1060,18 @@ func handleGrokSession(args []string) error {
 func handleGrokSessionPrompts(args []string) error {
 	var recentFlag *string
 	var limitFlag *int
+	var grepFlag *string
+	var excludeFlag *string
+	var headFlag *int
+	var tailFlag *int
 	var colorFlag bool
 	var noColorFlag bool
 	remaining, err := flags.String("--recent", &recentFlag).
 		Int("--limit", &limitFlag).
+		String("--grep", &grepFlag).
+		String("--exclude", &excludeFlag).
+		Int("--head", &headFlag).
+		Int("--tail", &tailFlag).
 		Bool("--color", &colorFlag).
 		Bool("--no-color", &noColorFlag).
 		Help("-h,--help", grokSessionPromptsHelp).
@@ -1073,6 +1092,11 @@ func handleGrokSessionPrompts(args []string) error {
 
 	recentSet := recentFlag != nil
 	limitSet := limitFlag != nil
+	grepSet := grepFlag != nil
+	excludeSet := excludeFlag != nil
+	headSet := headFlag != nil
+	tailSet := tailFlag != nil
+
 	var recent time.Duration
 	if recentSet {
 		w, err := groksessions.ParseRecentWindow(*recentFlag)
@@ -1088,6 +1112,49 @@ func handleGrokSessionPrompts(args []string) error {
 			return fmt.Errorf("--limit must be >= 1")
 		}
 	}
+
+	grep := ""
+	if grepSet {
+		grep = *grepFlag
+		if grep == "" {
+			return fmt.Errorf("--grep pattern must not be empty")
+		}
+	}
+	exclude := ""
+	if excludeSet {
+		exclude = *excludeFlag
+		if exclude == "" {
+			return fmt.Errorf("--exclude pattern must not be empty")
+		}
+	}
+	if headSet && tailSet {
+		return fmt.Errorf("--head and --tail are mutually exclusive")
+	}
+	head := 0
+	if headSet {
+		head = *headFlag
+		if head < 1 {
+			return fmt.Errorf("--head must be >= 1")
+		}
+	}
+	tail := 0
+	if tailSet {
+		tail = *tailFlag
+		if tail < 1 {
+			return fmt.Errorf("--tail must be >= 1")
+		}
+	}
+	filterOpts := groksessions.FilterUserPromptsOptions{
+		Grep:       grep,
+		GrepSet:    grepSet,
+		Exclude:    exclude,
+		ExcludeSet: excludeSet,
+		Head:       head,
+		HeadSet:    headSet,
+		Tail:       tail,
+		TailSet:    tailSet,
+	}
+	hasFilter := grepSet || excludeSet || headSet || tailSet
 
 	// Single-session mode: exactly one id, no --recent/--limit.
 	if len(remaining) > 1 {
@@ -1106,12 +1173,23 @@ func handleGrokSessionPrompts(args []string) error {
 		if err != nil {
 			return err
 		}
+		if hasFilter {
+			kept, ob, oa, err := groksessions.FilterUserPrompts(sp.UserPrompts, filterOpts)
+			if err != nil {
+				return err
+			}
+			sp.UserPrompts = kept
+			sp.OmittedBefore = ob
+			sp.OmittedAfter = oa
+		}
 		bw := bufio.NewWriter(os.Stdout)
 		defer bw.Flush()
 		return groksessions.WritePromptsText(bw, sp, groksessions.FormatPromptsOptions{
 			Now:       time.Now(),
 			Home:      homeDir(),
 			ColorMode: colorMode,
+			Grep:      grep,
+			GrepSet:   grepSet,
 		})
 	}
 
@@ -1124,12 +1202,20 @@ func handleGrokSessionPrompts(args []string) error {
 	defer bw.Flush()
 	fmt.Fprintln(os.Stderr, "scanning sessions…")
 	return groksessions.StreamPromptsList(bw, agenttty.GrokHome(), groksessions.ListPromptsOptions{
-		Now:       now,
-		Recent:    recent,
-		RecentSet: recentSet,
-		Limit:     limit,
-		LimitSet:  limitSet,
-		Home:      homeDir(),
+		Now:        now,
+		Recent:     recent,
+		RecentSet:  recentSet,
+		Limit:      limit,
+		LimitSet:   limitSet,
+		Home:       homeDir(),
+		Grep:       grep,
+		GrepSet:    grepSet,
+		Exclude:    exclude,
+		ExcludeSet: excludeSet,
+		Head:       head,
+		HeadSet:    headSet,
+		Tail:       tail,
+		TailSet:    tailSet,
 	}, groksessions.FormatPromptsOptions{
 		Now:       now,
 		Home:      homeDir(),
@@ -1138,6 +1224,8 @@ func handleGrokSessionPrompts(args []string) error {
 		RecentSet: recentSet,
 		LimitSet:  limitSet,
 		ColorMode: colorMode,
+		Grep:      grep,
+		GrepSet:   grepSet,
 	})
 }
 
