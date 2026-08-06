@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -750,8 +751,9 @@ const grokHelp = `
 Usage: agent-pro grok <command> [ARGS]
 
 Commands:
-  sessions          list recent Grok CLI sessions
-  session           show details for one Grok CLI session
+  sessions          list recent Grok CLI sessions (table)
+  session           per-session ops (info, view, prompts, …)
+  sessions prompts  alias for: session prompts (user prompt history)
 
 Run agent-pro grok <command> --help for command-specific options.
 `
@@ -774,8 +776,13 @@ func handleGrok(args []string) error {
 
 const grokSessionsHelp = `
 Usage: agent-pro grok sessions [--limit N] [--grep PATTERN] [--color]
+       agent-pro grok sessions prompts [OPTIONS]   (alias: session prompts)
 
 List recent Grok CLI sessions from ~/.grok (or $GROK_HOME).
+
+For user prompt history (compact [timestamp] lines), use:
+  agent-pro grok session prompts …
+  agent-pro grok sessions prompts …   (same)
 
 Options:
   --limit <n>    max sessions to list (default 20, max 100)
@@ -785,16 +792,25 @@ Options:
 `
 
 func handleGrokSessions(args []string) error {
+	// Alias: "grok sessions prompts …" → same as "grok session prompts …"
+	// (without this, leftover "prompts" was silently ignored and the old table printed).
+	if len(args) > 0 && args[0] == "prompts" {
+		return handleGrokSessionPrompts(args[1:])
+	}
+
 	var limitFlag *int
 	var grepFlag *string
 	var colorFlag *bool
-	_, err := flags.Int("--limit", &limitFlag).
+	remaining, err := flags.Int("--limit", &limitFlag).
 		String("--grep", &grepFlag).
 		Bool("--color", &colorFlag).
 		Help("-h,--help", grokSessionsHelp).
 		Parse(args)
 	if err != nil {
 		return err
+	}
+	if len(remaining) > 0 {
+		return fmt.Errorf("unexpected argument %q (did you mean 'grok session prompts' or 'grok sessions prompts'?)", remaining[0])
 	}
 
 	limit := 20
@@ -856,7 +872,8 @@ Run agent-pro grok session <command> --help for command-specific options.
 const grokSessionPromptsHelp = `
 Usage:
   agent-pro grok session prompts <session-id>
-  agent-pro grok session prompts [--recent <window>] [--limit N]
+  agent-pro grok session prompts [--recent <window>] [--limit N] [--color|--no-color]
+  agent-pro grok sessions prompts …   (alias)
 
 Show user prompts only as compact lines:
   [YYYY-MM-DD HH:MM:SS] prompt text…
@@ -864,19 +881,27 @@ Show user prompts only as compact lines:
 Single mode: all user prompts for one session (full history).
 Multi mode (no session id): newest sessions by last_active, with selection matrix:
 
-  (no flags)              last 10 sessions, full prompt history each
-  --limit N               last N sessions
+  (no flags)              last 10 sessions that have prompts
+  --limit N               last N sessions that have prompts (N >= 1)
   --recent Nd|Nh|Nm       all sessions with ≥1 in-window user prompt (no default cap)
   --recent W --limit N    in-window sessions only, stop at N
 
+Multi layout: session header, prompt lines, separator rule between sessions, footer.
+Output streams session-by-session (not buffered until the end).
+
 Options:
   --recent WINDOW   time window: Nd, Nh, or Nm (e.g. 1d, 2h, 30m)
-  --limit N         session limit (see matrix above)
+  --limit N         session limit (see matrix above; must be >= 1)
+  --color           force ANSI color on (even when stdout is not a TTY)
+  --no-color        force ANSI color off
   -h,--help         show help
+
+Color (auto by default): TTY on unless NO_COLOR is set; --color/--no-color override.
+Headers, timestamps, separators, and footer are dim when color is on.
 
 Notes:
   - session-id cannot be combined with --recent or --limit
-  - sessions with zero in-window prompts are skipped when --recent is set
+  - sessions with zero user prompts (or zero in-window prompts) are skipped
 `
 
 const grokSessionForkHelp = `
@@ -1024,12 +1049,26 @@ func handleGrokSession(args []string) error {
 func handleGrokSessionPrompts(args []string) error {
 	var recentFlag *string
 	var limitFlag *int
+	var colorFlag bool
+	var noColorFlag bool
 	remaining, err := flags.String("--recent", &recentFlag).
 		Int("--limit", &limitFlag).
+		Bool("--color", &colorFlag).
+		Bool("--no-color", &noColorFlag).
 		Help("-h,--help", grokSessionPromptsHelp).
 		Parse(args)
 	if err != nil {
 		return err
+	}
+	if colorFlag && noColorFlag {
+		return fmt.Errorf("--color and --no-color cannot be specified together")
+	}
+	colorMode := "auto"
+	if colorFlag {
+		colorMode = "always"
+	}
+	if noColorFlag {
+		colorMode = "never"
 	}
 
 	recentSet := recentFlag != nil
@@ -1045,8 +1084,8 @@ func handleGrokSessionPrompts(args []string) error {
 	limit := 0
 	if limitSet {
 		limit = *limitFlag
-		if limit < 0 {
-			return fmt.Errorf("--limit must be >= 0")
+		if limit < 1 {
+			return fmt.Errorf("--limit must be >= 1")
 		}
 	}
 
@@ -1067,37 +1106,39 @@ func handleGrokSessionPrompts(args []string) error {
 		if err != nil {
 			return err
 		}
-		out := groksessions.FormatPromptsText(sp, groksessions.FormatPromptsOptions{
-			Now:  time.Now(),
-			Home: homeDir(),
+		bw := bufio.NewWriter(os.Stdout)
+		defer bw.Flush()
+		return groksessions.WritePromptsText(bw, sp, groksessions.FormatPromptsOptions{
+			Now:       time.Now(),
+			Home:      homeDir(),
+			ColorMode: colorMode,
 		})
-		fmt.Print(out)
-		return nil
 	}
 
-	// Multi mode: no session id; apply selection matrix.
+	// Multi mode: discover summaries, then load+print each session before the next
+	// (true progressive stdout — do not ListPrompts-buffer then dump).
 	now := time.Now()
-	list, err := groksessions.ListPrompts(agenttty.GrokHome(), groksessions.ListPromptsOptions{
+	// Small buffer + explicit Flush after each session in StreamPromptsList so the
+	// terminal shows the first block without waiting for later updates.jsonl reads.
+	bw := bufio.NewWriterSize(os.Stdout, 1024)
+	defer bw.Flush()
+	fmt.Fprintln(os.Stderr, "scanning sessions…")
+	return groksessions.StreamPromptsList(bw, agenttty.GrokHome(), groksessions.ListPromptsOptions{
 		Now:       now,
 		Recent:    recent,
 		RecentSet: recentSet,
 		Limit:     limit,
 		LimitSet:  limitSet,
 		Home:      homeDir(),
-	})
-	if err != nil {
-		return err
-	}
-	out := groksessions.FormatPromptsListText(list, groksessions.FormatPromptsOptions{
+	}, groksessions.FormatPromptsOptions{
 		Now:       now,
 		Home:      homeDir(),
 		Window:    recent,
 		Limit:     limit,
 		RecentSet: recentSet,
 		LimitSet:  limitSet,
+		ColorMode: colorMode,
 	})
-	fmt.Print(out)
-	return nil
 }
 
 // grokSessionOpenInNewTerminal is injectable for tests (default: iTerm ForceNew).

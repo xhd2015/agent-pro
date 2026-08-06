@@ -318,15 +318,28 @@ func discoverSessions(grokHome string) ([]Session, error) {
 			}
 			return walkErr
 		}
-		if d.IsDir() || d.Name() != "summary.json" {
+		// Session layout: sessions/{cwdKey}/{uuid}/summary.json (+ terminal/, updates, …).
+		// When we enter a uuid dir that already has summary.json, parse it and SkipDir so
+		// we never walk terminal/ or other heavy children (dominant cost with large homes).
+		if d.IsDir() {
+			if path == root {
+				return nil
+			}
+			sumPath := filepath.Join(path, "summary.json")
+			if st, err := os.Stat(sumPath); err == nil && !st.IsDir() {
+				if session, ok := parseSummaryFile(sumPath); ok {
+					sessions = append(sessions, session)
+				}
+				return filepath.SkipDir
+			}
 			return nil
 		}
-
-		session, ok := parseSummaryFile(path)
-		if !ok {
-			return nil
+		// Files are only reached under dirs without summary.json (e.g. cwdKey placeholders).
+		if d.Name() == "summary.json" {
+			if session, ok := parseSummaryFile(path); ok {
+				sessions = append(sessions, session)
+			}
 		}
-		sessions = append(sessions, session)
 		return nil
 	})
 	if err != nil {
