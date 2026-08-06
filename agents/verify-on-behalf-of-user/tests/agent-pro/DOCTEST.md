@@ -25,6 +25,7 @@ agent-pro/
 ├── list/
 ├── install/
 ├── scenario-topic/
+├── host-topic/
 └── tty-topic/
 ```
 
@@ -34,9 +35,10 @@ agent-pro/
 |---|------|-------------|
 | 1 | `register` | `--show` transcript topic + format rules; skill is registered |
 | 2 | `list` | `agent-pro skills` lists skill with description |
-| 3 | `install` | `--install` writes scripts, templates, scenario + tty + transcript topics |
+| 3 | `install` | `--install` writes scripts, templates, host + scenario + tty + transcript topics |
 | 4 | `scenario-topic` | `--show` scenario topic: depth labels, browser-agent, FAIL rules |
-| 5 | `tty-topic` | `--show` tty topic: tty-watch, `--detach`, kill reclaim |
+| 5 | `host-topic` | `--show` host topic: opt-in outside sandbox, wrk ladder, dry-run, warnings |
+| 6 | `tty-topic` | `--show` tty topic: tty-watch, `--detach`, kill reclaim |
 
 ## How to Run
 

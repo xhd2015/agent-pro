@@ -14,6 +14,7 @@ import (
 var SkillFile string
 
 //go:embed sandbox
+//go:embed host
 //go:embed workflow
 //go:embed scenario
 //go:embed transcript

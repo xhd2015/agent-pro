@@ -2,14 +2,20 @@
 
 | Field | Value |
 |-------|-------|
+| Mode | **{{MODE}}** |
 | Scope | {{SCOPE}} |
 | Depth | **{{DEPTH}}** |
 | Depth reason | {{DEPTH_REASON}} |
 | Surface | {{SURFACE}} |
 | Started | {{STARTED}} |
-| Sandbox HOME | ~/.sandbox/default-home |
-| Sandbox bin | ~/.sandbox/bin |
+| HOME / bin | {{HOME_BIN_NOTE}} |
+| Install method | {{INSTALL_METHOD}} |
+| Targets | {{TARGETS}} |
 | Verdict | **{{VERDICT}}** |
+
+> **Mode:** `sandbox` (default) or `host` (only when user explicitly opted into
+> host / outside sandbox). Host: warn + dry-run/plan before mutate; change-scoped
+> install only. See topics sandbox and host.
 
 ---
 
@@ -32,16 +38,16 @@ $ git diff --stat
 
 ---
 
-## 2. Build & install (sandbox bin)
+## 2. Build & install
 
-> **Annotation:** Binaries install to ~/.sandbox/bin — not ~/go/bin.
+> **Annotation:** {{BUILD_ANNOTATION}}
+>
+> Sandbox: binaries under ~/.sandbox/bin after enter-sandbox.sh.
+> Host: wrk --reinstall-local (dry-run then apply) or change-scoped
+> script/install / go install ./cmd/T only (T = claimed tool name).
 
 ```sh
-$ source .agents/skills/verify-on-behalf-of-user/scripts/enter-sandbox.sh
-{{ENTER_SANDBOX_OUTPUT}}
-
-$ go build -o "$SANDBOX_BIN/{{BINARY}}" {{BUILD_TARGET}}
-{{BUILD_OUTPUT}}
+{{BUILD_COMMANDS}}
 ```
 
 > **Check:** {{BUILD_CHECK}}
@@ -121,11 +127,12 @@ $ go build -o "$SANDBOX_BIN/{{BINARY}}" {{BUILD_TARGET}}
 
 | Meta | Value |
 |------|-------|
+| Mode | {{MODE}} |
 | Depth | {{DEPTH}} ({{DEPTH_REASON}}) |
 | Surface | {{SURFACE}} |
 | Verdict | **{{VERDICT}}** |
 | Transcript file | `{{TRANSCRIPT_PATH}}` |
 
-Sandbox data (inspect after verify): `~/.sandbox/default-home`
+Sandbox data (inspect after sandbox-mode verify): `~/.sandbox/default-home`
 
 **Agent:** after saving this file, print its **full contents** in the reply for direct review.

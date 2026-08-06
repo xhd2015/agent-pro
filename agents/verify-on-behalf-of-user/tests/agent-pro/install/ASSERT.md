@@ -9,7 +9,8 @@ label: e2e
 - `templates/transcript.md` exists under installed skill dir.
 - `transcript/TOPIC.md` exists under installed skill dir.
 - `scenario/TOPIC.md` exists under installed skill dir.
-- Installed `templates/transcript.md` mentions Depth and browser-agent.
+- `host/TOPIC.md` exists under installed skill dir.
+- Installed `templates/transcript.md` mentions Depth, Mode, and browser-agent.
 
 ## Exit Code
 
@@ -55,6 +56,9 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	if !strings.Contains(body, "Depth") {
 		t.Fatalf("installed transcript template missing Depth field:\n%s", body)
 	}
+	if !strings.Contains(body, "Mode") {
+		t.Fatalf("installed transcript template missing Mode field:\n%s", body)
+	}
 	if !strings.Contains(body, "browser-agent") {
 		t.Fatalf("installed transcript template missing browser-agent:\n%s", body)
 	}
@@ -65,6 +69,10 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	scenarioTopic := filepath.Join(target, "scenario", "TOPIC.md")
 	if _, err := os.Stat(scenarioTopic); err != nil {
 		t.Fatalf("missing %s: %v", scenarioTopic, err)
+	}
+	hostTopic := filepath.Join(target, "host", "TOPIC.md")
+	if _, err := os.Stat(hostTopic); err != nil {
+		t.Fatalf("missing %s: %v", hostTopic, err)
 	}
 	ttyTopic := filepath.Join(target, "tty", "TOPIC.md")
 	if _, err := os.Stat(ttyTopic); err != nil {

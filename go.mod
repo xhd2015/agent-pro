@@ -11,9 +11,6 @@ require (
 	github.com/xhd2015/less-gen v0.0.19
 	github.com/xhd2015/xgo v1.2.0
 	gopkg.in/yaml.v3 v3.0.1
-)
-
-require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
@@ -24,10 +21,7 @@ require (
 	github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02
 	github.com/openai/openai-go/v3 v3.29.0
 	github.com/slack-go/slack v0.27.0
-	golang.org/x/term v0.43.0
-)
-
-require (
+	golang.org/x/term v0.45.0
 	github.com/rogpeppe/go-internal v1.15.0 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
@@ -35,9 +29,6 @@ require (
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/xhd2015/go-coverage v1.0.41 // indirect
 	github.com/xhd2015/go-inspect v0.0.49 // indirect
-)
-
-require (
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/colorprofile v0.4.1 // indirect
@@ -58,10 +49,9 @@ require (
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/xhd2015/less-flags v1.0.2
-	github.com/xhd2015/skills v0.0.22
+	github.com/xhd2015/skills v0.0.26
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	golang.org/x/sys v0.44.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
+	github.com/xhd2015/tty-watch v0.0.1
 )
-
-require github.com/xhd2015/tty-watch v0.0.1

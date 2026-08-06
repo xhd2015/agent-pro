@@ -12,8 +12,8 @@ require (
 	github.com/xhd2015/dot-pkgs/go-pkgs v0.0.96
 	github.com/xhd2015/less-flags v1.0.2
 	github.com/xhd2015/less-gen v0.0.19
-	github.com/xhd2015/skills v0.0.22
-	golang.org/x/term v0.43.0
+	github.com/xhd2015/skills v0.0.26
+	golang.org/x/term v0.45.0
 )
 
 require (
@@ -28,6 +28,6 @@ require (
 	github.com/xhd2015/go-inspect v0.0.49 // indirect
 	github.com/xhd2015/tty-watch v0.0.1 // indirect
 	github.com/xhd2015/xgo v1.2.0 // indirect
-	golang.org/x/sys v0.44.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
