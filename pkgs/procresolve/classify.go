@@ -67,3 +67,9 @@ func runnerKind(cmd string) string {
 		return ""
 	}
 }
+
+// IsGrokRunner reports whether cmd is a grok session runner (basename grok,
+// excluding pure `grok update` utilities).
+func IsGrokRunner(cmd string) bool {
+	return runnerKind(cmd) == "grok"
+}

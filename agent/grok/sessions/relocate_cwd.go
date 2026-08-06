@@ -42,7 +42,7 @@ func RelocateCWD(sessionID, targetDir string, opts *RelocateCWDOptions) (*Reloca
 	}
 	oldSessionDir := filepath.Dir(session.Path)
 
-	active, err := isSessionActive(grokHome, sessionID)
+	active, err := IsFileActive(grokHome, sessionID)
 	if err != nil {
 		return nil, err
 	}

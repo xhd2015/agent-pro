@@ -10,6 +10,12 @@ import (
 // fixture "019fabcdef-…" (10-char head) still match as a whole, not a suffix.
 var uuidPattern = regexp.MustCompile(`(?i)[0-9a-f]{8,}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
 
+// ParseSessionFromPath extracts a hard session hit from an open-file path.
+// Returns kind ("grok"|"codex"), sessionID (lowercased), ok.
+func ParseSessionFromPath(path string) (kind, sessionID string, ok bool) {
+	return parseSessionFromPath(path)
+}
+
 // parseSessionFromPath extracts a hard session hit from an open-file path.
 // Returns kind ("grok"|"codex"), sessionID, ok.
 func parseSessionFromPath(path string) (kind, sessionID string, ok bool) {

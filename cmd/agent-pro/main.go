@@ -41,6 +41,7 @@ Commands:
   crush             manage crush configuration
   codex             manage codex configuration
   grok              manage grok CLI sessions
+  bookmark          list/show/remove session bookmarks (multi-runner catalog)
   proc              resolve agent session from a process id
   skills            list available skills; skills update refreshes installs
   skill             show or install a skill (--show / --install)
@@ -87,6 +88,8 @@ func handle(args []string) error {
 		return handleCodex(args[1:])
 	case "grok":
 		return handleGrok(args[1:])
+	case "bookmark", "bookmarks":
+		return handleBookmark(args[1:])
 	case "pi":
 		return handlePi(args[1:])
 	case "crush":
@@ -833,11 +836,18 @@ const grokSessionHelp = `
 Usage: agent-pro grok session <command> [ARGS]
 
 Commands:
-  info  <session-id>   show detailed info for one Grok CLI session
-  stats <session-id>   analyse counts, latency, tools, and tasks for one session
-  view  <session-id>   print or web-view session messages (in-memory convert)
-  fork  <session-id>   fork via grok --resume … --fork-session (no agent-run map)
-  log   <session-id>   print session log (not implemented yet)
+  list                  alias for: agent-pro grok sessions
+  info   <session-id>   show detailed info for one Grok CLI session
+  status <session-id>   show dual-signal liveness (file-active + live PIDs)
+  files  <session-id>   list regular files in the session directory
+  stats  <session-id>   analyse counts, latency, tools, and tasks for one session
+  view   <session-id>   print or web-view session messages (in-memory convert)
+  fork   <session-id>   fork via grok --resume … --fork-session (no agent-run map)
+  backup <session-id>   backup session tree to a self-describing directory
+  bookmark <session-id> pin session into multi-runner bookmark catalog
+  bookmarks             list grok bookmarks (alias: agent-pro bookmark list --runner grok)
+  unbookmark <id>       remove grok bookmark (alias: agent-pro bookmark remove --runner grok)
+  log    <session-id>   print session log (not implemented yet)
 
 Run agent-pro grok session <command> --help for command-specific options.
 `
@@ -859,11 +869,37 @@ Options:
 `
 
 const grokSessionInfoHelp = `
-Usage: agent-pro grok session info <session-id>
+Usage: agent-pro grok session info <session-id> [OPTIONS]
 
 Show detailed info for one Grok CLI session from ~/.grok (or $GROK_HOME).
+Appends a dual-signal Active block (file-active + live PIDs).
 
 Options:
+  --no-pid      skip live PID scan; Active state from file-active only
+  -h,--help     show help
+`
+
+const grokSessionStatusHelp = `
+Usage: agent-pro grok session status <session-id> [OPTIONS]
+
+Show dual-signal liveness for one Grok CLI session:
+  file-active (active_sessions.json) + live PIDs (open-file hard hits on grok runners).
+
+State: running | marked-active | inactive
+
+Options:
+  --no-pid      skip live PID scan; state from file-active only
+  --json        print SessionStatus as JSON (no ANSI)
+  -h,--help     show help
+`
+
+const grokSessionFilesHelp = `
+Usage: agent-pro grok session files <session-id> [OPTIONS]
+
+List regular files in a Grok CLI session directory.
+
+Options:
+  --json        print files as a JSON array (no ANSI)
   -h,--help     show help
 `
 
@@ -901,6 +937,24 @@ Options:
   -h,--help     show help
 `
 
+const grokSessionBackupHelp = `
+Usage: agent-pro grok session backup <session-id> [OPTIONS]
+
+Backup one Grok CLI session to a self-describing directory
+(manifest.json + payload/). Optionally create a .tar.gz archive.
+
+Busy sessions (file-active or live PIDs) are refused. Linked child sessions
+are included by default.
+
+Options:
+  --out-dir DIR     write backup directory here (default: temp dir, kept)
+  -o,--output PATH  also create archive at PATH (must end with .tar.gz)
+  --no-children     skip copying linked child session directories
+  --dry-run         plan only; print what would be backed up (no writes)
+  --json            print BackupResult as JSON
+  -h,--help         show help
+`
+
 func handleGrokSession(args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
 		fmt.Print(strings.TrimPrefix(grokSessionHelp, "\n"))
@@ -908,14 +962,29 @@ func handleGrokSession(args []string) error {
 	}
 
 	switch args[0] {
+	case "list", "ls":
+		// Alias for agent-pro grok sessions (same flags: --limit, --grep, --color).
+		return handleGrokSessions(args[1:])
 	case "info":
 		return handleGrokSessionInfo(args[1:])
+	case "status":
+		return handleGrokSessionStatus(args[1:])
+	case "files":
+		return handleGrokSessionFiles(args[1:])
 	case "stats":
 		return handleGrokSessionStats(args[1:])
 	case "view":
 		return handleGrokSessionView(args[1:])
 	case "fork":
 		return handleGrokSessionFork(args[1:])
+	case "backup":
+		return handleGrokSessionBackup(args[1:])
+	case "bookmark":
+		return handleGrokSessionBookmark(args[1:])
+	case "bookmarks":
+		return handleBookmarkList(append([]string{"--runner", "grok"}, args[1:]...))
+	case "unbookmark":
+		return handleBookmarkRemove(append([]string{"--runner", "grok"}, args[1:]...))
 	case "log":
 		return fmt.Errorf("not implemented yet")
 	default:
@@ -1036,7 +1105,8 @@ func handleGrokSessionFork(args []string) error {
 }
 
 func handleGrokSessionInfo(args []string) error {
-	remaining, err := flags.New().
+	var noPID bool
+	remaining, err := flags.Bool("--no-pid", &noPID).
 		Help("-h,--help", grokSessionInfoHelp).
 		Parse(args)
 	if err != nil {
@@ -1058,6 +1128,162 @@ func handleGrokSessionInfo(args []string) error {
 	}
 
 	fmt.Println(groksessions.FormatInfoText(info, homeDir(), time.Now()))
+
+	st, err := groksessions.Status(grokHome, sessionID, !noPID, &groksessions.LiveOptions{
+		ListProcs: nil, // production defaults inside LivePIDsForSession
+		Lsof:      nil,
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Println()
+	fmt.Println(groksessions.FormatActiveBlock(st))
+	return nil
+}
+
+func handleGrokSessionStatus(args []string) error {
+	var noPID bool
+	var jsonFlag *bool
+	remaining, err := flags.Bool("--no-pid", &noPID).
+		Bool("--json", &jsonFlag).
+		Help("-h,--help", grokSessionStatusHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+	if len(remaining) != 1 {
+		return fmt.Errorf("expected exactly one session id, got %d arguments", len(remaining))
+	}
+
+	sessionID := strings.TrimSpace(remaining[0])
+	if sessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+
+	grokHome := agenttty.GrokHome()
+	st, err := groksessions.Status(grokHome, sessionID, !noPID, nil)
+	if err != nil {
+		return err
+	}
+
+	if jsonFlag != nil && *jsonFlag {
+		out, err := groksessions.FormatStatusJSON(st)
+		if err != nil {
+			return fmt.Errorf("format session status json: %w", err)
+		}
+		fmt.Println(out)
+		return nil
+	}
+
+	fmt.Println(groksessions.FormatStatusText(st))
+	return nil
+}
+
+func handleGrokSessionFiles(args []string) error {
+	var jsonFlag *bool
+	remaining, err := flags.Bool("--json", &jsonFlag).
+		Help("-h,--help", grokSessionFilesHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+	if len(remaining) != 1 {
+		return fmt.Errorf("expected exactly one session id, got %d arguments", len(remaining))
+	}
+
+	sessionID := strings.TrimSpace(remaining[0])
+	if sessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+
+	grokHome := agenttty.GrokHome()
+	_, files, err := groksessions.ListSessionFiles(grokHome, sessionID)
+	if err != nil {
+		return err
+	}
+
+	if jsonFlag != nil && *jsonFlag {
+		out, err := groksessions.FormatSessionFilesJSON(files)
+		if err != nil {
+			return fmt.Errorf("format session files json: %w", err)
+		}
+		fmt.Println(out)
+		return nil
+	}
+
+	fmt.Println(groksessions.FormatSessionFilesTable(files))
+	return nil
+}
+
+func handleGrokSessionBackup(args []string) error {
+	var outDir string
+	var archivePath string
+	var noChildren bool
+	var dryRun bool
+	var jsonFlag *bool
+	remaining, err := flags.String("--out-dir", &outDir).
+		String("-o,--output", &archivePath).
+		Bool("--no-children", &noChildren).
+		Bool("--dry-run", &dryRun).
+		Bool("--json", &jsonFlag).
+		Help("-h,--help", grokSessionBackupHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+	if len(remaining) != 1 {
+		return fmt.Errorf("expected exactly one session id, got %d arguments", len(remaining))
+	}
+	sessionID := strings.TrimSpace(remaining[0])
+	if sessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+
+	include := !noChildren
+	opts := &groksessions.BackupOptions{
+		GrokHome:        agenttty.GrokHome(),
+		OutDir:          outDir,
+		ArchivePath:     archivePath,
+		IncludeChildren: &include,
+		Live:            nil, // production defaults
+		DryRun:          dryRun,
+	}
+	result, err := groksessions.Backup(sessionID, opts)
+	if err != nil {
+		return err
+	}
+
+	if jsonFlag != nil && *jsonFlag {
+		data, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return fmt.Errorf("format backup result json: %w", err)
+		}
+		fmt.Println(string(data))
+		return nil
+	}
+
+	if result.DryRun {
+		fmt.Println("Would backup grok session")
+		fmt.Printf("  session:  %s\n", result.SessionID)
+		fmt.Printf("  cwd:      %s\n", result.CWD)
+		fmt.Printf("  related:  %s\n", strings.Join(result.RelatedSessions, ", "))
+		fmt.Printf("  files:    %d\n", result.PlannedFiles)
+		fmt.Printf("  bytes:    %d\n", result.PlannedBytes)
+		if outDir != "" {
+			fmt.Printf("  out-dir:  %s\n", outDir)
+		}
+		if archivePath != "" {
+			fmt.Printf("  archive:  %s\n", archivePath)
+		}
+		return nil
+	}
+
+	fmt.Printf("Backup written to %s\n", result.Dir)
+	fmt.Printf("  session:  %s\n", result.SessionID)
+	fmt.Printf("  manifest: %s\n", result.ManifestPath)
+	if result.ArchivePath != "" {
+		fmt.Printf("  archive:  %s\n", result.ArchivePath)
+	}
 	return nil
 }
 
@@ -2551,6 +2777,323 @@ func handleShowAgentFiles(args []string) error {
 
 func handleTraces(args []string) error {
 	return run.Run(args)
+}
+
+// --- session bookmarks (multi-runner catalog) ---
+
+const bookmarkHelp = `
+Usage: agent-pro bookmark [list|show|remove] [ARGS]
+
+Manage the multi-runner session bookmark catalog stored under
+$AGENT_PRO_HOME/session_bookmarks.json (default: ~/.agent-pro/).
+
+Commands:
+  list                  list bookmarks (default when no subcommand)
+  show   <session-id>   show one bookmark
+  remove <session-id>   remove a bookmark (aliases: rm, unbookmark)
+
+Options (list):
+  --runner <name>   filter by agent runner (e.g. grok, codex)
+  -t,--tag <tag>    AND filter: bookmark must include all tags (repeatable)
+  --limit <n>       max rows (0 = unlimited)
+  --stale           catalog snapshot only (no FS refresh / orphan checks)
+  --enrich          slow: walk GROK_HOME via Find when session_dir is stale
+  --json            print JSON (no ANSI)
+  -h,--help         show help
+
+Options (show / remove):
+  --runner <name>   disambiguate when the same session id is pinned under
+                    multiple runners
+  --stale           catalog snapshot only (show; same as list --stale)
+  --enrich          slow Find recovery when session_dir is stale (show)
+  --json            print JSON (show/remove ack; no ANSI)
+  -h,--help         show help
+
+Enrich modes (list/show; --stale and --enrich are mutually exclusive):
+  default           cheap refresh from stored session_dir/summary.json only
+  --stale           no live FS checks; Orphaned not computed
+  --enrich          light first, then Find under GROK_HOME (slow on large trees)
+
+Grok pin aliases:
+  agent-pro grok session bookmark <id> …
+  agent-pro grok session bookmarks
+  agent-pro grok session unbookmark <id>
+`
+
+const grokSessionBookmarkHelp = `
+Usage: agent-pro grok session bookmark <session-id> [OPTIONS]
+
+Pin a Grok CLI session into the multi-runner bookmark catalog
+($AGENT_PRO_HOME/session_bookmarks.json).
+
+Options:
+  -t,--tag <tag>         add/merge tag (repeatable); sorted unique on write
+  -d,--description TEXT  set description (omit to keep on update)
+  --clear-tags           wipe existing tags before merging any --tag values
+  --json                 print bookmark as JSON (no ANSI)
+  -h,--help              show help
+`
+
+func handleBookmark(args []string) error {
+	if len(args) == 0 {
+		return handleBookmarkList(nil)
+	}
+	if args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(strings.TrimPrefix(bookmarkHelp, "\n"))
+		return nil
+	}
+
+	switch args[0] {
+	case "list", "ls":
+		return handleBookmarkList(args[1:])
+	case "show":
+		return handleBookmarkShow(args[1:])
+	case "remove", "rm", "unbookmark":
+		return handleBookmarkRemove(args[1:])
+	default:
+		// Bare flags after "bookmark" → list (e.g. bookmark --json --runner grok).
+		if strings.HasPrefix(args[0], "-") {
+			return handleBookmarkList(args)
+		}
+		return fmt.Errorf("unknown bookmark command: %s", args[0])
+	}
+}
+
+func handleBookmarkList(args []string) error {
+	var runner string
+	var tags []string
+	var limit int
+	var staleFlag *bool
+	var enrichFlag *bool
+	var jsonFlag *bool
+	remaining, err := flags.String("--runner", &runner).
+		StringSlice("-t,--tag", &tags).
+		Int("--limit", &limit).
+		Bool("--stale", &staleFlag).
+		Bool("--enrich", &enrichFlag).
+		Bool("--json", &jsonFlag).
+		Help("-h,--help", bookmarkHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+	if len(remaining) > 0 {
+		return fmt.Errorf("unexpected arguments: %s", strings.Join(remaining, " "))
+	}
+
+	mode, err := resolveBookmarkEnrichMode(staleFlag, enrichFlag)
+	if err != nil {
+		return err
+	}
+
+	agentHome := resolveAgentProHome()
+	grokHome := agenttty.GrokHome()
+	views, warnings, err := groksessions.ListBookmarks(agentHome, grokHome, groksessions.ListFilter{
+		Runner: runner,
+		Tags:   tags,
+		Limit:  limit,
+		Enrich: mode,
+	})
+	if err != nil {
+		return err
+	}
+	for _, w := range warnings {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
+	}
+
+	if jsonFlag != nil && *jsonFlag {
+		out, err := groksessions.FormatBookmarkJSON(views)
+		if err != nil {
+			return fmt.Errorf("format bookmarks json: %w", err)
+		}
+		fmt.Println(out)
+		return nil
+	}
+
+	fmt.Println(groksessions.FormatBookmarksTable(views))
+	return nil
+}
+
+func handleBookmarkShow(args []string) error {
+	var runner string
+	var staleFlag *bool
+	var enrichFlag *bool
+	var jsonFlag *bool
+	remaining, err := flags.String("--runner", &runner).
+		Bool("--stale", &staleFlag).
+		Bool("--enrich", &enrichFlag).
+		Bool("--json", &jsonFlag).
+		Help("-h,--help", bookmarkHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+	if len(remaining) != 1 {
+		return fmt.Errorf("expected exactly one session id, got %d arguments", len(remaining))
+	}
+	sessionID := strings.TrimSpace(remaining[0])
+	if sessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+
+	mode, err := resolveBookmarkEnrichMode(staleFlag, enrichFlag)
+	if err != nil {
+		return err
+	}
+
+	agentHome := resolveAgentProHome()
+	grokHome := agenttty.GrokHome()
+	view, err := groksessions.GetBookmark(agentHome, runner, sessionID, grokHome, mode)
+	if err != nil {
+		return err
+	}
+
+	if jsonFlag != nil && *jsonFlag {
+		out, err := groksessions.FormatBookmarkJSON(view)
+		if err != nil {
+			return fmt.Errorf("format bookmark json: %w", err)
+		}
+		fmt.Println(out)
+		return nil
+	}
+
+	fmt.Println(groksessions.FormatBookmarkShow(view))
+	return nil
+}
+
+// resolveBookmarkEnrichMode maps --stale / --enrich CLI flags to EnrichMode.
+// Default (neither) is EnrichLight. Both set is an error.
+func resolveBookmarkEnrichMode(staleFlag, enrichFlag *bool) (groksessions.EnrichMode, error) {
+	stale := staleFlag != nil && *staleFlag
+	enrich := enrichFlag != nil && *enrichFlag
+	if stale && enrich {
+		return 0, fmt.Errorf("--stale and --enrich are mutually exclusive")
+	}
+	if stale {
+		return groksessions.EnrichOff, nil
+	}
+	if enrich {
+		return groksessions.EnrichHeavy, nil
+	}
+	return groksessions.EnrichLight, nil
+}
+
+func handleBookmarkRemove(args []string) error {
+	var runner string
+	var jsonFlag *bool
+	remaining, err := flags.String("--runner", &runner).
+		Bool("--json", &jsonFlag).
+		Help("-h,--help", bookmarkHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+	if len(remaining) != 1 {
+		return fmt.Errorf("expected exactly one session id, got %d arguments", len(remaining))
+	}
+	sessionID := strings.TrimSpace(remaining[0])
+	if sessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+
+	agentHome := resolveAgentProHome()
+	if err := groksessions.RemoveBookmark(agentHome, runner, sessionID); err != nil {
+		return err
+	}
+
+	if jsonFlag != nil && *jsonFlag {
+		out, err := groksessions.FormatBookmarkJSON(map[string]any{
+			"removed":    true,
+			"session_id": sessionID,
+			"runner":     runner,
+		})
+		if err != nil {
+			return err
+		}
+		fmt.Println(out)
+		return nil
+	}
+
+	if runner != "" {
+		fmt.Printf("Removed bookmark %s (runner %s)\n", sessionID, runner)
+	} else {
+		fmt.Printf("Removed bookmark %s\n", sessionID)
+	}
+	return nil
+}
+
+func handleGrokSessionBookmark(args []string) error {
+	var tagsFlag *[]string
+	var descFlag *string
+	var clearTags bool
+	var jsonFlag *bool
+	remaining, err := flags.StringSlice("-t,--tag", &tagsFlag).
+		String("-d,--description", &descFlag).
+		Bool("--clear-tags", &clearTags).
+		Bool("--json", &jsonFlag).
+		Help("-h,--help", grokSessionBookmarkHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+	if len(remaining) != 1 {
+		return fmt.Errorf("expected exactly one session id, got %d arguments", len(remaining))
+	}
+	sessionID := strings.TrimSpace(remaining[0])
+	if sessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+
+	opts := &groksessions.PinOptions{
+		Description: descFlag,
+		ClearTags:   clearTags,
+	}
+	if tagsFlag != nil {
+		opts.Tags = *tagsFlag
+	}
+
+	agentHome := resolveAgentProHome()
+	grokHome := agenttty.GrokHome()
+	bm, created, err := groksessions.BookmarkGrok(agentHome, grokHome, sessionID, opts)
+	if err != nil {
+		return err
+	}
+
+	if jsonFlag != nil && *jsonFlag {
+		out, err := groksessions.FormatBookmarkJSON(bm)
+		if err != nil {
+			return fmt.Errorf("format bookmark json: %w", err)
+		}
+		fmt.Println(out)
+		return nil
+	}
+
+	if created {
+		fmt.Printf("Bookmarked session %s\n", sessionID)
+	} else {
+		fmt.Printf("Updated bookmark %s\n", sessionID)
+	}
+	if bm != nil {
+		if len(bm.Tags) > 0 {
+			fmt.Printf("  tags: %s\n", strings.Join(bm.Tags, ", "))
+		}
+		if bm.Description != "" {
+			fmt.Printf("  description: %s\n", bm.Description)
+		}
+		if bm.Title != "" {
+			fmt.Printf("  title: %s\n", bm.Title)
+		}
+	}
+	return nil
+}
+
+// resolveAgentProHome returns AGENT_PRO_HOME if set, else ~/.agent-pro.
+// CLI reads env once and passes the path into package APIs (no library Setenv).
+func resolveAgentProHome() string {
+	if v := strings.TrimSpace(os.Getenv("AGENT_PRO_HOME")); v != "" {
+		return v
+	}
+	return filepath.Join(homeDir(), ".agent-pro")
 }
 
 // --- helpers ---
