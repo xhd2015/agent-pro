@@ -13,7 +13,8 @@ import (
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 )
 
-var codexResumeRe = regexp.MustCompile(`\bcodex\s+resume\s+([0-9a-fA-F-]{20,})\b`)
+// codexResumeRe matches "codex resume <id>" and "codex --resume <id>".
+var codexResumeRe = regexp.MustCompile(`\bcodex\s+(?:--)?resume\s+([0-9a-fA-F-]{20,})\b`)
 
 // CodexHome returns the codex data directory.
 func CodexHome() string {

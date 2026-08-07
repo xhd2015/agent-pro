@@ -12,7 +12,13 @@ import (
 const (
 	bannerWaitTimeout      = 30 * time.Second
 	codexBannerWaitTimeout = 2 * time.Minute
-	bannerPollInterval     = 75 * time.Millisecond
+	// openCodexBannerWaitTimeout is shorter: --open should attach soon, not
+	// sit blank for 2 minutes when inject-ready never arrives.
+	openCodexBannerWaitTimeout = 20 * time.Second
+	// acceptCodexTrustNoTrustGrace: if we never see a trust modal, do not burn
+	// the full timeout on empty/loading scrollback (resume reopen hang).
+	acceptCodexTrustNoTrustGrace = 4 * time.Second
+	bannerPollInterval           = 75 * time.Millisecond
 )
 
 type runConfig struct {
@@ -22,9 +28,18 @@ type runConfig struct {
 }
 
 func waitForBannerRemote(ctx context.Context, listenAddr, sessionID, provider string, markers []string) error {
+	return waitForBannerRemoteOpts(ctx, listenAddr, sessionID, provider, markers, 0, nil)
+}
+
+// waitForBannerRemoteOpts is waitForBannerRemote with optional timeout override
+// and abort (e.g. registry agent exited during open/resume).
+func waitForBannerRemoteOpts(ctx context.Context, listenAddr, sessionID, provider string, markers []string, timeout time.Duration, abort func() bool) error {
 	waitTimeout := bannerWaitTimeout
 	if isCodexProvider(provider) {
 		waitTimeout = codexBannerWaitTimeout
+	}
+	if timeout > 0 {
+		waitTimeout = timeout
 	}
 	deadline := time.Now().Add(waitTimeout)
 	trustPromptAccepted := false
@@ -33,6 +48,9 @@ func waitForBannerRemote(ctx context.Context, listenAddr, sessionID, provider st
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
+		}
+		if abort != nil && abort() {
+			return fmt.Errorf("%s agent exited before TUI banner", provider)
 		}
 		snapshot, err := ttywatch.SnapshotText(listenAddr, sessionID)
 		if err != nil {
@@ -65,8 +83,10 @@ func waitForBannerRemote(ctx context.Context, listenAddr, sessionID, provider st
 // acceptCodexTrustRemote soft-polls for the directory trust modal and sends Enter.
 // Used by --open (which does not hard-wait on banner) so sendable is not blocked
 // by trust or a false "update available" classification of the enter footer.
-// Returns when trust is gone or timeout/ctx elapses (never hard-fails open).
-func acceptCodexTrustRemote(ctx context.Context, listenAddr, sessionID, provider string, timeout time.Duration) {
+//
+// Returns when: trust cleared + chrome looks ready, abort fires, no-trust grace
+// elapses without a trust modal, or timeout.
+func acceptCodexTrustRemote(ctx context.Context, listenAddr, sessionID, provider string, timeout time.Duration, abort func() bool) {
 	if !isCodexProvider(provider) {
 		return
 	}
@@ -75,19 +95,30 @@ func acceptCodexTrustRemote(ctx context.Context, listenAddr, sessionID, provider
 	}
 	deadline := time.Now().Add(timeout)
 	accepted := false
+	// Start grace from first loop so unreachable/empty TTY does not burn full timeout.
+	noTrustSince := time.Now()
+	sawTrust := false
 	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():
 			return
 		default:
 		}
+		if abort != nil && abort() {
+			return
+		}
 		snapshot, err := ttywatch.SnapshotText(listenAddr, sessionID)
 		if err != nil {
+			if !sawTrust && time.Since(noTrustSince) >= acceptCodexTrustNoTrustGrace {
+				return
+			}
 			time.Sleep(bannerPollInterval)
 			continue
 		}
 		scrollback := []byte(snapshot)
 		if codexTrustPromptDetected(scrollback, provider) {
+			sawTrust = true
+			noTrustSince = time.Time{} // reset; wait for clear
 			if !accepted {
 				_ = ttywatch.SendMessage(listenAddr, sessionID, "", true)
 				accepted = true
@@ -100,6 +131,17 @@ func acceptCodexTrustRemote(ctx context.Context, listenAddr, sessionID, provider
 		if hasCodexPromptMarker(plain) ||
 			strings.Contains(plain, "OpenAI Codex") || bannerDetectedConfig(scrollback, provider, nil) {
 			return
+		}
+		// Never saw a trust modal: do not burn full timeout on empty/loading TUI
+		// (was the main "hang forever" on resume reopen before attach).
+		if !sawTrust {
+			if noTrustSince.IsZero() {
+				noTrustSince = time.Now()
+			} else if time.Since(noTrustSince) >= acceptCodexTrustNoTrustGrace {
+				return
+			}
+		} else if accepted {
+			// Trust accepted but chrome not ready yet: keep polling until deadline.
 		}
 		time.Sleep(bannerPollInterval)
 	}

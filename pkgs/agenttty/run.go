@@ -204,7 +204,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 			// Brief soft ready so registry/PTY is fully up before parent exits.
 			_ = waitForOpenReady(ctx, listenAddr, sessionID, 3*time.Second)
 			if isCodexProvider(provider.BannerProvider) || runnerID == "codex-tty" {
-				acceptCodexTrustRemote(ctx, listenAddr, sessionID, provider.BannerProvider, 45*time.Second)
+				acceptCodexTrustRemote(ctx, listenAddr, sessionID, provider.BannerProvider, 15*time.Second, nil)
 			}
 			select {
 			case <-ctx.Done():
@@ -229,16 +229,19 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 		return "", terminalSessionID, nil
 	}
 
-	// --open is attach-first: banner/OpenReady is inject-readiness, not attach readiness.
-	// Soft-wait for any scrollback content; never fail open on ready-marker timeout.
-	// AGENT_RUN_OPEN_ATTACH_INSTANT=1 keeps the same short soft wait (AttachWriter also
-	// returns immediately under that env).
+	// --open: soft-wait inject-readiness, inject when ready, then AttachWriter.
+	// AGENT_RUN_OPEN_ATTACH_INSTANT=1 skips interactive attach (tests).
+	// Abort pre-attach waits when the PTY agent child already exited so resume
+	// reopen does not hang blank for minutes then AttachWriter forever.
 	if opts.Open {
+		agentGone := func() bool {
+			return RegistryAgentExited(opts.Home, runnerID, sessionID)
+		}
 		_ = waitForOpenReady(ctx, listenAddr, sessionID, 3*time.Second)
-		// Codex open: soft-accept directory trust so follow-up send is not blocked
-		// (trust was misclassified as update menu; banner hard-wait is not used for open).
+		// Codex open: soft-accept directory trust so follow-up send is not blocked.
+		// Short no-trust grace (see acceptCodexTrustRemote) avoids a 45s blank hang.
 		if isCodexProvider(provider.BannerProvider) || runnerID == "codex-tty" {
-			acceptCodexTrustRemote(ctx, listenAddr, sessionID, provider.BannerProvider, 45*time.Second)
+			acceptCodexTrustRemote(ctx, listenAddr, sessionID, provider.BannerProvider, 15*time.Second, agentGone)
 		}
 
 		select {
@@ -247,22 +250,38 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 		case <-time.After(200 * time.Millisecond):
 		}
 
+		if agentGone() {
+			return "", terminalSessionID, fmt.Errorf("%s: agent exited before open attach (resume/start failed; check session id / codex UI)", runnerID)
+		}
+
 		// Inject policy under --open:
 		// - Grok new session: prompt on argv → do not re-inject.
 		// - codex-tty: always inject after ready (no argv prompt).
 		// - New session + NoSubmit: draft inject without Enter.
 		// - Resume + non-empty follow-up: wait inject-ready then inject if ready; banner
-		//   timeout must not fail open — still attach.
+		//   timeout must not fail open — still attach when agent is alive.
 		// - Empty prompt: no inject.
 		if promptText != "" && (isResume || opts.NoSubmit || runnerID == "codex-tty") {
-			if readyErr := waitForBannerRemote(ctx, listenAddr, sessionID, provider.BannerProvider, provider.BannerMarkers); readyErr != nil {
+			bannerTimeout := time.Duration(0) // default
+			if isCodexProvider(provider.BannerProvider) || runnerID == "codex-tty" {
+				bannerTimeout = openCodexBannerWaitTimeout
+			}
+			readyErr := waitForBannerRemoteOpts(ctx, listenAddr, sessionID, provider.BannerProvider, provider.BannerMarkers, bannerTimeout, agentGone)
+			if readyErr != nil {
 				if ctx.Err() != nil {
 					return "", terminalSessionID, ctx.Err()
 				}
-				// Soft: skip inject on banner/OpenReady timeout; proceed to attach.
+				if agentGone() {
+					return "", terminalSessionID, fmt.Errorf("%s: agent exited before inject-ready: %w", runnerID, readyErr)
+				}
+				// Soft: skip inject on banner timeout; proceed to attach if still alive.
 			} else if err := InjectMessage(listenAddr, sessionID, runnerID, promptText, !opts.NoSubmit); err != nil {
 				return "", terminalSessionID, err
 			}
+		}
+
+		if agentGone() {
+			return "", terminalSessionID, fmt.Errorf("%s: agent exited before open attach", runnerID)
 		}
 
 		// Persist dual-write snapshot while keep-alive, then auto-attach.

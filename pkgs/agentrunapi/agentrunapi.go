@@ -129,6 +129,12 @@ func AutoSendOrResume(ctx context.Context, opts Opts) error {
 		opts.Stderr = os.Stderr
 	}
 
+	// Open-mode codex never binds runner_session_id before attach returns.
+	// After /exit, bind from zombie scrollback footer so Classify can ModeResume.
+	if meta, found, rerr := resolveSession(opts.Store, sessionID); rerr == nil && found {
+		_ = tryBindRunnerSessionFromZombie(opts.Store, meta)
+	}
+
 	// Prefer explicit opts.Probe; nil → LifecycleProbe inside Classify.
 	mode, meta, found, err := Classify(opts.Store, sessionID, opts.Probe)
 	if err != nil {
@@ -142,16 +148,36 @@ func AutoSendOrResume(ctx context.Context, opts Opts) error {
 		}
 		return defaultSendLive(ctx, opts, meta)
 	case ModeResume:
+		// Reclaim keep-alive zombie before ForceNew/child re-reserves the id.
+		// (CLI resumeExistingSession also reclaims; this covers library + ModeRun
+		// fall-throughs and parent openInNewTerminal → child paths.)
+		ReclaimZombieTerminalIDs(opts.Store.Home(), effectiveRunner(opts, meta),
+			meta.TerminalSessionID, meta.SessionID, opts.SessionID)
 		if opts.ResumeSession != nil {
 			return opts.ResumeSession(ctx, opts, meta)
 		}
 		return defaultResumeSession(ctx, opts, meta)
 	default: // ModeRun
+		// Found session re-open (unbound after exit, or first run): free zombie id.
+		if found {
+			ReclaimZombieTerminalIDs(opts.Store.Home(), effectiveRunner(opts, meta),
+				meta.TerminalSessionID, meta.SessionID, opts.SessionID)
+		}
 		if opts.RunSession != nil {
 			return opts.RunSession(ctx, opts, meta, found)
 		}
 		return defaultRunSession(ctx, opts, meta, found)
 	}
+}
+
+func effectiveRunner(opts Opts, meta agentstorage.SessionMeta) string {
+	if r := strings.TrimSpace(opts.AgentRunner); r != "" {
+		return r
+	}
+	if r := strings.TrimSpace(meta.Runner); r != "" {
+		return r
+	}
+	return "grok-tty"
 }
 
 // resolveSession looks up a bare session id. Missing → found=false (MODE=run).
