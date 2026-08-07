@@ -30,6 +30,8 @@ type FollowUpOpts struct {
 	AllowRelocateResumeSessionDir bool
 	Open                          bool
 	Detach                        bool
+	// Color true → emit --color after open/detach flags, before -e / -- / prompt.
+	Color bool
 	// Env each "KEY=VALUE" → -e KEY=VALUE before -- / prompt (optional).
 	Env []string
 }
@@ -73,6 +75,9 @@ func BuildFollowUpCommand(opts FollowUpOpts) (string, error) {
 	}
 	if opts.Detach {
 		remainder = append(remainder, "--detach")
+	}
+	if opts.Color {
+		remainder = append(remainder, "--color")
 	}
 	for _, e := range opts.Env {
 		e = strings.TrimSpace(e)

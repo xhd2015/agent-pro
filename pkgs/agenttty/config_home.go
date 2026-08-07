@@ -34,19 +34,33 @@ func CodexHomeForRunner(configHome string) string {
 
 // PrependCommandEnv prefixes argv with env(1) assignments for the PTY child process.
 func PrependCommandEnv(argv []string, runnerID, configHome string) []string {
-	return ApplyChildProcessEnv(argv, runnerID, configHome, nil, nil)
+	return ApplyChildProcessEnv(argv, runnerID, configHome, nil, nil, false)
 }
 
 // ApplyChildProcessEnv prefixes argv with env(1) so the PTY child receives:
 // - env entries (KEY=VALUE, later wins for the same KEY)
 // - PATH with prependPaths joined ahead of the current PATH
 // - GROK_HOME / CODEX_HOME from configHome
-func ApplyChildProcessEnv(argv []string, runnerID, configHome string, prependPaths, envEntries []string) []string {
-	assignments := make([]string, 0, len(envEntries)+2)
+// - when color is true (applied last, wins over parent + -e):
+//   - env -u NO_COLOR
+//   - FORCE_COLOR=1 CLICOLOR=1 CLICOLOR_FORCE=1
+//   - TERM=xterm-256color when effective TERM is empty or "dumb"
+func ApplyChildProcessEnv(argv []string, runnerID, configHome string, prependPaths, envEntries []string, color bool) []string {
+	assignments := make([]string, 0, len(envEntries)+8)
+	// Effective TERM after parent + user -e (last-win); color policy may rewrite.
+	effectiveTERM := os.Getenv("TERM")
 	// Preserve order for meta/logging; env(1) last-wins for duplicate keys.
 	for _, e := range envEntries {
 		e = strings.TrimSpace(e)
 		if e == "" {
+			continue
+		}
+		key, val, hasEq := strings.Cut(e, "=")
+		if hasEq && key == "TERM" {
+			effectiveTERM = val
+		}
+		// Color policy wins over -e NO_COLOR=…: drop so -u can clear parent too.
+		if color && hasEq && key == "NO_COLOR" {
 			continue
 		}
 		assignments = append(assignments, e)
@@ -69,11 +83,33 @@ func ApplyChildProcessEnv(argv []string, runnerID, configHome string, prependPat
 		}
 	}
 	assignments = append(assignments, RunnerConfigHomeEnv(runnerID, configHome)...)
-	if len(assignments) == 0 {
+
+	// Color force policy last: unset NO_COLOR, set force keys, TERM policy.
+	// When effective TERM is empty/dumb → xterm-256color; otherwise pass through
+	// the effective value so PTY defaults do not clobber a good parent TERM.
+	var unset []string
+	if color {
+		unset = append(unset, "NO_COLOR")
+		assignments = append(assignments,
+			"FORCE_COLOR=1",
+			"CLICOLOR=1",
+			"CLICOLOR_FORCE=1",
+		)
+		if effectiveTERM == "" || effectiveTERM == "dumb" {
+			assignments = append(assignments, "TERM=xterm-256color")
+		} else {
+			assignments = append(assignments, "TERM="+effectiveTERM)
+		}
+	}
+
+	if len(assignments) == 0 && len(unset) == 0 {
 		return argv
 	}
-	out := make([]string, 0, 1+len(assignments)+len(argv))
+	out := make([]string, 0, 1+2*len(unset)+len(assignments)+len(argv))
 	out = append(out, "env")
+	for _, k := range unset {
+		out = append(out, "-u", k)
+	}
 	out = append(out, assignments...)
 	out = append(out, argv...)
 	return out

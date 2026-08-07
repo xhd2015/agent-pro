@@ -87,10 +87,13 @@ type Opts struct {
 	// ForceNew FollowUp Driver (see pkgs/agentdriver). Zero → DefaultSelf in serve.
 	Driver agentdriver.Driver
 	// NewTerminal: P1 unit leaves keep false. When true, ForceNew may remain CLI-owned.
-	NewTerminal  bool
-	Env          []string
+	NewTerminal bool
+	Env         []string
 	PrependPaths []string
-	Store        agentstorage.Store
+	// Color forces TTY child color env last (same policy as agent-run run --color).
+	// Not persisted on meta; does not recolor agent-run own stdout/JSON.
+	Color  bool
+	Store  agentstorage.Store
 	Stdout       io.Writer
 	Stderr       io.Writer
 	Probe        ProbeFunc

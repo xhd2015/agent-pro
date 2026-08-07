@@ -56,6 +56,7 @@ Options:
                       default: AGENT_RUNNER_CONFIG_HOME env
   --prepend-path DIR  prepend DIR to the TTY agent runner child PATH (repeatable; TTY only)
   -e, --env KEY=VALUE set env var on the TTY agent runner child process (repeatable; TTY only)
+  --color             force color on the TTY agent runner child (unset NO_COLOR; FORCE_COLOR/CLICOLOR; TTY only)
   -h, --help          show help
 `
 
@@ -71,6 +72,7 @@ func runHeadless(args []string, defaultRunner string) error {
 	var agentRunnerConfigHome string
 	var prependPaths []string
 	var envEntries []string
+	var colorFlag bool
 	var keepTTY bool
 	var openFlag bool
 	var detachFlag bool
@@ -99,6 +101,7 @@ func runHeadless(args []string, defaultRunner string) error {
 		String("--agent-runner-config-home", &agentRunnerConfigHome).
 		StringSlice("--prepend-path", &prependPaths).
 		StringSlice("-e,--env", &envEntries).
+		Bool("--color", &colorFlag).
 		Help("-h,--help", runHelp).
 		CollectParsedFlags(&recorded).
 		Parse(args)
@@ -140,6 +143,7 @@ func runHeadless(args []string, defaultRunner string) error {
 			agentRunnerBinary: agentRunnerBinary,
 			prependPaths:      absPrepend,
 			envEntries:        envEntries,
+			color:             colorFlag,
 			jsonFlag:          jsonFlag,
 			keepTTY:           keepTTY,
 			openFlag:          openFlag,
@@ -167,6 +171,7 @@ func runHeadless(args []string, defaultRunner string) error {
 			agentRunnerConfigHome:         absConfigHome,
 			prependPaths:                  absPrepend,
 			envEntries:                    envEntries,
+			color:                         colorFlag,
 			keepTTY:                       keepTTY,
 			openFlag:                      openFlag,
 			detachFlag:                    detachFlag,
@@ -215,6 +220,9 @@ func runHeadless(args []string, defaultRunner string) error {
 	if err := requireTTYForSessionEnv(runner, absPrepend, envEntries); err != nil {
 		return err
 	}
+	if err := requireTTYForColor(runner, colorFlag); err != nil {
+		return err
+	}
 	store, err := openStore()
 	if err != nil {
 		return err
@@ -235,6 +243,7 @@ func runHeadless(args []string, defaultRunner string) error {
 		AgentRunnerConfigHome: absConfigHome,
 		PrependPaths:          absPrepend,
 		Env:                   envEntries,
+		Color:                 colorFlag,
 		JSON:                  jsonFlag,
 		Workspace:             workspace,
 		KeepTerminalAlive:     keepTTY || openFlag || detachFlag,
@@ -275,6 +284,7 @@ type resumeFromGrokOpts struct {
 	agentRunnerBinary string
 	prependPaths      []string
 	envEntries        []string
+	color             bool
 	jsonFlag          bool
 	keepTTY           bool
 	openFlag          bool
@@ -325,6 +335,9 @@ func runResumeFromGrokSession(opts resumeFromGrokOpts) error {
 		return fmt.Errorf("--detach requires a TTY runner (got %s); non-TTY runners like fake-codex are not supported", runner)
 	}
 	if err := requireTTYForSessionEnv(runner, opts.prependPaths, opts.envEntries); err != nil {
+		return err
+	}
+	if err := requireTTYForColor(runner, opts.color); err != nil {
 		return err
 	}
 
@@ -435,6 +448,7 @@ func runResumeFromGrokSession(opts resumeFromGrokOpts) error {
 		AgentRunnerConfigHome: opts.configHome,
 		PrependPaths:          opts.prependPaths,
 		Env:                   opts.envEntries,
+		Color:                 opts.color,
 		JSON:                  opts.jsonFlag,
 		Workspace:             workspace,
 		KeepTerminalAlive:     opts.keepTTY || opts.openFlag || opts.detachFlag,
@@ -459,6 +473,7 @@ type autoSendOrResumeOpts struct {
 	agentRunnerConfigHome         string
 	prependPaths                  []string
 	envEntries                    []string
+	color                         bool
 	keepTTY                       bool
 	openFlag                      bool
 	detachFlag                    bool
@@ -515,6 +530,7 @@ func runAutoSendOrResume(opts autoSendOrResumeOpts) error {
 		Driver:                        mergeHostDriver(agentdriver.Driver{}),
 		Env:                           opts.envEntries,
 		PrependPaths:                  opts.prependPaths,
+		Color:                         opts.color,
 		Store:                         store,
 		Stdout:                        os.Stdout,
 		Stderr:                        os.Stderr,
@@ -542,6 +558,7 @@ func runAutoSendOrResume(opts autoSendOrResumeOpts) error {
 				agentRunnerConfigHome:         opts.agentRunnerConfigHome,
 				prependPaths:                  opts.prependPaths,
 				envEntries:                    opts.envEntries,
+				color:                         opts.color,
 				keepTTY:                       opts.keepTTY,
 				openFlag:                      opts.openFlag,
 				detachFlag:                    opts.detachFlag,
@@ -602,6 +619,7 @@ func openAutoInNewTerminal(opts autoSendOrResumeOpts, meta agentstorage.SessionM
 		AllowRelocateResumeSessionDir: opts.allowRelocateResumeSessionDir,
 		Open:                          opts.openFlag,
 		Detach:                        opts.detachFlag,
+		Color:                         opts.color,
 		Env:                           append([]string(nil), opts.envEntries...),
 	})
 	if err != nil {
@@ -756,6 +774,9 @@ func autoRunCreate(store agentstorage.Store, sessionID string, opts autoSendOrRe
 	if err := requireTTYForSessionEnv(runner, opts.prependPaths, opts.envEntries); err != nil {
 		return err
 	}
+	if err := requireTTYForColor(runner, opts.color); err != nil {
+		return err
+	}
 	return agentui.Run(context.Background(), agentui.RunOptions{
 		Prompt:                opts.prompt,
 		Runner:                runner,
@@ -765,6 +786,7 @@ func autoRunCreate(store agentstorage.Store, sessionID string, opts autoSendOrRe
 		AgentRunnerConfigHome: opts.agentRunnerConfigHome,
 		PrependPaths:          opts.prependPaths,
 		Env:                   opts.envEntries,
+		Color:                 opts.color,
 		JSON:                  opts.jsonFlag,
 		Workspace:             workspace,
 		KeepTerminalAlive:     opts.keepTTY || opts.openFlag || opts.detachFlag,

@@ -85,7 +85,7 @@ tests/agentrunapi/wait-driver/
 │   ├── driver-default-agent-run/        # empty DriverBinary → agent-run
 │   ├── custom-driver-prefix/            # binary + ArgsPrefix; no --new-terminal
 │   ├── open-child-shape/                # auto-send + open + session; no new-terminal
-│   └── detach-child-shape/              # auto-send + detach; no open/new-terminal
+│   ├── detach-child-shape/              # auto-send + detach; no open/new-terminal
 ├── open-new-terminal/                   # OpenInNewTerminal + injectable open
 │   ├── SETUP.md
 │   └── injectable-open/                 # records dir + followUp; no real iTerm

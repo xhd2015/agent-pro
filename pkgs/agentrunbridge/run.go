@@ -18,6 +18,8 @@ const (
 type RunOpts struct {
 	Prompt, SessionID, Binary, AgentRunner, RunnerConfigHome, WorkspaceDir string
 	AutoSendOrResume, KeepTTY, NewTerminal, Open, Detach, NoSubmit, Stateless bool
+	// Color maps to agent-run run --color (force TTY child color env).
+	Color bool
 	// AllowRelocateResumeSessionDir maps to agent-run
 	// --allow-relocate-resume-session-dir (resume --dir vs grok session cwd).
 	AllowRelocateResumeSessionDir bool

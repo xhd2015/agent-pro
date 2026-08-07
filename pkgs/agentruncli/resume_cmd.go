@@ -69,6 +69,7 @@ type resumeRunConfig struct {
 	agentRunnerConfigHome         string
 	prependPaths                  []string // CLI appends only (absolute); merged with meta in resumeExistingSession
 	envEntries                    []string // CLI appends only
+	color                         bool     // not persisted; CLI-only for this resume invocation
 	keepTTY                       bool
 	openFlag                      bool
 	detachFlag                    bool
@@ -260,6 +261,9 @@ func resumeExistingSession(store agentstorage.Store, meta agentstorage.SessionMe
 	if err := requireTTYForSessionEnv(runner, cfg.prependPaths, cfg.envEntries); err != nil {
 		return err
 	}
+	if err := requireTTYForColor(runner, cfg.color); err != nil {
+		return err
+	}
 
 	// Resume merge: stored paths/env always applied; CLI flags append only.
 	// Config home: CLI replaces scalar when set, else use stored.
@@ -320,6 +324,7 @@ func resumeExistingSession(store agentstorage.Store, meta agentstorage.SessionMe
 			AgentRunnerConfigHome: configHome,
 			PrependPaths:          effectivePrepend,
 			Env:                   effectiveEnv,
+			Color:                 cfg.color,
 			JSON:                  cfg.jsonFlag,
 			Workspace:             workspace,
 			KeepTerminalAlive:     keepTTY || openFlag || detachFlag,
@@ -354,6 +359,7 @@ func resumeExistingSession(store agentstorage.Store, meta agentstorage.SessionMe
 		AgentRunnerConfigHome: configHome,
 		PrependPaths:          effectivePrepend,
 		Env:                   effectiveEnv,
+		Color:                 cfg.color,
 		JSON:                  cfg.jsonFlag,
 		Workspace:             workspace,
 		KeepTerminalAlive:     keepTTY || openFlag || detachFlag,

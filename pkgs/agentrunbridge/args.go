@@ -45,6 +45,9 @@ func BuildArgs(opts RunOpts) []string {
 	if opts.Detach {
 		args = append(args, "--detach")
 	}
+	if opts.Color {
+		args = append(args, "--color")
+	}
 
 	// Env pairs after other flags and before "--" / prompt (agent-run StringSlice).
 	for _, e := range opts.Env {

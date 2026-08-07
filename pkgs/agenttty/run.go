@@ -39,6 +39,9 @@ type RunOptions struct {
 	PrependPaths []string
 	// Env is ordered KEY=VALUE entries applied to the PTY child (last-win per key).
 	Env []string
+	// Color forces TTY child color env last (unset NO_COLOR; FORCE_COLOR/CLICOLOR;
+	// TERM fixup when empty/dumb). Not persisted on session meta.
+	Color bool
 	// Driver is the host re-exec config for __serve_* children (see agentdriver).
 	// Zero → DefaultSelf. Prefer over BinaryPath.
 	Driver agentdriver.Driver
@@ -143,7 +146,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 			configHome = provisioned
 		}
 	}
-	argv = ApplyChildProcessEnv(argv, runnerID, configHome, opts.PrependPaths, opts.Env)
+	argv = ApplyChildProcessEnv(argv, runnerID, configHome, opts.PrependPaths, opts.Env, opts.Color)
 
 	driver := opts.Driver
 	if strings.TrimSpace(driver.Binary) == "" && strings.TrimSpace(opts.BinaryPath) != "" {
@@ -293,15 +296,20 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	case <-time.After(200 * time.Millisecond):
 	}
 
-	// Grok new session: prompt already on argv (auto-submits) — do not re-inject.
-	// codex-tty: always inject (argv omitted above); resume/NoSubmit inject for all.
-	// NoSubmit: inject without trailing Enter (suffixCR=false).
+	// Grok new session: prompt already on argv (auto-submits) — do not re-inject
+	// the prompt text. codex-tty: always inject (argv omitted above); resume/NoSubmit
+	// inject for all. NoSubmit: inject without trailing Enter (suffixCR=false).
 	// codex-tty uses InjectMessage (type then separate Enter) when submitting.
 	shouldInject := promptText != "" && (isResume || opts.NoSubmit || runnerID == "codex-tty")
 	if shouldInject {
 		if err := InjectMessage(listenAddr, sessionID, runnerID, promptText, !opts.NoSubmit); err != nil {
 			return "", terminalSessionID, err
 		}
+	} else if !opts.KeepTerminalAlive {
+		// Soft kick for shell env-logger fakes that `read` after printing the
+		// banner (session-env / run-color). Real grok already received the
+		// prompt on argv; a bare newline only unblocks read without retyping.
+		_ = ttywatch.InjectInput(listenAddr, sessionID, []byte("\n"))
 	}
 
 	keepBlocking := false

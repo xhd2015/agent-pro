@@ -80,6 +80,17 @@ func requireTTYForSessionEnv(runner string, prependPaths, envEntries []string) e
 	return fmt.Errorf("--prepend-path and -e/--env are only supported for TTY runners (got %s); non-TTY runners are not supported", runner)
 }
 
+// requireTTYForColor hard-errors when --color is used on a non-TTY runner.
+func requireTTYForColor(runner string, color bool) error {
+	if !color {
+		return nil
+	}
+	if agenttty.IsTTYRunner(runner) {
+		return nil
+	}
+	return fmt.Errorf("--color is only supported for TTY runners (got %s); non-TTY runners are not supported", runner)
+}
+
 // normalizeEnvEntries trims entries while preserving KEY=VALUE body (no key trim past first =).
 func normalizeEnvEntries(entries []string) []string {
 	if len(entries) == 0 {
