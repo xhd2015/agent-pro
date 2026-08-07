@@ -47,3 +47,35 @@ func TestCheckGrokWritable_busyWhenThinking(t *testing.T) {
 		t.Fatalf("expected busy state, got %q", st.State)
 	}
 }
+
+func TestCheckCodexWritable_notReadyAfterExitFooter(t *testing.T) {
+	// Residual composer glyphs + real /exit footer must not stay sendable.
+	scrollback := []byte("" +
+		"› old turn\n" +
+		"Token usage: total=1\n" +
+		"To continue this session, run codex resume 019fdca1-3893-7fa3-a8aa-ebc1ccc750a0\n")
+	st := checkCodexWritable(scrollback)
+	if st.Ready {
+		t.Fatalf("expected not ready after exit footer, got ready state=%q reason=%q", st.State, st.Reason)
+	}
+	if st.State != "exited" {
+		t.Fatalf("expected state=exited, got %q reason=%q", st.State, st.Reason)
+	}
+}
+
+func TestCheckCodexWritable_notReadyAfterTerminalExited(t *testing.T) {
+	scrollback := []byte("› leftover\n[Terminal exited]\n$ ")
+	st := checkCodexWritable(scrollback)
+	if st.Ready {
+		t.Fatalf("expected not ready after [Terminal exited], got ready state=%q", st.State)
+	}
+}
+
+func TestCheckCodexWritable_standaloneResumeCmdStillIdle(t *testing.T) {
+	// User typed "codex resume …" in chat without exit phrase — still injectable.
+	scrollback := []byte("» how do I use codex resume abcdef01-2345-6789-abcd-ef0123456789\n")
+	st := checkCodexWritable(scrollback)
+	if !st.Ready {
+		t.Fatalf("resume cmd alone should not block writable, got state=%q reason=%q", st.State, st.Reason)
+	}
+}

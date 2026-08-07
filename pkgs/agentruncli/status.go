@@ -363,19 +363,19 @@ func runnerKindFromMeta(runner string) string {
 // Keep-alive __serve__ remains TCP-reachable after the agent child exits
 // (zombie serve). Do not treat terminal.status==reachable alone as "still
 // active"; inspect scrollback exit markers, sendable idle, and serve children.
+// Prefer exit evidence over sendable=yes (residual glyphs can false-positive).
+// Primary path uses agentrunapi.LifecycleProbe; this is fallback only.
 func computeRunnerExited(report sessionStatusReport, meta agentstorage.SessionMeta, scrollback string) *bool {
 	t := true
 	f := false
 	if report.Terminal.Status == "reachable" {
+		// Zombie-after-/exit: exit footer / [Terminal exited] before sendable.
+		if scrollbackSuggestsAgentExited(scrollback, meta.Runner) {
+			return &t
+		}
 		// Truly live agent TUI: idle/sendable input prompt.
 		if report.Terminal.Sendable == "yes" {
 			return &f
-		}
-		// Zombie-after-/exit: exit footer / [Terminal exited] in snapshot.
-		// Prefer scrollback markers over "no child" alone — fixtures (and some
-		// hosts) register a non-serve PID that legitimately has zero children.
-		if scrollbackSuggestsAgentExited(scrollback) {
-			return &t
 		}
 		// Keep-alive serve still reachable but agent child is gone, and
 		// snapshot is non-empty without a live idle prompt (sendable already no).
@@ -411,25 +411,9 @@ func computeRunnerExited(report sessionStatusReport, meta agentstorage.SessionMe
 	return nil
 }
 
-// scrollbackSuggestsAgentExited reports post-/exit markers in terminal snapshot.
-// Matches left-aligned or indented "[Terminal exited]" and grok/codex resume footers.
-func scrollbackSuggestsAgentExited(scrollback string) bool {
-	if strings.TrimSpace(scrollback) == "" {
-		return false
-	}
-	// Snapshot may retain ANSI; plain substring match is enough for markers.
-	if strings.Contains(scrollback, "[Terminal exited]") {
-		return true
-	}
-	// "Resume this session with:" / "grok --resume <id>" / "codex --resume <id>"
-	lower := strings.ToLower(scrollback)
-	if strings.Contains(lower, "grok --resume") || strings.Contains(lower, "codex --resume") {
-		return true
-	}
-	if strings.Contains(lower, "resume this session with") {
-		return true
-	}
-	return false
+// scrollbackSuggestsAgentExited delegates to agenttty (runner-scoped footers).
+func scrollbackSuggestsAgentExited(scrollback, runner string) bool {
+	return agenttty.ScrollbackSuggestsAgentExited(scrollback, runner)
 }
 
 // scrollbackLooksLiveAgent reports idle TUI prompt markers (agent still interactive).

@@ -39,14 +39,17 @@ func EmptyProbe(store agentstorage.Store, meta agentstorage.SessionMeta) (ProbeR
 
 // lifecycleLayers is the internal multi-layer subset needed for Classify.
 type lifecycleLayers struct {
-	processStatus  string // alive|dead|unknown
-	processPID     int
-	terminalStatus string // reachable|unreachable|missing
+	processStatus    string // serve PID: alive|dead|unknown
+	processPID       int    // serve / registry PID
+	commandPID       int    // PTY agent child (0 unknown)
+	commandExited    bool   // registry recorded PTY Wait done
+	commandAlive     *bool  // nil unknown; true/false when commandPID known
+	terminalStatus   string // reachable|unreachable|missing
 	terminalSendable string // yes|no
-	runnerStatus   string // binding|bound|unbound
-	scrollback     string
-	exited         *bool
-	resumeReady    bool
+	runnerStatus     string // binding|bound|unbound
+	scrollback       string
+	exited           *bool
+	resumeReady      bool
 }
 
 func probeLifecycleLayers(store agentstorage.Store, meta agentstorage.SessionMeta) lifecycleLayers {
@@ -76,6 +79,16 @@ func probeLifecycleLayers(store agentstorage.Store, meta agentstorage.SessionMet
 			}
 		} else {
 			layers.processStatus = "unknown"
+		}
+		// Phase 2: agent child PID from registry (preferred over serve PID).
+		layers.commandPID = ttySess.Registry.CommandPID
+		layers.commandExited = ttySess.Registry.CommandExited
+		if layers.commandExited {
+			f := false
+			layers.commandAlive = &f
+		} else if layers.commandPID > 0 {
+			alive := ttywatch.ProcessAlive(layers.commandPID)
+			layers.commandAlive = &alive
 		}
 		if ttySess.TCPReachable {
 			layers.terminalStatus = "reachable"
@@ -146,15 +159,37 @@ func bindInProgress(home, sessionID string) bool {
 
 // computeRunnerExited returns true/false when known, nil when unknown.
 // Parity with agentruncli: keep-alive serve may stay reachable after /exit.
+//
+// Signal priority:
+//  1. command_pid / command_exited (PTY agent child) — primary
+//  2. scrollback exit footer / [Terminal exited]
+//  3. sendable + zombie serve (no children)
+//
+// Serve PID alone never means "agent live" under keep-alive.
 func computeRunnerExited(layers lifecycleLayers, meta agentstorage.SessionMeta) *bool {
 	t := true
 	f := false
+
+	// --- Primary: durable command_pid / command_exited from registry ---
+	if layers.commandExited {
+		return &t
+	}
+	if layers.commandAlive != nil {
+		if !*layers.commandAlive {
+			return &t // agent child dead
+		}
+		// Agent child still running → live (even if residual footers appear).
+		return &f
+	}
+
 	if layers.terminalStatus == "reachable" {
+		// Prefer exit markers over sendable (writable should already be "no"
+		// after exit; this is belt-and-suspenders for residual glyphs).
+		if scrollbackSuggestsAgentExited(layers.scrollback, meta.Runner) {
+			return &t
+		}
 		if layers.terminalSendable == "yes" {
 			return &f
-		}
-		if scrollbackSuggestsAgentExited(layers.scrollback) {
-			return &t
 		}
 		if layers.terminalSendable == "no" &&
 			strings.TrimSpace(layers.scrollback) != "" &&
@@ -185,21 +220,9 @@ func computeRunnerExited(layers lifecycleLayers, meta agentstorage.SessionMeta) 
 	return nil
 }
 
-func scrollbackSuggestsAgentExited(scrollback string) bool {
-	if strings.TrimSpace(scrollback) == "" {
-		return false
-	}
-	if strings.Contains(scrollback, "[Terminal exited]") {
-		return true
-	}
-	lower := strings.ToLower(scrollback)
-	if strings.Contains(lower, "grok --resume") || strings.Contains(lower, "codex --resume") {
-		return true
-	}
-	if strings.Contains(lower, "resume this session with") {
-		return true
-	}
-	return false
+// scrollbackSuggestsAgentExited delegates to agenttty (runner-scoped footers).
+func scrollbackSuggestsAgentExited(scrollback, runner string) bool {
+	return agenttty.ScrollbackSuggestsAgentExited(scrollback, runner)
 }
 
 func scrollbackLooksLiveAgent(scrollback string) bool {

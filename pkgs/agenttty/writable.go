@@ -120,6 +120,14 @@ func checkCodexWritable(scrollback []byte) WritableStatus {
 	if len(plain) == 0 {
 		return WritableStatus{Reason: "no terminal output", State: "unknown"}
 	}
+	// After /exit the keep-alive scrollback still holds historical › glyphs.
+	// Exit footer (phrase ∧ codex resume) or [Terminal exited] ⇒ not injectable.
+	if TerminalExitedMarkerPresent(plain) {
+		return WritableStatus{Reason: "terminal exited", State: "exited"}
+	}
+	if CodexExitFooterPresent(plain) {
+		return WritableStatus{Reason: "codex agent exited (resume footer)", State: "exited"}
+	}
 	lower := strings.ToLower(plain)
 	compact := compactWritableText(lower)
 	// Only the blocking Update available *menu* is non-writable. Residual banners that
