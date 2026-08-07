@@ -251,7 +251,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 		}
 
 		if agentGone() {
-			return "", terminalSessionID, fmt.Errorf("%s: agent exited before open attach (resume/start failed; check session id / codex UI)", runnerID)
+			return "", terminalSessionID, formatOpenAgentExitedError(runnerID, listenAddr, sessionID, "open attach", nil)
 		}
 
 		// Inject policy under --open:
@@ -272,7 +272,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 					return "", terminalSessionID, ctx.Err()
 				}
 				if agentGone() {
-					return "", terminalSessionID, fmt.Errorf("%s: agent exited before inject-ready: %w", runnerID, readyErr)
+					return "", terminalSessionID, formatOpenAgentExitedError(runnerID, listenAddr, sessionID, "inject-ready", readyErr)
 				}
 				// Soft: skip inject on banner timeout; proceed to attach if still alive.
 			} else if err := InjectMessage(listenAddr, sessionID, runnerID, promptText, !opts.NoSubmit); err != nil {
@@ -281,7 +281,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 		}
 
 		if agentGone() {
-			return "", terminalSessionID, fmt.Errorf("%s: agent exited before open attach", runnerID)
+			return "", terminalSessionID, formatOpenAgentExitedError(runnerID, listenAddr, sessionID, "open attach", nil)
 		}
 
 		// Persist dual-write snapshot while keep-alive, then auto-attach.
