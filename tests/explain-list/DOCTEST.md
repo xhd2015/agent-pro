@@ -2,11 +2,11 @@
 
 End-to-end doctests for the `explain list` subcommand (`cmd/explain` →
 `agent/explain`). Lists recent explain sessions from on-disk storage (newest
-first), pretty-prints Q/A cards, supports `--limit` / `--color`, and never
-invokes the LLM.
+first), pretty-prints Q/A cards, supports `--limit` / `--grep` / `--or` /
+`--and` / `--color`, and never invokes the LLM.
 
 ```text
-explain list [--limit N] [--color]
+explain list [--limit N] [--grep PATTERN]... [--or|--and] [--color]
 ```
 
 # DSN (Domain Specific Notion)
@@ -23,6 +23,12 @@ explain list [--limit N] [--color]
   (JSON `SessionData`: `agent_runner`, `model`, `messages[]` with
   `role`/`message`). Session time = dirname timestamp prefix; list order is
   created-desc.
+- **Grep filter** — optional repeatable `--grep` patterns (case-insensitive
+  **literal** substring). Match against Q/A `Messages[].Message` bodies only
+  (not runner / model / dirname). Multiple patterns **OR** by default;
+  `--or` makes OR explicit; `--and` requires every pattern to hit somewhere
+  in the session (patterns may land on different messages). Pipeline:
+  sort newest-first → filter → total = match count → apply `--limit`.
 - **Fake agent binary** — path in `EXPLAIN_AGENT_PATH`. List must never execute
   it; leaves point at a failing stub so accidental LLM paths fail loudly.
 - **Test harness** — builds `explain` once per `doctest test` session, seeds
@@ -31,12 +37,17 @@ explain list [--limit N] [--color]
 
 **Behaviors**
 
-- Empty store → friendly message (e.g. `No explain sessions yet.`), exit 0,
-  trailing newline on stdout.
-- With sessions: title line includes shown count, total count, and limit; cards newest-first
-  with index, formatted time `YYYY-MM-DD HH:MM:SS`, agent_runner / model,
-  turn count (user messages), then all Q/A lines in message order.
-- `--limit N` default 10; `N <= 0` → default 10; cap at 100.
+- Empty store → friendly message `No explain sessions yet.\n`, exit 0,
+  trailing newline on stdout (unchanged when `--grep` is also set).
+- With sessions and no filter: title includes shown count, total count, and
+  limit; cards newest-first with index, formatted time `YYYY-MM-DD HH:MM:SS`,
+  agent_runner / model, turn count (user messages), then all Q/A lines in
+  message order.
+- With greps: only matching sessions listed; title `of N` is the **match**
+  count (after filter, before limit). Store non-empty but zero matches →
+  `No matching explain sessions.\n`, exit 0.
+- `--limit N` default 10; `N <= 0` → default 10; cap at 100. With greps:
+  limit applies **after** filter.
 - Print each message body in full (no soft-truncate, no `…`); preserve stored
   newlines/whitespace. Multi-line bodies: first line after `Q  `/`A  `; each
   subsequent non-empty line indented with exactly **6 spaces**; empty segments
@@ -46,9 +57,17 @@ explain list [--limit N] [--color]
 - Color policy: `--color` forces ANSI on (wins over `NO_COLOR` and non-TTY);
   else if `NO_COLOR` non-empty → off; else auto (TTY). Harness uses pipes so
   auto is off. When on: `Q` bold cyan (`\x1b[1;36m`), `A` bold green
-  (`\x1b[1;32m`), headers/meta/separators dim (`\x1b[2m`); bodies plain.
-- `explain list --help` / `-h` documents `--limit` and `--color`.
-- List never starts/resumes an agent (no `EXPLAIN_AGENT_PATH` invocation).
+  (`\x1b[1;32m`), headers/meta/separators dim (`\x1b[2m`); bodies plain
+  except grep match spans (when greps present) which are **bold red**
+  `\x1b[1;31m…\x1b[0m` (preserve original casing; per-line leftmost-first,
+  no nested/overlapping spans; every non-overlapping occurrence of every
+  pattern on kept cards). Color off: filter only, no ANSI in bodies.
+- Validation hard errors (stderr `Error: …`, non-zero exit): empty `--grep`
+  pattern; both `--or` and `--and`; `--or`/`--and` without any `--grep`.
+- `explain list --help` / `-h` documents `--limit`, `--grep`, `--or`,
+  `--and`, and `--color`.
+- List never starts/resumes an agent (no `EXPLAIN_AGENT_PATH` invocation),
+  including when `--grep` is used.
 - User-facing stdout always ends with a trailing `\n` after the last content
   line.
 
@@ -87,13 +106,43 @@ explain list [--limit N] [--color]
  |    +-- color-overrides-no-color/    (LEAF) --color + NO_COLOR → ANSI still on
  |    +-- plain-no-flag/               (LEAF) no --color, non-TTY → no ANSI
  |
+ +-- grep/
+ |    |
+ |    +-- filter/
+ |    |    |
+ |    |    +-- single-match/           (LEAF) one --grep keeps only matches; title match totals
+ |    |    +-- case-insensitive/       (LEAF) Docker body matches --grep docker
+ |    |    +-- multi-default-or/       (LEAF) multi --grep default OR
+ |    |    +-- multi-explicit-or/      (LEAF) multi --grep --or same as default OR
+ |    |    +-- multi-and/              (LEAF) multi --grep --and requires all patterns
+ |    |    +-- and-across-messages/    (LEAF) AND patterns may hit different messages
+ |    |    +-- messages-only/          (LEAF) runner/model/dirname not searched
+ |    |    +-- with-limit/             (LEAF) filter then --limit; of N = match count
+ |    |    +-- no-match/               (LEAF) store non-empty, zero hits → No matching…
+ |    |    +-- empty-store/            (LEAF) empty store + --grep → No explain sessions yet.
+ |    |
+ |    +-- highlight/
+ |    |    |
+ |    |    +-- color-on/               (LEAF) --color: bold-red match spans, original case
+ |    |    +-- color-off/              (LEAF) filter works; no ANSI on match spans
+ |    |    +-- multi-pattern/          (LEAF) both patterns highlighted when both appear
+ |    |
+ |    +-- errors/
+ |    |    |
+ |    |    +-- empty-pattern/          (LEAF) --grep "" → Error, non-zero
+ |    |    +-- both-or-and/            (LEAF) --or and --and together → Error
+ |    |    +-- or-without-grep/        (LEAF) --or without --grep → Error
+ |    |    +-- and-without-grep/       (LEAF) --and without --grep → Error
+ |    |
+ |    +-- no-llm/                      (LEAF) list --grep does not invoke EXPLAIN_AGENT_PATH
+ |
  +-- help/
  |    |
- |    +-- list-help/                   (LEAF) list --help mentions --limit and --color
+ |    +-- list-help/                   (LEAF) list --help mentions --limit/--grep/--or/--and/--color
  |
  +-- dispatch/
       |
-      +-- no-llm-on-list/              (LEAF) list does not invoke EXPLAIN_AGENT_PATH
+      +-- no-llm-on-list/              (LEAF) plain list does not invoke EXPLAIN_AGENT_PATH
 ```
 
 ## Test Index
@@ -114,8 +163,26 @@ explain list [--limit N] [--color]
 | 12 | `color/no-color-env` | `NO_COLOR` set without `--color` → no `\x1b` |
 | 13 | `color/color-overrides-no-color` | `--color` + `NO_COLOR` → ANSI still present |
 | 14 | `color/plain-no-flag` | No flag, non-TTY harness → no ANSI |
-| 15 | `help/list-help` | `explain list --help` mentions `--limit` and `--color` |
-| 16 | `dispatch/no-llm-on-list` | List never runs fake agent at `EXPLAIN_AGENT_PATH` |
+| 15 | `grep/filter/single-match` | Single `--grep` keeps matching sessions; title uses match totals |
+| 16 | `grep/filter/case-insensitive` | Case-insensitive literal match; original casing preserved |
+| 17 | `grep/filter/multi-default-or` | Multiple `--grep` combine with default OR |
+| 18 | `grep/filter/multi-explicit-or` | Explicit `--or` same keep-set as default OR |
+| 19 | `grep/filter/multi-and` | `--and` requires every pattern somewhere in the session |
+| 20 | `grep/filter/and-across-messages` | AND patterns may hit different Q/A messages |
+| 21 | `grep/filter/messages-only` | Only message bodies searched (not runner/model/dirname) |
+| 22 | `grep/filter/with-limit` | Sort → filter → limit; `of N` is match count |
+| 23 | `grep/filter/no-match` | Non-empty store, zero matches → `No matching explain sessions.` |
+| 24 | `grep/filter/empty-store` | Empty store + `--grep` still → `No explain sessions yet.` |
+| 25 | `grep/highlight/color-on` | Color on: bold-red `\x1b[1;31m` around match spans |
+| 26 | `grep/highlight/color-off` | Color off: filter works; no ANSI on bodies |
+| 27 | `grep/highlight/multi-pattern` | Multi-pattern color-on highlights every provided pattern |
+| 28 | `grep/errors/empty-pattern` | Empty `--grep` pattern → `Error:` stderr, non-zero |
+| 29 | `grep/errors/both-or-and` | Both `--or` and `--and` → hard error |
+| 30 | `grep/errors/or-without-grep` | `--or` without any `--grep` → hard error |
+| 31 | `grep/errors/and-without-grep` | `--and` without any `--grep` → hard error |
+| 32 | `grep/no-llm` | `list --grep` never runs fake agent at `EXPLAIN_AGENT_PATH` |
+| 33 | `help/list-help` | `explain list --help` mentions `--limit`, `--grep`, `--or`, `--and`, `--color` |
+| 34 | `dispatch/no-llm-on-list` | Plain list never runs fake agent at `EXPLAIN_AGENT_PATH` |
 
 ## How to Run
 
@@ -356,14 +423,16 @@ func buildExplainOnce(t *testing.T, d *session.Doctest) (string, error) {
 		if err := os.MkdirAll(cache, 0o755); err != nil {
 			return err
 		}
+		// `cmd/` is a nested module (cmd/go.mod); build from that module root.
+		cmdDir := filepath.Join(repoRoot, "cmd")
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "go", "build", "-o", bin, "./cmd/explain")
-		cmd.Dir = repoRoot
+		cmd := exec.CommandContext(ctx, "go", "build", "-o", bin, "./explain")
+		cmd.Dir = cmdDir
 		var be bytes.Buffer
 		cmd.Stderr = &be
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("go build ./cmd/explain: %w\n%s", err, be.String())
+			return fmt.Errorf("go build ./explain (in %s): %w\n%s", cmdDir, err, be.String())
 		}
 		return os.WriteFile(ready, []byte("ok\n"), 0o644)
 	})

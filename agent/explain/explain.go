@@ -14,7 +14,7 @@ import (
 )
 
 var explainHelp = `Usage: explain [options] <message> [follow-up messages...]
-       explain list [--limit N] [--color]
+       explain list [--limit N] [--grep PATTERN]... [--or|--and] [--color]
 
 Ask an AI agent a question and get an answer. Sessions are reused when the
 positional arguments match a prefix of a previous session's user messages.

@@ -4,9 +4,10 @@
 
 ```
 # build explain once; isolate debug config home; seed sessions; run list
-caller: explain list [--limit N] [--color]
+caller: explain list [--limit N] [--grep P]... [--or|--and] [--color]
   -> session store under $AGENT_PRO_DEDICATED_AGENT_EXPLAIN_DEBUG_CONFIG_HOME/sessions
-  -> pretty cards on stdout (no EXPLAIN_AGENT_PATH start)
+  -> optional body grep filter (OR default / AND) then limit; pretty cards
+  -> no EXPLAIN_AGENT_PATH start
 doctest <- stdout / stderr / exit code
 ```
 

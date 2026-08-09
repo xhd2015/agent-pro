@@ -3,12 +3,13 @@
 **Feature**: list-specific help documents flags
 
 ```
-# explain list --help / -h -> usage mentions --limit and --color
+# explain list --help / -h -> usage mentions --limit, --grep, --or, --and, --color
 ```
 
 ## Preconditions
 
-- Implementer registers list help text including `--limit` and `--color`.
+- Implementer registers list help text including `--limit`, `--grep`, `--or`,
+  `--and`, and `--color`.
 
 ## Steps
 

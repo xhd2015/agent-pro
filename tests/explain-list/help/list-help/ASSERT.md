@@ -5,7 +5,7 @@ label: e2e
 ## Expected
 
 - Exit code 0 (help is not an error).
-- Combined stdout+stderr mentions `--limit` and `--color`.
+- Combined stdout+stderr mentions `--limit`, `--grep`, `--or`, `--and`, and `--color`.
 - Mentions `list` (subcommand context).
 - Fake agent not invoked.
 
@@ -39,11 +39,10 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	assertNotContains(t, resp.Stderr, "FAKE_AGENT_INVOKED")
 
 	combined := resp.Stdout + resp.Stderr
-	if !strings.Contains(combined, "--limit") {
-		t.Fatalf("list help must mention --limit:\n%s", combined)
-	}
-	if !strings.Contains(combined, "--color") {
-		t.Fatalf("list help must mention --color:\n%s", combined)
+	for _, flag := range []string{"--limit", "--grep", "--or", "--and", "--color"} {
+		if !strings.Contains(combined, flag) {
+			t.Fatalf("list help must mention %s:\n%s", flag, combined)
+		}
 	}
 	if !strings.Contains(strings.ToLower(combined), "list") {
 		t.Fatalf("list help should mention list:\n%s", combined)

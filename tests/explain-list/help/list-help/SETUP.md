@@ -1,9 +1,9 @@
 # Scenario
 
-**Feature**: explain list --help mentions --limit and --color
+**Feature**: explain list --help mentions --limit, --grep, --or, --and, --color
 
 ```
-explain list --help -> usage text includes --limit and --color
+explain list --help -> usage text includes --limit, --grep, --or, --and, --color
 ```
 
 ## Preconditions
