@@ -92,12 +92,13 @@ func FormatListTableWithHits(matches []SessionMatch, home string, now time.Time,
 
 	useColor := shouldColor(colorMode)
 	var b strings.Builder
-	fmt.Fprintf(&b, "%-38s  %-12s  %-42s  %5s  %s\n", "SESSION ID", "LAST ACTIVE", "TITLE", "MSGS", "CWD")
+	fmt.Fprintf(&b, "%-38s  %-5s  %-12s  %-42s  %5s  %s\n", "SESSION ID", "KIND", "LAST ACTIVE", "TITLE", "MSGS", "CWD")
 	for _, m := range matches {
 		fmt.Fprintf(
 			&b,
-			"%-38s  %-12s  %-42s  %5d  %s\n",
+			"%-38s  %-5s  %-12s  %-42s  %5d  %s\n",
 			m.ID,
+			sessionKindOrMain(m.Session),
 			formatRelativeTime(m.LastActiveAt, now),
 			truncateTitle(m.Title),
 			m.NumChatMessages,

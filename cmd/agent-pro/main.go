@@ -775,7 +775,7 @@ func handleGrok(args []string) error {
 }
 
 const grokSessionsHelp = `
-Usage: agent-pro grok sessions [--limit N] [--grep PATTERN] [--color]
+Usage: agent-pro grok sessions [OPTIONS]
        agent-pro grok sessions prompts [OPTIONS]   (alias: session prompts)
 
 List recent Grok CLI sessions from ~/.grok (or $GROK_HOME).
@@ -785,10 +785,20 @@ For user prompt history (compact [timestamp] lines), use:
   agent-pro grok sessions prompts …   (same)
 
 Options:
-  --limit <n>    max sessions to list (default 20, max 100)
+  --here         only sessions whose cwd matches the process working directory
+  --dir DIR      only sessions whose cwd matches DIR (repeatable; OR; must exist)
+  --recent W     only sessions active within W (Nd|Nh|Nm, e.g. 1d, 2h, 30m)
+  --active       only sessions listed in active_sessions.json
+  --main-agent   only main-agent class sessions (mutually exclusive with --sub-agent)
+  --sub-agent    only sub-agent class sessions (mutually exclusive with --main-agent)
+  --forked       only forked sessions (kind fork/subagent_fork or forked_at set)
+  --limit <n>    max sessions to list after filters (default 20, max 100)
   --grep <pat>   search session JSON; print indented hit lines under each match
   --color        always use ANSI colors (even when stdout is not a TTY)
   -h,--help      show help
+
+Place filters (--here / --dir) OR together. Other filters AND with place.
+Role filters (--main-agent / --sub-agent) are mutually exclusive; --forked ANDs with role.
 `
 
 func handleGrokSessions(args []string) error {
@@ -801,9 +811,23 @@ func handleGrokSessions(args []string) error {
 	var limitFlag *int
 	var grepFlag *string
 	var colorFlag *bool
+	var hereFlag *bool
+	var dirFlag []string
+	var recentFlag *string
+	var activeFlag *bool
+	var mainAgentFlag *bool
+	var subAgentFlag *bool
+	var forkedFlag *bool
 	remaining, err := flags.Int("--limit", &limitFlag).
 		String("--grep", &grepFlag).
 		Bool("--color", &colorFlag).
+		Bool("--here", &hereFlag).
+		StringSlice("--dir", &dirFlag).
+		String("--recent", &recentFlag).
+		Bool("--active", &activeFlag).
+		Bool("--main-agent", &mainAgentFlag).
+		Bool("--sub-agent", &subAgentFlag).
+		Bool("--forked", &forkedFlag).
 		Help("-h,--help", grokSessionsHelp).
 		Parse(args)
 	if err != nil {
@@ -822,7 +846,45 @@ func handleGrokSessions(args []string) error {
 	home := homeDir()
 	now := time.Now()
 
-	if grepFlag != nil {
+	// Build place set from --here / --dir (OR).
+	var placeCWDs []string
+	if hereFlag != nil && *hereFlag {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("--here: getwd: %w", err)
+		}
+		abs, err := filepath.Abs(cwd)
+		if err != nil {
+			return fmt.Errorf("--here: abs: %w", err)
+		}
+		placeCWDs = append(placeCWDs, filepath.Clean(abs))
+	}
+	for _, d := range dirFlag {
+		abs, err := filepath.Abs(d)
+		if err != nil {
+			return fmt.Errorf("--dir %q: %w", d, err)
+		}
+		abs = filepath.Clean(abs)
+		st, err := os.Stat(abs)
+		if err != nil {
+			return fmt.Errorf("--dir %q: %w", d, err)
+		}
+		if !st.IsDir() {
+			return fmt.Errorf("--dir %q is not a directory", d)
+		}
+		placeCWDs = append(placeCWDs, abs)
+	}
+
+	hasPlace := len(placeCWDs) > 0
+	hasRecent := recentFlag != nil
+	hasActive := activeFlag != nil && *activeFlag
+	hasMainAgent := mainAgentFlag != nil && *mainAgentFlag
+	hasSubAgent := subAgentFlag != nil && *subAgentFlag
+	hasForked := forkedFlag != nil && *forkedFlag
+	hasNewFilters := hasPlace || hasRecent || hasActive || hasMainAgent || hasSubAgent || hasForked
+
+	// Pure --grep (no place/recent/active/role/forked): keep ListWithGrep hit-line path.
+	if grepFlag != nil && !hasNewFilters {
 		pattern := strings.TrimSpace(*grepFlag)
 		if pattern == "" {
 			return fmt.Errorf("--grep requires a non-empty pattern")
@@ -839,7 +901,33 @@ func handleGrokSessions(args []string) error {
 		return nil
 	}
 
-	sessions, err := groksessions.List(grokHome, limit)
+	opts := groksessions.ListOptions{
+		Limit:     limit,
+		PlaceCWDs: placeCWDs,
+		Active:    hasActive,
+		Now:       now,
+		MainAgent: hasMainAgent,
+		SubAgent:  hasSubAgent,
+		Forked:    hasForked,
+	}
+	if hasRecent {
+		w, err := groksessions.ParseRecentWindow(*recentFlag)
+		if err != nil {
+			return err
+		}
+		opts.Recent = w
+		opts.RecentSet = true
+	}
+	if grepFlag != nil {
+		pattern := strings.TrimSpace(*grepFlag)
+		if pattern == "" {
+			return fmt.Errorf("--grep requires a non-empty pattern")
+		}
+		opts.Grep = pattern
+		opts.GrepSet = true
+	}
+
+	sessions, err := groksessions.ListWithOptions(grokHome, opts)
 	if err != nil {
 		return fmt.Errorf("list grok sessions: %w", err)
 	}
@@ -1026,7 +1114,8 @@ func handleGrokSession(args []string) error {
 
 	switch args[0] {
 	case "list", "ls":
-		// Alias for agent-pro grok sessions (same flags: --limit, --grep, --color).
+		// Alias for agent-pro grok sessions (same flags: --here, --dir, --recent,
+		// --active, --main-agent, --sub-agent, --forked, --limit, --grep, --color).
 		return handleGrokSessions(args[1:])
 	case "info":
 		return handleGrokSessionInfo(args[1:])

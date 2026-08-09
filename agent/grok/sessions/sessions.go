@@ -22,6 +22,13 @@ type Session struct {
 	Title           string
 	Path            string
 	NumChatMessages int
+	// Kind is the list display token: main | sub | sub+ | sub-f | fork.
+	Kind string
+
+	// Raw summary fields used by role/forked filters (not part of public table API).
+	rawSessionKind  string
+	parentSessionID string
+	forkedAt        string
 }
 
 type SessionInfo struct {
@@ -66,6 +73,9 @@ type grokSummary struct {
 	GitRootDir       string `json:"git_root_dir"`
 	HeadBranch       string `json:"head_branch"`
 	HeadCommit       string `json:"head_commit"`
+	SessionKind      string `json:"session_kind"`
+	ParentSessionID  string `json:"parent_session_id"`
+	ForkedAt         string `json:"forked_at"`
 }
 
 type grokSignals struct {
@@ -75,7 +85,40 @@ type grokSignals struct {
 	TotalTokensBeforeCompaction int `json:"totalTokensBeforeCompaction"`
 }
 
+// ListOptions configures ListWithOptions. Zero value matches List(grokHome, 0):
+// default limit 20, no place/recent/active/role/forked/grep filters.
+type ListOptions struct {
+	Limit     int
+	PlaceCWDs []string // resolved abs paths; OR match on Session.CWD; empty = no place filter
+	Recent    time.Duration
+	RecentSet bool
+	Active    bool
+	Now       time.Time // for recent window; zero → time.Now()
+	Grep      string
+	GrepSet   bool
+	MainAgent bool // --main-agent; mutually exclusive with SubAgent
+	SubAgent  bool // --sub-agent
+	Forked    bool // --forked
+}
+
 func List(grokHome string, limit int) ([]Session, error) {
+	return ListWithOptions(grokHome, ListOptions{Limit: limit})
+}
+
+// ListWithOptions discovers all sessions under grokHome, then applies filters
+// in locked order: place → recent → active → role → forked → grep → sort → limit.
+func ListWithOptions(grokHome string, opts ListOptions) ([]Session, error) {
+	if opts.MainAgent && opts.SubAgent {
+		return nil, fmt.Errorf("--main-agent and --sub-agent are mutually exclusive")
+	}
+	if opts.RecentSet && opts.Recent <= 0 {
+		return nil, fmt.Errorf("invalid recent window: must be positive")
+	}
+	if opts.GrepSet && strings.TrimSpace(opts.Grep) == "" {
+		return nil, fmt.Errorf("grep pattern must not be empty")
+	}
+
+	limit := opts.Limit
 	if limit <= 0 {
 		limit = defaultListLimit
 	}
@@ -88,6 +131,101 @@ func List(grokHome string, limit int) ([]Session, error) {
 		return nil, err
 	}
 
+	// 1. place: OR across PlaceCWDs; Abs+Clean equality; empty session CWD never matches
+	if len(opts.PlaceCWDs) > 0 {
+		placeSet := make(map[string]struct{}, len(opts.PlaceCWDs))
+		for _, p := range opts.PlaceCWDs {
+			cp, err := canonicalPath(p)
+			if err != nil {
+				return nil, fmt.Errorf("place cwd %q: %w", p, err)
+			}
+			placeSet[cp] = struct{}{}
+		}
+		var filtered []Session
+		for _, s := range sessions {
+			if strings.TrimSpace(s.CWD) == "" {
+				continue
+			}
+			cp, err := canonicalPath(s.CWD)
+			if err != nil {
+				continue
+			}
+			if _, ok := placeSet[cp]; ok {
+				filtered = append(filtered, s)
+			}
+		}
+		sessions = filtered
+	}
+
+	// 2. recent: last_active >= Now - Recent (inclusive lower bound)
+	if opts.RecentSet {
+		now := opts.Now
+		if now.IsZero() {
+			now = time.Now()
+		}
+		cutoff := now.Add(-opts.Recent)
+		var filtered []Session
+		for _, s := range sessions {
+			if !s.LastActiveAt.Before(cutoff) {
+				filtered = append(filtered, s)
+			}
+		}
+		sessions = filtered
+	}
+
+	// 3. active: IsFileActive / active_sessions.json membership
+	if opts.Active {
+		var filtered []Session
+		for _, s := range sessions {
+			ok, err := IsFileActive(grokHome, s.ID)
+			if err != nil {
+				return nil, err
+			}
+			if ok {
+				filtered = append(filtered, s)
+			}
+		}
+		sessions = filtered
+	}
+
+	// 4. role: main-agent class XOR sub-agent class
+	if opts.MainAgent || opts.SubAgent {
+		var filtered []Session
+		for _, s := range sessions {
+			isSub := isSubAgentClass(s)
+			if opts.MainAgent && !isSub {
+				filtered = append(filtered, s)
+			} else if opts.SubAgent && isSub {
+				filtered = append(filtered, s)
+			}
+		}
+		sessions = filtered
+	}
+
+	// 5. forked: fork kinds or non-empty forked_at
+	if opts.Forked {
+		var filtered []Session
+		for _, s := range sessions {
+			if isForkedSession(s) {
+				filtered = append(filtered, s)
+			}
+		}
+		sessions = filtered
+	}
+
+	// 6. grep: presence filter (same search family as ListWithGrep)
+	if opts.GrepSet {
+		pattern := strings.TrimSpace(opts.Grep)
+		var filtered []Session
+		for _, s := range sessions {
+			if len(searchSession(s, pattern)) > 0 {
+				filtered = append(filtered, s)
+			}
+		}
+		sessions = filtered
+	}
+
+	// 7. sort last_active desc (ID desc tie-break, same as List)
 	sort.Slice(sessions, func(i, j int) bool {
 		if sessions[i].LastActiveAt.Equal(sessions[j].LastActiveAt) {
 			return sessions[i].ID > sessions[j].ID
@@ -95,10 +233,70 @@ func List(grokHome string, limit int) ([]Session, error) {
 		return sessions[i].LastActiveAt.After(sessions[j].LastActiveAt)
 	})
 
+	// 8. limit
 	if len(sessions) > limit {
 		sessions = sessions[:limit]
 	}
 	return sessions, nil
+}
+
+// isSubAgentClass reports whether s is in the sub-agent filter class:
+// session_kind ∈ {subagent, subagent_resume, subagent_fork}
+// OR (kind empty/absent AND parent_session_id non-empty).
+func isSubAgentClass(s Session) bool {
+	k := strings.TrimSpace(s.rawSessionKind)
+	switch k {
+	case "subagent", "subagent_resume", "subagent_fork":
+		return true
+	}
+	if k == "" && strings.TrimSpace(s.parentSessionID) != "" {
+		return true
+	}
+	return false
+}
+
+// isForkedSession reports whether s is a forked session for --forked:
+// session_kind ∈ {fork, subagent_fork} OR forked_at is non-empty non-whitespace.
+func isForkedSession(s Session) bool {
+	k := strings.TrimSpace(s.rawSessionKind)
+	if k == "fork" || k == "subagent_fork" {
+		return true
+	}
+	return strings.TrimSpace(s.forkedAt) != ""
+}
+
+// displayKindToken maps raw session_kind to list KIND display tokens.
+// Priority: subagent_fork → fork → subagent_resume → subagent → main.
+func displayKindToken(rawKind string) string {
+	switch strings.TrimSpace(rawKind) {
+	case "subagent_fork":
+		return "sub-f"
+	case "fork":
+		return "fork"
+	case "subagent_resume":
+		return "sub+"
+	case "subagent":
+		return "sub"
+	default:
+		return "main"
+	}
+}
+
+// sessionKindOrMain returns Kind for table rendering; empty Kind defaults to main.
+func sessionKindOrMain(s Session) string {
+	if k := strings.TrimSpace(s.Kind); k != "" {
+		return k
+	}
+	return "main"
+}
+
+// canonicalPath returns filepath.Clean(filepath.Abs(p)) for place comparisons.
+func canonicalPath(p string) (string, error) {
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Clean(abs), nil
 }
 
 func Find(grokHome, sessionID string) (Session, error) {
@@ -215,12 +413,13 @@ func FormatListTable(sessions []Session, home string, now time.Time) string {
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "%-38s  %-12s  %-42s  %5s  %s\n", "SESSION ID", "LAST ACTIVE", "TITLE", "MSGS", "CWD")
+	fmt.Fprintf(&b, "%-38s  %-5s  %-12s  %-42s  %5s  %s\n", "SESSION ID", "KIND", "LAST ACTIVE", "TITLE", "MSGS", "CWD")
 	for _, session := range sessions {
 		fmt.Fprintf(
 			&b,
-			"%-38s  %-12s  %-42s  %5d  %s\n",
+			"%-38s  %-5s  %-12s  %-42s  %5d  %s\n",
 			session.ID,
+			sessionKindOrMain(session),
 			formatRelativeTime(session.LastActiveAt, now),
 			truncateTitle(session.Title),
 			session.NumChatMessages,
@@ -381,6 +580,10 @@ func parseSummaryFile(path string) (Session, bool) {
 		title = strings.TrimSpace(summary.SessionSummary)
 	}
 
+	rawKind := strings.TrimSpace(summary.SessionKind)
+	parentID := strings.TrimSpace(summary.ParentSessionID)
+	forkedAt := summary.ForkedAt // keep raw; filters TrimSpace themselves
+
 	return Session{
 		ID:              id,
 		LastActiveAt:    lastActive,
@@ -388,6 +591,10 @@ func parseSummaryFile(path string) (Session, bool) {
 		Title:           title,
 		Path:            path,
 		NumChatMessages: summary.NumChatMessages,
+		Kind:            displayKindToken(rawKind),
+		rawSessionKind:  rawKind,
+		parentSessionID: parentID,
+		forkedAt:        forkedAt,
 	}, true
 }
 

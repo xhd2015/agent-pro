@@ -4,8 +4,8 @@
 ---
 version: 2
 ---
-SESSION ID                              LAST ACTIVE   TITLE                                        MSGS  CWD
-01900021-aaaa-7aaa-aaaa-aaaaaaaaaaaa    30m ago       Ship GREP_SNIP_SHORT_TOKEN quickly              0  /tmp/grep-snippet-short
+SESSION ID                              KIND   LAST ACTIVE   TITLE                                        MSGS  CWD
+01900021-aaaa-7aaa-aaaa-aaaaaaaaaaaa    main   30m ago       Ship GREP_SNIP_SHORT_TOKEN quickly              0  /tmp/grep-snippet-short
   summary.json:1:title: Ship GREP_SNIP_SHORT_TOKEN quickly
 ```
 
@@ -75,8 +75,8 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	assert.Output(t, resp.Output, `---
 version: 2
 ---
-SESSION ID                              LAST ACTIVE   TITLE                                        MSGS  CWD
-01900021-aaaa-7aaa-aaaa-aaaaaaaaaaaa    30m ago       Ship GREP_SNIP_SHORT_TOKEN quickly              0  /tmp/grep-snippet-short
+SESSION ID                              KIND   LAST ACTIVE   TITLE                                        MSGS  CWD
+01900021-aaaa-7aaa-aaaa-aaaaaaaaaaaa    main   30m ago       Ship GREP_SNIP_SHORT_TOKEN quickly              0  /tmp/grep-snippet-short
   summary.json:1:title: Ship GREP_SNIP_SHORT_TOKEN quickly`)
 }
 ```

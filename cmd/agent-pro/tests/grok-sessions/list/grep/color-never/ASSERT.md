@@ -4,8 +4,8 @@
 ---
 version: 2
 ---
-SESSION ID                              LAST ACTIVE   TITLE                                        MSGS  CWD
-01900019-aaaa-7aaa-aaaa-aaaaaaaaaaaa    30m ago       Enable GREP_COLOR_TOKEN highlighting            0  /tmp/grep-color-never
+SESSION ID                              KIND   LAST ACTIVE   TITLE                                        MSGS  CWD
+01900019-aaaa-7aaa-aaaa-aaaaaaaaaaaa    main   30m ago       Enable GREP_COLOR_TOKEN highlighting            0  /tmp/grep-color-never
   summary.json:1:title: Enable GREP_COLOR_TOKEN highlighting
 ```
 
@@ -40,8 +40,8 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	assert.Output(t, resp.Output, `---
 version: 2
 ---
-SESSION ID                              LAST ACTIVE   TITLE                                        MSGS  CWD
-01900019-aaaa-7aaa-aaaa-aaaaaaaaaaaa    30m ago       Enable GREP_COLOR_TOKEN highlighting            0  /tmp/grep-color-never
+SESSION ID                              KIND   LAST ACTIVE   TITLE                                        MSGS  CWD
+01900019-aaaa-7aaa-aaaa-aaaaaaaaaaaa    main   30m ago       Enable GREP_COLOR_TOKEN highlighting            0  /tmp/grep-color-never
   summary.json:1:title: Enable GREP_COLOR_TOKEN highlighting`)
 }
 ```
