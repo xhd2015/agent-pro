@@ -32,24 +32,29 @@ func CodexHomeForRunner(configHome string) string {
 	return CodexHome()
 }
 
-// PrependCommandEnv prefixes argv with env(1) assignments for the PTY child process.
-func PrependCommandEnv(argv []string, runnerID, configHome string) []string {
-	return ApplyChildProcessEnv(argv, runnerID, configHome, nil, nil, false)
+// ChildEnvSpec is the pure child-env policy for HeadlessRun:
+// Set is KEY=VALUE for CommandEnv; Unset is bare keys for CommandUnset.
+// Never compose argv with env(1).
+type ChildEnvSpec struct {
+	Set   []string
+	Unset []string
 }
 
-// ApplyChildProcessEnv prefixes argv with env(1) so the PTY child receives:
-// - env entries (KEY=VALUE, later wins for the same KEY)
-// - PATH with prependPaths joined ahead of the current PATH
-// - GROK_HOME / CODEX_HOME from configHome
-// - when color is true (applied last, wins over parent + -e):
-//   - env -u NO_COLOR
+// BuildChildProcessEnv builds pure Set/Unset policy for the PTY agent child.
+// parentTERM is injectable (tests pass it; production may pass os.Getenv("TERM")).
+// Policy matches the old ApplyChildProcessEnv env(1) composition without the
+// env binary / argv mutation:
+//   - env entries (KEY=VALUE; order preserved; last-wins at merge)
+//   - PATH with prependPaths joined ahead of the current process PATH
+//   - GROK_HOME / CODEX_HOME from configHome
+//   - when color is true (applied last, wins over parent + -e):
+//   - Unset NO_COLOR; drop user -e NO_COLOR=… from Set
 //   - FORCE_COLOR=1 CLICOLOR=1 CLICOLOR_FORCE=1
 //   - TERM=xterm-256color when effective TERM is empty or "dumb"
-func ApplyChildProcessEnv(argv []string, runnerID, configHome string, prependPaths, envEntries []string, color bool) []string {
-	assignments := make([]string, 0, len(envEntries)+8)
+func BuildChildProcessEnv(runnerID, configHome string, prependPaths, envEntries []string, color bool, parentTERM string) ChildEnvSpec {
+	set := make([]string, 0, len(envEntries)+8)
 	// Effective TERM after parent + user -e (last-win); color policy may rewrite.
-	effectiveTERM := os.Getenv("TERM")
-	// Preserve order for meta/logging; env(1) last-wins for duplicate keys.
+	effectiveTERM := parentTERM
 	for _, e := range envEntries {
 		e = strings.TrimSpace(e)
 		if e == "" {
@@ -59,11 +64,11 @@ func ApplyChildProcessEnv(argv []string, runnerID, configHome string, prependPat
 		if hasEq && key == "TERM" {
 			effectiveTERM = val
 		}
-		// Color policy wins over -e NO_COLOR=…: drop so -u can clear parent too.
+		// Color policy wins over -e NO_COLOR=…: drop so Unset can clear parent too.
 		if color && hasEq && key == "NO_COLOR" {
 			continue
 		}
-		assignments = append(assignments, e)
+		set = append(set, e)
 	}
 	if len(prependPaths) > 0 {
 		parts := make([]string, 0, len(prependPaths)+1)
@@ -79,40 +84,41 @@ func ApplyChildProcessEnv(argv []string, runnerID, configHome string, prependPat
 			if cur := os.Getenv("PATH"); cur != "" {
 				pathVal = pathVal + string(os.PathListSeparator) + cur
 			}
-			assignments = append(assignments, "PATH="+pathVal)
+			set = append(set, "PATH="+pathVal)
 		}
 	}
-	assignments = append(assignments, RunnerConfigHomeEnv(runnerID, configHome)...)
+	set = append(set, RunnerConfigHomeEnv(runnerID, configHome)...)
 
-	// Color force policy last: unset NO_COLOR, set force keys, TERM policy.
-	// When effective TERM is empty/dumb → xterm-256color; otherwise pass through
-	// the effective value so PTY defaults do not clobber a good parent TERM.
 	var unset []string
 	if color {
 		unset = append(unset, "NO_COLOR")
-		assignments = append(assignments,
+		set = append(set,
 			"FORCE_COLOR=1",
 			"CLICOLOR=1",
 			"CLICOLOR_FORCE=1",
 		)
 		if effectiveTERM == "" || effectiveTERM == "dumb" {
-			assignments = append(assignments, "TERM=xterm-256color")
+			set = append(set, "TERM=xterm-256color")
 		} else {
-			assignments = append(assignments, "TERM="+effectiveTERM)
+			set = append(set, "TERM="+effectiveTERM)
 		}
 	}
+	return ChildEnvSpec{Set: set, Unset: unset}
+}
 
-	if len(assignments) == 0 && len(unset) == 0 {
-		return argv
-	}
-	out := make([]string, 0, 1+2*len(unset)+len(assignments)+len(argv))
-	out = append(out, "env")
-	for _, k := range unset {
-		out = append(out, "-u", k)
-	}
-	out = append(out, assignments...)
-	out = append(out, argv...)
-	return out
+// PrependCommandEnv is a legacy no-op identity: child env is applied via
+// BuildChildProcessEnv + HeadlessRun CommandEnv/CommandUnset, not env(1).
+func PrependCommandEnv(argv []string, runnerID, configHome string) []string {
+	return ApplyChildProcessEnv(argv, runnerID, configHome, nil, nil, false)
+}
+
+// ApplyChildProcessEnv is a transitional pure-argv helper. It no longer
+// prefixes argv with env(1); policy belongs in BuildChildProcessEnv and is
+// applied through HeadlessRun CommandEnv/CommandUnset. Argv is returned
+// unchanged (callers keep pure agent command heads).
+func ApplyChildProcessEnv(argv []string, runnerID, configHome string, prependPaths, envEntries []string, color bool) []string {
+	_, _, _, _, _ = runnerID, configHome, prependPaths, envEntries, color
+	return argv
 }
 
 // RunnerConfigHomeEnv returns runner-specific env assignments for a PTY child.

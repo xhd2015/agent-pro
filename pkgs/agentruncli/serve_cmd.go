@@ -2,7 +2,6 @@ package agentruncli
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"strings"
 
@@ -12,18 +11,15 @@ import (
 )
 
 func runServeSession(args []string) error {
-	if len(args) < 2 {
-		return fmt.Errorf("serve: missing session id or command")
+	parsed, err := ttywatch.ParseServeArgv(args)
+	if err != nil {
+		return err
 	}
-	sessionID := args[0]
-	command := args[1:]
-	return ttywatch.ServeSession(context.Background(), ttywatch.ServeOptions{
-		SessionID: sessionID,
-		Command:   command,
-		OnListening: func(ctx context.Context, listenAddr, home, registrySubdir string) {
-			startServeSendQueueDrainer(ctx, sessionID, listenAddr, home, registrySubdir)
-		},
-	})
+	opts := ttywatch.ServeOptionsFromArgv(parsed)
+	opts.OnListening = func(ctx context.Context, listenAddr, home, registrySubdir string) {
+		startServeSendQueueDrainer(ctx, parsed.SessionID, listenAddr, home, registrySubdir)
+	}
+	return ttywatch.ServeSession(context.Background(), opts)
 }
 
 // startServeSendQueueDrainer runs the session-owned send-queue consumer in the

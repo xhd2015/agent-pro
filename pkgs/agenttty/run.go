@@ -146,7 +146,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 			configHome = provisioned
 		}
 	}
-	argv = ApplyChildProcessEnv(argv, runnerID, configHome, opts.PrependPaths, opts.Env, opts.Color)
+	envSpec := BuildChildProcessEnv(runnerID, configHome, opts.PrependPaths, opts.Env, opts.Color, os.Getenv("TERM"))
 
 	driver := opts.Driver
 	if strings.TrimSpace(driver.Binary) == "" && strings.TrimSpace(opts.BinaryPath) != "" {
@@ -159,6 +159,8 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 		SessionID:      strings.TrimSpace(opts.SessionID),
 		Driver:         driver,
 		Command:        argv,
+		CommandEnv:     envSpec.Set,
+		CommandUnset:   envSpec.Unset,
 		Cwd:            opts.Workspace,
 		KeepAlive:      opts.KeepTerminalAlive,
 	})
