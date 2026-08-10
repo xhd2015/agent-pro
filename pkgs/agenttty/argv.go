@@ -39,9 +39,17 @@ func BuildGrokCommandArgv(env *exec.Env, settingsPath, agentRunnerBinary, model,
 }
 
 // BuildCodexCommandArgv returns argv for the interactive Codex TUI inside the PTY.
+// Always ensures (no duplicate when already set):
+//   - -c check_for_update_on_startup=false
+//   - --dangerously-bypass-hook-trust (skip "Hooks need review" modal for automation)
 func BuildCodexCommandArgv(env *exec.Env, settingsPath, agentRunnerBinary, model, resumeSession string) ([]string, error) {
 	if hook := strings.TrimSpace(os.Getenv(envCodexTTYCommand)); hook != "" {
-		return parseShellWords(hook)
+		args, err := parseShellWords(hook)
+		if err != nil {
+			return nil, err
+		}
+		args = EnsureCodexConfigFlag(args, "check_for_update_on_startup", "false")
+		return EnsureCodexBoolFlag(args, "--dangerously-bypass-hook-trust"), nil
 	}
 
 	path, userFlags, err := resolveCodexRunnerSpec(env, settingsPath, agentRunnerBinary)
@@ -57,7 +65,79 @@ func BuildCodexCommandArgv(env *exec.Env, settingsPath, agentRunnerBinary, model
 	if resumeSession != "" && !hasCodexResume(args) {
 		args = append(args, "resume", resumeSession)
 	}
+	args = EnsureCodexConfigFlag(args, "check_for_update_on_startup", "false")
+	args = EnsureCodexBoolFlag(args, "--dangerously-bypass-hook-trust")
 	return args, nil
+}
+
+// EnsureCodexConfigFlag ensures argv has paired "-c" "key=value" (preferred form).
+// If key already appears as a -c/--config value (key=… or bare key), do not add
+// another pair. Returns a new or same slice; does not mutate caller's backing
+// when appending (append-safe copy as needed).
+func EnsureCodexConfigFlag(args []string, key, value string) []string {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return args
+	}
+	if hasCodexConfigKey(args, key) {
+		return args
+	}
+	// Append-safe: copy so append cannot overwrite caller's unused capacity.
+	out := make([]string, len(args), len(args)+2)
+	copy(out, args)
+	return append(out, "-c", key+"="+value)
+}
+
+// ApplyCodexReasoningEffort: empty/whitespace effort → return args unchanged;
+// otherwise EnsureCodexConfigFlag(args, "model_reasoning_effort", effort).
+func ApplyCodexReasoningEffort(args []string, effort string) []string {
+	effort = strings.TrimSpace(effort)
+	if effort == "" {
+		return args
+	}
+	return EnsureCodexConfigFlag(args, "model_reasoning_effort", effort)
+}
+
+// EnsureCodexBoolFlag ensures argv contains a bare boolean flag token exactly once.
+// If flag is already present (any position), returns args unchanged. Append-safe copy on add.
+func EnsureCodexBoolFlag(args []string, flag string) []string {
+	flag = strings.TrimSpace(flag)
+	if flag == "" {
+		return args
+	}
+	if hasFlagToken(args, flag) {
+		return args
+	}
+	out := make([]string, len(args), len(args)+1)
+	copy(out, args)
+	return append(out, flag)
+}
+
+// hasFlagToken reports whether args contains an exact token equal to flag
+// (works for trailing boolean flags; unlike hasFlagPair which requires a following arg slot).
+func hasFlagToken(args []string, flag string) bool {
+	for _, a := range args {
+		if a == flag {
+			return true
+		}
+	}
+	return false
+}
+
+// hasCodexConfigKey reports whether args already contain -c/--config for key
+// (either "key=…" or bare "key" as the config value token).
+func hasCodexConfigKey(args []string, key string) bool {
+	prefix := key + "="
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] != "-c" && args[i] != "--config" {
+			continue
+		}
+		v := args[i+1]
+		if strings.HasPrefix(v, prefix) || v == key {
+			return true
+		}
+	}
+	return false
 }
 
 func resolveGrokRunnerSpec(env *exec.Env, settingsPath, spec string) (path string, userFlags []string, err error) {

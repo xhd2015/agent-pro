@@ -77,6 +77,9 @@ type Opts struct {
 	AgentRunnerBinary             string
 	RunnerConfigHome              string
 	Model                         string
+	// ModelReasoningEffort is optional Codex -c model_reasoning_effort=<level>.
+	// Plumbed into agentui/agenttty RunOptions for codex-tty (ApplyCodexReasoningEffort).
+	ModelReasoningEffort          string
 	Open                          bool
 	Detach                        bool
 	NoSubmit                      bool

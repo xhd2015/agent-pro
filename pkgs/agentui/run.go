@@ -31,7 +31,10 @@ type RunOptions struct {
 	Prompt    string
 	Runner    string
 	Model     string
-	SessionID string
+	// ModelReasoningEffort is optional Codex -c model_reasoning_effort=<level>
+	// (codex-tty only; plumbed to agenttty.RunOptions).
+	ModelReasoningEffort string
+	SessionID            string
 	// TerminalSessionID is the TTY registry id. When empty, SessionID is used as
 	// the custom terminal id (legacy --session / --session-id-from-prompt).
 	// When PreferAutoTerminal is true, TerminalSessionID is ignored and the TTY
@@ -228,7 +231,7 @@ func Run(ctx context.Context, opts RunOptions) error {
 		}
 	}
 
-	newRunnerSessionID, newTerminalSessionID, runErr := streamRunner(ctx, runner, opts.Store.Home(), workspace, env, runnerPrompt, opts.Model, opts.AgentRunnerBinary, opts.AgentRunnerConfigHome, opts.PrependPaths, opts.Env, opts.Color, runnerSessionID, sessionID, ttySessionID, opts.StreamPhases, opts.KeepTerminalAlive, opts.Open, opts.Detach, opts.NoSubmit, opts.Fork, opts.ForkSessionID, ttyGrokSyncOwnsEvents, opts.Driver, persistTerminalSessionID, emit, stderr)
+	newRunnerSessionID, newTerminalSessionID, runErr := streamRunner(ctx, runner, opts.Store.Home(), workspace, env, runnerPrompt, opts.Model, opts.ModelReasoningEffort, opts.AgentRunnerBinary, opts.AgentRunnerConfigHome, opts.PrependPaths, opts.Env, opts.Color, runnerSessionID, sessionID, ttySessionID, opts.StreamPhases, opts.KeepTerminalAlive, opts.Open, opts.Detach, opts.NoSubmit, opts.Fork, opts.ForkSessionID, ttyGrokSyncOwnsEvents, opts.Driver, persistTerminalSessionID, emit, stderr)
 	if strings.TrimSpace(newRunnerSessionID) != "" {
 		_ = opts.Store.UpdateSessionRunnerSessionID(sessionID, newRunnerSessionID)
 	}
@@ -444,7 +447,7 @@ func resolveTTYSessionID(opts RunOptions, userSessionID string) string {
 
 // streamRunner runs the selected agent. ttySessionID is the custom terminal
 // registry id (from --session / --session-id-from-prompt); empty keeps session-N.
-func streamRunner(ctx context.Context, runner, home, workspace string, env *agentexec.Env, prompt, model, agentRunnerBinary, agentRunnerConfigHome string, prependPaths, envEntries []string, color bool, runnerSessionID, agentSessionID, ttySessionID string, streamPhases, keepTerminalAlive, open, detach, noSubmit, fork bool, forkSessionID string, grokSyncOwnsEvents bool, driver agentdriver.Driver, onTerminalSessionID func(string), emit func(types.AgentEvent) error, stderr io.Writer) (string, string, error) {
+func streamRunner(ctx context.Context, runner, home, workspace string, env *agentexec.Env, prompt, model, modelReasoningEffort, agentRunnerBinary, agentRunnerConfigHome string, prependPaths, envEntries []string, color bool, runnerSessionID, agentSessionID, ttySessionID string, streamPhases, keepTerminalAlive, open, detach, noSubmit, fork bool, forkSessionID string, grokSyncOwnsEvents bool, driver agentdriver.Driver, onTerminalSessionID func(string), emit func(types.AgentEvent) error, stderr io.Writer) (string, string, error) {
 	if agenttty.IsTTYRunner(runner) {
 		terminalSessionID := ""
 		onID := func(id string) {
@@ -458,6 +461,7 @@ func streamRunner(ctx context.Context, runner, home, workspace string, env *agen
 			Workspace:             workspace,
 			Prompt:                prompt,
 			Model:                 model,
+			ModelReasoningEffort:  modelReasoningEffort,
 			ResumeSessionID:       runnerSessionID,
 			Fork:                  fork,
 			ForkSessionID:         forkSessionID,

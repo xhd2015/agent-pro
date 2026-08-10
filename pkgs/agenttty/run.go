@@ -21,7 +21,10 @@ type RunOptions struct {
 	Workspace       string
 	Prompt          string
 	Model           string
-	ResumeSessionID string
+	// ModelReasoningEffort is optional Codex -c model_reasoning_effort=<level>.
+	// Applied after BuildArgv for codex-tty only; empty leaves Codex home config.
+	ModelReasoningEffort string
+	ResumeSessionID      string
 	// Fork appends grok --fork-session after --resume (grok-tty only). Requires
 	// non-empty ResumeSessionID. Creates a new Grok conversation branch.
 	Fork bool
@@ -116,6 +119,10 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	argv, err := provider.BuildArgv(env, opts.SettingsPath, opts.AgentPath, opts.Model, opts.ResumeSessionID)
 	if err != nil {
 		return "", "", err
+	}
+	// codex-tty: optional model_reasoning_effort after BuildArgv (BuildArgvFunc unchanged).
+	if runnerID == "codex-tty" {
+		argv = ApplyCodexReasoningEffort(argv, opts.ModelReasoningEffort)
 	}
 	if opts.Fork {
 		if runnerID != "grok-tty" {
