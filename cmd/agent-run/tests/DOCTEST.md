@@ -101,6 +101,39 @@ cmd/agent-run/tests/
 │   │   └── double-kill/             second kill → exit 0 + warning not running
 │   └── tty/
 │       └── kill-alias/              tty kill same success path as kill
+├── takeover/                        takeover CLI (P1 help/validation + P2 Grok lifecycle)
+│   ├── help/
+│   │   ├── top-level-lists-takeover/  --help lists takeover
+│   │   └── takeover-help/           takeover --help: session-id, --grok, --codex, --agent-runner, --dry-run
+│   ├── validation/
+│   │   ├── missing-session-id/      takeover alone → non-zero
+│   │   ├── empty-session-id-whitespace/  whitespace positional → non-zero
+│   │   ├── mutex-grok-codex/        --grok + --codex → exclusive
+│   │   ├── grok-conflicts-agent-runner-codex-tty/  --grok vs codex-tty mismatch
+│   │   ├── codex-conflicts-agent-runner-grok-tty/  --codex vs grok-tty mismatch
+│   │   └── unknown-flag/            junk flag → non-zero
+│   ├── lifecycle/                   P2 Grok action body (L2 Mode handle + injectable hooks)
+│   │   ├── missing-provider-session/
+│   │   ├── already-managed-registry/
+│   │   ├── already-managed-process/
+│   │   ├── not-running-import/
+│   │   ├── not-running-mapped-resume/
+│   │   ├── running-native-kill-and-iterm/
+│   │   └── dry-run-would-kill/
+│   ├── lifecycle-codex/             P3 Codex lifecycle parity (L2 Mode handle + same hooks)
+│   │   ├── missing-provider-session/
+│   │   ├── already-managed-registry/
+│   │   ├── already-managed-process/
+│   │   ├── not-running-import/
+│   │   ├── not-running-mapped-resume/
+│   │   ├── running-native-kill-and-iterm/
+│   │   └── dry-run-would-kill/
+│   └── auto-detect/                 P4 no-flag provider resolve (Grok/Codex homes)
+│       ├── grok-only/
+│       ├── codex-only/
+│       ├── ambiguous/
+│       ├── neither/
+│       └── grok-only-dry-run/
 ├── run/
 │   ├── json-fake-codex-hi/          run --json --agent-runner fake-codex "hi"
 │   ├── events-persisted-to-home/    stdout NDJSON lines match events.jsonl
@@ -211,6 +244,33 @@ cmd/agent-run/tests/
 | 56 | `kill/stop/live-then-idle` | kill live fixture → `stopped`; registry gone |
 | 57 | `kill/stop/double-kill` | second kill → exit 0 + `warning:` not running |
 | 58 | `kill/tty/kill-alias` | `tty kill` same stop success path as top-level |
+| 59 | `takeover/help/top-level-lists-takeover` | top-level `--help` lists `takeover` |
+| 60 | `takeover/help/takeover-help` | `takeover --help` documents session-id, `--grok`, `--codex`, `--agent-runner`, `--dry-run` |
+| 61 | `takeover/validation/missing-session-id` | `takeover` alone → non-zero; missing session-id |
+| 62 | `takeover/validation/empty-session-id-whitespace` | whitespace session-id → non-zero |
+| 63 | `takeover/validation/mutex-grok-codex` | `--grok` + `--codex` → mutually exclusive |
+| 64 | `takeover/validation/grok-conflicts-agent-runner-codex-tty` | `--grok` + `--agent-runner codex-tty` → mismatch |
+| 65 | `takeover/validation/codex-conflicts-agent-runner-grok-tty` | `--codex` + `--agent-runner grok-tty` → mismatch |
+| 66 | `takeover/validation/unknown-flag` | unknown flag → non-zero |
+| 67 | `takeover/lifecycle/missing-provider-session` | missing Grok session under GROK_HOME → non-zero |
+| 68 | `takeover/lifecycle/already-managed-registry` | live registry for mapped meta → exit 0 + warning; no kill/iTerm |
+| 69 | `takeover/lifecycle/already-managed-process` | grok under agent-run ancestry → exit 0 + warning |
+| 70 | `takeover/lifecycle/not-running-import` | unmapped dead → import meta + iTerm ForceNew |
+| 71 | `takeover/lifecycle/not-running-mapped-resume` | mapped dead → resume existing id + iTerm |
+| 72 | `takeover/lifecycle/running-native-kill-and-iterm` | native live PID → kill log + iTerm ForceNew |
+| 73 | `takeover/lifecycle/dry-run-would-kill` | dry-run plan; no kill/meta/iTerm |
+| 74 | `takeover/lifecycle-codex/missing-provider-session` | missing Codex under CODEX_HOME → non-zero |
+| 75 | `takeover/lifecycle-codex/already-managed-registry` | live codex-tty registry → exit 0 + warning |
+| 76 | `takeover/lifecycle-codex/already-managed-process` | codex under agent-run ancestry → exit 0 + warning |
+| 77 | `takeover/lifecycle-codex/not-running-import` | unmapped dead → import meta runner=codex-tty + iTerm |
+| 78 | `takeover/lifecycle-codex/not-running-mapped-resume` | mapped dead → resume existing id + iTerm |
+| 79 | `takeover/lifecycle-codex/running-native-kill-and-iterm` | native codex PID → kill log + iTerm |
+| 80 | `takeover/lifecycle-codex/dry-run-would-kill` | dry-run plan; no kill/meta/iTerm |
+| 81 | `takeover/auto-detect/grok-only` | no flags; only Grok has id → grok import + iTerm |
+| 82 | `takeover/auto-detect/codex-only` | no flags; only Codex has id → codex import + iTerm |
+| 83 | `takeover/auto-detect/ambiguous` | same id in both homes → non-zero ambiguous |
+| 84 | `takeover/auto-detect/neither` | neither home has id → non-zero not found |
+| 85 | `takeover/auto-detect/grok-only-dry-run` | auto-detect Grok + `--dry-run` plan; no side effects |
 | 4 | `run/json-fake-codex-hi` | `run --json --agent-runner fake-codex "hi"` → valid NDJSON, last event type `done` |
 | 5 | `run/events-persisted-to-home` | Same run; `events.jsonl` under home matches stdout lines |
 | 6 | `run/human-readable-no-json` | `run` without `--json` uses human-readable print, not all JSON lines |

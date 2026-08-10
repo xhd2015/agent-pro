@@ -27,6 +27,7 @@ Commands:
   assets     frontend asset status and ensure (download)
   focus      focus iTerm2 window/tab for a session (tree TTYs + FindByTTY)
   kill       stop a live TTY session by registry id
+  takeover   adopt a live provider session into agent-run
   tty        TTY session helpers (status, attach, send, snapshot, watch, kill)
   pty        PTY resource stats and kill orphan __serve processes
 
@@ -107,6 +108,8 @@ func Handle(args []string) error {
 		return RunFocus(sub, os.Stdout, os.Stderr)
 	case "kill":
 		return runKill(sub)
+	case "takeover":
+		return runTakeover(sub, agentRunner)
 	default:
 		return fmt.Errorf("unknown command: %s", cmd)
 	}
