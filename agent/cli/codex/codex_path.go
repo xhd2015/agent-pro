@@ -12,7 +12,21 @@ import (
 	"time"
 
 	"github.com/xhd2015/agent-pro/agent/debuglog"
+	"github.com/xhd2015/dot-pkgs/go-pkgs/shell/lookpath"
 )
+
+// errLookpathSkip marks an intentionally skipped lookpath stage (PATH / login).
+// FindAgentPath already probes PATH before probeCodexInstallPath, so lookpath's
+// PATH stage is disabled for install probes.
+var errLookpathSkip = fmt.Errorf("lookpath: stage skipped")
+
+func skipLookPath(_ string) (string, error) {
+	return "", errLookpathSkip
+}
+
+func skipRunLogin(_, _ string, _ []string) (string, error) {
+	return "", errLookpathSkip
+}
 
 const (
 	npmPrefixTimeout   = 3 * time.Second
@@ -123,22 +137,31 @@ func probeCodexInstallPath() (string, bool) {
 	return probeCodexViaLoginShell(home)
 }
 
+// probeFixedCodexPaths uses lookpath for DefaultDirs + ExtraCandidates
+// (codexInstallCandidates). PATH is skipped (already probed by FindAgentPath);
+// login is skipped here so probeNpmPrefixCodex can run before login shells.
 func probeFixedCodexPaths(home string) (string, bool) {
 	candidates := codexInstallCandidates(home)
-	misses := make([]string, 0, len(candidates))
-	for _, candidate := range candidates {
-		if isInvocableCLI(candidate) {
-			logCodexPathProbe("fixed_hit", map[string]any{
-				"candidate": candidate,
-			})
-			return candidate, true
-		}
-		misses = append(misses, candidate)
-	}
-	logCodexPathProbe("fixed_miss", map[string]any{
-		"candidates": misses,
+	res, err := lookpath.Look("codex", lookpath.Options{
+		Home:            home,
+		ExtraCandidates: candidates,
+		IsExecutable:    isInvocableCLI,
+		LookPath:        skipLookPath,
+		RunLogin:        skipRunLogin,
+		Timeout:         loginShellTimeout,
 	})
-	return "", false
+	if err != nil {
+		logCodexPathProbe("fixed_miss", map[string]any{
+			"candidates": candidates,
+			"error":      err.Error(),
+		})
+		return "", false
+	}
+	logCodexPathProbe("fixed_hit", map[string]any{
+		"candidate": res.Path,
+		"via":       res.Via,
+	})
+	return res.Path, true
 }
 
 // resolveNvmVersion maps nvm default alias (e.g. "20") to an installed version dir (e.g. "v24.10.0").
@@ -280,51 +303,57 @@ func probeNpmPrefixCodex(home string) (string, bool) {
 	return "", false
 }
 
+// probeCodexViaLoginShell resolves codex via login shells using lookpath.
+// File-based stages are disabled so a system-installed codex cannot short-circuit
+// the login probe (unit tests place codex only on the login PATH).
 func probeCodexViaLoginShell(home string) (string, bool) {
 	user := os.Getenv("USER")
 	if user == "" {
 		user = os.Getenv("LOGNAME")
 	}
-	for _, shell := range []string{"bash", "zsh"} {
-		path, ok := loginShellCommandV(shell, home, user, "command -v codex")
-		if ok {
-			logCodexPathProbe("login_shell_hit", map[string]any{
-				"shell": shell,
-				"path":  path,
-			})
-			return path, true
-		}
-	}
-	logCodexPathProbe("login_shell_miss", map[string]any{
-		"shells": []string{"bash", "zsh"},
+	res, err := lookpath.Look("codex", lookpath.Options{
+		Home:         home,
+		LookPath:     skipLookPath,
+		IsExecutable: func(string) bool { return false },
+		Timeout:      loginShellTimeout,
+		// Preserve USER/LOGNAME for login profiles (lookpath default only sets HOME+PATH).
+		RunLogin: func(shell, command string, env []string) (string, error) {
+			ctx, cancel := context.WithTimeout(context.Background(), loginShellTimeout)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, shell, "-lic", command)
+			cmd.Env = []string{
+				"HOME=" + home,
+				"USER=" + user,
+				"LOGNAME=" + user,
+				"PATH=/usr/bin:/bin:/usr/sbin:/sbin",
+			}
+			out, err := cmd.Output()
+			if err != nil {
+				logCodexPathProbe("login_shell_try", map[string]any{
+					"shell": shell,
+					"error": errString(err),
+				})
+				return "", err
+			}
+			path := strings.TrimSpace(string(out))
+			if path == "" || !isInvocableCLI(path) {
+				return "", fmt.Errorf("login shell %s: codex not invocable", shell)
+			}
+			return path, nil
+		},
 	})
-	return "", false
-}
-
-func loginShellCommandV(shell, home, user, command string) (string, bool) {
-	ctx, cancel := context.WithTimeout(context.Background(), loginShellTimeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, shell, "-lic", command)
-	cmd.Env = []string{
-		"HOME=" + home,
-		"USER=" + user,
-		"LOGNAME=" + user,
-		"PATH=/usr/bin:/bin:/usr/sbin:/sbin",
-	}
-	out, err := cmd.Output()
 	if err != nil {
-		logCodexPathProbe("login_shell_try", map[string]any{
-			"shell": shell,
-			"error": errString(err),
+		logCodexPathProbe("login_shell_miss", map[string]any{
+			"shells": []string{"bash", "zsh"},
+			"error":  err.Error(),
 		})
 		return "", false
 	}
-	path := strings.TrimSpace(string(out))
-	if path == "" || !isInvocableCLI(path) {
-		return "", false
-	}
-	return path, true
+	logCodexPathProbe("login_shell_hit", map[string]any{
+		"path": res.Path,
+		"via":  res.Via,
+	})
+	return res.Path, true
 }
 
 func runNpmPrefixGlobal(npmBin, home string) (string, error) {
