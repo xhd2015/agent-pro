@@ -26,14 +26,3 @@ recent window? -> grep keep -> exclude drop -> head|tail slice
 
 - Filter fixture ids: `idFilterSingle`, `idFilterHead`, `idFilterGrepA/B/C`, multiSessionID.
 - Fixed Now from root.
-
-```go
-import "testing"
-
-func Setup(t *testing.T, d *session.Doctest, req *Request) error {
-	_ = t
-	_ = d
-	_ = req
-	return nil
-}
-```

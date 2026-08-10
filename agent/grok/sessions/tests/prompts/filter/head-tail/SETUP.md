@@ -20,14 +20,3 @@ tail N -> last N; OmittedBefore = total-N if total>N; marker BEFORE lines
 1. Seed session(s) with known chrono prompt lists.
 2. Set Head or Tail.
 3. Assert structured Omitted* and/or format marker placement; footer counts.
-
-```go
-import "testing"
-
-func Setup(t *testing.T, d *session.Doctest, req *Request) error {
-	_ = t
-	_ = d
-	_ = req
-	return nil
-}
-```

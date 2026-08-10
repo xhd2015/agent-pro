@@ -7,7 +7,8 @@
 - Formatted Output:
   - collapses internal whitespace to single spaces (no raw `\t` / raw newlines
     inside the prompt body line)
-  - soft-truncates the body portion to about **200 runes** ending with `…`
+  - **full** body by default: the collapsed `220` x-run is present
+  - **no** body-cap ellipsis `…` (U+2026) from length truncation
   - trailing newline
   - no `👤`
 
@@ -19,7 +20,6 @@
 import (
 	"strings"
 	"testing"
-	"unicode/utf8"
 )
 
 func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
@@ -33,7 +33,6 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	assertTrailingNewline(t, out)
 	assertNotContains(t, out, "👤")
 	// Collapsed: should not keep tab as-is in the body line content after the bracket.
-	// Allow timestamp brackets; body should not include literal tab.
 	body := out
 	if i := strings.Index(out, "] "); i >= 0 {
 		body = out[i+2:]
@@ -44,18 +43,14 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	if strings.Contains(strings.TrimRight(body, "\n"), "\n") {
 		t.Fatalf("formatted body is multi-line (expected single compact line):\n%q", out)
 	}
-	// Truncation: ellipsis present and total body not huge.
-	if !strings.Contains(out, "…") && !strings.Contains(out, "...") {
-		t.Fatalf("expected truncation ellipsis in output:\n%s", out)
+	// Default full body: entire 220-x run must appear after collapse.
+	xs := longPromptRunes(220)
+	if !strings.Contains(out, xs) {
+		t.Fatalf("expected full collapsed body with 220 x runes (no soft-cap):\n%s", out)
 	}
-	// Soft cap ~200 runes for the prompt text portion; whole line may be a bit longer.
-	// Fail if body still has ~220 raw x's untruncated.
-	if strings.Contains(out, longPromptRunes(220)) {
-		t.Fatalf("expected long body to be truncated, still full 220 x run")
-	}
-	// Formatted output should be well under raw length.
-	if utf8.RuneCountInString(out) > 280 {
-		t.Fatalf("formatted output still very long (%d runes):\n%s", runeLen(out), out)
+	// No body-cap ellipsis when MaxBody is unset.
+	if strings.Contains(out, "…") {
+		t.Fatalf("default full body must not soft-cap with …:\n%s", out)
 	}
 	assertContains(t, out, "hello")
 	assertContains(t, out, "world")

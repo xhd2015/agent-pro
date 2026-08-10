@@ -8,13 +8,15 @@ Doc-style tests for **user-prompt history** of Grok CLI sessions in
 ```text
 agent-pro grok session prompts <session-id>
 agent-pro grok session prompts [--recent <window>] [--limit N]
-  [--grep P] [--exclude Q] [--head N | --tail N] [--color|--no-color]
+  [--grep P] [--exclude Q] [--head N | --tail N] [--max-body N]
+  [--color|--no-color]
 ```
 
-**Classic TDD** — base list/format/parse is implemented (existing leaves GREEN
-with zero-value filter opts). New **filter/** leaves stay RED until the
-implementer lands grep / exclude / head / tail behavior (and additive option
-fields). This tree is **L2 in-process only** (library API); no product-binary e2e.
+**Classic TDD** — base list/format/parse/filter is implemented (most leaves
+GREEN). **Body length contract** is the active RED surface: product still
+soft-truncates every body at ~200 runes; new contract is **full body by
+default** plus optional `FormatPromptsOptions.MaxBody*` / CLI `--max-body N`
+(runes). This tree is **L2 in-process only** (library API); no product-binary e2e.
 
 # DSN (Domain Specific Notion)
 
@@ -55,14 +57,23 @@ and per-session head/tail slice, plus compact text formatting for CLI stdout.
   head/tail clip, `OmittedBefore` / `OmittedAfter` (counts of dropped prompts;
   zero when no clip). Marker is formatter chrome only — not a `UserPrompt`.
 - **Formatters** — compact lines only:
-  - `[YYYY-MM-DD HH:MM:SS] prompt text…` (location from opts; tests use UTC)
+  - `[YYYY-MM-DD HH:MM:SS] prompt text` (location from opts; tests use UTC)
   - Missing timestamp → `[—]` still print text
-  - Without grep: collapse whitespace; soft-truncate body ~200 runes + `…`
-  - With `GrepSet`: window body around **first** include-match ≤ ~200 runes so
-    hit is visible; when `ColorMode=always`, bold-red highlight on the match
+  - **Always** collapse internal whitespace (tabs/newlines → single spaces;
+    one line per prompt body)
+  - **Default body** (`!MaxBodySet`): **full** collapsed text — no soft-cap,
+    no body-length `…`
+  - **`MaxBodySet`**: soft-truncate body to **`MaxBodyRunes` runes** (N ≥ 1)
+    + Unicode `…` (U+2026) **outside** the N content runes (same form as
+    `softTruncateRunes`); invalid N &lt; 1 when set → clear error from Write*
+  - With `GrepSet` and **no** MaxBody: full collapsed body; when
+    `ColorMode=always`, bold-red highlight on the **first** include-match
+  - With `GrepSet` **and** MaxBody: window body around first match within
+    **N** runes (reuse window helpers; N replaces hard-coded 200); ellipsis
+    on cut sides; color highlight when always
   - Head clip: print kept lines then `(...M omitted...)` if `OmittedAfter=M>0`
   - Tail clip: print `(...M omitted...)` if `OmittedBefore=M>0` then kept lines
-  - Omission marker is dim meta when color on
+  - Omission marker is dim meta when color on (clips *which* prompts, not body)
   - Multi: session header `── <id>  ·  <relative>  ·  <title>  ·  <short cwd>`
   - Footer `N sessions, M user messages` counts **printed** prompts only
     (excludes virtual omission lines)
@@ -86,8 +97,8 @@ ListPrompts(opts: recent/limit + grep/exclude/head|tail)
   -> []SessionPrompts with Omitted*
 
 # format
-SessionPrompts | []SessionPrompts + FormatPromptsOptions{Grep*, ColorMode, …}
-  -> compact text + optional omission markers + footer; trailing \n
+SessionPrompts | []SessionPrompts + FormatPromptsOptions{Grep*, MaxBody*, ColorMode, …}
+  -> compact text; full body default; optional MaxBody soft-cap; omission markers + footer; trailing \n
 ```
 
 **Data source**
@@ -129,7 +140,9 @@ FilterUserPromptsOptions
 
 FormatPromptsOptions
   Now, Home, Location, Window, Limit, RecentSet, LimitSet, ColorMode  // existing
-  Grep, GrepSet   // match window + highlight (ColorMode always → bold red)
+  Grep, GrepSet          // highlight (always → bold red); window only when MaxBodySet
+  MaxBodyRunes int       // soft-cap body to N runes + "…" when MaxBodySet
+  MaxBodySet   bool      // true if --max-body provided
 
 ParseRecentWindow(s string) (time.Duration, error)
 Prompts(grokHome, sessionID string) (*SessionPrompts, error)
@@ -137,6 +150,7 @@ ListPrompts(grokHome string, opts ListPromptsOptions) ([]SessionPrompts, error)
 FilterUserPrompts(prompts []UserPrompt, opts FilterUserPromptsOptions) (kept []UserPrompt, omittedBefore, omittedAfter int, err error)
 FormatPromptsText(sp *SessionPrompts, opts FormatPromptsOptions) string
 FormatPromptsListText(list []SessionPrompts, opts FormatPromptsOptions) string
+WritePromptsText / WritePromptsList — stream form; may return error on invalid MaxBody
 ```
 
 Matcher: case-insensitive **literal** (same family as package `findLiteralCI` /
@@ -152,45 +166,37 @@ sessions list `--grep`). Grep/exclude target **`UserPrompt.Text` only**.
 agent/grok/sessions/tests/prompts/
 ├── DOCTEST.md
 ├── SETUP.md
-├── parse-window/                 # ParseRecentWindow (existing)
-├── single/                       # Prompts(sessionID) (existing)
-├── multi/                        # ListPrompts selection matrix (existing)
-├── format/                       # Format* text contract (existing)
-└── filter/                       # grep / exclude / head|tail (NEW — RED)
-    ├── grep/                     # text keep filter
-    │   ├── single-keep-matches/
-    │   ├── multi-keep-matches/
-    │   ├── case-insensitive/
-    │   ├── session-no-match-skipped/
-    │   ├── no-matches-empty-message/
-    │   ├── with-limit-survivors/
-    │   └── with-recent-then-text/
-    ├── exclude/                  # text drop filter
-    │   ├── drops-matching/
-    │   └── after-grep/
-    ├── head-tail/                # per-session slice + markers
-    │   ├── head-clips-marker-after/
-    │   ├── tail-clips-marker-before/
-    │   ├── head-covers-all-no-marker/
-    │   ├── multi-per-session-head/
-    │   └── footer-real-prompt-count/
-    ├── errors/                   # invalid opts
-    │   ├── head-and-tail-both/
-    │   ├── head-zero/
-    │   ├── tail-zero/
-    │   ├── empty-grep/
-    │   └── empty-exclude/
-    └── format-chrome/            # marker string + color highlight
+├── parse-window/                 # ParseRecentWindow
+├── single/                       # Prompts(sessionID); whitespace+full-body format
+├── multi/                        # ListPrompts selection matrix
+├── format/                       # Format* text contract + body length policy
+│   ├── … existing compact/empty/header leaves …
+│   ├── multi-long-bodies-full/   # multi list: long bodies full by default
+│   └── max-body/                 # MaxBodySet soft-cap + invalid N
+│       ├── cap-200/
+│       ├── cap-1/
+│       └── invalid-zero/
+└── filter/                       # grep / exclude / head|tail / format chrome
+    ├── grep/
+    ├── exclude/
+    ├── head-tail/
+    │   ├── … existing short-text head/tail …
+    │   └── head-long-body-full/  # head keeps full body (no body soft-cap)
+    ├── errors/
+    └── format-chrome/
         ├── omission-marker-exact/
-        └── color-grep-highlight/
+        ├── color-grep-highlight/
+        ├── grep-long-full-body/  # grep + long body, no MaxBody → full + highlight
+        └── grep-max-body-window/ # grep + MaxBody → window ≤ N around match
 ```
 
 Parameter ranking (most → least significant):
 
-1. **API surface** — parse-window / single / multi / format / **filter**
-2. **Filter kind** — grep | exclude | head-tail | errors | format-chrome
-3. **Multi selection interaction** — limit / recent with text filters
-4. **Outcome** — keep / skip session / empty / error / marker placement
+1. **API surface** — parse-window / single / multi / format / filter
+2. **Body length policy** (under format / format-chrome) — default full vs MaxBody
+3. **Filter kind** — grep | exclude | head-tail | errors | format-chrome
+4. **Multi selection interaction** — limit / recent with text filters
+5. **Outcome** — keep / skip session / empty / error / marker placement
 
 ## Test Index
 
@@ -207,7 +213,7 @@ Parameter ranking (most → least significant):
 | 9 | `single/known-two-prompts` | Two separate user messages with wire ms → 2 prompts, times match wire (UTC) |
 | 10 | `single/multi-chunk-coalesce` | Consecutive user chunks → one prompt; first-chunk timestamp |
 | 11 | `single/assistant-only-empty` | Only assistant/tool updates → empty `UserPrompts`, no error |
-| 12 | `single/whitespace-and-truncate` | Long/whitespace text collapses + truncates in format (~200 runes + `…`) |
+| 12 | `single/whitespace-and-truncate` | Long/whitespace text: collapse still; **full** body by default (no body-cap `…`) |
 | 13 | `single/unknown-session` | Missing id → `grok session not found` + id |
 | 14 | `single/empty-session-id` | Empty / whitespace id → not found error |
 | 15 | `single/missing-updates-file` | summary only, no `updates.jsonl` → empty prompts, no error |
@@ -225,48 +231,74 @@ Parameter ranking (most → least significant):
 | 27 | `format/multi-session-header` | Multi header has id, title, cwd; prompt lines follow |
 | 28 | `format/empty-friendly-message` | Empty list → contains `No user prompts found`; trailing newline |
 | 29 | `format/no-emoji-user-headers` | No `👤` / multi-line USER card chrome |
-| 30 | `filter/grep/single-keep-matches` | Single session: grep keeps only matching prompts (structured) |
-| 31 | `filter/grep/multi-keep-matches` | Multi: each session keeps only matching prompt texts |
-| 32 | `filter/grep/case-insensitive` | Grep `error` matches `ERROR` / `Error` |
-| 33 | `filter/grep/session-no-match-skipped` | Session with prompts but no grep hit is skipped (does not consume limit) |
-| 34 | `filter/grep/no-matches-empty-message` | All filtered out → format contains `No user prompts found` |
-| 35 | `filter/grep/with-limit-survivors` | Limit counts only sessions with ≥1 post-grep match |
-| 36 | `filter/grep/with-recent-then-text` | Recent window first, then grep on remaining |
-| 37 | `filter/exclude/drops-matching` | Exclude drops matching lines; non-matches remain |
-| 38 | `filter/exclude/after-grep` | Grep keep then exclude drop (AND-not) |
-| 39 | `filter/head-tail/head-clips-marker-after` | 5 prompts, head 2 → first 2 + trailing `(...3 omitted...)` |
-| 40 | `filter/head-tail/tail-clips-marker-before` | 5 prompts, tail 2 → leading `(...3 omitted...)` + last 2 |
-| 41 | `filter/head-tail/head-covers-all-no-marker` | head N ≥ total → all lines, no omission marker |
-| 42 | `filter/head-tail/multi-per-session-head` | Per-session head 1; each block capped + own M |
-| 43 | `filter/head-tail/footer-real-prompt-count` | Footer user-message count excludes virtual omission lines |
-| 44 | `filter/errors/head-and-tail-both` | HeadSet+TailSet → error |
-| 45 | `filter/errors/head-zero` | HeadSet Head=0 → error |
-| 46 | `filter/errors/tail-zero` | TailSet Tail=0 → error |
-| 47 | `filter/errors/empty-grep` | GrepSet with empty Grep → error |
-| 48 | `filter/errors/empty-exclude` | ExcludeSet with empty Exclude → error |
-| 49 | `filter/format-chrome/omission-marker-exact` | Output contains exact `(...M omitted...)` substring |
-| 50 | `filter/format-chrome/color-grep-highlight` | ColorMode always + grep → ANSI CSI on match |
+| 30 | `format/multi-long-bodies-full` | Multi list: each long prompt body printed full (no soft-cap) |
+| 31 | `format/max-body/cap-200` | MaxBodySet MaxBodyRunes=200 on 220-x body → ~200 content runes + `…` |
+| 32 | `format/max-body/cap-1` | MaxBody N=1 on long body → 1 content rune + `…` |
+| 33 | `format/max-body/invalid-zero` | MaxBodySet MaxBodyRunes=0 → clear error (max-body / ≥ 1) |
+| 34 | `filter/grep/single-keep-matches` | Single session: grep keeps only matching prompts (structured) |
+| 35 | `filter/grep/multi-keep-matches` | Multi: each session keeps only matching prompt texts |
+| 36 | `filter/grep/case-insensitive` | Grep `error` matches `ERROR` / `Error` |
+| 37 | `filter/grep/session-no-match-skipped` | Session with prompts but no grep hit is skipped (does not consume limit) |
+| 38 | `filter/grep/no-matches-empty-message` | All filtered out → format contains `No user prompts found` |
+| 39 | `filter/grep/with-limit-survivors` | Limit counts only sessions with ≥1 post-grep match |
+| 40 | `filter/grep/with-recent-then-text` | Recent window first, then grep on remaining |
+| 41 | `filter/exclude/drops-matching` | Exclude drops matching lines; non-matches remain |
+| 42 | `filter/exclude/after-grep` | Grep keep then exclude drop (AND-not) |
+| 43 | `filter/head-tail/head-clips-marker-after` | 5 prompts, head 2 → first 2 + trailing `(...3 omitted...)` |
+| 44 | `filter/head-tail/tail-clips-marker-before` | 5 prompts, tail 2 → leading `(...3 omitted...)` + last 2 |
+| 45 | `filter/head-tail/head-covers-all-no-marker` | head N ≥ total → all lines, no omission marker |
+| 46 | `filter/head-tail/multi-per-session-head` | Per-session head 1; each block capped + own M |
+| 47 | `filter/head-tail/footer-real-prompt-count` | Footer user-message count excludes virtual omission lines |
+| 48 | `filter/head-tail/head-long-body-full` | Head keeps long body **full** by default; omission marker still after |
+| 49 | `filter/errors/head-and-tail-both` | HeadSet+TailSet → error |
+| 50 | `filter/errors/head-zero` | HeadSet Head=0 → error |
+| 51 | `filter/errors/tail-zero` | TailSet Tail=0 → error |
+| 52 | `filter/errors/empty-grep` | GrepSet with empty Grep → error |
+| 53 | `filter/errors/empty-exclude` | ExcludeSet with empty Exclude → error |
+| 54 | `filter/format-chrome/omission-marker-exact` | Output contains exact `(...M omitted...)` substring |
+| 55 | `filter/format-chrome/color-grep-highlight` | ColorMode always + grep short body → ANSI CSI on match |
+| 56 | `filter/format-chrome/grep-long-full-body` | Grep + long body, no MaxBody → full body + bold-red first match |
+| 57 | `filter/format-chrome/grep-max-body-window` | Grep + MaxBody N → window ≤ N around first match; side ellipsis |
 
 ## How to Run
 
 ```sh
 doctest vet ./agent/grok/sessions/tests/prompts
 doctest test ./agent/grok/sessions/tests/prompts
-doctest test -v ./agent/grok/sessions/tests/prompts/filter/grep/single-keep-matches
+doctest test -v ./agent/grok/sessions/tests/prompts/format/max-body/cap-200
 ```
 
-Classic TDD: existing leaves (1–29) stay GREEN with zero-value filter opts after
-implementer adds additive fields. New `filter/**` leaves (30–50) stay RED until
-filter pipeline + format markers/highlight land.
+Classic TDD: short-body / filter / selection leaves stay GREEN. Leaves that
+demand **full body by default** or **MaxBody** behavior stay RED until
+implementer changes formatters + additive `MaxBodyRunes`/`MaxBodySet` fields
+(and Write* validation for invalid N).
 
 ```go
 import (
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/xhd2015/agent-pro/agent/grok/sessions"
 	"github.com/xhd2015/doctest/session"
 )
+
+// applyFormatMaxBody sets MaxBodyRunes / MaxBodySet on opts when those fields
+// exist on FormatPromptsOptions. Classic-TDD: suite compiles before implementer
+// lands the additive fields; after they land, opts carry MaxBody for format.
+func applyFormatMaxBody(opts *sessions.FormatPromptsOptions, maxRunes int, maxSet bool) {
+	if opts == nil {
+		return
+	}
+	v := reflect.ValueOf(opts).Elem()
+	if f := v.FieldByName("MaxBodyRunes"); f.IsValid() && f.CanSet() && f.Kind() == reflect.Int {
+		f.SetInt(int64(maxRunes))
+	}
+	if f := v.FieldByName("MaxBodySet"); f.IsValid() && f.CanSet() && f.Kind() == reflect.Bool {
+		f.SetBool(maxSet)
+	}
+}
 
 // Op selects which package entrypoint Run exercises.
 //   "parse"         — ParseRecentWindow(RecentRaw)
@@ -308,6 +340,10 @@ type Request struct {
 
 	// Format
 	ColorMode string // "auto"|"always"|"never"; empty → never in Format*
+
+	// Body soft-cap (zero-value = full body; MaxBodySet → N runes + "…")
+	MaxBodyRunes int
+	MaxBodySet   bool
 
 	// Pure FilterUserPrompts input (Op "filter")
 	FilterInput []sessions.UserPrompt
@@ -360,6 +396,10 @@ func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 		Grep:      req.Grep,
 		GrepSet:   req.GrepSet,
 	}
+	// Demand MaxBody* on FormatPromptsOptions (implementer adds fields).
+	// Reflection keeps the suite compiling until those fields exist; once
+	// present they are set so MaxBody leaves exercise the real API.
+	applyFormatMaxBody(&fmtOpts, req.MaxBodyRunes, req.MaxBodySet)
 	listOpts := sessions.ListPromptsOptions{
 		Now:        req.Now,
 		Recent:     req.Recent,
@@ -434,7 +474,13 @@ func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 			if ferr := applyFilterToSession(sp); ferr != nil {
 				resp.Err = ferr
 			} else {
-				resp.Output = sessions.FormatPromptsText(sp, fmtOpts)
+				// Prefer Write* so invalid MaxBody can surface as resp.Err.
+				var b strings.Builder
+				if werr := sessions.WritePromptsText(&b, sp, fmtOpts); werr != nil {
+					resp.Err = werr
+				} else {
+					resp.Output = b.String()
+				}
 			}
 		}
 	case "format-list":
@@ -442,13 +488,28 @@ func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 		resp.List = list
 		resp.Err = err
 		if err == nil {
-			resp.Output = sessions.FormatPromptsListText(list, fmtOpts)
+			var b strings.Builder
+			if werr := sessions.WritePromptsList(&b, list, fmtOpts); werr != nil {
+				resp.Err = werr
+			} else {
+				resp.Output = b.String()
+			}
 		}
 	case "format-empty":
-		resp.Output = sessions.FormatPromptsListText(nil, fmtOpts)
+		var b strings.Builder
+		if werr := sessions.WritePromptsList(&b, nil, fmtOpts); werr != nil {
+			resp.Err = werr
+		} else {
+			resp.Output = b.String()
+		}
 	case "format-synthetic":
 		resp.Single = req.Synthetic
-		resp.Output = sessions.FormatPromptsText(req.Synthetic, fmtOpts)
+		var b strings.Builder
+		if werr := sessions.WritePromptsText(&b, req.Synthetic, fmtOpts); werr != nil {
+			resp.Err = werr
+		} else {
+			resp.Output = b.String()
+		}
 	default:
 		t.Fatalf("unknown Op %q", req.Op)
 	}

@@ -18,7 +18,6 @@ import (
 
 const (
 	defaultPromptsListLimit = 10
-	promptBodyMaxRunes      = 200
 	missingTimestampMarker  = "[—]" // em dash U+2014
 	promptTruncateEllipsis  = "…"   // U+2026
 	sessionBlockSeparator   = "────────────────────────────────────────"
@@ -90,10 +89,15 @@ type FormatPromptsOptions struct {
 	// ColorMode is "auto" | "always" | "never"; empty treated as "never" for
 	// deterministic Format* string helpers (CLI passes "auto" by default).
 	ColorMode string
-	// Grep / GrepSet: when set, format windows body around first match and
-	// bold-red highlights the span when ColorMode enables color.
+	// Grep / GrepSet: when set, bold-red highlights the first match when color
+	// is on. Without MaxBodySet the full collapsed body is kept; with MaxBodySet
+	// the body is windowed around the match within MaxBodyRunes.
 	Grep    string
 	GrepSet bool
+	// MaxBodyRunes soft-caps each collapsed body to N content runes + "…"
+	// (ellipsis outside the N budget) when MaxBodySet is true. N must be >= 1.
+	MaxBodyRunes int
+	MaxBodySet   bool // true if --max-body provided
 }
 
 var recentWindowRE = regexp.MustCompile(`(?i)^([0-9]+)([dhm])$`)
@@ -242,6 +246,9 @@ func ListPrompts(grokHome string, opts ListPromptsOptions) ([]SessionPrompts, er
 // updates.jsonl reads happen only for candidates and each ready session is
 // flushed before the next load.
 func StreamPromptsList(w io.Writer, grokHome string, opts ListPromptsOptions, fmtOpts FormatPromptsOptions) error {
+	if err := validateFormatPromptsOptions(fmtOpts); err != nil {
+		return err
+	}
 	if fmtOpts.Now.IsZero() {
 		fmtOpts.Now = opts.Now
 	}
@@ -495,6 +502,9 @@ func FormatPromptsText(sp *SessionPrompts, opts FormatPromptsOptions) string {
 // When OmittedBefore/OmittedAfter > 0, prints virtual omission markers
 // (not counted as user messages).
 func WritePromptsText(w io.Writer, sp *SessionPrompts, opts FormatPromptsOptions) error {
+	if err := validateFormatPromptsOptions(opts); err != nil {
+		return err
+	}
 	if sp == nil || len(sp.UserPrompts) == 0 {
 		_, err := io.WriteString(w, "No user prompts found\n")
 		return err
@@ -505,6 +515,14 @@ func WritePromptsText(w io.Writer, sp *SessionPrompts, opts FormatPromptsOptions
 	}
 	useColor := shouldColor(normalizePromptsColorMode(opts.ColorMode))
 	return writeSessionPromptBody(w, sp, loc, useColor, opts)
+}
+
+// validateFormatPromptsOptions rejects invalid MaxBody when MaxBodySet.
+func validateFormatPromptsOptions(opts FormatPromptsOptions) error {
+	if opts.MaxBodySet && opts.MaxBodyRunes < 1 {
+		return fmt.Errorf("--max-body must be >= 1 (got %d)", opts.MaxBodyRunes)
+	}
+	return nil
 }
 
 // writeSessionPromptBody writes omission markers + prompt lines for one session.
@@ -547,6 +565,9 @@ func FormatPromptsListText(list []SessionPrompts, opts FormatPromptsOptions) str
 // WritePromptsList streams multi-session compact output to w (session-by-session).
 // Prefer this from CLI for progressive output; FormatPromptsListText wraps it.
 func WritePromptsList(w io.Writer, list []SessionPrompts, opts FormatPromptsOptions) error {
+	if err := validateFormatPromptsOptions(opts); err != nil {
+		return err
+	}
 	// Filter to sessions with prompts for counting / emission.
 	var with []SessionPrompts
 	totalMsgs := 0
@@ -662,39 +683,55 @@ func formatPromptLine(p UserPrompt, loc *time.Location, useColor bool, opts Form
 	if useColor {
 		prefix = dimMeta(prefix, true)
 	}
-	body := formatPromptBody(p.Text, opts.Grep, opts.GrepSet, useColor)
+	body := formatPromptBody(p.Text, opts, useColor)
 	return prefix + " " + body
 }
 
-// formatPromptBody collapses whitespace; without grep soft-truncates; with
-// GrepSet windows around the first case-insensitive match and optionally
-// bold-red highlights the matched span when useColor is true.
-func formatPromptBody(text, grep string, grepSet, useColor bool) string {
+// formatPromptBody collapses whitespace. Default (!MaxBodySet): full body.
+// MaxBodySet: soft-truncate to MaxBodyRunes + "…". With GrepSet: highlight
+// first match; window around match only when MaxBodySet (budget = MaxBodyRunes).
+func formatPromptBody(text string, opts FormatPromptsOptions, useColor bool) string {
 	collapsed := collapseWhitespace(text)
-	if !grepSet || grep == "" {
-		return softTruncateRunes(collapsed, promptBodyMaxRunes)
+
+	if opts.GrepSet && opts.Grep != "" {
+		start, length, ok := findLiteralCI(collapsed, opts.Grep)
+		if ok {
+			if opts.MaxBodySet {
+				snippet, newStart, newLen := windowPromptBody(collapsed, start, length, opts.MaxBodyRunes)
+				return highlightMatchSpan(snippet, newStart, newLen, useColor)
+			}
+			// Full body + optional highlight (no window / soft-cap).
+			return highlightMatchSpan(collapsed, start, length, useColor)
+		}
+		// No match: still apply MaxBody soft-cap if set.
+		if opts.MaxBodySet {
+			return softTruncateRunes(collapsed, opts.MaxBodyRunes)
+		}
+		return collapsed
 	}
-	start, length, ok := findLiteralCI(collapsed, grep)
-	if !ok {
-		return softTruncateRunes(collapsed, promptBodyMaxRunes)
+
+	if opts.MaxBodySet {
+		return softTruncateRunes(collapsed, opts.MaxBodyRunes)
 	}
-	snippet, newStart, newLen := windowPromptBody(collapsed, start, length)
-	if useColor && newLen > 0 && newStart >= 0 && newStart+newLen <= len(snippet) {
-		before := snippet[:newStart]
-		match := snippet[newStart : newStart+newLen]
-		after := snippet[newStart+newLen:]
-		snippet = before + ansiBold + ansiRed + match + ansiReset + after
-	}
-	return snippet
+	return collapsed
 }
 
-// windowPromptBody builds a ≤promptBodyMaxRunes window around a match in
-// collapsed text. Match offsets are byte positions into the returned snippet.
+// highlightMatchSpan wraps [start, start+length) bytes of s in bold-red when
+// useColor is true. start/length are byte offsets into s.
+func highlightMatchSpan(s string, start, length int, useColor bool) string {
+	if !useColor || length <= 0 || start < 0 || start+length > len(s) {
+		return s
+	}
+	return s[:start] + ansiBold + ansiRed + s[start:start+length] + ansiReset + s[start+length:]
+}
+
+// windowPromptBody builds a ≤maxRunes window around a match in collapsed text.
+// Match offsets are byte positions into the returned snippet.
 // Cut sides get a single Unicode ellipsis (…); same family as soft-truncate.
-func windowPromptBody(collapsed string, matchStart, matchLen int) (snippet string, newStart, newLen int) {
+func windowPromptBody(collapsed string, matchStart, matchLen, maxRunes int) (snippet string, newStart, newLen int) {
 	runes := []rune(collapsed)
 	total := len(runes)
-	if total <= promptBodyMaxRunes {
+	if maxRunes <= 0 || total <= maxRunes {
 		return collapsed, matchStart, matchLen
 	}
 
@@ -702,12 +739,12 @@ func windowPromptBody(collapsed string, matchStart, matchLen int) (snippet strin
 	matchEndRune := utf8.RuneCountInString(collapsed[:matchStart+matchLen])
 	matchRuneCount := matchEndRune - matchStartRune
 
-	if matchRuneCount >= promptBodyMaxRunes {
-		s := string(runes[matchStartRune : matchStartRune+promptBodyMaxRunes])
+	if matchRuneCount >= maxRunes {
+		s := string(runes[matchStartRune : matchStartRune+maxRunes])
 		return s, 0, len(s)
 	}
 
-	remaining := promptBodyMaxRunes - matchRuneCount
+	remaining := maxRunes - matchRuneCount
 	beforeBudget := remaining / 2
 	afterBudget := remaining - beforeBudget
 
@@ -748,7 +785,7 @@ func windowPromptBody(collapsed string, matchStart, matchLen int) (snippet strin
 	}
 
 	var b strings.Builder
-	b.Grow(promptBodyMaxRunes * utf8.UTFMax)
+	b.Grow(maxRunes * utf8.UTFMax)
 	if needBeforeEllipsis {
 		b.WriteString(promptTruncateEllipsis)
 	}

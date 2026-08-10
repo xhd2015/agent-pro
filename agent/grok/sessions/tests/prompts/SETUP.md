@@ -46,7 +46,9 @@ grep keep -> exclude drop -> head|tail slice -> format markers / highlight
 - Default fixture cwd: `/tmp/grok-prompts-fixture-project`
 - Session id patterns use `019f283a-dddd-7ddd-dddd-ddddddddddNN`
 - Multi fixtures use distinct `last_active_at` so newest-first order is stable
-- Soft-truncate body: **~200 runes** + Unicode ellipsis `…` (U+2026)
+- Body length: **full** collapsed text by default; optional `MaxBodySet` +
+  `MaxBodyRunes N` (N ≥ 1) soft-caps to N runes + Unicode ellipsis `…` (U+2026)
+  outside the N content runes
 - Compact timestamp layout: `2006-01-02 15:04:05` in `FormatPromptsOptions.Location`
 - Empty friendly phrase: `No user prompts found`
 - Missing timestamp marker: `[—]` (em dash U+2014)

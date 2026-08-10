@@ -960,9 +960,11 @@ Run agent-pro grok session <command> --help for command-specific options.
 const grokSessionPromptsHelp = `
 Usage:
   agent-pro grok session prompts <session-id>
-    [--grep P] [--exclude Q] [--head N | --tail N] [--color|--no-color]
+    [--grep P] [--exclude Q] [--head N | --tail N] [--max-body N]
+    [--color|--no-color]
   agent-pro grok session prompts [--recent <window>] [--limit N]
-    [--grep P] [--exclude Q] [--head N | --tail N] [--color|--no-color]
+    [--grep P] [--exclude Q] [--head N | --tail N] [--max-body N]
+    [--color|--no-color]
   agent-pro grok sessions prompts …   (alias)
 
 Show user prompts only as compact lines:
@@ -980,6 +982,10 @@ Filter pipeline (per session, after recent window): grep keep → exclude drop �
 Sessions with zero survivors are skipped and do not count toward --limit.
 Head and tail are mutually exclusive; N >= 1. Empty --grep/--exclude patterns error.
 
+Body length: full collapsed text by default. --max-body N soft-caps each body to
+N runes + … (N >= 1). With --grep, full body + highlight unless --max-body, which
+windows around the first match within N runes.
+
 Multi layout: session header, prompt lines, separator rule between sessions, footer.
 Output streams session-by-session (not buffered until the end).
 
@@ -990,6 +996,7 @@ Options:
   --exclude Q       drop prompts whose text matches Q (case-insensitive literal)
   --head N          first N prompts per session after text filters (N >= 1)
   --tail N          last N prompts per session after text filters (N >= 1)
+  --max-body N      soft-cap each prompt body to N runes + … (N >= 1; default: full)
   --color           force ANSI color on (even when stdout is not a TTY)
   --no-color        force ANSI color off
   -h,--help         show help
@@ -1153,6 +1160,7 @@ func handleGrokSessionPrompts(args []string) error {
 	var excludeFlag *string
 	var headFlag *int
 	var tailFlag *int
+	var maxBodyFlag *int
 	var colorFlag bool
 	var noColorFlag bool
 	remaining, err := flags.String("--recent", &recentFlag).
@@ -1161,6 +1169,7 @@ func handleGrokSessionPrompts(args []string) error {
 		String("--exclude", &excludeFlag).
 		Int("--head", &headFlag).
 		Int("--tail", &tailFlag).
+		Int("--max-body", &maxBodyFlag).
 		Bool("--color", &colorFlag).
 		Bool("--no-color", &noColorFlag).
 		Help("-h,--help", grokSessionPromptsHelp).
@@ -1185,6 +1194,7 @@ func handleGrokSessionPrompts(args []string) error {
 	excludeSet := excludeFlag != nil
 	headSet := headFlag != nil
 	tailSet := tailFlag != nil
+	maxBodySet := maxBodyFlag != nil
 
 	var recent time.Duration
 	if recentSet {
@@ -1233,6 +1243,13 @@ func handleGrokSessionPrompts(args []string) error {
 			return fmt.Errorf("--tail must be >= 1")
 		}
 	}
+	maxBodyRunes := 0
+	if maxBodySet {
+		maxBodyRunes = *maxBodyFlag
+		if maxBodyRunes < 1 {
+			return fmt.Errorf("--max-body must be >= 1 (got %d)", maxBodyRunes)
+		}
+	}
 	filterOpts := groksessions.FilterUserPromptsOptions{
 		Grep:       grep,
 		GrepSet:    grepSet,
@@ -1274,11 +1291,13 @@ func handleGrokSessionPrompts(args []string) error {
 		bw := bufio.NewWriter(os.Stdout)
 		defer bw.Flush()
 		return groksessions.WritePromptsText(bw, sp, groksessions.FormatPromptsOptions{
-			Now:       time.Now(),
-			Home:      homeDir(),
-			ColorMode: colorMode,
-			Grep:      grep,
-			GrepSet:   grepSet,
+			Now:          time.Now(),
+			Home:         homeDir(),
+			ColorMode:    colorMode,
+			Grep:         grep,
+			GrepSet:      grepSet,
+			MaxBodyRunes: maxBodyRunes,
+			MaxBodySet:   maxBodySet,
 		})
 	}
 
@@ -1306,15 +1325,17 @@ func handleGrokSessionPrompts(args []string) error {
 		Tail:       tail,
 		TailSet:    tailSet,
 	}, groksessions.FormatPromptsOptions{
-		Now:       now,
-		Home:      homeDir(),
-		Window:    recent,
-		Limit:     limit,
-		RecentSet: recentSet,
-		LimitSet:  limitSet,
-		ColorMode: colorMode,
-		Grep:      grep,
-		GrepSet:   grepSet,
+		Now:          now,
+		Home:         homeDir(),
+		Window:       recent,
+		Limit:        limit,
+		RecentSet:    recentSet,
+		LimitSet:     limitSet,
+		ColorMode:    colorMode,
+		Grep:         grep,
+		GrepSet:      grepSet,
+		MaxBodyRunes: maxBodyRunes,
+		MaxBodySet:   maxBodySet,
 	})
 }
 
