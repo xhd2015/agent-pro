@@ -34,6 +34,8 @@ type FollowUpOpts struct {
 	Color bool
 	// Env each "KEY=VALUE" → -e KEY=VALUE before -- / prompt (optional).
 	Env []string
+	// ExtraArgs are inserted after -e flags and before -- / prompt (e.g. event-bus flags).
+	ExtraArgs []string
 }
 
 // BuildFollowUpCommand returns a single shell-quoted command line suitable for
@@ -85,6 +87,12 @@ func BuildFollowUpCommand(opts FollowUpOpts) (string, error) {
 			continue
 		}
 		remainder = append(remainder, "-e", e)
+	}
+	for _, a := range opts.ExtraArgs {
+		if a == "" {
+			continue
+		}
+		remainder = append(remainder, a)
 	}
 
 	prompt := opts.Prompt

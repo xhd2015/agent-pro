@@ -57,6 +57,8 @@ Options:
   --prepend-path DIR  prepend DIR to the TTY agent runner child PATH (repeatable; TTY only)
   -e, --env KEY=VALUE set env var on the TTY agent runner child process (repeatable; TTY only)
   --color             force color on the TTY agent runner child (unset NO_COLOR; FORCE_COLOR/CLICOLOR; TTY only)
+  --event-bus-url URL publish agent.tty.started after a successful new-terminal open (best-effort)
+  --event-bus-token TOKEN  optional Bearer token for event-bus publish
   -h, --help          show help
 `
 
@@ -81,6 +83,8 @@ func runHeadless(args []string, defaultRunner string) error {
 	var allowRelocateResumeSessionDir bool
 	var resumeFromGrokSession *string
 	var forkFlag bool
+	var eventBusURL string
+	var eventBusToken string
 	var recorded flags.Flags
 	remaining, err := flags.Bool("--json", &jsonFlag).
 		String("--model", &model).
@@ -102,6 +106,8 @@ func runHeadless(args []string, defaultRunner string) error {
 		StringSlice("--prepend-path", &prependPaths).
 		StringSlice("-e,--env", &envEntries).
 		Bool("--color", &colorFlag).
+		String("--event-bus-url", &eventBusURL).
+		String("--event-bus-token", &eventBusToken).
 		Help("-h,--help", runHelp).
 		CollectParsedFlags(&recorded).
 		Parse(args)
@@ -181,6 +187,8 @@ func runHeadless(args []string, defaultRunner string) error {
 			prompt:                        prompt,
 			defaultRunner:                 defaultRunner,
 			newTerminal:                   newTerminal,
+			eventBusURL:                   eventBusURL,
+			eventBusToken:                 eventBusToken,
 			recorded:                      recorded,
 		})
 	}
@@ -483,6 +491,8 @@ type autoSendOrResumeOpts struct {
 	prompt                        string
 	defaultRunner                 string
 	newTerminal                   bool
+	eventBusURL                   string
+	eventBusToken                 string
 	recorded                      flags.Flags
 }
 
@@ -609,6 +619,8 @@ func openAutoInNewTerminal(opts autoSendOrResumeOpts, meta agentstorage.SessionM
 	if strings.TrimSpace(host.Binary) == "" {
 		host = agentdriver.Driver{Binary: exe}
 	}
+	// Carry event-bus flags into the ForceNew child so it can publish if needed.
+	eventBusExtra := AppendEventBusFlags(nil, opts.eventBusURL, opts.eventBusToken)
 	followUp, err := agentrunapi.BuildFollowUpCommand(agentrunapi.FollowUpOpts{
 		Driver:                        host,
 		SessionID:                     strings.TrimSpace(opts.sessionID),
@@ -621,6 +633,7 @@ func openAutoInNewTerminal(opts autoSendOrResumeOpts, meta agentstorage.SessionM
 		Detach:                        opts.detachFlag,
 		Color:                         opts.color,
 		Env:                           append([]string(nil), opts.envEntries...),
+		ExtraArgs:                     eventBusExtra,
 	})
 	if err != nil {
 		return err
@@ -629,10 +642,24 @@ func openAutoInNewTerminal(opts autoSendOrResumeOpts, meta agentstorage.SessionM
 	// follow-up is intentionally library-built (never includes --new-terminal).
 	_ = opts.recorded
 
-	return iterm2.OpenConfig(dir, &iterm2.Config{
+	if err := iterm2.OpenConfig(dir, &iterm2.Config{
 		Mode:             iterm2.ModeForceNew,
 		FollowUpCommands: []string{followUp},
-	})
+	}); err != nil {
+		return err
+	}
+
+	// After successful ForceNew open: best-effort agent.tty.started (never fails open).
+	payloadWorkspace := workspaceDir
+	if strings.TrimSpace(payloadWorkspace) == "" {
+		payloadWorkspace = dir
+	}
+	NotifyOnOpenPath("new-terminal", EventBusOpts{
+		URL:        opts.eventBusURL,
+		Token:      opts.eventBusToken,
+		WarnWriter: os.Stderr,
+	}, strings.TrimSpace(opts.sessionID), runner, payloadWorkspace)
+	return nil
 }
 
 // agentRunExecutable returns an absolute path to this process binary for re-exec.
