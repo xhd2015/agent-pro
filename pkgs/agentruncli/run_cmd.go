@@ -270,13 +270,13 @@ func runHeadless(args []string, defaultRunner string) error {
 	})
 }
 
-// keepAliveOpenDetach: detach always keeps; open keeps unless
-// AGENT_RUN_OPEN_CLOSE_EXITS experiment (window-close → exit serve).
+// keepAliveOpenDetach: detach always keeps; open keeps only when
+// OpenCloseExits is off (AGENT_RUN_OPEN_CLOSE_EXITS=0) or --keep-tty.
 func keepAliveOpenDetach(keepTTY, open, detach bool) bool {
 	if keepTTY || detach {
 		return true
 	}
-	if open && !agenttty.OpenCloseExitsExperiment() {
+	if open && !agenttty.OpenCloseExits() {
 		return true
 	}
 	return false

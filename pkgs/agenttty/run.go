@@ -80,25 +80,22 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	if !ok {
 		return "", "", fmt.Errorf("unknown TTY runner: %s", runnerID)
 	}
-	// Open/Detach default: keep-alive daemon after attach returns / after child exit.
-	// Experiment AGENT_RUN_OPEN_CLOSE_EXITS=1: for --open only, do NOT force
-	// keep-alive so that when the interactive writer disconnects (window close)
-	// and stopChild reaps the PTY agent, __serve__ exits too (resource free).
-	// --detach is unchanged (daemon is the product).
+	// Detach: keep-alive daemon is the product.
+	// Open: by default OpenCloseExits() — do NOT force keep-alive so window
+	// close (writer disconnect → stopChild) also tears down __serve__.
+	// Opt out: AGENT_RUN_OPEN_CLOSE_EXITS=0 restores pre-fix keep-alive open.
+	// Explicit KeepTerminalAlive / --keep-tty still wins when already set.
 	if opts.Detach {
 		opts.KeepTerminalAlive = true
 	} else if opts.Open {
-		if !openCloseExitsExperiment() {
+		if !OpenCloseExits() {
 			opts.KeepTerminalAlive = true
 		}
-		// experiment open: leave KeepTerminalAlive false unless caller set it
 	}
-	// commandcode-tty: always keep PTY alive so snapshot/attach work after run.
-	// Headless mode injects -p (non-interactive) so cmd exits cleanly while the
-	// serve persists the scrollback. Open mode omits -p for interactive use.
-	// Experiment open-close-exits: do not re-force keep-alive for open.
+	// commandcode-tty: keep PTY alive for headless snapshot/attach after run.
+	// Open + OpenCloseExits: do not re-force keep-alive (window-close teardown).
 	if runnerID == "commandcode-tty" {
-		if !(opts.Open && openCloseExitsExperiment()) {
+		if !(opts.Open && OpenCloseExits()) {
 			opts.KeepTerminalAlive = true
 		}
 	}
@@ -319,18 +316,18 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 				Alive:             true,
 			})
 		}
-		// Default attach_mode=attach → roleAttacher: WS disconnect does NOT stopChild
-		// (ghost __serve__ after iTerm red-close). Experiment uses screen → roleWriter:
-		// bare writer close without detach_keep → stopChild (ptywrap).
+		// OpenCloseExits (default): attach_mode=screen → ptywrap roleWriter so
+		// bare WS disconnect (iTerm red-close) calls stopChild() without needing
+		// detach_keep. attach_mode=attach (roleAttacher) leaves ghost __serve__.
 		attachMode := "attach"
-		if openCloseExitsExperiment() {
+		if OpenCloseExits() {
 			attachMode = "screen"
 		}
 		if _, attachErr := ttywatch.AttachWriter(listenAddr, sessionID, attachMode); attachErr != nil {
 			return "", terminalSessionID, attachErr
 		}
-		// Leave PTY/registry alive for re-attach/send; do not wait for turn.
-		// (With OPEN_CLOSE_EXITS + screen, window close reaps child; serve exits if !KeepAlive.)
+		// With OpenCloseExits + !KeepTerminalAlive, window close reaps child and
+		// serve exits. Ctrl-] still sends detach_keep (child kept).
 		return "", terminalSessionID, nil
 	}
 

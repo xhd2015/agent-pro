@@ -248,12 +248,12 @@ func defaultResumeSession(ctx context.Context, opts Opts, meta agentstorage.Sess
 }
 
 // keepAliveForOpenOrDetach mirrors agentui: detach always keeps; open keeps
-// unless AGENT_RUN_OPEN_CLOSE_EXITS experiment is on.
+// only when OpenCloseExits is off (AGENT_RUN_OPEN_CLOSE_EXITS=0) or keepTTY.
 func keepAliveForOpenOrDetach(keepTTY, open, detach bool) bool {
 	if keepTTY || detach {
 		return true
 	}
-	if open && !agenttty.OpenCloseExitsExperiment() {
+	if open && !agenttty.OpenCloseExits() {
 		return true
 	}
 	return false
