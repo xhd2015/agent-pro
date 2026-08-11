@@ -259,7 +259,7 @@ func runHeadless(args []string, defaultRunner string) error {
 		Color:                 colorFlag,
 		JSON:                  jsonFlag,
 		Workspace:             workspace,
-		KeepTerminalAlive:     keepTTY || openFlag || detachFlag,
+		KeepTerminalAlive:     keepAliveOpenDetach(keepTTY, openFlag, detachFlag),
 		Open:                  openFlag,
 		Detach:                detachFlag,
 		NoSubmit:              noSubmit,
@@ -268,6 +268,18 @@ func runHeadless(args []string, defaultRunner string) error {
 		Stdout:                os.Stdout,
 		Stderr:                os.Stderr,
 	})
+}
+
+// keepAliveOpenDetach: detach always keeps; open keeps unless
+// AGENT_RUN_OPEN_CLOSE_EXITS experiment (window-close → exit serve).
+func keepAliveOpenDetach(keepTTY, open, detach bool) bool {
+	if keepTTY || detach {
+		return true
+	}
+	if open && !agenttty.OpenCloseExitsExperiment() {
+		return true
+	}
+	return false
 }
 
 // resolveCLIRunner picks the agent runner for run/auto paths.
@@ -464,7 +476,7 @@ func runResumeFromGrokSession(opts resumeFromGrokOpts) error {
 		Color:                 opts.color,
 		JSON:                  opts.jsonFlag,
 		Workspace:             workspace,
-		KeepTerminalAlive:     opts.keepTTY || opts.openFlag || opts.detachFlag,
+		KeepTerminalAlive:     keepAliveOpenDetach(opts.keepTTY, opts.openFlag, opts.detachFlag),
 		Open:                  opts.openFlag,
 		Detach:                opts.detachFlag,
 		NoSubmit:              opts.noSubmit,
@@ -836,7 +848,7 @@ func autoRunCreate(store agentstorage.Store, sessionID string, opts autoSendOrRe
 		Color:                 opts.color,
 		JSON:                  opts.jsonFlag,
 		Workspace:             workspace,
-		KeepTerminalAlive:     opts.keepTTY || opts.openFlag || opts.detachFlag,
+		KeepTerminalAlive:     keepAliveOpenDetach(opts.keepTTY, opts.openFlag, opts.detachFlag),
 		Open:                  opts.openFlag,
 		Detach:                opts.detachFlag,
 		NoSubmit:              opts.noSubmit,

@@ -141,14 +141,14 @@ func defaultRunSession(ctx context.Context, opts Opts, meta agentstorage.Session
 		Color:                 opts.Color,
 		JSON:                  opts.JSON,
 		Workspace:             workspace,
-		KeepTerminalAlive:     opts.KeepTTY || opts.Open || opts.Detach,
-		Open:                  opts.Open,
-		Detach:                opts.Detach,
-		NoSubmit:              opts.NoSubmit,
-		Driver:                opts.Driver,
-		Store:                 opts.Store,
-		Stdout:                stdout,
-		Stderr:                stderr,
+		KeepTerminalAlive: keepAliveForOpenOrDetach(opts.KeepTTY, opts.Open, opts.Detach),
+		Open:              opts.Open,
+		Detach:            opts.Detach,
+		NoSubmit:          opts.NoSubmit,
+		Driver:            opts.Driver,
+		Store:             opts.Store,
+		Stdout:            stdout,
+		Stderr:            stderr,
 	})
 }
 
@@ -236,15 +236,27 @@ func defaultResumeSession(ctx context.Context, opts Opts, meta agentstorage.Sess
 		Color:                 opts.Color,
 		JSON:                  opts.JSON,
 		Workspace:             workspace,
-		KeepTerminalAlive:     keepTTY || opts.Open || opts.Detach,
-		Open:                  opts.Open,
-		Detach:                opts.Detach,
-		NoSubmit:              opts.NoSubmit,
-		Driver:                opts.Driver,
-		Store:                 opts.Store,
-		Stdout:                stdout,
-		Stderr:                stderr,
+		KeepTerminalAlive: keepAliveForOpenOrDetach(keepTTY, opts.Open, opts.Detach),
+		Open:              opts.Open,
+		Detach:            opts.Detach,
+		NoSubmit:          opts.NoSubmit,
+		Driver:            opts.Driver,
+		Store:             opts.Store,
+		Stdout:            stdout,
+		Stderr:            stderr,
 	})
+}
+
+// keepAliveForOpenOrDetach mirrors agentui: detach always keeps; open keeps
+// unless AGENT_RUN_OPEN_CLOSE_EXITS experiment is on.
+func keepAliveForOpenOrDetach(keepTTY, open, detach bool) bool {
+	if keepTTY || detach {
+		return true
+	}
+	if open && !agenttty.OpenCloseExitsExperiment() {
+		return true
+	}
+	return false
 }
 
 func resolveWorkspaceDir(dir string) (string, error) {

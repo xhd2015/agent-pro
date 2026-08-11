@@ -80,14 +80,27 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	if !ok {
 		return "", "", fmt.Errorf("unknown TTY runner: %s", runnerID)
 	}
-	if opts.Open || opts.Detach {
+	// Open/Detach default: keep-alive daemon after attach returns / after child exit.
+	// Experiment AGENT_RUN_OPEN_CLOSE_EXITS=1: for --open only, do NOT force
+	// keep-alive so that when the interactive writer disconnects (window close)
+	// and stopChild reaps the PTY agent, __serve__ exits too (resource free).
+	// --detach is unchanged (daemon is the product).
+	if opts.Detach {
 		opts.KeepTerminalAlive = true
+	} else if opts.Open {
+		if !openCloseExitsExperiment() {
+			opts.KeepTerminalAlive = true
+		}
+		// experiment open: leave KeepTerminalAlive false unless caller set it
 	}
 	// commandcode-tty: always keep PTY alive so snapshot/attach work after run.
 	// Headless mode injects -p (non-interactive) so cmd exits cleanly while the
 	// serve persists the scrollback. Open mode omits -p for interactive use.
+	// Experiment open-close-exits: do not re-force keep-alive for open.
 	if runnerID == "commandcode-tty" {
-		opts.KeepTerminalAlive = true
+		if !(opts.Open && openCloseExitsExperiment()) {
+			opts.KeepTerminalAlive = true
+		}
 	}
 	// codex-tty headless: keep serve alive through inject+turn. Without keep-alive,
 	// /input can 404 mid-inject on short-lived serve teardown ("inject endpoint not found").
@@ -306,10 +319,18 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 				Alive:             true,
 			})
 		}
-		if _, attachErr := ttywatch.AttachWriter(listenAddr, sessionID, "attach"); attachErr != nil {
+		// Default attach_mode=attach → roleAttacher: WS disconnect does NOT stopChild
+		// (ghost __serve__ after iTerm red-close). Experiment uses screen → roleWriter:
+		// bare writer close without detach_keep → stopChild (ptywrap).
+		attachMode := "attach"
+		if openCloseExitsExperiment() {
+			attachMode = "screen"
+		}
+		if _, attachErr := ttywatch.AttachWriter(listenAddr, sessionID, attachMode); attachErr != nil {
 			return "", terminalSessionID, attachErr
 		}
 		// Leave PTY/registry alive for re-attach/send; do not wait for turn.
+		// (With OPEN_CLOSE_EXITS + screen, window close reaps child; serve exits if !KeepAlive.)
 		return "", terminalSessionID, nil
 	}
 

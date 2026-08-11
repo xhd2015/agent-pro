@@ -83,7 +83,10 @@ func Run(ctx context.Context, opts RunOptions) error {
 	if opts.Store == nil {
 		return fmt.Errorf("store is required")
 	}
-	if opts.Open || opts.Detach {
+	// Detach always keep-alive. Open keep-alive unless close→exit experiment.
+	if opts.Detach {
+		opts.KeepTerminalAlive = true
+	} else if opts.Open && !agenttty.OpenCloseExitsExperiment() {
 		opts.KeepTerminalAlive = true
 	}
 	// Empty prompt is allowed for --open / --detach / keep-alive reopen (resume
@@ -474,7 +477,8 @@ func streamRunner(ctx context.Context, runner, home, workspace string, env *agen
 			Env:                   envEntries,
 			Color:                 color,
 			Driver:                driver,
-			KeepTerminalAlive:     keepTerminalAlive || open || detach,
+			// open keep-alive unless close→exit experiment (detach always keeps).
+			KeepTerminalAlive: keepTerminalAlive || detach || (open && !agenttty.OpenCloseExitsExperiment()),
 			Open:                  open,
 			Detach:                detach,
 			NoSubmit:              noSubmit,
