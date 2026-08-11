@@ -25,6 +25,7 @@ Usage: agent-run run [OPTIONS] ["prompt"]
 Options:
   --json              stream NDJSON AgentEvent lines to stdout
   --model MODEL       model name
+  --model-reasoning-effort LEVEL  optional reasoning effort (pass-through; empty/omitted = no default)
   --session ID        session id
   --session-id ID     alias for --session
   --session-id-from-prompt   generate session id from prompt slug (storage + TTY registry)
@@ -65,6 +66,7 @@ Options:
 func runHeadless(args []string, defaultRunner string) error {
 	var jsonFlag bool
 	var model string
+	var modelReasoningEffort string
 	var sessionID string
 	var sessionIDFromPrompt bool
 	var autoSendOrResume bool
@@ -88,6 +90,7 @@ func runHeadless(args []string, defaultRunner string) error {
 	var recorded flags.Flags
 	remaining, err := flags.Bool("--json", &jsonFlag).
 		String("--model", &model).
+		String("--model-reasoning-effort", &modelReasoningEffort).
 		String("--session,--session-id", &sessionID).
 		Bool("--session-id-from-prompt", &sessionIDFromPrompt).
 		Bool("--auto-send-or-resume", &autoSendOrResume).
@@ -170,6 +173,7 @@ func runHeadless(args []string, defaultRunner string) error {
 		return runAutoSendOrResume(autoSendOrResumeOpts{
 			jsonFlag:                      jsonFlag,
 			model:                         model,
+			modelReasoningEffort:          modelReasoningEffort,
 			sessionID:                     sessionID,
 			sessionIDFromPrompt:           sessionIDFromPrompt,
 			agentRunner:                   agentRunner,
@@ -246,6 +250,7 @@ func runHeadless(args []string, defaultRunner string) error {
 		Prompt:                prompt,
 		Runner:                runner,
 		Model:                 model,
+		ModelReasoningEffort:  modelReasoningEffort,
 		SessionID:             sessionID,
 		AgentRunnerBinary:     agentRunnerBinary,
 		AgentRunnerConfigHome: absConfigHome,
@@ -474,6 +479,7 @@ func runResumeFromGrokSession(opts resumeFromGrokOpts) error {
 type autoSendOrResumeOpts struct {
 	jsonFlag                      bool
 	model                         string
+	modelReasoningEffort          string
 	sessionID                     string
 	sessionIDFromPrompt           bool
 	agentRunner                   string
@@ -538,6 +544,7 @@ func runAutoSendOrResume(opts autoSendOrResumeOpts) error {
 		AgentRunnerBinary:             opts.agentRunnerBinary,
 		RunnerConfigHome:              opts.agentRunnerConfigHome,
 		Model:                         opts.model,
+		ModelReasoningEffort:          opts.modelReasoningEffort,
 		Open:                          opts.openFlag,
 		Detach:                        opts.detachFlag,
 		NoSubmit:                      opts.noSubmit,
@@ -645,6 +652,8 @@ func openAutoInNewTerminal(opts autoSendOrResumeOpts, meta agentstorage.SessionM
 		Open:                          opts.openFlag,
 		Detach:                        opts.detachFlag,
 		Color:                         opts.color,
+		Model:                         opts.model,
+		ModelReasoningEffort:          opts.modelReasoningEffort,
 		Env:                           append([]string(nil), opts.envEntries...),
 		ExtraArgs:                     eventBusExtra,
 	})
@@ -818,6 +827,7 @@ func autoRunCreate(store agentstorage.Store, sessionID string, opts autoSendOrRe
 		Prompt:                opts.prompt,
 		Runner:                runner,
 		Model:                 opts.model,
+		ModelReasoningEffort:  opts.modelReasoningEffort,
 		SessionID:             sessionID,
 		AgentRunnerBinary:     opts.agentRunnerBinary,
 		AgentRunnerConfigHome: opts.agentRunnerConfigHome,

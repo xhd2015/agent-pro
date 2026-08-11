@@ -32,6 +32,12 @@ type FollowUpOpts struct {
 	Detach                        bool
 	// Color true → emit --color after open/detach flags, before -e / -- / prompt.
 	Color bool
+	// Model is optional; when non-empty, BuildFollowUpCommand emits --model=<m>
+	// (or two-token form). Empty → omit (no product default).
+	Model string
+	// ModelReasoningEffort is optional; when non-empty, emits
+	// --model-reasoning-effort=<level>. Empty → omit (no default max).
+	ModelReasoningEffort string
 	// Env each "KEY=VALUE" → -e KEY=VALUE before -- / prompt (optional).
 	Env []string
 	// ExtraArgs are inserted after -e flags and before -- / prompt (e.g. event-bus flags).
@@ -80,6 +86,12 @@ func BuildFollowUpCommand(opts FollowUpOpts) (string, error) {
 	}
 	if opts.Color {
 		remainder = append(remainder, "--color")
+	}
+	if m := strings.TrimSpace(opts.Model); m != "" {
+		remainder = append(remainder, "--model="+m)
+	}
+	if e := strings.TrimSpace(opts.ModelReasoningEffort); e != "" {
+		remainder = append(remainder, "--model-reasoning-effort="+e)
 	}
 	for _, e := range opts.Env {
 		e = strings.TrimSpace(e)
