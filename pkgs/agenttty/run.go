@@ -244,8 +244,8 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 				Alive:             true,
 			})
 		}
-		// Leave PTY/registry alive for later attach/send; return immediately.
-		return "", terminalSessionID, nil
+		// Leave PTY/registry alive for later attach/send; bind codex id when possible.
+		return resolveOpenDetachRunnerSessionID(ctx, opts, runnerID, provider, configHome, runStart, listenAddr, sessionID), terminalSessionID, nil
 	}
 
 	// --open: soft-wait inject-readiness, inject when ready, then AttachWriter.
@@ -323,12 +323,24 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 		if OpenCloseExits() {
 			attachMode = "screen"
 		}
+		// Bind codex runner_session_id before attach returns. Open path used to
+		// always return "" here; without a bound id, AutoSendOrResume falls to
+		// ModeRun after terminal close and opens a second Codex conversation.
+		runnerSID := resolveOpenDetachRunnerSessionID(ctx, opts, runnerID, provider, configHome, runStart, listenAddr, sessionID)
+
 		if _, attachErr := ttywatch.AttachWriter(listenAddr, sessionID, attachMode); attachErr != nil {
-			return "", terminalSessionID, attachErr
+			return runnerSID, terminalSessionID, attachErr
 		}
 		// With OpenCloseExits + !KeepTerminalAlive, window close reaps child and
 		// serve exits. Ctrl-] still sends detach_keep (child kept).
-		return "", terminalSessionID, nil
+		// One-shot re-try if still empty (rollout may appear during attach).
+		if strings.TrimSpace(runnerSID) == "" && (isCodexProvider(provider.BannerProvider) || runnerID == "codex-tty") {
+			if id := tryDiscoverCodexOnce(opts, configHome, runStart, listenAddr, sessionID); id != "" {
+				runnerSID = id
+				fmt.Fprintf(opts.Stderr, "codex-tty: codex session %s\n", runnerSID)
+			}
+		}
+		return runnerSID, terminalSessionID, nil
 	}
 
 	// Non-open headless: hard-wait inject-ready (banner/OpenReady), then inject.
@@ -637,4 +649,39 @@ func waitForOpenReady(ctx context.Context, listenAddr, sessionID string, timeout
 		time.Sleep(50 * time.Millisecond)
 	}
 	return fmt.Errorf("open ready: scrollback empty after %s", timeout)
+}
+
+// resolveOpenDetachRunnerSessionID returns the provider session id to bind on
+// --open / --detach return. Resume reuses ResumeSessionID. Codex new sessions
+// wait briefly for a cwd-matched rollout (or resume footer) so agent-run meta
+// can ModeResume after terminal close. Non-codex open returns empty (grok uses
+// a separate open-bind worker in agentui).
+func resolveOpenDetachRunnerSessionID(ctx context.Context, opts RunOptions, runnerID string, provider Provider, configHome string, runStart time.Time, listenAddr, termSessionID string) string {
+	if id := strings.TrimSpace(opts.ResumeSessionID); id != "" {
+		return id
+	}
+	if !isCodexProvider(provider.BannerProvider) && runnerID != "codex-tty" {
+		return ""
+	}
+	codexHome := CodexHomeForRunner(configHome)
+	sid := WaitDiscoverCodexSessionID(ctx, codexHome, opts.Workspace, runStart, listenAddr, termSessionID, openCodexBindBudget)
+	if sid == "" {
+		return ""
+	}
+	fmt.Fprintf(opts.Stderr, "codex-tty: codex session %s\n", sid)
+	return sid
+}
+
+func tryDiscoverCodexOnce(opts RunOptions, configHome string, runStart time.Time, listenAddr, termSessionID string) string {
+	scrollback := ""
+	if strings.TrimSpace(listenAddr) != "" && strings.TrimSpace(termSessionID) != "" {
+		if snap, err := fetchSnapshotBytes(listenAddr, termSessionID); err == nil {
+			scrollback = string(snap)
+		}
+	}
+	id, ok := DiscoverCodexSessionID(CodexHomeForRunner(configHome), opts.Workspace, runStart, scrollback)
+	if !ok {
+		return ""
+	}
+	return id
 }

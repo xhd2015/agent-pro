@@ -36,6 +36,70 @@ func FindCodexResumeSessionID(text string) string {
 	return matches[len(matches)-1][1]
 }
 
+// openCodexBindBudget is how long --open/--detach waits for a Codex session id
+// after inject so meta.runner_session_id can be bound before the caller returns.
+// Attach-instant and OpenCloseExits mean we cannot rely on post-exit footers.
+const openCodexBindBudget = 20 * time.Second
+
+// openCodexBindPoll is the poll interval while waiting for a rollout / footer.
+const openCodexBindPoll = 200 * time.Millisecond
+
+// DiscoverCodexSessionID tries one-shot discovery of a codex session for workspace
+// after runStart (cwd-matched rollout, optional scrollback resume footer).
+// Empty scrollback skips footer extraction.
+func DiscoverCodexSessionID(codexHome, workspace string, runStart time.Time, scrollback string) (sessionID string, ok bool) {
+	codexHome = strings.TrimSpace(codexHome)
+	if codexHome == "" {
+		codexHome = CodexHome()
+	}
+	if id, _, found, err := scanActiveCodexTranscripts(codexHome, workspace, runStart); err == nil && found {
+		if sid := strings.TrimSpace(id); sid != "" {
+			return sid, true
+		}
+	}
+	if footer := FindCodexResumeSessionID(scrollback); footer != "" {
+		// Prefer footer only when a matching rollout exists (avoid stale text).
+		if path, found, err := findCodexTranscriptBySessionID(codexHome, footer); err == nil && found && path != "" {
+			return footer, true
+		}
+		// Footer without rollout still usable for resume if codex printed it.
+		return footer, true
+	}
+	return "", false
+}
+
+// WaitDiscoverCodexSessionID polls until a codex session id is found or budget elapses.
+// listenAddr+termSessionID optional: when set, also scrapes scrollback for resume footer.
+// Soft: returns "" on timeout (open still succeeds unbound).
+func WaitDiscoverCodexSessionID(ctx context.Context, codexHome, workspace string, runStart time.Time, listenAddr, termSessionID string, budget time.Duration) string {
+	if budget <= 0 {
+		budget = openCodexBindBudget
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	deadline := time.Now().Add(budget)
+	for {
+		scrollback := ""
+		if strings.TrimSpace(listenAddr) != "" && strings.TrimSpace(termSessionID) != "" {
+			if snap, err := fetchSnapshotBytes(listenAddr, termSessionID); err == nil {
+				scrollback = string(snap)
+			}
+		}
+		if id, ok := DiscoverCodexSessionID(codexHome, workspace, runStart, scrollback); ok {
+			return id
+		}
+		if time.Now().After(deadline) {
+			return ""
+		}
+		select {
+		case <-ctx.Done():
+			return ""
+		case <-time.After(openCodexBindPoll):
+		}
+	}
+}
+
 func findCodexTranscriptBySessionID(codexHome, sessionID string) (string, bool, error) {
 	pattern := filepath.Join(codexHome, "sessions", "*", "*", "*", "rollout-*-"+sessionID+".jsonl")
 	matches, err := filepath.Glob(pattern)
