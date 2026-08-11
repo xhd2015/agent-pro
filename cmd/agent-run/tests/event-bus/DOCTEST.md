@@ -11,6 +11,10 @@ this tree — leaves stay **RED** until implementer lands APIs + flag wiring.
 
 Shared wire client: `github.com/xhd2015/dot-pkgs/go-pkgs/eventbus` (P1).
 
+**P1 true-TTY library wire + double-fire** lives in sibling tree (keeps this
+suite compile-GREEN): `cmd/agent-run/tests/event-bus-on-tty/`. Library hook
+policy: `tests/agentrunapi/on-tty-started/`.
+
 ## Version
 
 0.0.2

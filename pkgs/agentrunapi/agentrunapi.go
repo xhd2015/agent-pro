@@ -66,6 +66,16 @@ func Classify(store agentstorage.Store, sessionID string, probe ProbeFunc) (mode
 	return ModeRun, meta, true, nil
 }
 
+// TTYStartedInfo is passed to OnTTYStarted / OnTTYRestarted lifecycle hooks.
+// Empty strings are OK when unknown; SessionID matches the run session when known.
+// Reason is eventbus.ReasonTTYNew | ReasonTTYFollowup | ReasonTTYResume.
+type TTYStartedInfo struct {
+	SessionID string
+	Runner    string
+	Workspace string
+	Reason    string
+}
+
 // Opts drives AutoSendOrResume. NewTerminal=false is the in-process P1 path.
 // Dispatch hooks, when set, replace production send/run/resume for unit tests
 // and prove no agent-run binary LookPath is required.
@@ -100,6 +110,17 @@ type Opts struct {
 	Stdout       io.Writer
 	Stderr       io.Writer
 	Probe        ProbeFunc
+
+	// OnTTYStarted, when non-nil, is invoked once when AutoSendOrResume newly
+	// establishes a live TTY for the session (successful ModeRun / first open).
+	// Reason is "new". Nil = no-op. Not invoked on ModeSend or ModeResume.
+	// Best-effort: panics in the hook are recovered and do not fail the run.
+	OnTTYStarted func(info TTYStartedInfo)
+
+	// OnTTYRestarted, when non-nil, is invoked after successful ModeSend
+	// (follow-up into live TTY, reason "followup") or ModeResume (reason "resume").
+	// Nil = no-op. Not invoked on ModeRun. Panics recovered like OnTTYStarted.
+	OnTTYRestarted func(info TTYStartedInfo)
 
 	// Optional dispatch overrides (nil = production path).
 	RunSession    func(ctx context.Context, opts Opts, meta agentstorage.SessionMeta, found bool) error
@@ -146,30 +167,98 @@ func AutoSendOrResume(ctx context.Context, opts Opts) error {
 
 	switch mode {
 	case ModeSend:
+		// Live follow-up into an existing TTY: never fire OnTTYStarted.
+		var sendErr error
 		if opts.SendLive != nil {
-			return opts.SendLive(ctx, opts, meta)
+			sendErr = opts.SendLive(ctx, opts, meta)
+		} else {
+			sendErr = defaultSendLive(ctx, opts, meta)
 		}
-		return defaultSendLive(ctx, opts, meta)
+		if sendErr != nil {
+			return sendErr
+		}
+		fireOnTTYRestarted(opts, meta, "followup")
+		return nil
 	case ModeResume:
 		// Reclaim keep-alive zombie before ForceNew/child re-reserves the id.
 		// (CLI resumeExistingSession also reclaims; this covers library + ModeRun
 		// fall-throughs and parent openInNewTerminal → child paths.)
 		ReclaimZombieTerminalIDs(opts.Store.Home(), effectiveRunner(opts, meta),
 			meta.TerminalSessionID, meta.SessionID, opts.SessionID)
+		var resumeErr error
 		if opts.ResumeSession != nil {
-			return opts.ResumeSession(ctx, opts, meta)
+			resumeErr = opts.ResumeSession(ctx, opts, meta)
+		} else {
+			resumeErr = defaultResumeSession(ctx, opts, meta)
 		}
-		return defaultResumeSession(ctx, opts, meta)
+		if resumeErr != nil {
+			return resumeErr
+		}
+		fireOnTTYRestarted(opts, meta, "resume")
+		return nil
 	default: // ModeRun
 		// Found session re-open (unbound after exit, or first run): free zombie id.
 		if found {
 			ReclaimZombieTerminalIDs(opts.Store.Home(), effectiveRunner(opts, meta),
 				meta.TerminalSessionID, meta.SessionID, opts.SessionID)
 		}
+		var runErr error
 		if opts.RunSession != nil {
-			return opts.RunSession(ctx, opts, meta, found)
+			runErr = opts.RunSession(ctx, opts, meta, found)
+		} else {
+			runErr = defaultRunSession(ctx, opts, meta, found)
 		}
-		return defaultRunSession(ctx, opts, meta, found)
+		if runErr != nil {
+			return runErr
+		}
+		// First live TTY established for this session — fire once (best-effort).
+		fireOnTTYStarted(opts, meta)
+		return nil
+	}
+}
+
+// fireOnTTYStarted invokes opts.OnTTYStarted once after a successful ModeRun
+// dispatch. Nil hook is a no-op. Panics are recovered so bus side effects never
+// fail the open path.
+func fireOnTTYStarted(opts Opts, meta agentstorage.SessionMeta) {
+	if opts.OnTTYStarted == nil {
+		return
+	}
+	info := ttyLifecycleInfo(opts, meta, "new")
+	defer recoverTTYHook(opts, "OnTTYStarted")
+	opts.OnTTYStarted(info)
+}
+
+// fireOnTTYRestarted invokes opts.OnTTYRestarted after successful ModeSend/ModeResume.
+func fireOnTTYRestarted(opts Opts, meta agentstorage.SessionMeta, reason string) {
+	if opts.OnTTYRestarted == nil {
+		return
+	}
+	info := ttyLifecycleInfo(opts, meta, reason)
+	defer recoverTTYHook(opts, "OnTTYRestarted")
+	opts.OnTTYRestarted(info)
+}
+
+func ttyLifecycleInfo(opts Opts, meta agentstorage.SessionMeta, reason string) TTYStartedInfo {
+	info := TTYStartedInfo{
+		SessionID: opts.SessionID,
+		Runner:    effectiveRunner(opts, meta),
+		Workspace: strings.TrimSpace(opts.WorkspaceDir),
+		Reason:    reason,
+	}
+	if info.Workspace == "" {
+		info.Workspace = strings.TrimSpace(meta.Workspace)
+	}
+	return info
+}
+
+func recoverTTYHook(opts Opts, name string) {
+	if r := recover(); r != nil {
+		w := opts.Stderr
+		if w == nil {
+			w = os.Stderr
+		}
+		fmt.Fprintf(w, "warning: %s panic: %v\n", name, r)
 	}
 }
 

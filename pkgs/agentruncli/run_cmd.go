@@ -522,6 +522,14 @@ func runAutoSendOrResume(opts autoSendOrResumeOpts) error {
 	}
 
 	runner := resolveCLIRunner(opts.agentRunner, opts.defaultRunner)
+	// Shared at-most-once guard for ForceNew NotifyOnOpenPath + library OnTTYStarted.
+	var ttyAlreadyNotified bool
+	eventBusOpts := EventBusOpts{
+		URL:             opts.eventBusURL,
+		Token:           opts.eventBusToken,
+		WarnWriter:      os.Stderr,
+		AlreadyNotified: &ttyAlreadyNotified,
+	}
 	apiOpts := agentrunapi.Opts{
 		SessionID:                     sessionID,
 		Prompt:                        opts.prompt,
@@ -546,10 +554,13 @@ func runAutoSendOrResume(opts autoSendOrResumeOpts) error {
 		Stderr:                        os.Stderr,
 		// Shared production probe (same as Classify default when Probe is nil).
 		Probe: agentrunapi.LifecycleProbe,
+		// Wire library TTY lifecycle hooks to HTTP when --event-bus-url is set (nil when empty).
+		OnTTYStarted:   WireOnTTYStarted(eventBusOpts),
+		OnTTYRestarted: WireOnTTYRestarted(eventBusOpts),
 		// Production dispatch keeps full CLI semantics (resume reclaim, new-terminal).
 		RunSession: func(ctx context.Context, o agentrunapi.Opts, meta agentstorage.SessionMeta, found bool) error {
 			if opts.newTerminal {
-				return openAutoInNewTerminal(opts, meta, found)
+				return openAutoInNewTerminal(opts, meta, found, eventBusOpts)
 			}
 			return autoRunCreate(store, o.SessionID, opts)
 		},
@@ -558,7 +569,7 @@ func runAutoSendOrResume(opts autoSendOrResumeOpts) error {
 		},
 		ResumeSession: func(ctx context.Context, o agentrunapi.Opts, meta agentstorage.SessionMeta) error {
 			if opts.newTerminal {
-				return openAutoInNewTerminal(opts, meta, true)
+				return openAutoInNewTerminal(opts, meta, true, eventBusOpts)
 			}
 			return resumeExistingSession(store, meta, resumeRunConfig{
 				jsonFlag:                      opts.jsonFlag,
@@ -587,7 +598,9 @@ func runAutoSendOrResume(opts autoSendOrResumeOpts) error {
 // iTerm2 window (ModeForceNew), stripping --new-terminal so the child runs in-process.
 // The launcher does not spawn the provider. Follow-up is built via
 // agentrunapi.BuildFollowUpCommand (DriverBinary = this executable).
-func openAutoInNewTerminal(opts autoSendOrResumeOpts, meta agentstorage.SessionMeta, found bool) error {
+// eventBusOpts shares AlreadyNotified with library OnTTYStarted so ForceNew +
+// ModeRun hook publish at most once per open.
+func openAutoInNewTerminal(opts autoSendOrResumeOpts, meta agentstorage.SessionMeta, found bool, eventBusOpts EventBusOpts) error {
 	exe, err := agentRunExecutable()
 	if err != nil {
 		return err
@@ -650,15 +663,12 @@ func openAutoInNewTerminal(opts autoSendOrResumeOpts, meta agentstorage.SessionM
 	}
 
 	// After successful ForceNew open: best-effort agent.tty.started (never fails open).
+	// Shares AlreadyNotified with library WireOnTTYStarted installed on apiOpts.
 	payloadWorkspace := workspaceDir
 	if strings.TrimSpace(payloadWorkspace) == "" {
 		payloadWorkspace = dir
 	}
-	NotifyOnOpenPath("new-terminal", EventBusOpts{
-		URL:        opts.eventBusURL,
-		Token:      opts.eventBusToken,
-		WarnWriter: os.Stderr,
-	}, strings.TrimSpace(opts.sessionID), runner, payloadWorkspace)
+	NotifyOnOpenPath("new-terminal", eventBusOpts, strings.TrimSpace(opts.sessionID), runner, payloadWorkspace)
 	return nil
 }
 
