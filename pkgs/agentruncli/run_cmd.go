@@ -26,6 +26,7 @@ Options:
   --json              stream NDJSON AgentEvent lines to stdout
   --model MODEL       model name
   --model-reasoning-effort LEVEL  optional reasoning effort (pass-through; empty/omitted = no default)
+  --prompt-file PATH  read initial prompt from PATH (exclusive with positional prompt)
   --session ID        session id
   --session-id ID     alias for --session
   --session-id-from-prompt   generate session id from prompt slug (storage + TTY registry)
@@ -63,10 +64,37 @@ Options:
   -h, --help          show help
 `
 
+// ResolveRunPrompt resolves agent-run run's initial prompt from a positional
+// string and optional --prompt-file path. Exported for L2 pure doctests;
+// runHeadless uses the same policy after flag parse.
+//
+// Policy:
+//   - if promptFile non-empty (TrimSpace) and positional non-empty (TrimSpace)
+//     → error (mutually exclusive)
+//   - if promptFile non-empty → read file UTF-8 body, TrimSpace, return
+//   - else return TrimSpace(positional)
+//   - missing/unreadable path → non-nil error
+func ResolveRunPrompt(positionalPrompt, promptFile string) (string, error) {
+	positional := strings.TrimSpace(positionalPrompt)
+	file := strings.TrimSpace(promptFile)
+	if file != "" && positional != "" {
+		return "", fmt.Errorf("--prompt-file and positional prompt are mutually exclusive")
+	}
+	if file != "" {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			return "", fmt.Errorf("read --prompt-file %s: %w", file, err)
+		}
+		return strings.TrimSpace(string(data)), nil
+	}
+	return positional, nil
+}
+
 func runHeadless(args []string, defaultRunner string) error {
 	var jsonFlag bool
 	var model string
 	var modelReasoningEffort string
+	var promptFile string
 	var sessionID string
 	var sessionIDFromPrompt bool
 	var autoSendOrResume bool
@@ -91,6 +119,7 @@ func runHeadless(args []string, defaultRunner string) error {
 	remaining, err := flags.Bool("--json", &jsonFlag).
 		String("--model", &model).
 		String("--model-reasoning-effort", &modelReasoningEffort).
+		String("--prompt-file", &promptFile).
 		String("--session,--session-id", &sessionID).
 		Bool("--session-id-from-prompt", &sessionIDFromPrompt).
 		Bool("--auto-send-or-resume", &autoSendOrResume).
@@ -117,7 +146,10 @@ func runHeadless(args []string, defaultRunner string) error {
 	if err != nil {
 		return err
 	}
-	prompt := strings.TrimSpace(strings.Join(remaining, " "))
+	prompt, err := ResolveRunPrompt(strings.Join(remaining, " "), promptFile)
+	if err != nil {
+		return err
+	}
 
 	if err := validateEnvFlags(envEntries); err != nil {
 		return err
