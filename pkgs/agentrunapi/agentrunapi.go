@@ -154,9 +154,12 @@ func AutoSendOrResume(ctx context.Context, opts Opts) error {
 	}
 
 	// Open-mode codex never binds runner_session_id before attach returns.
-	// After /exit, bind from zombie scrollback footer so Classify can ModeResume.
+	// After /exit, bind from zombie scrollback footer and/or CODEX_HOME rollout
+	// so Classify can ModeResume. EnsureCodexRunnerBound covers discovery +
+	// live scrollback; zombie path remains gated (exit footer) for footer-only.
 	if meta, found, rerr := resolveSession(opts.Store, sessionID); rerr == nil && found {
-		_ = tryBindRunnerSessionFromZombie(opts.Store, meta)
+		meta = tryBindRunnerSessionFromZombie(opts.Store, meta)
+		_, _ = EnsureCodexRunnerBound(opts.Store, meta, productionCodexBindOpts(opts.Store, meta))
 	}
 
 	// Prefer explicit opts.Probe; nil → LifecycleProbe inside Classify.
