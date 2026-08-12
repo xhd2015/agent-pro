@@ -517,7 +517,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 						}
 					}
 				}
-				id, path, ok, discErr := scanActiveCodexTranscripts(codexHome, opts.Workspace, runStart)
+				id, path, ok, discErr := scanActiveCodexTranscripts(codexHome, opts.Workspace, runStart, promptText)
 				if discErr != nil {
 					if tailCtx.Err() == nil {
 						fmt.Fprintf(opts.Stderr, "codex-tty: codex transcript discovery failed: %v\n", discErr)
@@ -666,7 +666,8 @@ func resolveOpenDetachRunnerSessionID(ctx context.Context, opts RunOptions, runn
 		return ""
 	}
 	codexHome := CodexHomeForRunner(configHome)
-	sid := WaitDiscoverCodexSessionID(ctx, codexHome, opts.Workspace, runStart, listenAddr, termSessionID, openCodexBindBudget)
+	prompt := normalizeRunnerPrompt(strings.TrimSpace(opts.Prompt))
+	sid := WaitDiscoverCodexSessionID(ctx, codexHome, opts.Workspace, runStart, listenAddr, termSessionID, prompt, openCodexBindBudget)
 	if sid == "" {
 		return ""
 	}
@@ -681,7 +682,8 @@ func tryDiscoverCodexOnce(opts RunOptions, configHome string, runStart time.Time
 			scrollback = string(snap)
 		}
 	}
-	id, ok := DiscoverCodexSessionID(CodexHomeForRunner(configHome), opts.Workspace, runStart, scrollback)
+	prompt := normalizeRunnerPrompt(strings.TrimSpace(opts.Prompt))
+	id, ok := DiscoverCodexSessionID(CodexHomeForRunner(configHome), opts.Workspace, runStart, scrollback, prompt)
 	if !ok {
 		return ""
 	}

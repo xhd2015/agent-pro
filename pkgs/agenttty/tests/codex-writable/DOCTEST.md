@@ -36,11 +36,13 @@ rendered tty-watch snapshot text fixtures under `pkgs/agenttty/testdata/codex-wr
   `state=idle`, `ready=true`.
 - DetectScreenStatus for idle chat with only `›` or only `»` → not `unknown`
   (`banner` or `idle`, matching ›-only class today).
-- Busy: queued follow-up, working / esc-to-interrupt → `state=busy`.
+- Busy: queued follow-up, **live** working / esc-to-interrupt in the active turn → `state=busy`.
+- Historical working / esc-to-interrupt **above** a settled bottom main-chat `›`/`»` → still
+  `idle` (post-turn); full-scrollback busy match is a false negative for WaitDone/send.
 
 ## Version
 
-0.0.3
+0.0.4
 
 ## Decision Tree
 
@@ -58,7 +60,8 @@ pkgs/agenttty/tests/codex-writable/
     ├── main-prompt-idle/                    # F4: MCP incomplete + main › → idle (compat GREEN)
     ├── empty-snapshot-unknown/              # F5: empty bytes → unknown
     ├── double-angle-prompt-idle/            # F6: Codex 0.146 » only → idle (RED before fix)
-    └── double-angle-mcp-idle/               # F7: MCP incomplete + » only → idle (RED before fix)
+    ├── double-angle-mcp-idle/               # F7: MCP incomplete + » only → idle (RED before fix)
+    └── historical-working-bottom-prompt-idle/ # F8: historical • Working + bottom › → idle (RED before fix)
 ```
 
 Parameter ranking (most → least significant):
@@ -80,6 +83,7 @@ Parameter ranking (most → least significant):
 | 5 | `regression/empty-snapshot-unknown` | Empty bytes → `state=unknown` (F5) |
 | 6 | `regression/double-angle-prompt-idle` | Usage-limit + main `»` only → idle + screen≠unknown (F6, RED before fix) |
 | 7 | `regression/double-angle-mcp-idle` | MCP incomplete + main `»` only → idle (F7, RED before fix) |
+| 8 | `regression/historical-working-bottom-prompt-idle` | Historical `• Working` + settled bottom `›` → idle (F8, RED before fix) |
 
 ## How to Run
 
@@ -89,6 +93,7 @@ doctest test ./pkgs/agenttty/tests/codex-writable
 doctest test -v ./pkgs/agenttty/tests/codex-writable/regression/update-modal-not-idle
 doctest test -v ./pkgs/agenttty/tests/codex-writable/regression/double-angle-prompt-idle
 doctest test -v ./pkgs/agenttty/tests/codex-writable/regression/double-angle-mcp-idle
+doctest test -v ./pkgs/agenttty/tests/codex-writable/regression/historical-working-bottom-prompt-idle
 doctest test -v ./pkgs/agenttty/tests/codex-writable/fixture-table/all-expectations-match
 ```
 

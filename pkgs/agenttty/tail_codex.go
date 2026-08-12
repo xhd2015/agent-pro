@@ -45,25 +45,40 @@ const openCodexBindBudget = 20 * time.Second
 const openCodexBindPoll = 200 * time.Millisecond
 
 // DiscoverCodexSessionID tries one-shot discovery of a codex session for workspace
-// after runStart (cwd-matched rollout, optional scrollback resume footer).
+// after runStart. prompt is the agent-run open inject text (may be empty).
+//
+// Bind policy (concurrent same-cwd safe):
+//  1. Prefer this TTY's resume footer when present (per-terminal).
+//  2. Else disk scan: cwd + time; when prompt is set, first real user message
+//     must match (skip Codex <environment_context> blobs).
+//  3. Never bind "newest cwd" when multiple candidates remain (fail closed).
+//
 // Empty scrollback skips footer extraction.
-func DiscoverCodexSessionID(codexHome, workspace string, runStart time.Time, scrollback string) (sessionID string, ok bool) {
+func DiscoverCodexSessionID(codexHome, workspace string, runStart time.Time, scrollback, prompt string) (sessionID string, ok bool) {
 	codexHome = strings.TrimSpace(codexHome)
 	if codexHome == "" {
 		codexHome = CodexHome()
 	}
-	if id, _, found, err := scanActiveCodexTranscripts(codexHome, workspace, runStart); err == nil && found {
+	prompt = strings.TrimSpace(prompt)
+
+	// Footer first — exclusive to this terminal's scrollback.
+	if footer := FindCodexResumeSessionID(scrollback); footer != "" {
+		if path, found, err := findCodexTranscriptBySessionID(codexHome, footer); err == nil && found && path != "" {
+			// With a known open prompt, reject a stale footer that points at
+			// another thread's rollout.
+			if prompt == "" || codexRolloutPromptMatches(path, prompt) {
+				return footer, true
+			}
+		} else if prompt == "" {
+			// Footer without rollout still usable for resume if codex printed it.
+			return footer, true
+		}
+	}
+
+	if id, _, found, err := scanActiveCodexTranscripts(codexHome, workspace, runStart, prompt); err == nil && found {
 		if sid := strings.TrimSpace(id); sid != "" {
 			return sid, true
 		}
-	}
-	if footer := FindCodexResumeSessionID(scrollback); footer != "" {
-		// Prefer footer only when a matching rollout exists (avoid stale text).
-		if path, found, err := findCodexTranscriptBySessionID(codexHome, footer); err == nil && found && path != "" {
-			return footer, true
-		}
-		// Footer without rollout still usable for resume if codex printed it.
-		return footer, true
 	}
 	return "", false
 }
@@ -71,7 +86,7 @@ func DiscoverCodexSessionID(codexHome, workspace string, runStart time.Time, scr
 // WaitDiscoverCodexSessionID polls until a codex session id is found or budget elapses.
 // listenAddr+termSessionID optional: when set, also scrapes scrollback for resume footer.
 // Soft: returns "" on timeout (open still succeeds unbound).
-func WaitDiscoverCodexSessionID(ctx context.Context, codexHome, workspace string, runStart time.Time, listenAddr, termSessionID string, budget time.Duration) string {
+func WaitDiscoverCodexSessionID(ctx context.Context, codexHome, workspace string, runStart time.Time, listenAddr, termSessionID, prompt string, budget time.Duration) string {
 	if budget <= 0 {
 		budget = openCodexBindBudget
 	}
@@ -86,7 +101,7 @@ func WaitDiscoverCodexSessionID(ctx context.Context, codexHome, workspace string
 				scrollback = string(snap)
 			}
 		}
-		if id, ok := DiscoverCodexSessionID(codexHome, workspace, runStart, scrollback); ok {
+		if id, ok := DiscoverCodexSessionID(codexHome, workspace, runStart, scrollback, prompt); ok {
 			return id
 		}
 		if time.Now().After(deadline) {
@@ -112,14 +127,19 @@ func findCodexTranscriptBySessionID(codexHome, sessionID string) (string, bool, 
 	return matches[len(matches)-1], true, nil
 }
 
-func scanActiveCodexTranscripts(codexHome, workspace string, runStart time.Time) (sessionID, path string, ok bool, err error) {
+// scanActiveCodexTranscripts finds a cwd-matched rollout after runStart.
+// When prompt is non-empty, require the first real user message to match; when
+// multiple candidates remain, fail closed (ok=false) instead of newest-cwd.
+// Empty prompt with multiple cwd+time candidates also fails closed.
+func scanActiveCodexTranscripts(codexHome, workspace string, runStart time.Time, prompt string) (sessionID, path string, ok bool, err error) {
 	pattern := filepath.Join(codexHome, "sessions", "*", "*", "*", "rollout-*.jsonl")
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
 		return "", "", false, err
 	}
 	absWorkspace, _ := filepath.Abs(canonicalWorkspacePath(workspace))
-	var best codexTranscriptMeta
+	prompt = strings.TrimSpace(prompt)
+	var candidates []codexTranscriptMeta
 	for _, candidate := range matches {
 		info, statErr := os.Stat(candidate)
 		if statErr != nil || info.IsDir() {
@@ -137,16 +157,111 @@ func scanActiveCodexTranscripts(codexHome, workspace string, runStart time.Time)
 		if meta.SessionID == "" {
 			meta.SessionID = codexSessionIDFromPath(candidate)
 		}
-		if best.Path == "" || meta.SessionTime.After(best.SessionTime) ||
-			(meta.SessionTime.Equal(best.SessionTime) && meta.ModTime.After(best.ModTime)) ||
-			(meta.SessionTime.Equal(best.SessionTime) && meta.ModTime.Equal(best.ModTime) && meta.Path > best.Path) {
-			best = meta
+		// Prompt gate: skip until first real user message is written and matches
+		// (poller will retry). Empty prompt skips this filter.
+		if prompt != "" && !codexRolloutPromptMatches(candidate, prompt) {
+			continue
 		}
+		candidates = append(candidates, meta)
 	}
-	if best.Path == "" {
+	if len(candidates) == 0 {
 		return "", "", false, nil
 	}
+	// Multi-candidate fail-closed: never steal newest under concurrent opens.
+	if len(candidates) > 1 {
+		return "", "", false, nil
+	}
+	best := candidates[0]
 	return best.SessionID, best.Path, true, nil
+}
+
+// codexRolloutPromptMatches reports whether the rollout's first real user prompt
+// equals want (environment_context user blobs are skipped).
+func codexRolloutPromptMatches(rolloutPath, want string) bool {
+	want = strings.TrimSpace(want)
+	if want == "" {
+		return true
+	}
+	got, ok := firstCodexRealUserPrompt(rolloutPath)
+	if !ok {
+		return false
+	}
+	got = strings.TrimSpace(got)
+	if got == want {
+		return true
+	}
+	// Soft: inject may be a prefix/suffix of a longer user blob or vice versa.
+	if strings.Contains(got, want) || strings.Contains(want, got) {
+		return true
+	}
+	return false
+}
+
+// firstCodexRealUserPrompt returns the first user message text that is not an
+// environment_context wrapper.
+func firstCodexRealUserPrompt(path string) (string, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", false
+	}
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 64*1024), 512*1024)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var rec struct {
+			Type    string `json:"type"`
+			Payload struct {
+				Type    string `json:"type"`
+				Role    string `json:"role"`
+				Message string `json:"message"`
+				Content []struct {
+					Type string `json:"type"`
+					Text string `json:"text"`
+				} `json:"content"`
+			} `json:"payload"`
+		}
+		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+			continue
+		}
+		switch rec.Type {
+		case "response_item":
+			if rec.Payload.Type != "" && rec.Payload.Type != "message" {
+				continue
+			}
+			if strings.TrimSpace(rec.Payload.Role) != "user" {
+				continue
+			}
+			var texts []string
+			for _, c := range rec.Payload.Content {
+				if t := strings.TrimSpace(c.Text); t != "" {
+					texts = append(texts, t)
+				}
+			}
+			text := strings.TrimSpace(strings.Join(texts, "\n"))
+			if text == "" || isCodexEnvironmentContextUserText(text) {
+				continue
+			}
+			return text, true
+		case "event_msg":
+			if rec.Payload.Type != "user_message" {
+				continue
+			}
+			text := strings.TrimSpace(rec.Payload.Message)
+			if text == "" || isCodexEnvironmentContextUserText(text) {
+				continue
+			}
+			return text, true
+		}
+	}
+	return "", false
+}
+
+func isCodexEnvironmentContextUserText(text string) bool {
+	return strings.HasPrefix(strings.TrimSpace(text), "<environment_context>")
 }
 
 type codexTranscriptMeta struct {

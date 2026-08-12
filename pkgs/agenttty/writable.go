@@ -93,6 +93,49 @@ func grokBusyInPromptRegion(plain string) bool {
 	return strings.Contains(region, "working") || strings.Contains(region, "thinking")
 }
 
+// codexPromptRegion returns the active/post-turn slice of Codex scrollback used for
+// busy vs idle. Prefer the last settled "Worked for" footer (everything above is
+// historical). Otherwise prefer context around the last main-chat ›/» glyph.
+// Falls back to a short tail so live "• Working" without a prompt still matches.
+func codexPromptRegion(plain string) string {
+	lower := strings.ToLower(plain)
+	if i := strings.LastIndex(lower, "worked for"); i >= 0 {
+		return plain[i:]
+	}
+	best := -1
+	for _, m := range []string{"\u203a", "›", "\u00bb", "»"} {
+		if j := strings.LastIndex(plain, m); j > best {
+			best = j
+		}
+	}
+	if best >= 0 {
+		// Include lines above the prompt so live Working chrome just above › still counts.
+		start := best
+		if start > 500 {
+			start -= 500
+		} else {
+			start = 0
+		}
+		// Snap back to a line start when possible.
+		if nl := strings.LastIndex(plain[start:best], "\n"); nl >= 0 {
+			start = start + nl + 1
+		}
+		return plain[start:]
+	}
+	return grokTailLines(plain, 16)
+}
+
+// codexBusyInPromptRegion reports live Codex busy chrome (• + working / esc to interrupt)
+// only inside codexPromptRegion — not historical markers above a settled post-turn footer.
+func codexBusyInPromptRegion(plain string) bool {
+	region := strings.ToLower(codexPromptRegion(plain))
+	hasBullet := strings.Contains(region, "•") || strings.Contains(region, "\u2022")
+	if !hasBullet {
+		return false
+	}
+	return strings.Contains(region, "working") || strings.Contains(region, "esc to interrupt")
+}
+
 func checkGrokWritable(scrollback []byte) WritableStatus {
 	plain := stripPlain(scrollback)
 	if len(plain) == 0 {
@@ -158,14 +201,18 @@ func checkCodexWritable(scrollback []byte) WritableStatus {
 	if strings.Contains(compact, "doyoutrustthecontentsofthisdirectory") {
 		return WritableStatus{Reason: "codex trust prompt visible", State: "loading"}
 	}
-	if strings.Contains(lower, "•") && (strings.Contains(lower, "working") || strings.Contains(lower, "esc to interrupt")) {
+	// Busy only in the active/post-turn region — historical "• Working" above a settled
+	// "Worked for …" + bottom › must not block WaitDone/send (scorer idle false-negative).
+	if codexBusyInPromptRegion(plain) {
 		return WritableStatus{Reason: "codex still working (esc to interrupt)", State: "busy"}
 	}
 	if hasCodexPromptMarker(plain) {
 		if strings.Contains(lower, "response:") || strings.Contains(lower, "submitted:") {
 			return WritableStatus{Ready: true, State: "idle"}
 		}
-		if !strings.Contains(lower, "working") && !strings.Contains(lower, "booting") {
+		// "working"/"booting" only matter in the prompt region (same as busy rule).
+		regionLower := strings.ToLower(codexPromptRegion(plain))
+		if !strings.Contains(regionLower, "working") && !strings.Contains(regionLower, "booting") {
 			return WritableStatus{Ready: true, State: "idle"}
 		}
 	}

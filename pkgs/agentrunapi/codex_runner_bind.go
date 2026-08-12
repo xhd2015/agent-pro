@@ -28,9 +28,10 @@ type CodexRunnerBindOpts struct {
 
 // EnsureCodexRunnerBound ensures meta.runner_session_id is bound for codex runners
 // when a Codex session id is discoverable. Discovery delegates to
-// agenttty.DiscoverCodexSessionID (same recipe as open-time bind): cwd-matched
-// rollout then optional scrollback resume footer. This is the late/fallback path
-// that persists into the agent-run store when open-time bind was missed.
+// agenttty.DiscoverCodexSessionID (same recipe as open-time bind): resume footer,
+// then cwd+time with optional InitialPrompt match (fail-closed on multi-match).
+// This is the late/fallback path that persists into the agent-run store when
+// open-time bind was missed.
 //
 // Best-effort: does not return an error solely because bind missed; store update
 // errors are soft (still return updated meta).
@@ -75,7 +76,7 @@ func EnsureCodexRunnerBound(
 	}
 
 	// Same discovery as open-time bind (agenttty); we only add store persist.
-	id, ok := agenttty.DiscoverCodexSessionID(codexHome, workspace, notBefore, scrollback)
+	id, ok := agenttty.DiscoverCodexSessionID(codexHome, workspace, notBefore, scrollback, meta.InitialPrompt)
 	if !ok || strings.TrimSpace(id) == "" {
 		return meta, false
 	}

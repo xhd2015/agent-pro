@@ -29,6 +29,8 @@ tty-watch snapshot <session> -> rendered scrollback text
 - Post-fix: update modal → non-idle (`loading`); main chat `›` after boot remains idle.
 - Codex **0.146.0** main-chat prompt may be `»` (U+00BB) instead of `›` (U+203A); both must
   classify as idle when present without busy/loading signals.
+- Historical `• Working` / `esc to interrupt` **above** a settled bottom `›` must still be idle
+  (post-turn scrollback); live Working in the prompt tail remains busy.
 - `reason` in `expectations.jsonl` is a **substring** expectation (implementer-chosen full reason).
 
 ```go
@@ -41,12 +43,13 @@ import (
 )
 
 const (
-	fixtureUpdateModal      = "codex-update-available-modal.txt"
-	fixtureModelLoading     = "codex-update-plus-model-loading.txt"
-	fixtureMainPromptMCP    = "codex-mcp-incomplete-prompt.txt"
-	fixtureEmptySnapshot    = "codex-empty-snapshot.txt"
-	fixtureDoubleAngleIdle  = "codex-double-angle-prompt-idle.txt"
-	fixtureDoubleAngleMCP   = "codex-double-angle-mcp-incomplete.txt"
+	fixtureUpdateModal                         = "codex-update-available-modal.txt"
+	fixtureModelLoading                        = "codex-update-plus-model-loading.txt"
+	fixtureMainPromptMCP                       = "codex-mcp-incomplete-prompt.txt"
+	fixtureEmptySnapshot                       = "codex-empty-snapshot.txt"
+	fixtureDoubleAngleIdle                     = "codex-double-angle-prompt-idle.txt"
+	fixtureDoubleAngleMCP                      = "codex-double-angle-mcp-incomplete.txt"
+	fixtureHistoricalWorkingBottomPromptIdle   = "codex-historical-working-bottom-prompt-idle.txt"
 )
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {

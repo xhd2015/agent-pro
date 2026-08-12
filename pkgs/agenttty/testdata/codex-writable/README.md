@@ -34,9 +34,11 @@ pkgs/agenttty/testdata/codex-writable/
 | `codex-empty-snapshot.txt` | Empty bytes → `unknown` |
 | `codex-double-angle-prompt-idle.txt` | Codex 0.146 idle with only `»` (U+00BB) + usage-limit bullet → `ready=true`, `idle` |
 | `codex-double-angle-mcp-incomplete.txt` | MCP incomplete + only `»` (no `›`) → `ready=true`, `idle` |
+| `codex-historical-working-bottom-prompt-idle.txt` | Historical `• Working` / `esc to interrupt` **above** settled bottom `›` → `ready=true`, `idle` (desired; RED until tail-scoped busy) |
 
 Sources: live captures from `/tmp/codex-status-fixtures-for-req/` (content preserved) plus
-synthetic Codex 0.146 double-angle fixtures from the SeaTalk incident.
+synthetic Codex 0.146 double-angle fixtures from the SeaTalk incident, plus scorer WaitDone
+historical-working scrollback shape.
 
 **Critical bugs:**
 
@@ -51,4 +53,5 @@ synthetic Codex 0.146 double-angle fixtures from the SeaTalk incident.
 doctest vet ./pkgs/agenttty/tests/codex-writable
 doctest test ./pkgs/agenttty/tests/codex-writable
 doctest test -v ./pkgs/agenttty/tests/codex-writable/regression/update-modal-not-idle
+doctest test -v ./pkgs/agenttty/tests/codex-writable/regression/historical-working-bottom-prompt-idle
 ```

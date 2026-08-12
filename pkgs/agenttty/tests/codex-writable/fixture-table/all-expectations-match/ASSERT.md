@@ -1,9 +1,10 @@
 ## Expected
 
-- `Run` returns one `FixtureResult` per `expectations.jsonl` row (currently 7 fixtures).
+- `Run` returns one `FixtureResult` per `expectations.jsonl` row (currently 8 fixtures).
 - Every result matches `ready`, `state`, and `reason` substring (when manifest specifies `reason`).
 - No fixture file is missing from disk; `codex-*.txt` count equals manifest length.
 - Includes Codex 0.146 double-angle (`»`) idle fixtures — RED until product accepts U+00BB.
+- Includes historical-working + bottom-`›` idle fixture — RED until busy rule is tail-scoped.
 
 ## Exit Code
 
