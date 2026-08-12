@@ -11,9 +11,10 @@ import (
 // Production default: true.
 //
 // Mechanism (pkgs/agenttty/run.go):
-//  1. AttachWriter uses attach_mode=screen (ptywrap roleWriter) so bare WS
-//     disconnect without {"type":"detach_keep"} calls stopChild() — kills the
-//     PTY agent when the user closes the iTerm window (attach client dies).
+//  1. AttachWriter uses attach_mode=open (ptywrap roleWriter + raw scrollback
+//     first frame) so bare WS disconnect without {"type":"detach_keep"} calls
+//     stopChild() — kills the PTY agent when the user closes the iTerm window
+//     (attach client dies), while preserving TUI mouse/alt-screen CSI fidelity.
 //  2. --open does not force KeepTerminalAlive, so after the child exits,
 //     __serve__ shuts down (tty-watch ServeSession non-keep-alive path) instead
 //     of waiting forever on ctx.Done().

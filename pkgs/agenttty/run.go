@@ -316,12 +316,14 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 				Alive:             true,
 			})
 		}
-		// OpenCloseExits (default): attach_mode=screen → ptywrap roleWriter so
-		// bare WS disconnect (iTerm red-close) calls stopChild() without needing
-		// detach_keep. attach_mode=attach (roleAttacher) leaves ghost __serve__.
+		// OpenCloseExits (default): attach_mode=open → ptywrap roleWriter so bare
+		// WS disconnect (iTerm red-close) calls stopChild() without detach_keep,
+		// while the initial frame is raw scrollback (attach-like) so Grok mouse /
+		// alt-screen CSIs reach the host. attach_mode=attach (roleAttacher) leaves
+		// ghost __serve__; attach_mode=screen is CUP export for grid tools only.
 		attachMode := "attach"
 		if OpenCloseExits() {
-			attachMode = "screen"
+			attachMode = "open"
 		}
 		// Bind codex runner_session_id before attach returns. Open path used to
 		// always return "" here; without a bound id, AutoSendOrResume falls to
