@@ -129,7 +129,10 @@ func RunJSON(ctx context.Context, opts RunJSONOpts) (string, error) {
 		return "", fmt.Errorf("result file %s: %w", resultPath, err)
 	}
 	trimmed := bytes.TrimSpace(data)
-	if len(trimmed) == 0 || !json.Valid(trimmed) {
+	if len(trimmed) == 0 {
+		return "", fmt.Errorf("result file %s: empty (agent finished without writing JSON)", resultPath)
+	}
+	if !json.Valid(trimmed) {
 		return "", fmt.Errorf("result file %s: not valid JSON", resultPath)
 	}
 	return string(data), nil
@@ -285,7 +288,14 @@ func resultFromHandle(h RunHandle) *RunResult {
 }
 
 func newJSONResultPath() (string, error) {
-	f, err := os.CreateTemp("", "agent-run-result-*.json")
+	dir := ""
+	if st, err := os.Stat("/tmp"); err == nil && st.IsDir() {
+		dir = "/tmp"
+	}
+	f, err := os.CreateTemp(dir, "agent-run-result-*.json")
+	if err != nil && dir != "" {
+		f, err = os.CreateTemp("", "agent-run-result-*.json")
+	}
 	if err != nil {
 		return "", fmt.Errorf("create result temp file: %w", err)
 	}
@@ -303,7 +313,7 @@ func appendJSONResultInstructions(prompt, resultPath, schema string) string {
 	var b strings.Builder
 	b.WriteString(strings.TrimRight(prompt, "\n"))
 	b.WriteString("\n\n")
-	b.WriteString("When finished, write a single JSON object to:\n  ")
+	b.WriteString("The caller is blocked until this file contains valid JSON. Write it as soon as you have the object — do not delay the write for extra lookups, a closing summary, or another API call:\n  ")
 	b.WriteString(resultPath)
 	b.WriteString("\nMatch this example (same keys; values are illustrative):\n")
 	b.WriteString(schema)

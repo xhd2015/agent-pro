@@ -5,6 +5,7 @@
 
 ```go
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -27,6 +28,12 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	}
 	if ws != "" && (resp.LaunchResultFile == ws || strings.HasPrefix(resp.LaunchResultFile, ws+string(filepath.Separator))) {
 		t.Fatalf("ResultFile %q must not be under WorkspaceDir %q", resp.LaunchResultFile, ws)
+	}
+	if st, err := os.Stat("/tmp"); err == nil && st.IsDir() {
+		tmpPrefix := "/tmp" + string(filepath.Separator)
+		if !strings.HasPrefix(resp.LaunchResultFile, tmpPrefix) && resp.LaunchResultFile != "/tmp" {
+			t.Fatalf("ResultFile should be under /tmp when it exists, got %q", resp.LaunchResultFile)
+		}
 	}
 }
 ```

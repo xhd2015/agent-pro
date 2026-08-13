@@ -54,19 +54,23 @@ func waitUntilDone(ctx context.Context, opts RunOpts, handle RunHandle) error {
 				if perr == nil && report.ResumeReady {
 					return nil
 				}
-				sendable, _, busy := probeTurnIdle(store, meta)
-				switch {
-				case busy:
-					sawBusy = true
-					idleSince = time.Time{}
-				case sendable && (sawBusy || time.Since(openedAt) >= runMinWorkBeforeIdle):
-					if idleSince.IsZero() {
-						idleSince = time.Now()
-					} else if time.Since(idleSince) >= runIdleStable {
-						return nil
+				// RunJSON: idle is not done. Grok often looks sendable between
+				// tool calls; the result file (or exit) is the only completion.
+				if strings.TrimSpace(opts.ResultFile) == "" {
+					sendable, _, busy := probeTurnIdle(store, meta)
+					switch {
+					case busy:
+						sawBusy = true
+						idleSince = time.Time{}
+					case sendable && (sawBusy || time.Since(openedAt) >= runMinWorkBeforeIdle):
+						if idleSince.IsZero() {
+							idleSince = time.Now()
+						} else if time.Since(idleSince) >= runIdleStable {
+							return nil
+						}
+					default:
+						idleSince = time.Time{}
 					}
-				default:
-					idleSince = time.Time{}
 				}
 			}
 		}
