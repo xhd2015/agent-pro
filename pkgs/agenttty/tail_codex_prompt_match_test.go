@@ -1,6 +1,7 @@
 package agenttty
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -85,6 +86,74 @@ func TestScanActiveCodexTranscripts_MultiMatchFailClosed(t *testing.T) {
 	}
 	if ok || id != "" {
 		t.Fatalf("same prompt multi: want fail-closed, got ok=%v id=%q", ok, id)
+	}
+}
+
+func writeRolloutUsers(t *testing.T, dir, name, sessionID, cwd string, users []string, sessionTime time.Time) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	ts := sessionTime.UTC().Format(time.RFC3339Nano)
+	body := `{"timestamp":"` + ts + `","type":"session_meta","payload":{"id":"` + sessionID + `","session_id":"` + sessionID + `","cwd":"` + cwd + `","timestamp":"` + ts + `"}}
+`
+	for _, u := range users {
+		body += `{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":` + jsonQuote(u) + `}]}}
+`
+	}
+	if err := os.WriteFile(path, []byte(body), 0644); err != nil {
+		t.Fatalf("write rollout: %v", err)
+	}
+	return path
+}
+
+func jsonQuote(s string) string {
+	b, err := json.Marshal(s)
+	if err != nil {
+		return `""`
+	}
+	return string(b)
+}
+
+func TestCodexRolloutPromptMatches_SecondUserIsInject(t *testing.T) {
+	root := t.TempDir()
+	day := filepath.Join(root, "sessions", "2026", "08", "13")
+	if err := os.MkdirAll(day, 0755); err != nil {
+		t.Fatal(err)
+	}
+	ws := "/tmp/ws-agents"
+	inject := "SeaTalk local-bot session open\nsession-id: s1\ncli: reply"
+	path := writeRolloutUsers(t, day, "rollout-s-dddddddd-dddd-dddd-dddd-dddddddddddd.jsonl",
+		"dddddddd-dddd-dddd-dddd-dddddddddddd", ws, []string{
+			"# AGENTS.md instructions for /tmp/ws-agents\n\n<INSTRUCTIONS>\nbrief\n",
+			inject,
+		}, time.Now())
+	if !codexRolloutPromptMatches(path, inject) {
+		t.Fatal("want inject match on user[2] after AGENTS.md user[1]")
+	}
+	id, _, ok, err := scanActiveCodexTranscripts(root, ws, time.Now().Add(-time.Minute), inject)
+	if err != nil || !ok || id != "dddddddd-dddd-dddd-dddd-dddddddddddd" {
+		t.Fatalf("scan: ok=%v id=%q err=%v", ok, id, err)
+	}
+}
+
+func TestCodexRolloutPromptMatches_StopsAfterThreeUsers(t *testing.T) {
+	root := t.TempDir()
+	day := filepath.Join(root, "sessions", "2026", "08", "13")
+	if err := os.MkdirAll(day, 0755); err != nil {
+		t.Fatal(err)
+	}
+	ws := "/tmp/ws-cap"
+	path := writeRolloutUsers(t, day, "rollout-s-eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee.jsonl",
+		"eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee", ws, []string{
+			"user-one",
+			"user-two",
+			"user-three",
+			"SeaTalk local-bot session open",
+		}, time.Now())
+	if codexRolloutPromptMatches(path, "SeaTalk local-bot session open") {
+		t.Fatal("inject at user[4] must not match (cap is 3)")
+	}
+	if !codexRolloutPromptMatches(path, "user-three") {
+		t.Fatal("user[3] should still match")
 	}
 }
 

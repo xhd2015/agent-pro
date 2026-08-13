@@ -6,7 +6,7 @@ Converted from the local repro: open with `llm-mock-run-codex` never writes
 `meta.runner_session_id`, so a later `--auto-send-or-resume --open` starts a
 **second** Codex conversation under the same agent-run session id.
 
-# DSN
+# DSN (Domain Specific Notion)
 
 **Participants**
 
@@ -41,7 +41,7 @@ resume -> second rollout uuid-2; still unbound
 
 ## Version
 
-0.0.1
+0.0.2
 
 ## Decision Tree
 
@@ -49,7 +49,8 @@ resume -> second rollout uuid-2; still unbound
 cmd/agent-run/tests/codex-open-bind-resume/
 ├── DOCTEST.md
 ├── SETUP.md
-└── open-then-auto-resume-same-codex-id/   # primary repro → red until Fix A
+├── open-then-auto-resume-same-codex-id/        # short OPEN_MARKER, no AGENTS.md
+└── open-agents-md-then-resume-same-codex-id/   # AGENTS.md + SeaTalk inject (user[2])
 ```
 
 ## Test Index
@@ -57,6 +58,7 @@ cmd/agent-run/tests/codex-open-bind-resume/
 | # | Leaf | Description |
 |---|------|-------------|
 | 1 | `open-then-auto-resume-same-codex-id` | open binds; end; auto-send-or-resume keeps same codex id |
+| 2 | `open-agents-md-then-resume-same-codex-id` | AGENTS.md first user msg; still bind + same uuid after resume |
 
 ## How to Run
 
@@ -69,9 +71,14 @@ doctest test --label e2e --label codex \
 
 doctest test -v --label e2e --label codex \
   ./cmd/agent-run/tests/codex-open-bind-resume/open-then-auto-resume-same-codex-id
+
+doctest test -v --label e2e --label codex \
+  ./cmd/agent-run/tests/codex-open-bind-resume/open-agents-md-then-resume-same-codex-id
 ```
 
-Expect **FAIL** until open binds `runner_session_id` (Fix A).
+`open-then-auto-resume-same-codex-id`: short marker, no `AGENTS.md`.
+`open-agents-md-then-resume-same-codex-id`: expect **FAIL** until Discover
+matches the inject among the first few user messages (not only AGENTS.md).
 
 ## Types
 

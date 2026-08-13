@@ -128,8 +128,9 @@ func findCodexTranscriptBySessionID(codexHome, sessionID string) (string, bool, 
 }
 
 // scanActiveCodexTranscripts finds a cwd-matched rollout after runStart.
-// When prompt is non-empty, require the first real user message to match; when
-// multiple candidates remain, fail closed (ok=false) instead of newest-cwd.
+// When prompt is non-empty, require one of the first few real user messages
+// to match (Codex often stores AGENTS.md as user[1] and the inject as user[2]);
+// when multiple candidates remain, fail closed (ok=false) instead of newest-cwd.
 // Empty prompt with multiple cwd+time candidates also fails closed.
 func scanActiveCodexTranscripts(codexHome, workspace string, runStart time.Time, prompt string) (sessionID, path string, ok bool, err error) {
 	pattern := filepath.Join(codexHome, "sessions", "*", "*", "*", "rollout-*.jsonl")
@@ -157,8 +158,8 @@ func scanActiveCodexTranscripts(codexHome, workspace string, runStart time.Time,
 		if meta.SessionID == "" {
 			meta.SessionID = codexSessionIDFromPath(candidate)
 		}
-		// Prompt gate: skip until first real user message is written and matches
-		// (poller will retry). Empty prompt skips this filter.
+		// Prompt gate: skip until one of the first few real user messages
+		// matches (poller will retry). Empty prompt skips this filter.
 		if prompt != "" && !codexRolloutPromptMatches(candidate, prompt) {
 			continue
 		}
@@ -175,24 +176,28 @@ func scanActiveCodexTranscripts(codexHome, workspace string, runStart time.Time,
 	return best.SessionID, best.Path, true, nil
 }
 
-// codexRolloutPromptMatches reports whether the rollout's first real user prompt
-// equals want (environment_context user blobs are skipped).
+// codexMaxPromptMatchUserMessages is how many non-env user messages to
+// compare against the open inject. Codex writes AGENTS.md as user[1] and the
+// typed inject as user[2]; 3 covers a preamble + inject without scanning the
+// whole transcript.
+const codexMaxPromptMatchUserMessages = 3
+
+// codexRolloutPromptMatches reports whether one of the first few real user
+// prompts equals want (environment_context-only user blobs are skipped).
 func codexRolloutPromptMatches(rolloutPath, want string) bool {
 	want = strings.TrimSpace(want)
 	if want == "" {
 		return true
 	}
-	got, ok := firstCodexRealUserPrompt(rolloutPath)
-	if !ok {
-		return false
-	}
-	got = strings.TrimSpace(got)
-	if got == want {
-		return true
-	}
-	// Soft: inject may be a prefix/suffix of a longer user blob or vice versa.
-	if strings.Contains(got, want) || strings.Contains(want, got) {
-		return true
+	for _, got := range codexRealUserPrompts(rolloutPath, codexMaxPromptMatchUserMessages) {
+		got = strings.TrimSpace(got)
+		if got == want {
+			return true
+		}
+		// Soft: inject may be a prefix/suffix of a longer user blob or vice versa.
+		if strings.Contains(got, want) || strings.Contains(want, got) {
+			return true
+		}
 	}
 	return false
 }
@@ -200,13 +205,27 @@ func codexRolloutPromptMatches(rolloutPath, want string) bool {
 // firstCodexRealUserPrompt returns the first user message text that is not an
 // environment_context wrapper.
 func firstCodexRealUserPrompt(path string) (string, bool) {
+	got := codexRealUserPrompts(path, 1)
+	if len(got) == 0 {
+		return "", false
+	}
+	return got[0], true
+}
+
+// codexRealUserPrompts returns up to max user message texts from a rollout,
+// skipping empty and environment_context-only blobs.
+func codexRealUserPrompts(path string, max int) []string {
+	if max <= 0 {
+		return nil
+	}
 	f, err := os.Open(path)
 	if err != nil {
-		return "", false
+		return nil
 	}
 	defer f.Close()
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 64*1024), 512*1024)
+	var out []string
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
@@ -227,6 +246,7 @@ func firstCodexRealUserPrompt(path string) (string, bool) {
 		if err := json.Unmarshal([]byte(line), &rec); err != nil {
 			continue
 		}
+		text := ""
 		switch rec.Type {
 		case "response_item":
 			if rec.Payload.Type != "" && rec.Payload.Type != "message" {
@@ -241,23 +261,24 @@ func firstCodexRealUserPrompt(path string) (string, bool) {
 					texts = append(texts, t)
 				}
 			}
-			text := strings.TrimSpace(strings.Join(texts, "\n"))
-			if text == "" || isCodexEnvironmentContextUserText(text) {
-				continue
-			}
-			return text, true
+			text = strings.TrimSpace(strings.Join(texts, "\n"))
 		case "event_msg":
 			if rec.Payload.Type != "user_message" {
 				continue
 			}
-			text := strings.TrimSpace(rec.Payload.Message)
-			if text == "" || isCodexEnvironmentContextUserText(text) {
-				continue
-			}
-			return text, true
+			text = strings.TrimSpace(rec.Payload.Message)
+		default:
+			continue
+		}
+		if text == "" || isCodexEnvironmentContextUserText(text) {
+			continue
+		}
+		out = append(out, text)
+		if len(out) >= max {
+			break
 		}
 	}
-	return "", false
+	return out
 }
 
 func isCodexEnvironmentContextUserText(text string) bool {
