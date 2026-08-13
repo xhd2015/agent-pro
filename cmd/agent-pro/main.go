@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	codexcfg "github.com/xhd2015/agent-pro/agent/codex/config"
 	codexsessions "github.com/xhd2015/agent-pro/agent/codex/sessions"
 	codexskills "github.com/xhd2015/agent-pro/agent/codex/skills"
+	grokfork "github.com/xhd2015/agent-pro/agent/grok/fork"
 	groksessions "github.com/xhd2015/agent-pro/agent/grok/sessions"
 	grokview "github.com/xhd2015/agent-pro/agent/grok/view"
 	"github.com/xhd2015/agent-pro/agent/opencode/commands"
@@ -26,7 +26,6 @@ import (
 	"github.com/xhd2015/agent-pro/frontend"
 	"github.com/xhd2015/agent-pro/pkgs/agentconfig"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
-	"github.com/xhd2015/agent-pro/pkgs/shell"
 	"github.com/xhd2015/agent-pro/run"
 	"github.com/xhd2015/agent-pro/server"
 	lib "github.com/xhd2015/dot-pkgs/go-pkgs/shell/iterm2"
@@ -1400,15 +1399,14 @@ func handleGrokSessionFork(args []string) error {
 	}
 	cwd = abs
 
-	tokens := []string{"grok", "--resume", sessionID, "--fork-session"}
-	if sid := strings.TrimSpace(newSessionID); sid != "" {
-		tokens = append(tokens, "--session-id", sid)
+	launch := grokfork.SessionLaunch{
+		SessionID:    sessionID,
+		NewSessionID: newSessionID,
+		Dir:          cwd,
+		Bin:          "grok",
+		Env:          os.Environ(),
 	}
-	quoted := make([]string, 0, len(tokens))
-	for _, t := range tokens {
-		quoted = append(quoted, shell.ShellQuote(t))
-	}
-	cmdLine := strings.Join(quoted, " ")
+	cmdLine := launch.QuotedCommandLine()
 
 	if dryRun {
 		fmt.Println("Would fork grok session")
@@ -1424,6 +1422,7 @@ func handleGrokSessionFork(args []string) error {
 	}
 
 	if newTerminal {
+		// Keep -n opening iTerm with grok --resume --fork-session (not grok-fork --session-id).
 		if err := grokSessionOpenInNewTerminal(cwd, cmdLine); err != nil {
 			return fmt.Errorf("open new terminal: %w", err)
 		}
@@ -1431,21 +1430,11 @@ func handleGrokSessionFork(args []string) error {
 		return nil
 	}
 
-	// Foreground: resolve grok on PATH and run in session cwd.
-	bin, lookErr := exec.LookPath("grok")
-	if lookErr != nil {
-		return fmt.Errorf("grok not found on PATH: %w", lookErr)
-	}
-	argv := []string{"--resume", sessionID, "--fork-session"}
-	if sid := strings.TrimSpace(newSessionID); sid != "" {
-		argv = append(argv, "--session-id", sid)
-	}
-	cmd := exec.Command(bin, argv...)
-	cmd.Dir = cwd
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	if err := grokfork.Fork(&grokfork.Options{
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+		Env:    os.Environ(),
+	}, sessionID, newSessionID, cwd); err != nil {
 		return fmt.Errorf("grok fork: %w", err)
 	}
 	return nil
