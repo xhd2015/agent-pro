@@ -33,6 +33,10 @@ library automatically once BuildFollowUp spills); CLI inject beyond P1
   `d.DOCTEST_CASE` (parallel-safe; no `t.Setenv` / `t.Chdir` / `os.Setenv`).
   Production default when empty (document only; not asserted here): e.g.
   `AGENT_RUN_HOME/open-prompts` or `os.TempDir`.
+- **`MaybeSpillPrompt` / `ShouldSpillPrompt` / `PromptSpillOpts`** — exported
+  core used by `BuildFollowUpCommand` and external callers (e.g. wrk create UX)
+  that build their own `agent-run` argv. Same 600-rune threshold; `Force`
+  writes even when under the threshold.
 - **`BuildFollowUpCommand`** — pure-ish: opts → single shell-quoted line;
   may create a spill file under `PromptSpillDir` when auto-spilling.
 - **Threshold (locked):** `utf8.RuneCountInString(strings.TrimSpace(Prompt))`

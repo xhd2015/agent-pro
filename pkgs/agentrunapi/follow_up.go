@@ -17,6 +17,40 @@ import (
 // Locked: 600.
 const PromptFileSpillMinRunes = 600
 
+// PromptSpillOpts configures MaybeSpillPrompt (shared by BuildFollowUpCommand and
+// callers that build their own agent-run argv, e.g. wrk create UX).
+type PromptSpillOpts struct {
+	// SpillDir is where the file is written. Empty uses
+	// filepath.Join(os.TempDir(), "agent-run-prompt-spill").
+	SpillDir string
+	// SessionID if non-empty is sanitized into the filename (prompt-<id>-*.txt).
+	SessionID string
+	// Force writes even when the prompt is at or under PromptFileSpillMinRunes.
+	Force bool
+}
+
+// ShouldSpillPrompt reports whether TrimSpace(prompt) exceeds PromptFileSpillMinRunes.
+func ShouldSpillPrompt(prompt string) bool {
+	return utf8.RuneCountInString(strings.TrimSpace(prompt)) > PromptFileSpillMinRunes
+}
+
+// MaybeSpillPrompt writes TrimSpace(prompt) to a file for --prompt-file delivery.
+// Under the threshold and !Force: returns ("", false, nil) and writes nothing.
+func MaybeSpillPrompt(prompt string, opts PromptSpillOpts) (path string, spilled bool, err error) {
+	if !opts.Force && !ShouldSpillPrompt(prompt) {
+		return "", false, nil
+	}
+	path, err = spillFollowUpPrompt(FollowUpOpts{
+		Prompt:         prompt,
+		PromptSpillDir: opts.SpillDir,
+		SessionID:      opts.SessionID,
+	})
+	if err != nil {
+		return "", false, err
+	}
+	return path, true, nil
+}
+
 // FollowUpOpts builds a shell-quoted ForceNew child command (no --new-terminal).
 type FollowUpOpts struct {
 	// Driver is the host re-exec config. Zero Binary → Resolve defaults to self
@@ -129,12 +163,13 @@ func BuildFollowUpCommand(opts FollowUpOpts) (string, error) {
 			return "", fmt.Errorf("prompt-file path: %w", err)
 		}
 		remainder = append(remainder, "--prompt-file="+abs)
-	} else if utf8.RuneCountInString(strings.TrimSpace(opts.Prompt)) > PromptFileSpillMinRunes {
-		abs, err := spillFollowUpPrompt(opts)
-		if err != nil {
-			return "", err
-		}
-		remainder = append(remainder, "--prompt-file="+abs)
+	} else if path, spilled, err := MaybeSpillPrompt(opts.Prompt, PromptSpillOpts{
+		SpillDir:  opts.PromptSpillDir,
+		SessionID: opts.SessionID,
+	}); err != nil {
+		return "", err
+	} else if spilled {
+		remainder = append(remainder, "--prompt-file="+path)
 	} else {
 		prompt := opts.Prompt
 		// ForceNew auto-send child: open/detach always use "--"; non-empty prompt also
