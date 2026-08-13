@@ -45,14 +45,22 @@ type UsageInfo struct {
 }
 
 var (
-	weeklyLimitRe = regexp.MustCompile(`(?i)weekly\s*limit:\s*(\d+%)`)
-	// nextResetCandidates: ordered formats for "Next reset"; first match wins.
+	// Legacy: "Weekly limit: 65%"
+	weeklyLimitLegacyRe = regexp.MustCompile(`(?i)weekly\s*limit:\s*(\d+%)`)
+	// Panel header (Grok 1.0.3): "Weekly limit (SuperGrok Heavy)" — percent on following lines.
+	weeklyLimitHeaderRe = regexp.MustCompile(`(?i)weekly\s*limit\b`)
+	percentTokenRe      = regexp.MustCompile(`(\d+%)`)
+	// nextResetCandidates: ordered formats; first match wins.
 	// Whitelist known TZs only (PT, UTC) — no catch-all [A-Z]{2,4} (matches junk like "Imag").
-	// No-timezone form is last; normalize keeps bare wall clock (interpreted as local by consumers).
+	// Legacy "Next reset:" then panel "Resets:" / "Reset:".
+	// No-timezone form is last per family; normalize keeps bare wall clock (local for consumers).
 	nextResetCandidates = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)next\s*reset:\s*([A-Za-z]+\s*\d{1,2},\s*\d{1,2}:\d{2}\s*PT)`),
 		regexp.MustCompile(`(?i)next\s*reset:\s*([A-Za-z]+\s*\d{1,2},\s*\d{1,2}:\d{2}\s*UTC)`),
 		regexp.MustCompile(`(?i)next\s*reset:\s*([A-Za-z]+\s*\d{1,2},\s*\d{1,2}:\d{2})`),
+		regexp.MustCompile(`(?i)resets?:\s*([A-Za-z]+\s*\d{1,2},\s*\d{1,2}:\d{2}\s*PT)`),
+		regexp.MustCompile(`(?i)resets?:\s*([A-Za-z]+\s*\d{1,2},\s*\d{1,2}:\d{2}\s*UTC)`),
+		regexp.MustCompile(`(?i)resets?:\s*([A-Za-z]+\s*\d{1,2},\s*\d{1,2}:\d{2})`),
 	}
 	// Matches Month Day, HH:MM with optional PT|UTC after spaces are stripped.
 	resetDateRe = regexp.MustCompile(`(?i)^([A-Za-z]+)(\d{1,2}),(\d{1,2}:\d{2})(PT|UTC)?$`)
@@ -629,15 +637,38 @@ func parseUsage(scrollback []byte) (*UsageInfo, error) {
 }
 
 func parseUsageText(corpus string) (*UsageInfo, error) {
-	weekly := weeklyLimitRe.FindStringSubmatch(corpus)
-	nextRaw, ok := matchNextReset(corpus)
-	if len(weekly) < 2 || !ok {
+	weekly, weeklyOK := matchWeeklyLimit(corpus)
+	nextRaw, nextOK := matchNextReset(corpus)
+	if !weeklyOK || !nextOK {
 		return nil, fmt.Errorf("failed to parse usage output")
 	}
 	return &UsageInfo{
-		WeeklyLimit: strings.TrimSpace(weekly[1]),
+		WeeklyLimit: weekly,
 		NextReset:   normalizeResetDate(nextRaw),
 	}, nil
+}
+
+// matchWeeklyLimit accepts legacy "Weekly limit: N%" or modal panel form:
+// "Weekly limit (...)" header then first N% on a following line.
+func matchWeeklyLimit(corpus string) (string, bool) {
+	if m := weeklyLimitLegacyRe.FindStringSubmatch(corpus); len(m) >= 2 {
+		return strings.TrimSpace(m[1]), true
+	}
+	loc := weeklyLimitHeaderRe.FindStringIndex(corpus)
+	if loc == nil {
+		return "", false
+	}
+	// Percent is on following lines (progress bar), not the header line itself.
+	rest := corpus[loc[1]:]
+	nl := strings.IndexByte(rest, '\n')
+	if nl < 0 {
+		return "", false
+	}
+	rest = rest[nl+1:]
+	if m := percentTokenRe.FindStringSubmatch(rest); len(m) >= 2 {
+		return m[1], true
+	}
+	return "", false
 }
 
 // matchNextReset tries ordered next-reset candidates; first match wins.
