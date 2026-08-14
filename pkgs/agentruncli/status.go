@@ -13,8 +13,8 @@ import (
 	"github.com/xhd2015/agent-pro/pkgs/agentrunapi"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
-	"github.com/xhd2015/tty-watch/pkgs/ttywatch"
 	"github.com/xhd2015/less-gen/flags"
+	"github.com/xhd2015/tty-watch/pkgs/ttywatch"
 )
 
 const statusHelp = `
@@ -37,13 +37,13 @@ Options:
 
 // sessionStatusReport is the multi-layer probe result for status / resume gates.
 type sessionStatusReport struct {
-	Session   string             `json:"session"`
-	Status    string             `json:"status"`
-	Workspace string             `json:"workspace,omitempty"`
-	Process   processLayerReport `json:"process"`
+	Session   string              `json:"session"`
+	Status    string              `json:"status"`
+	Workspace string              `json:"workspace,omitempty"`
+	Process   processLayerReport  `json:"process"`
 	Terminal  terminalLayerReport `json:"terminal"`
-	Runner    runnerLayerReport  `json:"runner"`
-	Resume    resumeLayerReport  `json:"resume"`
+	Runner    runnerLayerReport   `json:"runner"`
+	Resume    resumeLayerReport   `json:"resume"`
 }
 
 type processLayerReport struct {
@@ -58,6 +58,7 @@ type terminalLayerReport struct {
 	Listen   string `json:"listen,omitempty"`
 	Screen   string `json:"screen,omitempty"`
 	Sendable string `json:"sendable,omitempty"` // yes|no
+	InputBox string `json:"input_box"`          // empty|occupied|unknown
 }
 
 type runnerLayerReport struct {
@@ -308,6 +309,14 @@ func probeSessionStatus(store agentstorage.Store, meta agentstorage.SessionMeta)
 		report.Resume.Ready = bound && exited != nil && *exited
 	}
 
+	inputText := ""
+	if report.Terminal.Status == "reachable" {
+		inputText = scrollbackSnapshot
+	}
+	inputToken := strings.TrimSpace(fmt.Sprint(agenttty.DetectInputBox(inputText)))
+	_, inputJSON := agenttty.InputBoxReport(inputToken)
+	report.Terminal.InputBox = inputJSON
+
 	// --- resume reason (display only) ---
 	bound := report.Runner.Status == "bound"
 	exited := report.Runner.Exited
@@ -488,6 +497,10 @@ func printSessionStatusHuman(r sessionStatusReport) {
 	}
 	if r.Terminal.Sendable != "" {
 		fmt.Printf("  sendable: %s\n", r.Terminal.Sendable)
+	}
+	if r.Terminal.InputBox != "" {
+		human, _ := agenttty.InputBoxReport(r.Terminal.InputBox)
+		fmt.Printf("  %s\n", human)
 	}
 	fmt.Println()
 	fmt.Println("runner:")
