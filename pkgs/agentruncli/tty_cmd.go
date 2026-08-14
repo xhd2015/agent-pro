@@ -10,8 +10,8 @@ import (
 
 	"github.com/xhd2015/agent-pro/pkgs/agentsend"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
-	"github.com/xhd2015/tty-watch/pkgs/ttywatch"
 	"github.com/xhd2015/less-gen/flags"
+	"github.com/xhd2015/tty-watch/pkgs/ttywatch"
 )
 
 const ttyHelp = `
@@ -82,17 +82,18 @@ Options:
 `
 
 type ttyStatusData struct {
-	PID              int    `json:"pid"`
-	Port             string `json:"port"`
-	TTYType          string `json:"tty_type"`
-	SessionID        string `json:"session_id"`
-	SessionFilePath  string `json:"session_file_path,omitempty"`
-	StartTime        string `json:"start_time"`
-	TCPReachable     bool   `json:"tcp_reachable"`
-	ScreenStatus     string `json:"screen_status,omitempty"`
-	Sendable         bool   `json:"sendable"`
-	SendableReason   string `json:"sendable_reason,omitempty"`
-	SendableState    string `json:"sendable_state,omitempty"`
+	PID             int    `json:"pid"`
+	Port            string `json:"port"`
+	TTYType         string `json:"tty_type"`
+	SessionID       string `json:"session_id"`
+	SessionFilePath string `json:"session_file_path,omitempty"`
+	StartTime       string `json:"start_time"`
+	TCPReachable    bool   `json:"tcp_reachable"`
+	ScreenStatus    string `json:"screen_status,omitempty"`
+	Sendable        bool   `json:"sendable"`
+	SendableReason  string `json:"sendable_reason,omitempty"`
+	SendableState   string `json:"sendable_state,omitempty"`
+	InputBox        string `json:"input_box"`
 }
 
 func runTty(args []string) error {
@@ -170,10 +171,12 @@ func runTtyStatus(args []string) error {
 	}
 
 	var writable agenttty.WritableStatus
+	var scrollbackText string
 	provider, ok := agenttty.Get(ttySess.RunnerID)
 	if tcpReachable && ok && provider.CheckWritable != nil {
-		scrollbackText, err := ttywatch.SnapshotText(ttySess.Registry.ListenAddr, sessionID)
-		if err == nil && len(scrollbackText) > 0 {
+		text, err := ttywatch.SnapshotText(ttySess.Registry.ListenAddr, sessionID)
+		if err == nil && len(text) > 0 {
+			scrollbackText = text
 			scrollback := []byte(scrollbackText)
 			writable = provider.CheckWritable(scrollback)
 			if provider.DetectScreenStatus != nil &&
@@ -189,6 +192,9 @@ func runTtyStatus(args []string) error {
 		writable = agenttty.WritableStatus{Reason: "terminal unreachable", State: "unreachable"}
 	}
 
+	inputToken := strings.TrimSpace(fmt.Sprint(agenttty.DetectInputBox(scrollbackText)))
+	inputHuman, inputJSON := agenttty.InputBoxReport(inputToken)
+
 	data := ttyStatusData{
 		PID:             ttySess.Registry.PID,
 		Port:            ttySess.Registry.ListenAddr,
@@ -201,6 +207,7 @@ func runTtyStatus(args []string) error {
 		Sendable:        writable.Ready,
 		SendableReason:  writable.Reason,
 		SendableState:   writable.State,
+		InputBox:        inputJSON,
 	}
 
 	if jsonFlag {
@@ -229,6 +236,7 @@ func runTtyStatus(args []string) error {
 	} else {
 		fmt.Printf("sendable: no\n")
 	}
+	fmt.Println(inputHuman)
 	return nil
 }
 
