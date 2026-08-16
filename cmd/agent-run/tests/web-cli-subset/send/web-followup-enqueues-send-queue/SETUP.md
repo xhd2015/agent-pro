@@ -27,7 +27,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	seedAgentSessionForStubTTY(t, req, req.SessionID, terminalID)
 	req.FollowUpPrompt = "web-queue-probe"
 	req.HTTPMethod = http.MethodPost
-	req.HTTPPath = "/api/agent-run/sessions/" + req.Runner + "/" + req.SessionID + "/messages"
+	req.HTTPPath = "/api/agent-run/sessions/" + req.SessionID + "/messages"
 	body, _ := json.Marshal(map[string]string{"message": req.FollowUpPrompt})
 	req.HTTPBody = string(body)
 	req.Mode = "http"

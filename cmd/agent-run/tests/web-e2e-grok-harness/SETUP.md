@@ -19,6 +19,7 @@ build agent-run + llm-mock-run-grok -> web grok flags -> POST grok-tty -> finish
 
 ```go
 import (
+	"runtime"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -165,9 +166,12 @@ func sessionStatus(detailJSON string) string {
 
 func waitForSessionFinished(t *testing.T, baseURL, bearer, runner, sessionID string, timeout time.Duration) string {
 	deadline := time.Now().Add(timeout)
-	url := fmt.Sprintf("%s/api/agent-run/sessions/%s/%s", baseURL, runner, sessionID)
+	url := fmt.Sprintf("%s/api/agent-run/sessions/%s", baseURL, sessionID)
 	for time.Now().Before(deadline) {
-		_, body := httpGet(t, url, bearer)
+		status, body := httpGet(t, url, bearer)
+		if status == http.StatusNotFound {
+			t.Fatalf("session detail 404 while waiting for finished: %s", body)
+		}
 		if sessionStatus(body) == "finished" {
 			return body
 		}
@@ -221,7 +225,7 @@ func runHarnessSmokeProbe(t *testing.T, req *Request) (*Response, error) {
 		return resp, fmt.Errorf("web session not initialized")
 	}
 	body := waitForSessionFinished(t, req.WebBaseURL, req.WebToken, req.SessionRunner, req.SessionID, 25*time.Second)
-	status, _ := httpGet(t, fmt.Sprintf("%s/api/agent-run/sessions/%s/%s", req.WebBaseURL, req.SessionRunner, req.SessionID), req.WebToken)
+	status, _ := httpGet(t, fmt.Sprintf("%s/api/agent-run/sessions/%s", req.WebBaseURL, req.SessionID), req.WebToken)
 	resp.HTTPStatus = status
 	resp.HTTPBody = body
 	return resp, nil
@@ -248,12 +252,12 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if err := os.MkdirAll(req.GrokHome, 0755); err != nil {
 		return err
 	}
-	build := exec.Command("go", "build", "-o", req.AgentRun, "./cmd/agent-run")
+	build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.AgentRun, "./cmd/agent-run")
 	build.Dir = req.RepoRoot
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("build agent-run: %w\n%s", err, string(out))
 	}
-	buildMock := exec.Command("go", "build", "-o", req.LLMMockRunGrok, "./agent/llm/llm-mock/llm-mock-run-grok")
+	buildMock := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.LLMMockRunGrok, "./agent/llm/llm-mock/llm-mock-run-grok")
 	buildMock.Dir = req.RepoRoot
 	if out, err := buildMock.CombinedOutput(); err != nil {
 		return fmt.Errorf("build llm-mock-run-grok: %w\n%s", err, string(out))

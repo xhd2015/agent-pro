@@ -34,6 +34,7 @@ agent-run msg status|cancel <session-id>/msg_N -> agentsend.MessageStatus / Canc
 
 ```go
 import (
+	"runtime"
 	"bufio"
 	"bytes"
 	"context"
@@ -72,7 +73,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 		return fmt.Errorf("mkdir bin: %w", err)
 	}
 	// agent-run is in the cmd module (cmd/go.mod), package ./agent-run — not root go.mod.
-	build := exec.Command("go", "build", "-o", req.AgentRun, "./agent-run")
+	build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.AgentRun, "./agent-run")
 	build.Dir = filepath.Join(req.RepoRoot, "cmd")
 	build.Env = append(os.Environ(), "GOWORK=off")
 	if out, err := build.CombinedOutput(); err != nil {

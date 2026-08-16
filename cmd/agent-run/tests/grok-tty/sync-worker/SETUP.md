@@ -35,6 +35,7 @@ agent-run web + llm-mock grok-tty keep-tty
 
 ```go
 import (
+	"runtime"
 	"bufio"
 	"bytes"
 	"context"
@@ -148,7 +149,7 @@ func ensureSessionBinaries(t *testing.T, d *session.Doctest, repoRoot string) (a
 			{llmMock, []string{"build", "-o", llmMock, "./agent/llm/llm-mock/llm-mock-run-grok"}},
 		}
 		for _, b := range builds {
-			cmd := exec.Command("go", b.args...)
+			cmd := exec.Command(runtime.GOROOT()+"/bin/go", b.args...)
 			cmd.Dir = repoRoot
 			if out, err := cmd.CombinedOutput(); err != nil {
 				return fmt.Errorf("go %v: %w\n%s", b.args, err, string(out))
@@ -503,7 +504,7 @@ func postFollowUpMessage(t *testing.T, req *Request, sessionID, message string) 
 	if err != nil {
 		t.Fatalf("marshal follow-up: %v", err)
 	}
-	path := fmt.Sprintf("%s/api/agent-run/sessions/%s/%s/messages", req.WebBaseURL, req.Runner, sessionID)
+	path := fmt.Sprintf("%s/api/agent-run/sessions/%s/messages", req.WebBaseURL, sessionID)
 	return doHTTP(t, http.MethodPost, path, req.WebToken, "application/json", string(payload))
 }
 
@@ -623,7 +624,7 @@ func seedFinishedSessionEmptyEvents(t *testing.T, req *Request) {
 
 func getSessionDetail(t *testing.T, req *Request) (int, string) {
 	t.Helper()
-	path := fmt.Sprintf("%s/api/agent-run/sessions/%s/%s", req.WebBaseURL, req.Runner, req.SessionID)
+	path := fmt.Sprintf("%s/api/agent-run/sessions/%s", req.WebBaseURL, req.SessionID)
 	return doHTTP(t, http.MethodGet, path, req.WebToken, "", "")
 }
 

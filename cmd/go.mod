@@ -8,7 +8,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/gorilla/websocket v1.5.3
 	github.com/slack-go/slack v0.27.0
-	github.com/xhd2015/agent-pro v0.0.127
+	github.com/xhd2015/agent-pro v0.0.130
 	github.com/xhd2015/dot-pkgs/go-pkgs v0.0.120
 	github.com/xhd2015/less-flags v1.0.2
 	github.com/xhd2015/less-gen v0.0.19

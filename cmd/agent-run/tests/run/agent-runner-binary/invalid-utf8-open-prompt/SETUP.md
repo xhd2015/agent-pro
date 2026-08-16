@@ -18,6 +18,7 @@ Two leaves (3s budgets; no soft-bind oracle):
 
 ```go
 import (
+	"runtime"
 	"fmt"
 	"os"
 	"os/exec"
@@ -57,7 +58,7 @@ func buildLLMMockSibling(t *testing.T, req *Request) error {
 	if _, err := os.Stat(llmMock); err == nil {
 		return nil
 	}
-	build := exec.Command("go", "build", "-o", llmMock, "./agent/llm/llm-mock")
+	build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", llmMock, "./agent/llm/llm-mock")
 	build.Dir = req.RepoRoot
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("build llm-mock: %w\n%s", err, string(out))

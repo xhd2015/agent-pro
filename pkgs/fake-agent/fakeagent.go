@@ -51,6 +51,9 @@ type Generator struct {
 	// WorkDir is the probe sandbox for relative file/grep ops. Empty = process cwd.
 	// File writes always land under probeWriteDir (temp), not WorkDir.
 	WorkDir string
+	// SkipExec records probe events without running bash/grep. Unit tests set
+	// this so GenerateSession cannot nest `go`/`git` or stall on a large cwd.
+	SkipExec bool
 }
 
 func NewGenerator(seed int64) *Generator {
@@ -126,10 +129,16 @@ func (g *Generator) execProbe(s probe.Suggestion) ([]Event, string) {
 	cwd := g.probeCwd()
 	switch s.Kind {
 	case probe.KindToolCall:
+		if g.SkipExec {
+			return g.buildCmdEvents(id, s.Value, "", 0)
+		}
 		stdout, _, exitCode, _ := faketoolexec.ExecuteBash(s.Value, cwd, nil)
 		return g.buildCmdEvents(id, s.Value, stdout, exitCode)
 	case probe.KindFileRead:
 		cmd := "cat " + s.Value
+		if g.SkipExec {
+			return g.buildCmdEvents(id, cmd, "", 0)
+		}
 		path := s.Value
 		if !filepath.IsAbs(path) && cwd != "." {
 			path = filepath.Join(cwd, path)
@@ -140,15 +149,23 @@ func (g *Generator) execProbe(s probe.Suggestion) ([]Event, string) {
 		}
 		return g.buildCmdEvents(id, cmd, content, 0)
 	case probe.KindFileWrite:
-		os.MkdirAll(probeWriteDir, 0755)
-		writePath := filepath.Join(probeWriteDir, filepath.Base(s.Value))
-		faketoolexec.ExecuteWrite(writePath, "content written by agent")
+		if !g.SkipExec {
+			os.MkdirAll(probeWriteDir, 0755)
+			writePath := filepath.Join(probeWriteDir, filepath.Base(s.Value))
+			faketoolexec.ExecuteWrite(writePath, "content written by agent")
+		}
 		return g.buildFileChangeEvents(id, s.Value, "add")
 	case probe.KindSearch:
 		cmd := "grep -rn " + s.Value + " " + cwd
+		if g.SkipExec {
+			return g.buildCmdEvents(id, cmd, "", 0)
+		}
 		output, exitCode, _ := faketoolexec.ExecuteGrep(s.Value, cwd)
 		return g.buildCmdEvents(id, cmd, output, exitCode)
 	default:
+		if g.SkipExec {
+			return g.buildCmdEvents(id, s.Value, "", 0)
+		}
 		stdout, _, exitCode, _ := faketoolexec.ExecuteBash(s.Value, cwd, nil)
 		return g.buildCmdEvents(id, s.Value, stdout, exitCode)
 	}

@@ -2,11 +2,23 @@ package fakeagent
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/xhd2015/agent-pro/pkgs/fake-agent/probe"
 )
+
+// testGenerator sandboxes probe exec so GenerateSession cannot re-enter
+// `go test ./...` or walk a large repo cwd.
+func testGenerator(t *testing.T, seed int64) *Generator {
+	t.Helper()
+	g := NewGenerator(seed)
+	g.WorkDir = t.TempDir()
+	g.SkipExec = true
+	return g
+}
 
 func TestNewGenerator(t *testing.T) {
 	g := NewGenerator(42)
@@ -27,10 +39,15 @@ func TestNextID(t *testing.T) {
 }
 
 func TestGenerateSession_Deterministic(t *testing.T) {
+	dir := t.TempDir()
 	g := NewGenerator(42)
+	g.WorkDir = dir
+	g.SkipExec = true
 	events1 := g.GenerateSession("create a Go HTTP server")
 
 	g2 := NewGenerator(42)
+	g2.WorkDir = dir
+	g2.SkipExec = true
 	events2 := g2.GenerateSession("create a Go HTTP server")
 
 	if len(events1) != len(events2) {
@@ -46,7 +63,7 @@ func TestGenerateSession_Deterministic(t *testing.T) {
 }
 
 func TestGenerateSession_NonEmpty(t *testing.T) {
-	g := NewGenerator(100)
+	g := testGenerator(t, 100)
 	events := g.GenerateSession("write unit tests")
 	if len(events) == 0 {
 		t.Fatal("GenerateSession returned empty events")
@@ -55,7 +72,7 @@ func TestGenerateSession_NonEmpty(t *testing.T) {
 
 func TestGenerateSession_StartsWithReasoning(t *testing.T) {
 	for seed := int64(0); seed < 20; seed++ {
-		g := NewGenerator(seed)
+		g := testGenerator(t, seed)
 		events := g.GenerateSession("some task")
 		if len(events) == 0 {
 			t.Fatalf("seed %d: no events", seed)
@@ -69,7 +86,7 @@ func TestGenerateSession_StartsWithReasoning(t *testing.T) {
 
 func TestGenerateSession_EndsWithMessage(t *testing.T) {
 	for seed := int64(0); seed < 20; seed++ {
-		g := NewGenerator(seed)
+		g := testGenerator(t, seed)
 		events := g.GenerateSession("some task")
 		if len(events) == 0 {
 			t.Fatalf("seed %d: no events", seed)
@@ -83,7 +100,7 @@ func TestGenerateSession_EndsWithMessage(t *testing.T) {
 
 func TestGenerateSession_EventOrdering(t *testing.T) {
 	for seed := int64(0); seed < 30; seed++ {
-		g := NewGenerator(seed)
+		g := testGenerator(t, seed)
 		events := g.GenerateSession("some task")
 
 		itemStates := make(map[string]string)
@@ -124,7 +141,7 @@ func TestGenerateSession_EventOrdering(t *testing.T) {
 func TestGenerateSession_MultipleSeedsProduceVariedOutput(t *testing.T) {
 	var firstLineSets []map[string]bool
 	for seed := int64(0); seed < 10; seed++ {
-		g := NewGenerator(seed)
+		g := testGenerator(t, seed)
 		events := g.GenerateSession("some task")
 		set := make(map[string]bool)
 		for _, e := range events {
@@ -162,7 +179,7 @@ func setsEqual(a, b map[string]bool) bool {
 }
 
 func TestGenerateSession_WithEmptyPrompt(t *testing.T) {
-	g := NewGenerator(42)
+	g := testGenerator(t, 42)
 	events := g.GenerateSession("")
 	if len(events) == 0 {
 		t.Fatal("empty prompt should still generate events")
@@ -201,7 +218,7 @@ func TestExtractTopic(t *testing.T) {
 }
 
 func TestGenerateSession_WithProbeBacktick(t *testing.T) {
-	g := NewGenerator(42)
+	g := testGenerator(t, 42)
 	events := g.GenerateSession("please run `echo hello` for me")
 	found := false
 	for _, e := range events {
@@ -221,7 +238,7 @@ func TestGenerateSession_WithProbeBacktick(t *testing.T) {
 }
 
 func TestGenerateSession_WithProbeFilePath(t *testing.T) {
-	g := NewGenerator(42)
+	g := testGenerator(t, 42)
 	events := g.GenerateSession("read /tmp/config.json and check it")
 	found := false
 	for _, e := range events {
@@ -241,7 +258,7 @@ func TestGenerateSession_WithProbeFilePath(t *testing.T) {
 }
 
 func TestGenerateSession_WithProbeFileWrite(t *testing.T) {
-	g := NewGenerator(100)
+	g := testGenerator(t, 100)
 	events := g.GenerateSession("create /tmp/out.txt with some content")
 	found := false
 	for _, e := range events {
@@ -268,7 +285,7 @@ func TestGenerateSession_WithProbeFileWrite(t *testing.T) {
 }
 
 func TestGenerateSession_WithProbeSearch(t *testing.T) {
-	g := NewGenerator(42)
+	g := testGenerator(t, 42)
 	events := g.GenerateSession("grep TODO src/")
 	found := false
 	for _, e := range events {
@@ -289,7 +306,7 @@ func TestGenerateSession_WithProbeSearch(t *testing.T) {
 
 func TestGenerateSession_RoundLimit(t *testing.T) {
 	for seed := int64(0); seed < 50; seed++ {
-		g := NewGenerator(seed)
+		g := testGenerator(t, seed)
 		events := g.GenerateSession("some task")
 
 		toolRoundCount := 0
@@ -325,7 +342,7 @@ func TestGenerateSession_RoundLimit(t *testing.T) {
 
 func TestGenerateSession_ResponseEventuallyProduced(t *testing.T) {
 	for seed := int64(0); seed < 30; seed++ {
-		g := NewGenerator(seed)
+		g := testGenerator(t, seed)
 		events := g.GenerateSession("some task")
 
 		hasMessage := false
@@ -342,14 +359,19 @@ func TestGenerateSession_ResponseEventuallyProduced(t *testing.T) {
 }
 
 func TestExecProbe_ReturnsResultText(t *testing.T) {
-	g := NewGenerator(42)
+	g := testGenerator(t, 42)
+	g.SkipExec = false
 	events, result := g.execProbe(probe.Suggestion{Kind: "tool_call", Value: "echo test"})
 	if len(events) == 0 {
 		t.Fatal("execProbe returned no events")
 	}
 	_ = result // some commands legitimately have empty output
 
-	_, result2 := g.execProbe(probe.Suggestion{Kind: "file_read", Value: "/tmp/test.txt"})
+	path := filepath.Join(g.WorkDir, "test.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, result2 := g.execProbe(probe.Suggestion{Kind: "file_read", Value: path})
 	if result2 == "" {
 		t.Fatal("execFileRead returned empty result")
 	}
@@ -364,7 +386,8 @@ func TestPickSuggestion_EmptySuggestsDefault(t *testing.T) {
 }
 
 func TestExecProbe_FileWriteReturnsPath(t *testing.T) {
-	g := NewGenerator(42)
+	g := testGenerator(t, 42)
+	g.SkipExec = false
 	_, result := g.execProbe(probe.Suggestion{Kind: "file_write", Value: "/tmp/test.txt"})
 	if result != "/tmp/test.txt" {
 		t.Fatalf("file write result = %q, want /tmp/test.txt", result)

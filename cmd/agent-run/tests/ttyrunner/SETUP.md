@@ -33,6 +33,7 @@ ptywrap multi-attach -> first interactive writer, observers read-only
 
 ```go
 import (
+	"runtime"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -72,7 +73,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if err := os.MkdirAll(filepath.Dir(req.AgentRun), 0755); err != nil {
 		return fmt.Errorf("mkdir bin: %w", err)
 	}
-	build := exec.Command("go", "build", "-o", req.AgentRun, "./cmd/agent-run")
+	build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.AgentRun, "./cmd/agent-run")
 	build.Dir = req.RepoRoot
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("build agent-run: %w\n%s", err, string(out))
@@ -749,7 +750,7 @@ func runStubTTYOp(t *testing.T, req *Request) (*Response, error) {
 		resp.Stdout = cliResp.Stdout
 		resp.Stderr = cliResp.Stderr
 		resp.ExitCode = cliResp.ExitCode
-		resp.EventsFilePath = filepath.Join(req.Home, "sessions", "stub-tty", req.AgentSessionID, "events.jsonl")
+		resp.EventsFilePath = filepath.Join(req.Home, "sessions", req.AgentSessionID, "events.jsonl")
 	case "scenario-mock-screen-frames":
 		req.StubScenarioJSON = `{"banner_delay_ms":0,"screen_frames":[{"delay_ms":0,"text":"frame-0\n"},{"delay_ms":300,"text":"frame-1\n› "}],"exit_after_turn":true}`
 		cliResp, err := runStubTTYRun(t, req)

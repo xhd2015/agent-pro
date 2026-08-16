@@ -10,8 +10,12 @@ jobs:
     container:
       # Match go.work / go.mod (GOTOOLCHAIN=local in official images rejects lower runtimes).
       image: golang:1.25.10
+    env:
+      GOFLAGS: -buildvcs=false
     steps:
       - uses: actions/checkout@v4
+      - name: Expose go on default PATH
+        run: ln -sf "$(go env GOROOT)/bin/go" /usr/bin/go
       - name: Go test cmd
         run: go -C cmd test -v ./...
       - name: Go test
@@ -23,4 +27,4 @@ jobs:
             go install github.com/xhd2015/doctest/cmd/doctest@latest
           fi
       - name: Doctest
-        run: doctest test -v --label-all ./...
+        run: doctest test -v --label-all -timeout 30m ./...

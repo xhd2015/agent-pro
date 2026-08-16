@@ -1,6 +1,7 @@
 package probe
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -214,6 +215,9 @@ func TestDefaultSuggestions(t *testing.T) {
 			t.Fatalf("duplicate default suggestion: %s", s.Value)
 		}
 		seen[s.Value] = true
+		if strings.HasPrefix(s.Value, "go ") {
+			t.Fatalf("default suggestion %q would nest a go command under go test", s.Value)
+		}
 	}
 }
 

@@ -36,6 +36,7 @@ AttachWriter(listen, id, "screen") under host PTY
 
 ```go
 import (
+	"runtime"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -134,7 +135,7 @@ func ensureSessionBinaries(t *testing.T, d *session.Doctest, repoRoot string) (a
 			}
 		}
 		// agent-run lives under nested cmd module
-		cmd := exec.Command("go", "build", "-o", agentRun, "./agent-run")
+		cmd := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", agentRun, "./agent-run")
 		cmd.Dir = filepath.Join(repoRoot, "cmd")
 		if out, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("go build agent-run: %w\n%s", err, out)
@@ -148,7 +149,7 @@ func ensureSessionBinaries(t *testing.T, d *session.Doctest, repoRoot string) (a
 			{llmMock, "./agent/llm/llm-mock"},
 			{attachHelper, "./script/debug/open-attach-fidelity-attachhost"},
 		} {
-			c := exec.Command("go", "build", "-o", b.out, b.pkg)
+			c := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", b.out, b.pkg)
 			c.Dir = repoRoot
 			if out, err := c.CombinedOutput(); err != nil {
 				return fmt.Errorf("go build %s: %w\n%s", b.pkg, err, out)

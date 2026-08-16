@@ -33,7 +33,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	}
 	assertHTTPStatus(t, resp, 200)
 	requireTerminalMappingAvailable(t, req, resp.HTTPBody)
-	status, detail := doHTTP(t, "GET", req.WebBaseURL+"/api/agent-run/sessions/"+req.Runner+"/"+req.ChatSessionID, req.WebToken, "", "")
+	status, detail := doHTTP(t, "GET", req.WebBaseURL+"/api/agent-run/sessions/"+req.ChatSessionID, req.WebToken, "", "")
 	if status != 200 {
 		t.Fatalf("session detail status=%d body=%s", status, detail)
 	}

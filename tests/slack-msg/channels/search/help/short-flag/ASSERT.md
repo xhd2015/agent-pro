@@ -44,10 +44,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	if resp.Stderr != "" {
 		t.Fatalf("expected empty stderr, got:\n%s", resp.Stderr)
 	}
-	assert.Output(t, resp.Stdout, `---
-version: 2
----
-slack-msg channels search: search workspace channels by name.
+	assert.Output(t, resp.Stdout, `slack-msg channels search: search workspace channels by name.
 
 Usage:
   slack-msg channels search [options] QUERY

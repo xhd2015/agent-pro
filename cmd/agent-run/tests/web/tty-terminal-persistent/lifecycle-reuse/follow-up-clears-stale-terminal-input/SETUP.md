@@ -105,7 +105,7 @@ func staleInputSessionBodyEventually(t *testing.T, req *Request, timeout time.Du
 	deadline := time.Now().Add(timeout)
 	var last string
 	for time.Now().Before(deadline) {
-		status, body := doHTTP(t, "GET", req.WebBaseURL+"/api/agent-run/sessions/"+req.Runner+"/"+req.ChatSessionID, req.WebToken, "", "")
+		status, body := doHTTP(t, "GET", req.WebBaseURL+"/api/agent-run/sessions/"+req.ChatSessionID, req.WebToken, "", "")
 		if status != http.StatusOK {
 			t.Fatalf("session detail status=%d body=%s", status, body)
 		}

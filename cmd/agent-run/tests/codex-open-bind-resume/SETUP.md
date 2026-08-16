@@ -39,6 +39,7 @@ agent-run run --auto-send-or-resume --open ... "FOLLOW_UP"
 
 ```go
 import (
+	"runtime"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -113,7 +114,7 @@ func ensureSessionBinaries(t *testing.T, d *session.Doctest, repoRoot string) (a
 		}
 		// agent-run lives under nested cmd module (cmd/go.mod).
 		cmdDir := filepath.Join(repoRoot, "cmd")
-		b1 := exec.Command("go", "build", "-o", agentRun, "./agent-run")
+		b1 := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", agentRun, "./agent-run")
 		b1.Dir = cmdDir
 		if out, err := b1.CombinedOutput(); err != nil {
 			return fmt.Errorf("build agent-run: %w\n%s", err, out)
@@ -126,7 +127,7 @@ func ensureSessionBinaries(t *testing.T, d *session.Doctest, repoRoot string) (a
 			{llmMock, "./agent/llm/llm-mock"},
 			{llmMockRunCodex, "./agent/llm/llm-mock/llm-mock-run-codex"},
 		} {
-			cmd := exec.Command("go", "build", "-o", b.out, b.pkg)
+			cmd := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", b.out, b.pkg)
 			cmd.Dir = repoRoot
 			if out, err := cmd.CombinedOutput(); err != nil {
 				return fmt.Errorf("build %s: %w\n%s", b.pkg, err, out)

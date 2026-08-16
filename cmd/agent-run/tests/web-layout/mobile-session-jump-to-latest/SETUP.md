@@ -48,7 +48,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 		return err
 	}
 
-	sessionPath := "/sessions/" + runner + "/" + sessionID
+	sessionPath := "/sessions/" + sessionID
 	body := openSeededSessionPage(req.BaseURL, sessionPath) +
 		waitForMessageListOverflow() + scrollMessageListUpFromBottom(250) +
 		assertMessageListDetached() + sendComposerMessage(followUpPrompt) +

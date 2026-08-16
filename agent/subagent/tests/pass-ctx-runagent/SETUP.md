@@ -1,7 +1,7 @@
 ## Preconditions
 - The `runAgent` function accepts `ctx context.Context` as its first parameter.
 - The hardcoded 30-second timeout in `runAgent` is removed; the passed context is used directly.
-- `fake-codex` binary is available at `../../../../fake-codex` relative to d.DOCTEST_ROOT.
+- `fake-codex` is built from `./cmd/fake-codex` into a temp path.
 - `subagent.TestExported_runAgent` wraps the unexported `runAgent`.
 
 ## Steps

@@ -31,6 +31,7 @@ fixture session metadata + tty registry -> terminal resolver
 
 ```go
 import (
+	"runtime"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -67,7 +68,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if err := os.MkdirAll(filepath.Dir(req.AgentRun), 0755); err != nil {
 		return err
 	}
-	build := exec.Command("go", "build", "-o", req.AgentRun, "./cmd/agent-run")
+	build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.AgentRun, "./cmd/agent-run")
 	build.Dir = req.RepoRoot
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("build agent-run: %w\n%s", err, string(out))
@@ -354,11 +355,11 @@ func unusedLocalAddr(t *testing.T) string {
 }
 
 func terminalStatusPath(runner, sessionID string) string {
-	return "/api/agent-run/sessions/" + runner + "/" + sessionID + "/terminal"
+	return "/api/agent-run/sessions/" + sessionID + "/terminal"
 }
 
 func terminalWSPath(runner, sessionID string) string {
-	return "/api/agent-run/sessions/" + runner + "/" + sessionID + "/terminal/ws"
+	return "/api/agent-run/sessions/" + sessionID + "/terminal/ws"
 }
 
 func decodeJSONBody(t *testing.T, body string) map[string]any {
@@ -424,7 +425,7 @@ await page.reload({ waitUntil: 'domcontentloaded' });
 }
 
 func sessionBrowserScript(req *Request, body string) string {
-	path := req.WebBaseURL + "/sessions/" + req.Runner + "/" + req.SessionID
+	path := req.WebBaseURL + "/sessions/" + req.SessionID
 	return fmt.Sprintf(`
 await page.setViewportSize({ width: 430, height: 860 });
 await page.goto(%s, { waitUntil: 'domcontentloaded' });

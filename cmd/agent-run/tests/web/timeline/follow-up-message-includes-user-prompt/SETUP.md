@@ -44,7 +44,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 		return err
 	}
 
-	url := req.WebBaseURL + "/api/agent-run/sessions/" + req.SessionRunner + "/" + req.SessionID + "/messages"
+	url := req.WebBaseURL + "/api/agent-run/sessions/" + req.SessionID + "/messages"
 	payload, _ := json.Marshal(map[string]string{"text": req.CreatePrompt})
 	status, body := httpPostJSON(t, url, req.WebToken, string(payload))
 	if status != 200 && status != 202 {
@@ -53,7 +53,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 
 	req.HTTPMethod = "GET"
 	req.HTTPAuth = req.WebToken
-	req.HTTPPath = "/api/agent-run/sessions/" + req.SessionRunner + "/" + req.SessionID
+	req.HTTPPath = "/api/agent-run/sessions/" + req.SessionID
 	return nil
 }
 

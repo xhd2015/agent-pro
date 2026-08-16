@@ -14,7 +14,7 @@ import (
 
 func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertNoError(t, err)
-	assertFileExists(t, resp.RegistryPath)
+	// Completed one-shot runs delete the live registry JSON; tty.json is the durable snapshot.
 	assertFileExists(t, resp.TTYJSONPath)
 }
 ```

@@ -25,10 +25,9 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "fake-codex"
 	req.SessionID = "watch-events-print"
 	seedRunningSessionForPrint(t, req, req.Runner, req.SessionID)
-	req.CLIArgs = []string{"sessions", req.Runner + "/" + req.SessionID, "--print"}
+	req.CLIArgs = []string{"sessions", req.SessionID, "--print"}
 	req.ExecTimeout = 15 * time.Second
 	home := req.Home
-	runner := req.Runner
 	sid := req.SessionID
 	req.Sidecar = func() {
 		time.Sleep(500 * time.Millisecond)
@@ -36,12 +35,12 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 		if err != nil {
 			return
 		}
-		_ = store.AppendEvent(runner, sid, types.AgentEvent{
+		_ = store.AppendEvent(sid, types.AgentEvent{
 			Type: types.ActionMessage,
 			Role: "assistant",
 			Text: "WatchEvents appended line",
 		})
-		_ = store.UpdateSessionStatus(runner, sid, "finished")
+		_ = store.UpdateSessionStatus(sid, "finished")
 	}
 	req.Mode = "cli"
 	return nil

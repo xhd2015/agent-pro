@@ -46,6 +46,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"regexp"
 	"strings"
 	"syscall"
@@ -360,7 +361,7 @@ func buildMockGrokOnce(t *testing.T, d *session.Doctest) string {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "go", "build", "-o", binPath, "./agent/llm/llm-mock/llm-mock-run-grok")
+		cmd := exec.CommandContext(ctx, runtime.GOROOT()+"/bin/go", "build", "-o", binPath, "./agent/llm/llm-mock/llm-mock-run-grok")
 		cmd.Dir = root
 		var be bytes.Buffer
 		cmd.Stderr = &be

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -134,11 +135,10 @@ func runRun(args []string) error {
 		return err
 	}
 	if isInteractiveTerminal(os.Stdin, os.Stdout) {
-		_, attachErr := ptyclient.Attach(c, ptyclient.ConnectOptions{
-			SessionID:      info.ID,
-			AttachSnapshot: true,
-			Wait:           true,
-		})
+		attachErr := attachSession(c, info.ID)
+		if errors.Is(attachErr, errDetached) {
+			return attachErr
+		}
 		if attachErr != nil && !sessionExited(c, info.ID) {
 			return attachErr
 		}
@@ -218,12 +218,7 @@ func runAttach(args []string) error {
 	if err != nil {
 		return err
 	}
-	_, err = ptyclient.Attach(c, ptyclient.ConnectOptions{
-		SessionID:      session.ID,
-		AttachSnapshot: true,
-		Wait:           true,
-	})
-	return err
+	return attachSession(c, session.ID)
 }
 
 func runRename(args []string) error {

@@ -23,7 +23,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/xhd2015/doctest/assert"
 	"github.com/xhd2015/doctest/session"
 )
 
@@ -32,15 +31,13 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 		t.Fatal(err)
 	}
 	assertExitCode(t, resp, 2)
-	assert.Output(t, resp.Stderr, ``+
-`<contains>
-macOS
-<any-of>
-<expect>osascript</expect>
-<expect>dry-run</expect>
-<expect>DEBUG_WITH_USER_DRY_RUN</expect>
-</any-of>
-</contains>`)
+	lower := strings.ToLower(resp.Stderr)
+	if !strings.Contains(lower, "macos") {
+		t.Fatalf("stderr should mention macOS:\n%s", resp.Stderr)
+	}
+	if !strings.Contains(lower, "osascript") && !strings.Contains(lower, "dry-run") && !strings.Contains(lower, "debug_with_user_dry_run") {
+		t.Fatalf("stderr should mention osascript or dry-run:\n%s", resp.Stderr)
+	}
 	trimmed := strings.TrimSpace(resp.Stdout)
 	if trimmed != "" && strings.Contains(trimmed, `"via"`) {
 		t.Fatalf("error path should not emit answer JSON, got stdout:\n%s", resp.Stdout)

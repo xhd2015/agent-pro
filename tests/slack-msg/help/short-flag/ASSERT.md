@@ -4,7 +4,7 @@
 slack-msg: Slack messaging CLI.
 
 Usage:
-  slack-msg <command> [options]
+  slack-msg \<command> [options]
   slack-msg --help [--topic TOPIC]
 
 Commands:
@@ -66,14 +66,11 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	// v2: lines with balanced [...] become regex; escape brackets so they match
 	// literally. Parentheses alone are not regex signals and must stay unescaped
 	// (escaping them would require a literal backslash in output).
-	assert.Output(t, resp.Stdout, `---
-version: 2
----
-slack-msg: Slack messaging CLI.
+	assert.Output(t, resp.Stdout, `slack-msg: Slack messaging CLI.
 
 Usage:
-  slack-msg <command> \[options\]
-  slack-msg --help \[--topic TOPIC\]
+  slack-msg \<command> [options]
+  slack-msg --help [--topic TOPIC]
 
 Commands:
   send      Post a message via Slack Web API

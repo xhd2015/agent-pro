@@ -41,6 +41,7 @@ integration <- output Paris from mocked Chat Completions API
 
 ```go
 import (
+	"runtime"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -89,7 +90,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.BinaryPath = filepath.Join(tmp, "llm-mock")
 	req.ShortcutPath = filepath.Join(tmp, "llm-mock-run-opencode")
 
-	buildMain := exec.Command("go", "build", "-o", req.BinaryPath, "./agent/llm/llm-mock")
+	buildMain := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.BinaryPath, "./agent/llm/llm-mock")
 	buildMain.Dir = req.RepoRoot
 	if out, err := buildMain.CombinedOutput(); err != nil {
 		return fmt.Errorf("build llm-mock: %w\n%s", err, string(out))
@@ -97,7 +98,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 
 	shortcutMain := filepath.Join(req.RepoRoot, "agent/llm/llm-mock/llm-mock-run-opencode/main.go")
 	if _, err := os.Stat(shortcutMain); err == nil {
-		buildShortcut := exec.Command("go", "build", "-o", req.ShortcutPath, "./agent/llm/llm-mock/llm-mock-run-opencode")
+		buildShortcut := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.ShortcutPath, "./agent/llm/llm-mock/llm-mock-run-opencode")
 		buildShortcut.Dir = req.RepoRoot
 		if out, err := buildShortcut.CombinedOutput(); err != nil {
 			return fmt.Errorf("build llm-mock-run-opencode: %w\n%s", err, string(out))

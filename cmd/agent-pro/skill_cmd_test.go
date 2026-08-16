@@ -384,8 +384,13 @@ func TestHandleSkillsUpdateUpdatesAlreadyInstalledSkill(t *testing.T) {
 			t.Fatalf("handleSkills(update): %v", err)
 		}
 	})
-	if !strings.Contains(stdout, "Update skill at") {
-		t.Fatalf("update output missing update line:\n%s", stdout)
+	// HandleUpdateMany prints a per-skill table + summary, not the older
+	// single-skill "Update skill at <dir>" / "Installed skill to" lines.
+	if !strings.Contains(stdout, "git-resolve-conflicts") || !strings.Contains(stdout, "updated") {
+		t.Fatalf("update output missing updated skill row:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "SKILL.md") {
+		t.Fatalf("update output missing SKILL.md path:\n%s", stdout)
 	}
 	if strings.Contains(stdout, "Installed skill to") {
 		t.Fatalf("update should not install missing skills:\n%s", stdout)

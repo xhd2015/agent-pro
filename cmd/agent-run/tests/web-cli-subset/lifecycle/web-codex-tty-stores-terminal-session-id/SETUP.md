@@ -23,7 +23,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	waitForSessionStatus(t, req, req.Runner, req.ChatSessionID, "finished", 60*time.Second)
 	req.TerminalSessionID = waitForTerminalSessionID(t, req, req.Runner, req.ChatSessionID, 10*time.Second)
 	req.Mode = "http"
-	req.HTTPPath = "/api/agent-run/sessions/" + req.Runner + "/" + req.ChatSessionID
+	req.HTTPPath = "/api/agent-run/sessions/" + req.ChatSessionID
 	return nil
 }
 ```

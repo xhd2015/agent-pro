@@ -25,6 +25,7 @@ go build agents/debug-with-user -> temp binary -> exec ask/skill show -> capture
 
 ```go
 import (
+	"runtime"
 	"fmt"
 	"os"
 	"os/exec"
@@ -43,7 +44,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if err := os.MkdirAll(filepath.Dir(req.Binary), 0o755); err != nil {
 		return fmt.Errorf("mkdir bin: %w", err)
 	}
-	build := exec.Command("go", "build", "-o", req.Binary, "./agents/debug-with-user")
+	build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.Binary, "./agents/debug-with-user")
 	build.Dir = req.RepoRoot
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("build debug-with-user: %w\n%s", err, string(out))

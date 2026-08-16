@@ -37,6 +37,7 @@ keep-tty: tail must survive tailState.streamed; WatchEvents until ctx done
 
 ```go
 import (
+	"runtime"
 	"bufio"
 	"bytes"
 	"context"
@@ -131,7 +132,7 @@ func ensureSessionBinaries(t *testing.T, d *session.Doctest, repoRoot string) (a
 			{llmMock, []string{"build", "-o", llmMock, "./agent/llm/llm-mock/llm-mock-run-grok"}},
 		}
 		for _, b := range builds {
-			cmd := exec.Command("go", b.args...)
+			cmd := exec.Command(runtime.GOROOT()+"/bin/go", b.args...)
 			cmd.Dir = repoRoot
 			if out, err := cmd.CombinedOutput(); err != nil {
 				return fmt.Errorf("go %v: %w\n%s", b.args, err, string(out))
@@ -668,8 +669,8 @@ func postCreateSession(t *testing.T, req *Request, runner, prompt string) string
 
 func collectSSESessionEvents(t *testing.T, req *Request, runner, sessionID string, afterOffset int64, maxWait time.Duration) []map[string]any {
 	t.Helper()
-	rawURL := fmt.Sprintf("%s/api/agent-run/sessions/%s/%s/events/stream?after=%d",
-		req.WebBaseURL, runner, sessionID, afterOffset)
+	rawURL := fmt.Sprintf("%s/api/agent-run/sessions/%s/events/stream?after=%d",
+		req.WebBaseURL, sessionID, afterOffset)
 	ctx, cancel := context.WithTimeout(context.Background(), maxWait)
 	defer cancel()
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
@@ -790,10 +791,10 @@ func seedRunningSessionForFollow(t *testing.T, req *Request, runner, sessionID s
 		Status:    "running",
 		Workspace: req.TempDir,
 	}
-	if err := store.CreateSession(runner, sessionID, meta); err != nil {
+	if err := store.CreateSession(sessionID, meta); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	if err := store.AppendEvent(runner, sessionID, types.AgentEvent{
+	if err := store.AppendEvent(sessionID, types.AgentEvent{
 		Type: types.ActionMessage,
 		Role: "assistant",
 		Text: "Initial running event",
@@ -805,7 +806,7 @@ func seedRunningSessionForFollow(t *testing.T, req *Request, runner, sessionID s
 func markSessionFinished(t *testing.T, req *Request, runner, sessionID string) {
 	t.Helper()
 	store := openAgentStore(t, req)
-	if err := store.UpdateSessionStatus(runner, sessionID, "finished"); err != nil {
+	if err := store.UpdateSessionStatus(sessionID, "finished"); err != nil {
 		t.Fatalf("UpdateSessionStatus finished: %v", err)
 	}
 }
@@ -819,13 +820,13 @@ func seedFinishedSession(t *testing.T, req *Request, runner, sessionID, firstTex
 		Status:    "finished",
 		Workspace: req.TempDir,
 	}
-	if err := store.CreateSession(runner, sessionID, meta); err != nil {
+	if err := store.CreateSession(sessionID, meta); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	if err := store.UpdateSessionStatus(runner, sessionID, "finished"); err != nil {
+	if err := store.UpdateSessionStatus(sessionID, "finished"); err != nil {
 		t.Fatalf("UpdateSessionStatus: %v", err)
 	}
-	if err := store.AppendEvent(runner, sessionID, types.AgentEvent{
+	if err := store.AppendEvent(sessionID, types.AgentEvent{
 		Type: types.ActionMessage,
 		Role: "assistant",
 		Text: firstText,
@@ -837,7 +838,7 @@ func seedFinishedSession(t *testing.T, req *Request, runner, sessionID, firstTex
 func appendSessionEvent(t *testing.T, req *Request, runner, sessionID, text string) {
 	t.Helper()
 	store := openAgentStore(t, req)
-	if err := store.AppendEvent(runner, sessionID, types.AgentEvent{
+	if err := store.AppendEvent(sessionID, types.AgentEvent{
 		Type: types.ActionMessage,
 		Role: "assistant",
 		Text: text,

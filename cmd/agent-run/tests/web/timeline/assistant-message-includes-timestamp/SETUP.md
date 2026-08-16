@@ -38,7 +38,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	waitForSessionStatus(t, req, req.SessionRunner, sessionID, "finished", 30*time.Second)
 	req.HTTPMethod = "GET"
 	req.HTTPAuth = req.WebToken
-	req.HTTPPath = "/api/agent-run/sessions/" + req.SessionRunner + "/" + sessionID
+	req.HTTPPath = "/api/agent-run/sessions/" + sessionID
 	return nil
 }
 ```

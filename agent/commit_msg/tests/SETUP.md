@@ -25,6 +25,7 @@ optional --commit -> git commit (must not race with concurrent git from agent)
 
 ```go
 import (
+	"runtime"
 	"bytes"
 	"fmt"
 	"os"
@@ -52,7 +53,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	}
 	req.TempDir = t.TempDir()
 	req.FakeOpencode = filepath.Join(req.TempDir, "fake-opencode")
-	build := exec.Command("go", "build", "-o", req.FakeOpencode, "./cmd/fake-opencode")
+	build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.FakeOpencode, "./cmd/fake-opencode")
 	build.Dir = req.RepoRoot
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("build fake-opencode: %w\n%s", err, string(out))
@@ -290,7 +291,7 @@ func captureGenCommitMsgHelp(t *testing.T, req *Request) (*Response, error) {
 			return nil, fmt.Errorf("help capture requires TempDir or GenCommitMsgBin")
 		}
 		bin = filepath.Join(req.TempDir, "gen-commit-msg")
-		build := exec.Command("go", "build", "-o", bin, "./cmd/gen-commit-msg")
+		build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", bin, "./cmd/gen-commit-msg")
 		build.Dir = req.RepoRoot
 		if out, err := build.CombinedOutput(); err != nil {
 			return nil, fmt.Errorf("build gen-commit-msg: %w\n%s", err, string(out))

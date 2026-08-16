@@ -23,7 +23,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	if !boolField(first, "available") {
 		t.Fatalf("first terminal status unavailable: %s", resp.HTTPBody)
 	}
-	_, _ = doHTTP(t, "GET", req.WebBaseURL+"/api/agent-run/sessions/"+req.Runner+"/"+req.SessionID, req.WebToken, "", "")
+	_, _ = doHTTP(t, "GET", req.WebBaseURL+"/api/agent-run/sessions/"+req.SessionID, req.WebToken, "", "")
 	status, secondBody := doHTTP(t, "GET", req.WebBaseURL+terminalStatusPath(req.Runner, req.SessionID), req.WebToken, "", "")
 	if status != 200 {
 		t.Fatalf("second terminal status=%d body=%s", status, secondBody)

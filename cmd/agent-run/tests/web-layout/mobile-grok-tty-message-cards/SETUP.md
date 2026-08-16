@@ -48,7 +48,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 		return err
 	}
 
-	sessionPath := "/sessions/grok-tty/" + sessionID
+	sessionPath := "/sessions/" + sessionID
 	body := seedTokenInPage(req.Token) + `
 await page.goto('` + req.BaseURL + sessionPath + `', { waitUntil: 'networkidle' });
 await page.locator('[data-testid="chat-active"]').waitFor({ state: 'visible', timeout: 15000 });

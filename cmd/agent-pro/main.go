@@ -942,6 +942,7 @@ Commands:
   list                  alias for: agent-pro grok sessions
   info   <session-id>   show detailed info for one Grok CLI session
   status <session-id>   show dual-signal liveness (file-active + live PIDs)
+  focus  <session-id>   focus the iTerm2 tab that hosts this Grok session
   files  <session-id>   list regular files in the session directory
   stats  <session-id>   analyse counts, latency, tools, and tasks for one session
   view   <session-id>   print or web-view session messages (in-memory convert)
@@ -1127,6 +1128,8 @@ func handleGrokSession(args []string) error {
 		return handleGrokSessionInfo(args[1:])
 	case "status":
 		return handleGrokSessionStatus(args[1:])
+	case "focus":
+		return handleGrokSessionFocus(args[1:])
 	case "files":
 		return handleGrokSessionFiles(args[1:])
 	case "stats":
@@ -1475,6 +1478,10 @@ func handleGrokSessionInfo(args []string) error {
 	fmt.Println()
 	fmt.Println(groksessions.FormatActiveBlock(st))
 	return nil
+}
+
+func handleGrokSessionFocus(args []string) error {
+	return groksessions.RunFocus(args, os.Stdout, agenttty.GrokHome(), nil)
 }
 
 func handleGrokSessionStatus(args []string) error {

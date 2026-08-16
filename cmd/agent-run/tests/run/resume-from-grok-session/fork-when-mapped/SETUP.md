@@ -21,9 +21,14 @@ argv-recorder as --agent-runner-binary
 3. Run import with --fork.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"time"
 
-func Setup(t *testing.T, req *Request) error {
+	"github.com/xhd2015/doctest/session"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.GrokCWD = absPath(t, req.WorkDir)
 	seedGrokSession(t, req.GrokHome, req.GrokCWD, req.GrokSessionID)
 	req.MappedSessID = "mapped-parent-fork"

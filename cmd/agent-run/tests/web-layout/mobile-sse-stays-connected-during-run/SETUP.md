@@ -44,7 +44,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 		return err
 	}
 
-	sessionPath := "/sessions/" + runner + "/" + sessionID
+	sessionPath := "/sessions/" + sessionID
 	body := initSSEPersistenceMonitor() + `
 await page.goto('` + req.BaseURL + sessionPath + `', { waitUntil: 'domcontentloaded' });
 const chat = page.locator('[data-testid="chat-active"]');

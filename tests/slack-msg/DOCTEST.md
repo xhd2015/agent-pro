@@ -504,11 +504,11 @@ doctest test -v ./tests/slack-msg/listen/session-routing/thread-session-map
 doctest test -v ./tests/slack-msg/listen/session-routing/thread-env-flags
 doctest test -v ./tests/slack-msg/listen/session-routing/channel-stable-session
 doctest test -v ./tests/slack-msg/listen/session-routing/dm-session-key
-doctest test -v ./tests/slack-msg/session/reply/success/map-config-flag
-doctest test -v ./tests/slack-msg/session/history/success/chronological
-doctest test -v ./tests/slack-msg/session/list/success/multi-sorted-human
-doctest test -v ./tests/slack-msg/session/info/success/human-keys
-doctest test -v ./tests/slack-msg/session/update/success/set-dir
+doctest test -v ./tests/slack-msg/slacksession/reply/success/map-config-flag
+doctest test -v ./tests/slack-msg/slacksession/history/success/chronological
+doctest test -v ./tests/slack-msg/slacksession/list/success/multi-sorted-human
+doctest test -v ./tests/slack-msg/slacksession/info/success/human-keys
+doctest test -v ./tests/slack-msg/slacksession/update/success/set-dir
 ```
 
 **Implementer note (`session list` / `info` / `update` — RED until landed):**
@@ -582,6 +582,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -854,7 +855,7 @@ func buildSlackMsg(t *testing.T, d *session.Doctest) (string, error) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 			defer cancel()
-			cmd := exec.CommandContext(ctx, "go", "build", "-o", bin, "./cmd/slack-msg")
+			cmd := exec.CommandContext(ctx, runtime.GOROOT()+"/bin/go", "build", "-o", bin, "./cmd/slack-msg")
 			cmd.Dir = repoRoot
 			var stderr bytes.Buffer
 			cmd.Stderr = &stderr

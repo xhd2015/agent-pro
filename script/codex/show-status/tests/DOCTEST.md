@@ -113,6 +113,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -185,7 +186,7 @@ func buildShowStatus(t *testing.T, d *session.Doctest) (string, error) {
 		binPath := filepath.Join(tmp, "codex-show-status")
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "go", "build", "-o", binPath, "./script/codex/show-status")
+		cmd := exec.CommandContext(ctx, runtime.GOROOT()+"/bin/go", "build", "-o", binPath, "./script/codex/show-status")
 		cmd.Dir = repoRoot
 		var be bytes.Buffer
 		cmd.Stderr = &be
@@ -214,7 +215,7 @@ func buildTTYWatch(t *testing.T, d *session.Doctest) (string, error) {
 		binPath := filepath.Join(tmp, "tty-watch")
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "go", "build", "-o", binPath, "github.com/xhd2015/tty-watch/cmd/tty-watch")
+		cmd := exec.CommandContext(ctx, runtime.GOROOT()+"/bin/go", "build", "-o", binPath, "github.com/xhd2015/tty-watch/cmd/tty-watch")
 		cmd.Dir = repoRoot
 		var be bytes.Buffer
 		cmd.Stderr = &be

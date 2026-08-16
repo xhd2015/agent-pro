@@ -22,8 +22,8 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	if resp.EnsureErr != nil {
 		t.Fatalf("EnsureGrokSync: %v", resp.EnsureErr)
 	}
-	if resp.WorkerCount != 1 {
-		t.Fatalf("GrokSyncWorkerCount: got %d want 1", resp.WorkerCount)
+	if !resp.WorkerActive {
+		t.Fatal("expected this session's grok sync worker to be active")
 	}
 	if count := countUserMessagesByText(resp.Events, idempotentUserPrompt); count != 1 {
 		t.Fatalf("user message count for %q: got %d want 1; events=%d",

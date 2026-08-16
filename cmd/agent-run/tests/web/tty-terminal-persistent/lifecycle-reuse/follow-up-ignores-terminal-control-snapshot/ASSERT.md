@@ -42,7 +42,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	deadline := time.Now().Add(5 * time.Second)
 	var last string
 	for time.Now().Before(deadline) {
-		status, body := doHTTP(t, "GET", req.WebBaseURL+"/api/agent-run/sessions/"+req.Runner+"/"+req.ChatSessionID, req.WebToken, "", "")
+		status, body := doHTTP(t, "GET", req.WebBaseURL+"/api/agent-run/sessions/"+req.ChatSessionID, req.WebToken, "", "")
 		if status != http.StatusOK {
 			t.Fatalf("session detail status=%d body=%s", status, body)
 		}
@@ -59,7 +59,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	if status := sessionStatus(t, last); status != "running" {
 		violations = append(violations, fmt.Sprintf("session status=%q, want running", status))
 	}
-	secondStatus, secondBody := doHTTP(t, "POST", req.WebBaseURL+"/api/agent-run/sessions/"+req.Runner+"/"+req.ChatSessionID+"/messages", req.WebToken, "application/json", `{"text":"Are you still there?"}`)
+	secondStatus, secondBody := doHTTP(t, "POST", req.WebBaseURL+"/api/agent-run/sessions/"+req.ChatSessionID+"/messages", req.WebToken, "application/json", `{"text":"Are you still there?"}`)
 	if secondStatus != http.StatusAccepted {
 		violations = append(violations, fmt.Sprintf("second follow-up status=%d body=%s", secondStatus, secondBody))
 	}

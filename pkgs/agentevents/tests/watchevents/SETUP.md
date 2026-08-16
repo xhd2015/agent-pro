@@ -71,13 +71,13 @@ func seedFinishedSession(t *testing.T, req *Request) agentstorage.Store {
 		Status:    "finished",
 		Workspace: req.TempDir,
 	}
-	if err := store.CreateSession(req.Runner, req.SessionID, meta); err != nil {
+	if err := store.CreateSession(req.SessionID, meta); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	if err := store.UpdateSessionStatus(req.Runner, req.SessionID, "finished"); err != nil {
+	if err := store.UpdateSessionStatus(req.SessionID, "finished"); err != nil {
 		t.Fatalf("UpdateSessionStatus: %v", err)
 	}
-	if err := store.AppendEvent(req.Runner, req.SessionID, types.AgentEvent{
+	if err := store.AppendEvent(req.SessionID, types.AgentEvent{
 		Type: types.ActionMessage,
 		Role: "assistant",
 		Text: "Initial finished event",
@@ -89,7 +89,7 @@ func seedFinishedSession(t *testing.T, req *Request) agentstorage.Store {
 
 func eventsTailOffset(t *testing.T, store agentstorage.Store, runner, sessionID string) int64 {
 	t.Helper()
-	_, offset, err := store.ReadEvents(runner, sessionID, 0)
+	_, offset, err := store.ReadEvents(sessionID, 0)
 	if err != nil {
 		t.Fatalf("ReadEvents: %v", err)
 	}
@@ -110,7 +110,7 @@ func runWatchEventsProbe(t *testing.T, req *Request) (*Response, error) {
 
 	done := make(chan error, 1)
 	go func() {
-		err := agentevents.WatchEvents(ctx, store, req.Runner, req.SessionID, req.AfterOffset, func(line string) error {
+		err := agentevents.WatchEvents(ctx, store, req.SessionID, req.AfterOffset, func(line string) error {
 			mu.Lock()
 			received = append(received, line)
 			mu.Unlock()
@@ -120,7 +120,7 @@ func runWatchEventsProbe(t *testing.T, req *Request) (*Response, error) {
 	}()
 
 	time.Sleep(req.AppendDelay)
-	if err := store.AppendEvent(req.Runner, req.SessionID, types.AgentEvent{
+	if err := store.AppendEvent(req.SessionID, types.AgentEvent{
 		Type: types.ActionMessage,
 		Role: "assistant",
 		Text: req.AppendText,

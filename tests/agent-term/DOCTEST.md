@@ -109,7 +109,7 @@ import (
 
 	"testing"
 
-	"github.com/xhd2015/agent-pro/cmd-doctest-harness/agent-term/termtest"
+	"github.com/xhd2015/agent-pro/tests/agent-term/termtest"
 	"github.com/xhd2015/doctest/session"
 )
 
@@ -121,8 +121,8 @@ func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	return termtest.Run(t, req)
 }
 
-func buildAgentTerm(t *testing.T) string {
-	return termtest.BuildAgentTerm(t)
+func buildAgentTerm(t *testing.T, d *session.Doctest) string {
+	return termtest.BuildAgentTerm(t, d.DOCTEST_ROOT)
 }
 
 func pickFreePort(base int) (int, error) {
