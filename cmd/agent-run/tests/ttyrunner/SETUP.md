@@ -750,7 +750,7 @@ func runStubTTYOp(t *testing.T, req *Request) (*Response, error) {
 		resp.Stdout = cliResp.Stdout
 		resp.Stderr = cliResp.Stderr
 		resp.ExitCode = cliResp.ExitCode
-		resp.EventsFilePath = filepath.Join(req.Home, "sessions", "stub-tty", req.AgentSessionID, "events.jsonl")
+		resp.EventsFilePath = filepath.Join(req.Home, "sessions", req.AgentSessionID, "events.jsonl")
 	case "scenario-mock-screen-frames":
 		req.StubScenarioJSON = `{"banner_delay_ms":0,"screen_frames":[{"delay_ms":0,"text":"frame-0\n"},{"delay_ms":300,"text":"frame-1\n› "}],"exit_after_turn":true}`
 		cliResp, err := runStubTTYRun(t, req)

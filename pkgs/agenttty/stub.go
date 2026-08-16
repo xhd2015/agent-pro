@@ -66,10 +66,6 @@ func loadStubScenario() *StubScenario {
 	return cachedStubScenario
 }
 
-func init() {
-	emitStubLLMEvents = tailStubLLMEvents
-}
-
 // BuildStubCommandArgv returns argv for the stub TTY process inside the PTY.
 func BuildStubCommandArgv(env *agentexec.Env, settingsPath, agentPath, model, resumeSession string) ([]string, error) {
 	if hook := strings.TrimSpace(os.Getenv(envStubTTYCommand)); hook != "" {

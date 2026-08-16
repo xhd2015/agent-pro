@@ -134,13 +134,7 @@ func ProviderListSorted() []Provider {
 	return out
 }
 
-var emitStubLLMEvents func(ctx TailContext) (string, error)
-
 func registerStubProvider() {
-	var tail func(TailContext) (string, error)
-	if emitStubLLMEvents != nil {
-		tail = emitStubLLMEvents
-	}
 	_ = Register(Provider{
 		ID:                 "stub-tty",
 		RegistryDir:        "stub-tty-registry",
@@ -148,7 +142,7 @@ func registerStubProvider() {
 		BannerMarkers:      []string{"STUB_TTY_BANNER"},
 		DisableTail:        true,
 		BuildArgv:          BuildStubCommandArgv,
-		StartEventTail:     tail,
+		StartEventTail:     tailStubLLMEvents,
 		DetectScreenStatus: detectStubScreenStatus,
 		CheckWritable:      checkStubWritable,
 	})
