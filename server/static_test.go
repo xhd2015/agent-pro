@@ -12,6 +12,9 @@ import (
 )
 
 func TestStaticServesIndexFromSharedFrontendEmbed(t *testing.T) {
+	if !frontend.DistComplete() {
+		t.Skip("embedded frontend is the thin placeholder; fat SPA is not in this checkout")
+	}
 	Init(frontend.DistFS, frontend.TemplateHTML)
 
 	mux := http.NewServeMux()

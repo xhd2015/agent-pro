@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
@@ -32,45 +33,139 @@ func GetPidOnPort(port int) (int, error) {
 
 	switch runtime.GOOS {
 	case "darwin", "linux":
-		cmd := exec.Command("lsof", "-ti", fmt.Sprintf("tcp:%s", portStr), "-sTCP:LISTEN")
-		out, err := cmd.Output()
-		if err == nil {
-			pidStr := strings.TrimSpace(string(out))
-			if idx := strings.IndexByte(pidStr, '\n'); idx > 0 {
-				pidStr = pidStr[:idx]
-			}
-			if pidStr == "" {
-				return 0, fmt.Errorf("%w: %d", ErrNoProcessOnPort, port)
-			}
-			pid, err := strconv.Atoi(pidStr)
-			if err != nil {
-				return 0, fmt.Errorf("failed to parse PID '%s': %w", pidStr, err)
-			}
+		if pid, err := pidFromLsof(portStr); err == nil {
 			return pid, nil
 		}
 		if runtime.GOOS == "linux" {
-			cmd = exec.Command("ss", "-tlnp", fmt.Sprintf("sport = :%s", portStr))
-			out, err = cmd.Output()
-			if err != nil {
-				return 0, fmt.Errorf("%w: %d", ErrNoProcessOnPort, port)
+			if pid, err := pidFromSS(portStr); err == nil {
+				return pid, nil
 			}
-			for _, line := range strings.Split(string(out), "\n") {
-				if idx := strings.Index(line, "pid="); idx >= 0 {
-					rest := line[idx+4:]
-					if end := strings.IndexAny(rest, ",) \t\n"); end > 0 {
-						pid, err := strconv.Atoi(rest[:end])
-						if err != nil {
-							return 0, fmt.Errorf("failed to parse PID '%s': %w", rest[:end], err)
-						}
-						return pid, nil
-					}
-				}
+			if pid, err := pidOnPortFromProc(port); err == nil {
+				return pid, nil
 			}
 		}
 		return 0, fmt.Errorf("%w: %d", ErrNoProcessOnPort, port)
 	default:
 		return 0, fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}
+}
+
+func pidFromLsof(portStr string) (int, error) {
+	cmd := exec.Command("lsof", "-ti", fmt.Sprintf("tcp:%s", portStr), "-sTCP:LISTEN")
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, err
+	}
+	pidStr := strings.TrimSpace(string(out))
+	if idx := strings.IndexByte(pidStr, '\n'); idx > 0 {
+		pidStr = pidStr[:idx]
+	}
+	if pidStr == "" {
+		return 0, ErrNoProcessOnPort
+	}
+	pid, err := strconv.Atoi(pidStr)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse PID '%s': %w", pidStr, err)
+	}
+	return pid, nil
+}
+
+func pidFromSS(portStr string) (int, error) {
+	cmd := exec.Command("ss", "-tlnp", fmt.Sprintf("sport = :%s", portStr))
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, err
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		idx := strings.Index(line, "pid=")
+		if idx < 0 {
+			continue
+		}
+		rest := line[idx+4:]
+		end := strings.IndexAny(rest, ",) \t\n")
+		if end <= 0 {
+			continue
+		}
+		pid, err := strconv.Atoi(rest[:end])
+		if err != nil {
+			return 0, fmt.Errorf("failed to parse PID '%s': %w", rest[:end], err)
+		}
+		return pid, nil
+	}
+	return 0, ErrNoProcessOnPort
+}
+
+const tcpListenState = "0A"
+
+func pidOnPortFromProc(port int) (int, error) {
+	for _, path := range []string{"/proc/net/tcp", "/proc/net/tcp6"} {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		inode, ok := listenInodeForPort(string(data), port)
+		if !ok {
+			continue
+		}
+		if pid, err := pidForSocketInode(inode); err == nil {
+			return pid, nil
+		}
+	}
+	return 0, ErrNoProcessOnPort
+}
+
+func listenInodeForPort(data string, port int) (string, bool) {
+	want := fmt.Sprintf("%04X", port)
+	for _, line := range strings.Split(data, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 10 {
+			continue
+		}
+		local, st, inode := fields[1], fields[3], fields[9]
+		colon := strings.LastIndexByte(local, ':')
+		if colon < 0 || !strings.EqualFold(local[colon+1:], want) {
+			continue
+		}
+		if !strings.EqualFold(st, tcpListenState) {
+			continue
+		}
+		if inode == "" || inode == "0" {
+			continue
+		}
+		return inode, true
+	}
+	return "", false
+}
+
+func pidForSocketInode(inode string) (int, error) {
+	want := "socket:[" + inode + "]"
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return 0, err
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		pid, err := strconv.Atoi(e.Name())
+		if err != nil {
+			continue
+		}
+		fds, err := os.ReadDir("/proc/" + e.Name() + "/fd")
+		if err != nil {
+			continue
+		}
+		for _, fd := range fds {
+			target, err := os.Readlink("/proc/" + e.Name() + "/fd/" + fd.Name())
+			if err != nil {
+				continue
+			}
+			if target == want {
+				return pid, nil
+			}
+		}
+	}
+	return 0, ErrNoProcessOnPort
 }
 
 // KillPortPid kills any process listening on the given port and waits for it

@@ -46,7 +46,10 @@ var patterns = []pattern{
 var defaultSuggestions = []Suggestion{
 	{KindToolCall, "ls -la"},
 	{KindToolCall, "git status"},
-	{KindToolCall, "go test ./..."},
+	// Cheap, non-go probe. Do not default to `go test` / `go env`:
+	// GenerateSession actually execs these, and a nested `go` waits on
+	// the same command lock as the parent `go test`.
+	{KindToolCall, "pwd"},
 	{KindFileRead, "README.md"},
 	{KindSearch, "TODO"},
 }

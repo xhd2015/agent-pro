@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 )
 
 // inspect emits a structured result and exits 0 (pass) or 1 (fail).

@@ -13,8 +13,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Go test cmd
+        env:
+          GOFLAGS: -buildvcs=false
         run: go -C cmd test -v ./...
       - name: Go test
+        env:
+          GOFLAGS: -buildvcs=false
         run: go test -v ./...
 
       - name: Install doctest

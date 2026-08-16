@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -83,7 +84,15 @@ func TestAskAgentCLISurfacesFakeCodexError(t *testing.T) {
 func buildFakeCodex(t *testing.T) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "fake-codex")
-	cmd := exec.Command("go", "build", "-o", bin, "../../../cmd/fake-codex")
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	// cmd/ is a nested module (cmd-doctest-harness). Build from that module
+	// so `go test ./...` in the main module can still compile fake-codex.
+	cmdDir := filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "cmd")
+	cmd := exec.Command("go", "build", "-buildvcs=false", "-o", bin, "./fake-codex")
+	cmd.Dir = cmdDir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build fake-codex: %v\n%s", err, string(out))
 	}

@@ -29,6 +29,23 @@ func TestCheckPort_InUse(t *testing.T) {
 	}
 }
 
+func TestListenInodeForPort(t *testing.T) {
+	const sample = `  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
+   0: 0100007F:A11F 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 12345 1 0000000000000000 100 0 0 10 0
+   1: 00000000:0016 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 99 1 0000000000000000 100 0 0 10 0
+`
+	inode, ok := listenInodeForPort(sample, 0xA11F)
+	if !ok || inode != "12345" {
+		t.Fatalf("listenInodeForPort(0xA11F) = %q, %v; want 12345, true", inode, ok)
+	}
+	if inode, ok := listenInodeForPort(sample, 22); !ok || inode != "99" {
+		t.Fatalf("listenInodeForPort(22) = %q, %v; want 99, true", inode, ok)
+	}
+	if _, ok := listenInodeForPort(sample, 80); ok {
+		t.Fatal("expected no inode for unused port 80")
+	}
+}
+
 func TestGetPidOnPort_OwnProcess(t *testing.T) {
 	ln, err := net.Listen("tcp", "localhost:0")
 	if err != nil {

@@ -2,9 +2,11 @@ package faketoolexec
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 )
@@ -13,8 +15,12 @@ type MockConfig = types.MockConfig
 
 type FileChange = types.FileChange
 
+const execTimeout = 5 * time.Second
+
 func ExecuteBash(command string, workDir string, env []string) (stdout string, stderr string, exitCode int, err error) {
-	cmd := exec.Command("bash", "-c", command)
+	ctx, cancel := context.WithTimeout(context.Background(), execTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "bash", "-c", command)
 	if workDir != "" {
 		cmd.Dir = workDir
 	}
