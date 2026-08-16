@@ -70,6 +70,7 @@ agent-run run --open ... "one word of France capital"
 
 ```go
 import (
+	"runtime"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -176,7 +177,7 @@ func ensureSessionBinaries(t *testing.T, d *session.Doctest, repoRoot string) (a
 			{llmMock, []string{"build", "-o", llmMock, "./agent/llm/llm-mock/llm-mock-run-grok"}},
 		}
 		for _, b := range builds {
-			cmd := exec.Command("go", b.args...)
+			cmd := exec.Command(runtime.GOROOT()+"/bin/go", b.args...)
 			cmd.Dir = repoRoot
 			if out, err := cmd.CombinedOutput(); err != nil {
 				return fmt.Errorf("go %v: %w\n%s", b.args, err, string(out))

@@ -146,6 +146,7 @@ package-internal test helpers / `TestExported_`). Prefer these stable exports.
 
 ```go
 import (
+	"runtime"
 	"bufio"
 	"encoding/json"
 	"fmt"
@@ -299,7 +300,7 @@ func loadExpectations(path string) ([]FixtureExpectation, error) {
 
 func runProbeExport(t *testing.T, repoRoot, fromDir, exportDir string) (string, error) {
 	t.Helper()
-	ctx := exec.Command("go", "run", "./script/debug/grok-writable-probe",
+	ctx := exec.Command(runtime.GOROOT()+"/bin/go", "run", "./script/debug/grok-writable-probe",
 		"-export-fixtures="+exportDir,
 		"-from="+fromDir,
 	)

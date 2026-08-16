@@ -11,6 +11,7 @@ Builds `agent-run` and `llm-mock-run-commandcode` into temp dir. Sets `AGENT_RUN
 
 ```go
 import (
+	"runtime"
 	"fmt"
 	"os"
 	"os/exec"
@@ -33,7 +34,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if err := os.MkdirAll(filepath.Dir(req.AgentRun), 0755); err != nil {
 		return fmt.Errorf("mkdir bin: %w", err)
 	}
-	build := exec.Command("go", "build", "-o", req.AgentRun, "./cmd/agent-run")
+	build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.AgentRun, "./cmd/agent-run")
 	build.Dir = req.RepoRoot
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build agent-run: %v\n%s", err, out)
@@ -41,7 +42,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 
 	if !req.SkipMockBuild {
 		req.MockBinary = filepath.Join(req.TempDir, "bin", "llm-mock-run-commandcode")
-		build2 := exec.Command("go", "build", "-o", req.MockBinary,
+		build2 := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.MockBinary,
 			"./agent/llm/llm-mock/llm-mock-run-commandcode")
 		build2.Dir = req.RepoRoot
 		if out2, err2 := build2.CombinedOutput(); err2 != nil {

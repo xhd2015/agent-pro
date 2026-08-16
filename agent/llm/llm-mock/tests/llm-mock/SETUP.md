@@ -43,6 +43,7 @@ HTTP client <- llm-mock (recorded requests, port announcement)
 
 ```go
 import (
+	"runtime"
     "bufio"
     "bytes"
     "context"
@@ -87,7 +88,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
         req.Method = "POST"
     }
 
-    build := exec.Command("go", "build", "-o", req.BinaryPath, "./agent/llm/llm-mock")
+    build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.BinaryPath, "./agent/llm/llm-mock")
     build.Dir = req.RepoRoot
     if out, err := build.CombinedOutput(); err != nil {
         return fmt.Errorf("build llm-mock: %w\n%s", err, string(out))

@@ -52,6 +52,7 @@ seed bound+exited meta (+ prepend_paths/env/config_home)
 
 ```go
 import (
+	"runtime"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -138,7 +139,7 @@ func buildOnce(t *testing.T, d *session.Doctest) (agentRun string, err error) {
 				return fmt.Errorf("ensure %s stub: %w", rel, err)
 			}
 		}
-		build := exec.Command("go", "build", "-o", agentRun, "./cmd/agent-run")
+		build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", agentRun, "./cmd/agent-run")
 		build.Dir = repoRoot
 		if out, err := build.CombinedOutput(); err != nil {
 			return fmt.Errorf("build agent-run: %w\n%s", err, string(out))

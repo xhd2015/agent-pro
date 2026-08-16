@@ -31,6 +31,7 @@ fixture session metadata + tty registry -> terminal resolver
 
 ```go
 import (
+	"runtime"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -67,7 +68,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if err := os.MkdirAll(filepath.Dir(req.AgentRun), 0755); err != nil {
 		return err
 	}
-	build := exec.Command("go", "build", "-o", req.AgentRun, "./cmd/agent-run")
+	build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.AgentRun, "./cmd/agent-run")
 	build.Dir = req.RepoRoot
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("build agent-run: %w\n%s", err, string(out))

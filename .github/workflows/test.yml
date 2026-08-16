@@ -14,6 +14,8 @@ jobs:
       GOFLAGS: -buildvcs=false
     steps:
       - uses: actions/checkout@v4
+      - name: Expose go on default PATH
+        run: ln -sf "$(go env GOROOT)/bin/go" /usr/bin/go
       - name: Go test cmd
         run: go -C cmd test -v ./...
       - name: Go test

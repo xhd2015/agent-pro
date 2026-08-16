@@ -32,6 +32,7 @@ fake ptywrap / stub-tty / web server / CLI / SSE / playwright probes
 
 ```go
 import (
+	"runtime"
 	"bufio"
 	"bytes"
 	"context"
@@ -124,7 +125,7 @@ func ensureSessionBinaries(t *testing.T, d *session.Doctest, repoRoot string) (a
 			{ttyWatch, []string{"build", "-o", ttyWatch, "github.com/xhd2015/tty-watch/cmd/tty-watch"}},
 		}
 		for _, b := range builds {
-			cmd := exec.Command("go", b.args...)
+			cmd := exec.Command(runtime.GOROOT()+"/bin/go", b.args...)
 			cmd.Dir = repoRoot
 			if out, err := cmd.CombinedOutput(); err != nil {
 				return fmt.Errorf("go %v: %w\n%s", b.args, err, string(out))
@@ -159,7 +160,7 @@ func buildLLMMockRunGrok(t *testing.T, req *Request) error {
 	if err := os.MkdirAll(req.GrokHome, 0755); err != nil {
 		return err
 	}
-	build := exec.Command("go", "build", "-o", req.LLMMockRunGrok, "./agent/llm/llm-mock/llm-mock-run-grok")
+	build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.LLMMockRunGrok, "./agent/llm/llm-mock/llm-mock-run-grok")
 	build.Dir = req.RepoRoot
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("build llm-mock-run-grok: %w\n%s", err, string(out))

@@ -27,6 +27,7 @@ nested sessions/<runner>/<id>/ -> flat sessions/<id>/ + .layout v2 + backup
 
 ```go
 import (
+	"runtime"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -52,7 +53,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if err := os.MkdirAll(filepath.Dir(req.Bin), 0o755); err != nil {
 		return fmt.Errorf("mkdir bin: %w", err)
 	}
-	build := exec.Command("go", "build", "-o", req.Bin, "./cmd/migrate-sessions")
+	build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.Bin, "./cmd/migrate-sessions")
 	build.Dir = req.RepoRoot
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("build migrate-sessions: %w\n%s", err, string(out))

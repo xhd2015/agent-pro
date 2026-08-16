@@ -41,6 +41,7 @@ integration <- events.jsonl turn_started model_id mock-model
 
 ```go
 import (
+	"runtime"
 	"bufio"
 	"encoding/json"
 	"fmt"
@@ -100,13 +101,13 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.BinaryPath = filepath.Join(tmp, "llm-mock")
 	req.ShortcutPath = filepath.Join(tmp, "llm-mock-run-grok")
 
-	buildMain := exec.Command("go", "build", "-o", req.BinaryPath, "./agent/llm/llm-mock")
+	buildMain := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.BinaryPath, "./agent/llm/llm-mock")
 	buildMain.Dir = req.RepoRoot
 	if out, err := buildMain.CombinedOutput(); err != nil {
 		return fmt.Errorf("build llm-mock: %w\n%s", err, string(out))
 	}
 
-	buildShortcut := exec.Command("go", "build", "-o", req.ShortcutPath, "./agent/llm/llm-mock/llm-mock-run-grok")
+	buildShortcut := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.ShortcutPath, "./agent/llm/llm-mock/llm-mock-run-grok")
 	buildShortcut.Dir = req.RepoRoot
 	if out, err := buildShortcut.CombinedOutput(); err != nil {
 		return fmt.Errorf("build llm-mock-run-grok: %w\n%s", err, string(out))

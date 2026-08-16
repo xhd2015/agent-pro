@@ -24,6 +24,7 @@ POST /api/agent-run/sessions {runner: grok-tty}
 
 ```go
 import (
+	"runtime"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -333,12 +334,12 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if err := os.MkdirAll(req.GrokHome, 0755); err != nil {
 		return err
 	}
-	build := exec.Command("go", "build", "-o", req.AgentRun, "./cmd/agent-run")
+	build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.AgentRun, "./cmd/agent-run")
 	build.Dir = req.RepoRoot
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("build agent-run: %w\n%s", err, string(out))
 	}
-	buildMock := exec.Command("go", "build", "-o", req.LLMMockRunGrok, "./agent/llm/llm-mock/llm-mock-run-grok")
+	buildMock := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.LLMMockRunGrok, "./agent/llm/llm-mock/llm-mock-run-grok")
 	buildMock.Dir = req.RepoRoot
 	if out, err := buildMock.CombinedOutput(); err != nil {
 		return fmt.Errorf("build llm-mock-run-grok: %w\n%s", err, string(out))

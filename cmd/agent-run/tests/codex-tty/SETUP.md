@@ -35,6 +35,7 @@ agent-run attach <id> -> registry lookup -> ptyclient WS attach
 
 ```go
 import (
+	"runtime"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -887,7 +888,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if err := os.MkdirAll(filepath.Dir(req.AgentRun), 0755); err != nil {
 		return fmt.Errorf("mkdir bin: %w", err)
 	}
-	build := exec.Command("go", "build", "-o", req.AgentRun, "./cmd/agent-run")
+	build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.AgentRun, "./cmd/agent-run")
 	build.Dir = req.RepoRoot
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("build agent-run: %w\n%s", err, string(out))
@@ -929,7 +930,7 @@ func ensureLLMMockCodex(t *testing.T, req *Request) {
 		if _, err := os.Stat(b.out); err == nil {
 			continue
 		}
-		cmd := exec.Command("go", "build", "-o", b.out, b.pkg)
+		cmd := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", b.out, b.pkg)
 		cmd.Dir = req.RepoRoot
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("build %s: %v\n%s", b.pkg, err, out)
