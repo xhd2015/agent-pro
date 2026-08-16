@@ -139,6 +139,9 @@ func TestSubmitAnswerAllAnsweredTransitionsOutOfClarification(t *testing.T) {
 		llmDoneCh:  doneCh,
 		width:      80,
 		logs:       []string{},
+		// Avoid defaultLLMStarter: it goroutines RunLLM into sessionDir and
+		// races t.TempDir cleanup ("directory not empty") in CI containers.
+		llmStarter: func(string, string, string, string, string, chan<- string, chan<- llmDoneMsg) {},
 	}
 	m.submitAnswer("A2")
 	if m.clarificationMode {
