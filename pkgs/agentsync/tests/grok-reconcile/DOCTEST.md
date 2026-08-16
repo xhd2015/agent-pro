@@ -135,7 +135,7 @@ func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	if err := os.MkdirAll(req.GrokHome, 0755); err != nil {
 		return nil, err
 	}
-	req.SessionDir = filepath.Join(req.AgentHome, "sessions", req.Runner, req.SessionID)
+	req.SessionDir = filepath.Join(req.AgentHome, "sessions", req.SessionID)
 
 	switch req.Mode {
 	case "flock-nb":

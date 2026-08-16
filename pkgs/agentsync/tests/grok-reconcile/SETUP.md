@@ -27,7 +27,7 @@ ReconcileOnce scans meta.json candidates
 ## Context
 
 - Lock file: `<sessionDir>/grok-sync.lock`.
-- Reconcile target: `sessions/grok-tty/<id>/meta.json` with `initial_prompt`.
+- Reconcile target: `sessions/<id>/meta.json` with `initial_prompt`.
 
 ```go
 import (
@@ -144,9 +144,12 @@ func writeFakeGrokSessionDir(grokHome, workspace, sessionUUID, prompt string, in
 	return updatesPath, nil
 }
 
-func writeSessionMeta(sessionDir, runner, sessionID, initialPrompt, runnerSessionID, status string) error {
+func writeSessionMeta(sessionDir, runner, sessionID, initialPrompt, runnerSessionID, status, workspace string) error {
 	if err := os.MkdirAll(sessionDir, 0755); err != nil {
 		return err
+	}
+	if strings.TrimSpace(workspace) == "" {
+		workspace = sessionDir
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	meta := map[string]any{
@@ -155,7 +158,7 @@ func writeSessionMeta(sessionDir, runner, sessionID, initialPrompt, runnerSessio
 		"initial_prompt":    initialPrompt,
 		"runner_session_id": runnerSessionID,
 		"status":            status,
-		"workspace":         sessionDir,
+		"workspace":         workspace,
 		"created_at":        now,
 		"updated_at":        now,
 	}
@@ -223,7 +226,7 @@ func seedFinishedEmptySession(t *testing.T, req *Request, status string) error {
 	}
 	req.GrokSessionID = grokID
 	req.GrokUpdatesPath = updatesPath
-	return writeSessionMeta(req.SessionDir, req.Runner, req.SessionID, prompt, "", status)
+	return writeSessionMeta(req.SessionDir, req.Runner, req.SessionID, prompt, "", status, req.Workspace)
 }
 
 func seedRunningSessionWithUpdates(t *testing.T, req *Request) error {
@@ -245,7 +248,7 @@ func seedRunningSessionWithUpdates(t *testing.T, req *Request) error {
 	}
 	req.GrokSessionID = grokID
 	req.GrokUpdatesPath = updatesPath
-	if err := writeSessionMeta(req.SessionDir, req.Runner, req.SessionID, prompt, grokID, "running"); err != nil {
+	if err := writeSessionMeta(req.SessionDir, req.Runner, req.SessionID, prompt, grokID, "running", req.Workspace); err != nil {
 		return err
 	}
 	return nil

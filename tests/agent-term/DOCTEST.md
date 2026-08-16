@@ -109,7 +109,7 @@ import (
 
 	"testing"
 
-	"github.com/xhd2015/agent-pro/cmd-doctest-harness/agent-term/termtest"
+	"github.com/xhd2015/agent-pro/tests/agent-term/termtest"
 	"github.com/xhd2015/doctest/session"
 )
 
