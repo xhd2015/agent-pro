@@ -504,7 +504,7 @@ func postFollowUpMessage(t *testing.T, req *Request, sessionID, message string) 
 	if err != nil {
 		t.Fatalf("marshal follow-up: %v", err)
 	}
-	path := fmt.Sprintf("%s/api/agent-run/sessions/%s/%s/messages", req.WebBaseURL, req.Runner, sessionID)
+	path := fmt.Sprintf("%s/api/agent-run/sessions/%s/messages", req.WebBaseURL, sessionID)
 	return doHTTP(t, http.MethodPost, path, req.WebToken, "application/json", string(payload))
 }
 
@@ -624,7 +624,7 @@ func seedFinishedSessionEmptyEvents(t *testing.T, req *Request) {
 
 func getSessionDetail(t *testing.T, req *Request) (int, string) {
 	t.Helper()
-	path := fmt.Sprintf("%s/api/agent-run/sessions/%s/%s", req.WebBaseURL, req.Runner, req.SessionID)
+	path := fmt.Sprintf("%s/api/agent-run/sessions/%s", req.WebBaseURL, req.SessionID)
 	return doHTTP(t, http.MethodGet, path, req.WebToken, "", "")
 }
 

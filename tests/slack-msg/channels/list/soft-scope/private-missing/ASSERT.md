@@ -46,10 +46,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	if strings.Contains(resp.Stdout, "old-stuff") || strings.Contains(resp.Stdout, "C0ARCHIVED1") {
 		t.Fatalf("archived channel must be excluded:\n%s", resp.Stdout)
 	}
-	assert.Output(t, resp.Stdout, `---
-version: 2
----
-C0ALE44K5J6  #general  public  member
+	assert.Output(t, resp.Stdout, `C0ALE44K5J6  #general  public  member
 C0OTHERCHAN  #random  public  -
 `)
 }

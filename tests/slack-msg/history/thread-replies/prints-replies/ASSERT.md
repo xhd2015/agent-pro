@@ -38,10 +38,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	if resp.Stderr != "" {
 		t.Fatalf("expected empty stderr, got:\n%s", resp.Stderr)
 	}
-	assert.Output(t, resp.Stdout, `---
-version: 2
----
-[1710001000.000100] U_PARENT: parent
+	assert.Output(t, resp.Stdout, `[1710001000.000100] U_PARENT: parent
 [1710001000.000200] U_R1: reply one
 [1710001000.000300] U_R2: reply two
 `)

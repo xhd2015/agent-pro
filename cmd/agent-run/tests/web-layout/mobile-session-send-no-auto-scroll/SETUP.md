@@ -47,7 +47,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 		return err
 	}
 
-	sessionPath := "/sessions/" + runner + "/" + sessionID
+	sessionPath := "/sessions/" + sessionID
 	body := `
 await page.goto('` + req.BaseURL + sessionPath + `', { waitUntil: 'domcontentloaded' });
 ` + waitForChatActive() + waitForMessageListOverflow() + scrollMessageListUpFromBottom(250) + assertMessageListDetached() +

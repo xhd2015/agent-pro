@@ -37,10 +37,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	if resp.Stderr != "" {
 		t.Fatalf("expected empty stderr, got:\n%s", resp.Stderr)
 	}
-	assert.Output(t, resp.Stdout, `---
-version: 2
----
-C0AGENTDBG1  #agent-pro-debug  private  -
+	assert.Output(t, resp.Stdout, `C0AGENTDBG1  #agent-pro-debug  private  -
 C0ALE44K5J6  #general  public  member
 `)
 }

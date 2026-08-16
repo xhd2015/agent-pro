@@ -355,11 +355,11 @@ func unusedLocalAddr(t *testing.T) string {
 }
 
 func terminalStatusPath(runner, sessionID string) string {
-	return "/api/agent-run/sessions/" + runner + "/" + sessionID + "/terminal"
+	return "/api/agent-run/sessions/" + sessionID + "/terminal"
 }
 
 func terminalWSPath(runner, sessionID string) string {
-	return "/api/agent-run/sessions/" + runner + "/" + sessionID + "/terminal/ws"
+	return "/api/agent-run/sessions/" + sessionID + "/terminal/ws"
 }
 
 func decodeJSONBody(t *testing.T, body string) map[string]any {
@@ -425,7 +425,7 @@ await page.reload({ waitUntil: 'domcontentloaded' });
 }
 
 func sessionBrowserScript(req *Request, body string) string {
-	path := req.WebBaseURL + "/sessions/" + req.Runner + "/" + req.SessionID
+	path := req.WebBaseURL + "/sessions/" + req.SessionID
 	return fmt.Sprintf(`
 await page.setViewportSize({ width: 430, height: 860 });
 await page.goto(%s, { waitUntil: 'domcontentloaded' });

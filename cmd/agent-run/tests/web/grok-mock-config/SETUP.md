@@ -202,9 +202,12 @@ func sessionStatus(detailJSON string) string {
 
 func waitForSessionFinished(t *testing.T, baseURL, bearer, runner, sessionID string, timeout time.Duration) string {
 	deadline := time.Now().Add(timeout)
-	url := fmt.Sprintf("%s/api/agent-run/sessions/%s/%s", baseURL, runner, sessionID)
+	url := fmt.Sprintf("%s/api/agent-run/sessions/%s", baseURL, sessionID)
 	for time.Now().Before(deadline) {
-		_, body := httpGet(t, url, bearer)
+		status, body := httpGet(t, url, bearer)
+		if status == http.StatusNotFound {
+			t.Fatalf("session detail 404 while waiting for finished: %s", body)
+		}
 		if sessionStatus(body) == "finished" {
 			return body
 		}
@@ -305,7 +308,7 @@ func runWebGrokMockProbe(t *testing.T, req *Request) (*Response, error) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	status, body := httpGet(t, fmt.Sprintf("%s/api/agent-run/sessions/%s/%s", req.WebBaseURL, req.SessionRunner, req.SessionID), req.WebToken)
+	status, body := httpGet(t, fmt.Sprintf("%s/api/agent-run/sessions/%s", req.WebBaseURL, req.SessionID), req.WebToken)
 	resp.HTTPStatus = status
 	resp.HTTPBody = body
 	return resp, nil

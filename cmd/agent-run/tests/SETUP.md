@@ -642,8 +642,8 @@ func filesOutsidePrefix(t *testing.T, root, prefix string) []string {
 
 func collectSSESessionEvents(t *testing.T, req *Request, runner, sessionID string, afterOffset int64, maxWait time.Duration) []map[string]any {
 	t.Helper()
-	url := fmt.Sprintf("%s/api/agent-run/sessions/%s/%s/events/stream?after=%d",
-		req.WebBaseURL, runner, sessionID, afterOffset)
+	url := fmt.Sprintf("%s/api/agent-run/sessions/%s/events/stream?after=%d",
+		req.WebBaseURL, sessionID, afterOffset)
 	ctx, cancel := context.WithTimeout(context.Background(), maxWait)
 	defer cancel()
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)

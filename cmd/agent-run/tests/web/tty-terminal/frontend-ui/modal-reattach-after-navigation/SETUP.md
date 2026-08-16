@@ -36,7 +36,7 @@ await page.getByRole('button', { name: /terminal/i }).click();
 await page.getByText(/reattach-terminal-state/).waitFor({ state: 'visible', timeout: 15000 });
 await page.getByRole('button', { name: /close|dismiss/i }).click();
 await page.goto(`+jsQuote(req.WebBaseURL)+`, { waitUntil: 'domcontentloaded' });
-await page.goto(`+jsQuote(req.WebBaseURL+"/sessions/"+req.Runner+"/"+req.SessionID)+`, { waitUntil: 'domcontentloaded' });
+await page.goto(`+jsQuote(req.WebBaseURL+"/sessions/"+req.SessionID)+`, { waitUntil: 'domcontentloaded' });
 await page.getByRole('button', { name: /terminal/i }).click();
 await page.getByText(/reattach-terminal-state/).waitFor({ state: 'visible', timeout: 15000 });
 `)

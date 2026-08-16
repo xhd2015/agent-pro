@@ -582,6 +582,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -854,7 +855,7 @@ func buildSlackMsg(t *testing.T, d *session.Doctest) (string, error) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 			defer cancel()
-			cmd := exec.CommandContext(ctx, "go", "build", "-o", bin, "./cmd/slack-msg")
+			cmd := exec.CommandContext(ctx, runtime.GOROOT()+"/bin/go", "build", "-o", bin, "./cmd/slack-msg")
 			cmd.Dir = repoRoot
 			var stderr bytes.Buffer
 			cmd.Stderr = &stderr

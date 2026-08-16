@@ -81,7 +81,7 @@ func postCreateSession(t *testing.T, req *Request, runner, prompt string) (strin
 
 func getSessionDetail(t *testing.T, req *Request, runner, sessionID string) (int, string) {
 	t.Helper()
-	url := fmt.Sprintf("%s/api/agent-run/sessions/%s/%s", req.WebBaseURL, runner, sessionID)
+	url := fmt.Sprintf("%s/api/agent-run/sessions/%s", req.WebBaseURL, sessionID)
 	return httpGet(t, url, req.WebToken)
 }
 
@@ -123,7 +123,10 @@ func waitForSessionStatus(t *testing.T, req *Request, runner, sessionID, wantSta
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		_, body := getSessionDetail(t, req, runner, sessionID)
+		status, body := getSessionDetail(t, req, runner, sessionID)
+		if status == http.StatusNotFound {
+			t.Fatalf("session detail 404 while waiting for %q: %s", wantStatus, body)
+		}
 		if sessionStatusFromDetail(body) == wantStatus {
 			return body
 		}

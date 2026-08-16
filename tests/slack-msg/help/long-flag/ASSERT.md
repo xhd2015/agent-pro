@@ -38,10 +38,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 		t.Fatalf("help missing --topic usage:\n%s", resp.Stdout)
 	}
 	// v2: escape balanced [...] so lines match literally as regex; leave () alone.
-	assert.Output(t, resp.Stdout, `---
-version: 2
----
-slack-msg: Slack messaging CLI.
+	assert.Output(t, resp.Stdout, `slack-msg: Slack messaging CLI.
 
 Usage:
   slack-msg <command> \[options\]

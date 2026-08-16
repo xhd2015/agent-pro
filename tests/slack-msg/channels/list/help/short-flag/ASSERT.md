@@ -42,10 +42,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	if resp.Stderr != "" {
 		t.Fatalf("expected empty stderr, got:\n%s", resp.Stderr)
 	}
-	assert.Output(t, resp.Stdout, `---
-version: 2
----
-slack-msg channels list: list workspace channels.
+	assert.Output(t, resp.Stdout, `slack-msg channels list: list workspace channels.
 
 Usage:
   slack-msg channels list [options]

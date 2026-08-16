@@ -339,7 +339,7 @@ func jsQuote(s string) string {
 }
 
 func sessionBrowserScript(req *Request, body string) string {
-	path := req.BaseURL + "/sessions/" + req.Runner + "/" + req.ChatSessionID
+	path := req.BaseURL + "/sessions/" + req.ChatSessionID
 	return fmt.Sprintf(`
 await page.setViewportSize({ width: 390, height: 844 });
 await page.goto(%s, { waitUntil: 'domcontentloaded' });

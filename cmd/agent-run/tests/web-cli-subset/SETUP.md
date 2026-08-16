@@ -414,8 +414,8 @@ func runSSE(t *testing.T, req *Request) (*Response, error) {
 
 func collectSSESessionEvents(t *testing.T, req *Request, runner, sessionID string, afterOffset int64, maxWait time.Duration) []map[string]any {
 	t.Helper()
-	rawURL := fmt.Sprintf("%s/api/agent-run/sessions/%s/%s/events/stream?after=%d",
-		req.WebBaseURL, runner, sessionID, afterOffset)
+	rawURL := fmt.Sprintf("%s/api/agent-run/sessions/%s/events/stream?after=%d",
+		req.WebBaseURL, sessionID, afterOffset)
 	ctx, cancel := context.WithTimeout(context.Background(), maxWait)
 	defer cancel()
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
@@ -651,11 +651,11 @@ func writeJSONFile(t *testing.T, path string, value any) {
 }
 
 func terminalStatusPath(runner, sessionID string) string {
-	return "/api/agent-run/sessions/" + runner + "/" + sessionID + "/terminal"
+	return "/api/agent-run/sessions/" + sessionID + "/terminal"
 }
 
 func terminalWSPath(runner, sessionID string) string {
-	return "/api/agent-run/sessions/" + runner + "/" + sessionID + "/terminal/ws"
+	return "/api/agent-run/sessions/" + sessionID + "/terminal/ws"
 }
 
 func postCreateSession(t *testing.T, req *Request, runner, prompt string) (string, int, string) {
@@ -686,7 +686,7 @@ func postCreateSession(t *testing.T, req *Request, runner, prompt string) (strin
 
 func postFollowUpMessage(t *testing.T, req *Request, runner, sessionID, message string) (int, string) {
 	t.Helper()
-	rawURL := fmt.Sprintf("%s/api/agent-run/sessions/%s/%s/messages", req.WebBaseURL, runner, sessionID)
+	rawURL := fmt.Sprintf("%s/api/agent-run/sessions/%s/messages", req.WebBaseURL, sessionID)
 	payload, err := json.Marshal(map[string]string{"message": message})
 	if err != nil {
 		t.Fatalf("marshal follow-up: %v", err)
@@ -696,7 +696,7 @@ func postFollowUpMessage(t *testing.T, req *Request, runner, sessionID, message 
 
 func getSessionDetail(t *testing.T, req *Request, runner, sessionID string) (int, string) {
 	t.Helper()
-	rawURL := fmt.Sprintf("%s/api/agent-run/sessions/%s/%s", req.WebBaseURL, runner, sessionID)
+	rawURL := fmt.Sprintf("%s/api/agent-run/sessions/%s", req.WebBaseURL, sessionID)
 	return doHTTP(t, http.MethodGet, rawURL, req.WebToken, "", "")
 }
 
@@ -730,7 +730,10 @@ func waitForSessionStatus(t *testing.T, req *Request, runner, sessionID, wantSta
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		_, body := getSessionDetail(t, req, runner, sessionID)
+		status, body := getSessionDetail(t, req, runner, sessionID)
+		if status == http.StatusNotFound {
+			t.Fatalf("session detail 404 while waiting for %q: %s", wantStatus, body)
+		}
 		if sessionStatusFromDetail(body) == wantStatus {
 			return body
 		}
@@ -745,7 +748,10 @@ func waitForTerminalSessionID(t *testing.T, req *Request, runner, sessionID stri
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		_, body := getSessionDetail(t, req, runner, sessionID)
+		status, body := getSessionDetail(t, req, runner, sessionID)
+		if status == http.StatusNotFound {
+			t.Fatalf("session detail 404 while waiting for terminal_session_id: %s", body)
+		}
 		if id := terminalSessionIDFromDetail(body); id != "" {
 			return id
 		}
@@ -1113,7 +1119,7 @@ await page.reload({ waitUntil: 'domcontentloaded' });
 }
 
 func sessionBrowserScript(req *Request, body string) string {
-	path := req.WebBaseURL + "/sessions/" + req.Runner + "/" + req.SessionID
+	path := req.WebBaseURL + "/sessions/" + req.SessionID
 	return fmt.Sprintf(`
 await page.setViewportSize({ width: 430, height: 860 });
 await page.goto(%s, { waitUntil: 'domcontentloaded' });

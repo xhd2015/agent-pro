@@ -22,7 +22,7 @@ agent-term serve -> daemon TCP -> list/run/attach/web subcommands
 import "testing"
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
-	req.AgentTermBin = buildAgentTerm(t)
+	req.AgentTermBin = buildAgentTerm(t, d)
 	return nil
 }
 ```

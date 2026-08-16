@@ -166,9 +166,12 @@ func sessionStatus(detailJSON string) string {
 
 func waitForSessionFinished(t *testing.T, baseURL, bearer, runner, sessionID string, timeout time.Duration) string {
 	deadline := time.Now().Add(timeout)
-	url := fmt.Sprintf("%s/api/agent-run/sessions/%s/%s", baseURL, runner, sessionID)
+	url := fmt.Sprintf("%s/api/agent-run/sessions/%s", baseURL, sessionID)
 	for time.Now().Before(deadline) {
-		_, body := httpGet(t, url, bearer)
+		status, body := httpGet(t, url, bearer)
+		if status == http.StatusNotFound {
+			t.Fatalf("session detail 404 while waiting for finished: %s", body)
+		}
 		if sessionStatus(body) == "finished" {
 			return body
 		}
@@ -222,7 +225,7 @@ func runHarnessSmokeProbe(t *testing.T, req *Request) (*Response, error) {
 		return resp, fmt.Errorf("web session not initialized")
 	}
 	body := waitForSessionFinished(t, req.WebBaseURL, req.WebToken, req.SessionRunner, req.SessionID, 25*time.Second)
-	status, _ := httpGet(t, fmt.Sprintf("%s/api/agent-run/sessions/%s/%s", req.WebBaseURL, req.SessionRunner, req.SessionID), req.WebToken)
+	status, _ := httpGet(t, fmt.Sprintf("%s/api/agent-run/sessions/%s", req.WebBaseURL, req.SessionID), req.WebToken)
 	resp.HTTPStatus = status
 	resp.HTTPBody = body
 	return resp, nil

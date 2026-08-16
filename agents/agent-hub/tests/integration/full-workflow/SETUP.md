@@ -26,7 +26,7 @@ import (
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     if _, err := exec.LookPath("bun"); err != nil {
-        t.Fatalf("full-workflow test requires bun: %v", err)
+        t.Skipf("full-workflow test requires bun: %v", err)
     }
 
     req.Env = append(req.Env,

@@ -46,10 +46,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	if strings.Contains(resp.Stdout, slackTestAppToken) {
 		t.Fatalf("stdout must not contain raw app token %q:\n%s", slackTestAppToken, resp.Stdout)
 	}
-	assert.Output(t, resp.Stdout, `---
-version: 2
----
-Using config from: (none)
+	assert.Output(t, resp.Stdout, `Using config from: (none)
 kind: app
 ok: true
 token: xapp-...oken

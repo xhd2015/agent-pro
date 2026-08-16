@@ -31,10 +31,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 			t.Fatalf("session history help missing %q:\n%s", want, resp.Stdout)
 		}
 	}
-	assert.Output(t, resp.Stdout, `---
-version: 2
----
-slack-msg session history: print local session message history.
+	assert.Output(t, resp.Stdout, `slack-msg session history: print local session message history.
 
 Usage:
   slack-msg session history [options]

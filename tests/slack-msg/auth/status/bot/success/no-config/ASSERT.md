@@ -48,10 +48,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	if strings.Contains(resp.Stdout, slackTestToken) {
 		t.Fatalf("stdout must not contain raw bot token %q:\n%s", slackTestToken, resp.Stdout)
 	}
-	assert.Output(t, resp.Stdout, `---
-version: 2
----
-Using config from: (none)
+	assert.Output(t, resp.Stdout, `Using config from: (none)
 kind: bot
 ok: true
 team: SlackTest Team (T024BE7LD)

@@ -33,7 +33,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 
 func postSessionMessage(t *testing.T, req *Request, runner, sessionID, text string) {
 	t.Helper()
-	url := req.WebBaseURL + "/api/agent-run/sessions/" + runner + "/" + sessionID + "/messages"
+	url := req.WebBaseURL + "/api/agent-run/sessions/" + sessionID + "/messages"
 	payload, err := json.Marshal(map[string]string{"text": text})
 	if err != nil {
 		t.Fatalf("marshal message: %v", err)

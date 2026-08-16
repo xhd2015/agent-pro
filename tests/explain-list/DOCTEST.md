@@ -206,6 +206,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -427,7 +428,7 @@ func buildExplainOnce(t *testing.T, d *session.Doctest) (string, error) {
 		cmdDir := filepath.Join(repoRoot, "cmd")
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "go", "build", "-o", bin, "./explain")
+		cmd := exec.CommandContext(ctx, runtime.GOROOT()+"/bin/go", "build", "-o", bin, "./explain")
 		cmd.Dir = cmdDir
 		var be bytes.Buffer
 		cmd.Stderr = &be

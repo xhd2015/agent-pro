@@ -50,7 +50,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 
 	escapedWS := strings.ReplaceAll(workspacePath, `\`, `\\`)
 	escapedWS = strings.ReplaceAll(escapedWS, `'`, `\'`)
-	sessionPath := "/sessions/" + runner + "/" + sessionID
+	sessionPath := "/sessions/" + sessionID
 	body := seedTokenInPage(req.Token) + `
 await page.goto('` + req.BaseURL + sessionPath + `', { waitUntil: 'networkidle' });
 const workspace = page.locator('[data-testid="workspace"]');

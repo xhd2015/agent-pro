@@ -380,7 +380,7 @@ func sessionStatusFromDetail(detailJSON string) string {
 
 func getSessionDetail(t *testing.T, req *Request, runner, sessionID string) (int, string) {
 	t.Helper()
-	rawURL := fmt.Sprintf("%s/api/agent-run/sessions/%s/%s", req.WebBaseURL, runner, sessionID)
+	rawURL := fmt.Sprintf("%s/api/agent-run/sessions/%s", req.WebBaseURL, sessionID)
 	return doHTTP(t, http.MethodGet, rawURL, req.WebToken, "", "")
 }
 
@@ -388,7 +388,10 @@ func waitForSessionStatus(t *testing.T, req *Request, runner, sessionID, wantSta
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		_, body := getSessionDetail(t, req, runner, sessionID)
+		status, body := getSessionDetail(t, req, runner, sessionID)
+		if status == http.StatusNotFound {
+			t.Fatalf("session detail 404 while waiting for %q: %s", wantStatus, body)
+		}
 		if sessionStatusFromDetail(body) == wantStatus {
 			return body
 		}
@@ -407,7 +410,10 @@ func waitForSessionComplete(t *testing.T, req *Request, runner, sessionID string
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		_, body := getSessionDetail(t, req, runner, sessionID)
+		status, body := getSessionDetail(t, req, runner, sessionID)
+		if status == http.StatusNotFound {
+			t.Fatalf("session detail 404 while waiting for complete: %s", body)
+		}
 		if sessionStatusTerminal(sessionStatusFromDetail(body)) {
 			return body
 		}
@@ -508,8 +514,8 @@ func sseHasEventType(events []map[string]any, wantType string) bool {
 
 func collectSSESessionEvents(t *testing.T, req *Request, runner, sessionID string, afterOffset int64, maxWait time.Duration) []map[string]any {
 	t.Helper()
-	rawURL := fmt.Sprintf("%s/api/agent-run/sessions/%s/%s/events/stream?after=%d",
-		req.WebBaseURL, runner, sessionID, afterOffset)
+	rawURL := fmt.Sprintf("%s/api/agent-run/sessions/%s/events/stream?after=%d",
+		req.WebBaseURL, sessionID, afterOffset)
 	ctx, cancel := context.WithTimeout(context.Background(), maxWait)
 	defer cancel()
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
@@ -630,7 +636,7 @@ func jsQuote(s string) string {
 }
 
 func sessionBrowserScript(req *Request, body string) string {
-	path := req.WebBaseURL + "/sessions/" + req.Runner + "/" + req.SessionID
+	path := req.WebBaseURL + "/sessions/" + req.SessionID
 	return fmt.Sprintf(`
 await page.setViewportSize({ width: 430, height: 860 });
 await page.goto(%s, { waitUntil: 'domcontentloaded' });

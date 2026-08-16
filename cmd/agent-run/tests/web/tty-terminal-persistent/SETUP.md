@@ -431,11 +431,11 @@ func unusedLocalAddr(t *testing.T) string {
 }
 
 func terminalStatusPath(runner, sessionID string) string {
-	return "/api/agent-run/sessions/" + runner + "/" + sessionID + "/terminal"
+	return "/api/agent-run/sessions/" + sessionID + "/terminal"
 }
 
 func terminalWSPath(runner, sessionID string) string {
-	return "/api/agent-run/sessions/" + runner + "/" + sessionID + "/terminal/ws"
+	return "/api/agent-run/sessions/" + sessionID + "/terminal/ws"
 }
 
 func decodeJSONBody(t *testing.T, body string) map[string]any {
@@ -498,7 +498,7 @@ func runWebSocketTwice(t *testing.T, req *Request) (*Response, error) {
 	if errText != "" {
 		return &Response{WSOutput: first, WSError: errText}, nil
 	}
-	_, _ = doHTTP(t, "GET", req.WebBaseURL+"/api/agent-run/sessions/"+req.Runner+"/"+req.ChatSessionID, req.WebToken, "", "")
+	_, _ = doHTTP(t, "GET", req.WebBaseURL+"/api/agent-run/sessions/"+req.ChatSessionID, req.WebToken, "", "")
 	second, errText := readTerminalWSOnce(t, req)
 	count := 0
 	if req.PTYConnectionCount != nil {
@@ -537,9 +537,9 @@ func runFollowUpReuseProbe(t *testing.T, req *Request) (*Response, error) {
 	firstStatus, firstBody := doHTTP(t, "GET", req.WebBaseURL+statusPath, req.WebToken, "", "")
 	req.RegistryIDsBefore = registryIDs(t, req)
 	payload := `{"text":` + jsQuote(req.FollowUpPrompt) + `}`
-	followStatus, followBody := doHTTP(t, "POST", req.WebBaseURL+"/api/agent-run/sessions/"+req.Runner+"/"+req.ChatSessionID+"/messages", req.WebToken, "application/json", payload)
+	followStatus, followBody := doHTTP(t, "POST", req.WebBaseURL+"/api/agent-run/sessions/"+req.ChatSessionID+"/messages", req.WebToken, "application/json", payload)
 	time.Sleep(300 * time.Millisecond)
-	sessionStatus, sessionBody := doHTTP(t, "GET", req.WebBaseURL+"/api/agent-run/sessions/"+req.Runner+"/"+req.ChatSessionID, req.WebToken, "", "")
+	sessionStatus, sessionBody := doHTTP(t, "GET", req.WebBaseURL+"/api/agent-run/sessions/"+req.ChatSessionID, req.WebToken, "", "")
 	secondStatus, secondBody := doHTTP(t, "GET", req.WebBaseURL+statusPath, req.WebToken, "", "")
 	return &Response{
 		FirstHTTPStatus:  firstStatus,
@@ -602,7 +602,7 @@ func jsQuote(s string) string {
 }
 
 func sessionBrowserScript(req *Request, body string) string {
-	path := req.WebBaseURL + "/sessions/" + req.Runner + "/" + req.ChatSessionID
+	path := req.WebBaseURL + "/sessions/" + req.ChatSessionID
 	return fmt.Sprintf(`
 await page.setViewportSize({ width: 430, height: 860 });
 await page.goto(%s, { waitUntil: 'domcontentloaded' });
@@ -658,7 +658,7 @@ func waitForCreatedTTYTerminalID(t *testing.T, req *Request, timeout time.Durati
 	deadline := time.Now().Add(timeout)
 	var last string
 	for time.Now().Before(deadline) {
-		status, body := doHTTP(t, "GET", req.WebBaseURL+"/api/agent-run/sessions/"+req.Runner+"/"+req.ChatSessionID, req.WebToken, "", "")
+		status, body := doHTTP(t, "GET", req.WebBaseURL+"/api/agent-run/sessions/"+req.ChatSessionID, req.WebToken, "", "")
 		last = body
 		if status == http.StatusOK {
 			var parsed struct {
@@ -681,7 +681,7 @@ func waitForCreatedTTYSessionFinished(t *testing.T, req *Request) {
 	deadline := time.Now().Add(20 * time.Second)
 	var last string
 	for time.Now().Before(deadline) {
-		status, body := doHTTP(t, "GET", req.WebBaseURL+"/api/agent-run/sessions/"+req.Runner+"/"+req.ChatSessionID, req.WebToken, "", "")
+		status, body := doHTTP(t, "GET", req.WebBaseURL+"/api/agent-run/sessions/"+req.ChatSessionID, req.WebToken, "", "")
 		last = body
 		if status == http.StatusOK {
 			var parsed struct {

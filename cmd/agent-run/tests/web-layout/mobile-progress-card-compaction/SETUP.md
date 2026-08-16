@@ -44,7 +44,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 		return err
 	}
 
-	sessionPath := "/sessions/" + runner + "/" + sessionID
+	sessionPath := "/sessions/" + sessionID
 	body := seedTokenInPage(req.Token) + `
 await page.goto('` + req.BaseURL + sessionPath + `', { waitUntil: 'networkidle' });
 const progress = page.locator('[data-testid="progress-card"]');

@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -98,16 +99,18 @@ var (
 )
 
 // BuildAgentTerm builds the agent-term binary for doctest harnesses.
-func BuildAgentTerm(t *testing.T) string {
+// start is typically d.DOCTEST_ROOT so the walk can find the repo-root go.mod
+// even when the generated test's cwd is a temp directory.
+func BuildAgentTerm(t *testing.T, start string) string {
 	t.Helper()
 	cachedAgentTermBinOnce.Do(func() {
-		root, err := findModuleRoot()
+		root, err := findModuleRoot(start)
 		if err != nil {
 			cachedAgentTermBinErr = err
 			return
 		}
 		out := filepath.Join(os.TempDir(), "agent-term-doctest-shared")
-		cmd := exec.Command("go", "build", "-o", out, "./cmd/agent-term")
+		cmd := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", out, "./cmd/agent-term")
 		cmd.Dir = root
 		if combined, err := cmd.CombinedOutput(); err != nil {
 			cachedAgentTermBinErr = fmt.Errorf("build agent-term: %v\n%s", err, combined)
@@ -632,35 +635,35 @@ func trimDaemonLog(stderr string) string {
 	return strings.TrimRight(stderr, "\n")
 }
 
-func findModuleRoot() (string, error) {
+func findModuleRoot(start string) (string, error) {
+	candidates := make([]string, 0, 3)
+	if start != "" {
+		candidates = append(candidates, start)
+	}
 	if root := os.Getenv("DOCTEST_ROOT"); root != "" {
-		for dir := root; ; dir = filepath.Dir(dir) {
-			if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-				if _, err := os.Stat(filepath.Join(dir, "cmd/agent-term")); err == nil {
-					return dir, nil
+		candidates = append(candidates, root)
+	}
+	if wd, err := os.Getwd(); err == nil {
+		candidates = append(candidates, wd)
+	}
+	seen := map[string]bool{}
+	for _, startDir := range candidates {
+		for dir := startDir; ; dir = filepath.Dir(dir) {
+			if !seen[dir] {
+				seen[dir] = true
+				if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+					if _, err := os.Stat(filepath.Join(dir, "cmd/agent-term")); err == nil {
+						return dir, nil
+					}
 				}
 			}
-			if filepath.Dir(dir) == dir {
+			parent := filepath.Dir(dir)
+			if parent == dir {
 				break
 			}
 		}
 	}
-	dir, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			if _, err := os.Stat(filepath.Join(dir, "cmd/agent-term")); err == nil {
-				return dir, nil
-			}
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", fmt.Errorf("go.mod not found")
-		}
-		dir = parent
-	}
+	return "", fmt.Errorf("go.mod not found")
 }
 
 // PickFreePort finds an available TCP port near base.

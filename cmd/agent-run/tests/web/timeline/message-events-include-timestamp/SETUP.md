@@ -37,7 +37,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.SessionID = sessionID
 	req.HTTPMethod = "GET"
 	req.HTTPAuth = req.WebToken
-	req.HTTPPath = "/api/agent-run/sessions/" + req.SessionRunner + "/" + sessionID
+	req.HTTPPath = "/api/agent-run/sessions/" + sessionID
 	return nil
 }
 ```

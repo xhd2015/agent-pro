@@ -131,6 +131,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -327,7 +328,7 @@ func buildAgentProOnce(t *testing.T, sessionID, repoRoot string) (string, error)
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "go", "build", "-o", binPath, "./cmd/agent-pro")
+		cmd := exec.CommandContext(ctx, runtime.GOROOT()+"/bin/go", "build", "-o", binPath, "./cmd/agent-pro")
 		cmd.Dir = repoRoot
 		var be bytes.Buffer
 		cmd.Stderr = &be
