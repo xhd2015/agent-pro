@@ -98,7 +98,7 @@ func runAgentInteractiveOpen(prompt, sessionID string, opts agentOptions) error 
 // agent-run (or SLACK_LISTEN_AGENT_RUN) with --auto-send-or-resume --open
 // and no --new-terminal (library BuildFollowUpCommand).
 func openInteractiveInNewTerminal(o agentrunapi.Opts, driverBinary string) error {
-	return agentrunapi.OpenInNewTerminal(agentrunapi.OpenInNewTerminalOpts{
+	opts := agentrunapi.OpenInNewTerminalOpts{
 		WorkspaceDir: o.WorkspaceDir,
 		FollowUpOpts: agentrunapi.FollowUpOpts{
 			// DriverBinary empty → "agent-run" (compat fallback).
@@ -113,7 +113,23 @@ func openInteractiveInNewTerminal(o agentrunapi.Opts, driverBinary string) error
 			Detach:                        o.Detach,
 			Env:                           o.Env,
 		},
-	})
+	}
+	// Tests set SLACK_LISTEN_AGENT_RUN to a mock script. Exec that follow-up
+	// in-process: iTerm ForceNew is unavailable in CI / headless runs.
+	if strings.TrimSpace(os.Getenv(envAgentRun)) != "" {
+		opts.OpenTerminal = execFollowUpInProcess
+	}
+	return agentrunapi.OpenInNewTerminal(opts)
+}
+
+func execFollowUpInProcess(dir, followUp string) error {
+	cmd := exec.Command("sh", "-c", followUp)
+	if strings.TrimSpace(dir) != "" {
+		cmd.Dir = dir
+	}
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 func makeTTYStatusFn(driverBinary, sessionID string) func() (string, error) {
