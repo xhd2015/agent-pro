@@ -4,7 +4,7 @@
 slack-msg auth: inspect bot or app token status.
 
 Usage:
-  slack-msg auth <command> [options]
+  slack-msg auth \<command> [options]
 
 Commands:
   status  Show bot or app token status
@@ -43,7 +43,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	assert.Output(t, resp.Stdout, `slack-msg auth: inspect bot or app token status.
 
 Usage:
-  slack-msg auth <command> [options]
+  slack-msg auth \<command> [options]
 
 Commands:
   status  Show bot or app token status

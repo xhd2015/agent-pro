@@ -4,7 +4,7 @@
 slack-msg session: session-bound management, reply and history.
 
 Usage:
-  slack-msg session <command> \[options\]
+  slack-msg session \<command> \[options\]
 
 Commands:
   list     List sessions from the local map
@@ -53,7 +53,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	assert.Output(t, resp.Stdout, `slack-msg session: session-bound management, reply and history.
 
 Usage:
-  slack-msg session <command> \[options\]
+  slack-msg session \<command> \[options\]
 
 Commands:
   list     List sessions from the local map

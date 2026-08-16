@@ -28,7 +28,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	assert.Output(t, resp.Stdout, `slack-msg channels: list or search workspace channels.
 
 Usage:
-  slack-msg channels <command> [options]
+  slack-msg channels \<command> [options]
 
 Commands:
   list    List visible channels

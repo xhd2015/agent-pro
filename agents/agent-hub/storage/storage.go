@@ -21,6 +21,11 @@ func New(home string) *Store {
 	return &Store{Home: home}
 }
 
+func (s *Store) cursorPath(consumerID string) string {
+	safe := strings.NewReplacer("/", "__", string(os.PathSeparator), "__").Replace(consumerID)
+	return filepath.Join(s.Home, "consumers", safe+".cursor.json")
+}
+
 func (s *Store) Append(event model.NormalizedEvent, receivedAt time.Time) (model.Envelope, error) {
 	if receivedAt.IsZero() {
 		receivedAt = time.Now().UTC()
@@ -169,8 +174,8 @@ func (s *Store) SaveCursor(consumerID string, cursor model.Cursor) error {
 	if err := cursor.Validate(); err != nil {
 		return err
 	}
-	dir := filepath.Join(s.Home, "consumers")
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	path := s.cursorPath(consumerID)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(struct {
@@ -181,11 +186,11 @@ func (s *Store) SaveCursor(consumerID string, cursor model.Cursor) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, consumerID+".cursor.json"), data, 0644)
+	return os.WriteFile(path, data, 0644)
 }
 
 func (s *Store) LoadCursor(consumerID string) (model.Cursor, error) {
-	data, err := os.ReadFile(filepath.Join(s.Home, "consumers", consumerID+".cursor.json"))
+	data, err := os.ReadFile(s.cursorPath(consumerID))
 	if err != nil {
 		return model.Cursor{}, err
 	}

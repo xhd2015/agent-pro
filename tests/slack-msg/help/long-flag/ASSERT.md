@@ -41,7 +41,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	assert.Output(t, resp.Stdout, `slack-msg: Slack messaging CLI.
 
 Usage:
-  slack-msg <command> \[options\]
+  slack-msg \<command> \[options\]
   slack-msg --help \[--topic TOPIC\]
 
 Commands:

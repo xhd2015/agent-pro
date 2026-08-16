@@ -92,20 +92,11 @@ func TestResolveGrokHomeFromEnvGrokHome(t *testing.T) {
 	}
 }
 
-func TestRunGrokHookSkipsMockServer(t *testing.T) {
-	home := filepath.Join(t.TempDir(), "hook-home")
-	t.Setenv("GROK_HOME", home)
-	t.Setenv("LLM_MOCK_RUN_GROK_COMMAND", `sh -c 'echo hooked > "$GROK_HOME/hook.txt"; exit 0'`)
-
-	if err := RunGrok(nil, RunGrokOptions{}); err != nil {
-		t.Fatal(err)
-	}
-	data, err := os.ReadFile(filepath.Join(home, "hook.txt"))
-	if err != nil {
-		t.Fatalf("hook artifact: %v", err)
-	}
-	if string(data) != "hooked\n" {
-		t.Fatalf("hook artifact = %q", string(data))
+func TestRunGrokValidatesLogHTTPBeforeHook(t *testing.T) {
+	t.Setenv("LLM_MOCK_RUN_GROK_COMMAND", `sh -c 'echo GROK_RAN; exit 0'`)
+	err := RunGrok(nil, RunGrokOptions{LogHTTPPath: filepath.Join(t.TempDir(), "http.log")})
+	if err == nil || !strings.Contains(err.Error(), ".jsonl") {
+		t.Fatalf("want --log-http jsonl validation error, got %v", err)
 	}
 }
 

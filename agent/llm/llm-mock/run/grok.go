@@ -29,10 +29,6 @@ type RunGrokOptions struct {
 // RunGrok starts the mock server in the background, configures an isolated GROK_HOME,
 // runs grok in the foreground, and tears down the mock when grok exits.
 func RunGrok(grokArgs []string, opts RunGrokOptions) error {
-	if hook := strings.TrimSpace(os.Getenv("LLM_MOCK_RUN_GROK_COMMAND")); hook != "" {
-		return runGrokHookCommand(hook, opts)
-	}
-
 	if opts.LogEventsPath != "" && !strings.HasSuffix(opts.LogEventsPath, ".jsonl") {
 		return fmt.Errorf("--log-events path must end with .jsonl")
 	}
@@ -160,42 +156,6 @@ func RunGrok(grokArgs []string, opts RunGrokOptions) error {
 		}
 		return fmt.Errorf("run grok: %w", runErr)
 	}
-	return nil
-}
-
-func runGrokHookCommand(hook string, opts RunGrokOptions) error {
-	tmpDir, err := os.MkdirTemp("", "llm-mock-run-grok-*")
-	if err != nil {
-		return fmt.Errorf("create temp dir: %w", err)
-	}
-	grokHome, _, err := resolveGrokHome(tmpDir, opts.AgentRunnerConfigHome)
-	if err != nil {
-		return err
-	}
-	grokEnv := append(os.Environ(), "GROK_HOME="+grokHome)
-	fmt.Fprintf(os.Stderr, "GROK_HOME=%s\n", grokHome)
-
-	grokCmd := exec.Command("sh", "-c", hook)
-	grokCmd.Env = grokEnv
-	workDir, err := workDirForSessionEncoding(".")
-	if err != nil {
-		return err
-	}
-	grokCmd.Dir = workDir
-	grokCmd.Stdin = os.Stdin
-	grokCmd.Stdout = os.Stdout
-	grokCmd.Stderr = os.Stderr
-
-	runGrokDebugf("starting grok hook workDir=%q grokHome=%q", workDir, grokHome)
-	runErr := grokCmd.Run()
-	if runErr != nil {
-		runGrokDebugf("grok hook exited with error: %v", runErr)
-		if exitErr, ok := runErr.(*exec.ExitError); ok {
-			os.Exit(exitErr.ExitCode())
-		}
-		return fmt.Errorf("run grok hook: %w", runErr)
-	}
-	runGrokDebugf("grok hook exited ok")
 	return nil
 }
 
