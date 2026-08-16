@@ -10,15 +10,13 @@ jobs:
     container:
       # Match go.work / go.mod (GOTOOLCHAIN=local in official images rejects lower runtimes).
       image: golang:1.25.10
+    env:
+      GOFLAGS: -buildvcs=false
     steps:
       - uses: actions/checkout@v4
       - name: Go test cmd
-        env:
-          GOFLAGS: -buildvcs=false
         run: go -C cmd test -v ./...
       - name: Go test
-        env:
-          GOFLAGS: -buildvcs=false
         run: go test -v ./...
 
       - name: Install doctest
