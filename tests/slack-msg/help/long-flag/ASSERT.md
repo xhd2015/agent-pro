@@ -37,12 +37,12 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	if !strings.Contains(resp.Stdout, "--topic") {
 		t.Fatalf("help missing --topic usage:\n%s", resp.Stdout)
 	}
-	// v2: escape balanced [...] so lines match literally as regex; leave () alone.
+	// v1: escape <command> as a literal tag; [options] is plain text.
 	assert.Output(t, resp.Stdout, `slack-msg: Slack messaging CLI.
 
 Usage:
-  slack-msg \<command> \[options\]
-  slack-msg --help \[--topic TOPIC\]
+  slack-msg \<command> [options]
+  slack-msg --help [--topic TOPIC]
 
 Commands:
   send      Post a message via Slack Web API

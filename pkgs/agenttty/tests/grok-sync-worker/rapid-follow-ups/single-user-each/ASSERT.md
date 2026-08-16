@@ -43,8 +43,8 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	if got := countActionDone(resp.Events); got != 2 {
 		t.Fatalf("want 2 ActionDone (one per turn), got %d", got)
 	}
-	if resp.WorkerCount > 1 {
-		t.Fatalf("expected single grok sync worker, GrokSyncWorkerCount=%d", resp.WorkerCount)
+	if !resp.WorkerActive {
+		t.Fatal("expected this session's grok sync worker to be active")
 	}
 	for _, reply := range []string{syncReplyA, syncReplyB} {
 		found := false

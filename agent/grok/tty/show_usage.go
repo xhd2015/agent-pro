@@ -116,7 +116,7 @@ func FetchUsageWithOptions(ctx context.Context, opts Options) (*UsageInfo, error
 		select {
 		case <-ctx.Done():
 			if lastErr != nil {
-				return nil, lastErr
+				return nil, fmt.Errorf("timeout waiting for usage output: %w", lastErr)
 			}
 			return nil, timeoutErr(ctx)
 		default:

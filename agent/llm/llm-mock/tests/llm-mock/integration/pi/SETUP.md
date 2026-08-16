@@ -14,14 +14,18 @@ pi -> mock -> Paris
 
 ```go
 import (
+    "fmt"
     "os"
+    "os/exec"
     "path/filepath"
     "testing"
 	"github.com/xhd2015/doctest/session"
-	"fmt"
 )
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+    if _, err := exec.LookPath("pi"); err != nil {
+        t.Skipf("pi not on PATH: %v", err)
+    }
     // Create temp config directory for pi
     configDir := t.TempDir()
 

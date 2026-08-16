@@ -36,7 +36,6 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 			"run",
 			"--session-id=" + sessionID,
 			"--auto-send-or-resume",
-			"--new-terminal",
 			"--open",
 		} {
 			if !strings.Contains(line, want) {

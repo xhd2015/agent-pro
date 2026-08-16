@@ -100,6 +100,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -160,7 +161,7 @@ func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 		req.Runner = "grok-tty"
 	}
 	if req.SessionID == "" {
-		req.SessionID = "sync-worker-test"
+		req.SessionID = "sync-" + strings.ReplaceAll(t.Name(), "/", "_")
 	}
 	if req.GrokSessionID == "" {
 		req.GrokSessionID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"

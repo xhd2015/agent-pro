@@ -26,9 +26,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.Runner == "" {
 		req.Runner = "grok-tty"
 	}
-	if req.SessionID == "" {
-		req.SessionID = "sync-worker-checkpoint"
-	}
+	// SessionID is assigned per-leaf in Run so parallel trees do not share a worker.
 	return nil
 }
 ```
