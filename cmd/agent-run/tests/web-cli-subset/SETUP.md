@@ -1029,7 +1029,7 @@ func appendEventWhileSSE(t *testing.T, req *Request, runner, sessionID, text str
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
-	if err := store.AppendEvent(runner, sessionID, types.AgentEvent{
+	if err := store.AppendEvent(sessionID, types.AgentEvent{
 		Type: types.ActionMessage,
 		Role: "assistant",
 		Text: text,
@@ -1056,10 +1056,10 @@ func seedRunningSessionForPrint(t *testing.T, req *Request, runner, sessionID st
 		Status:    "running",
 		Workspace: req.TempDir,
 	}
-	if err := store.CreateSession(runner, sessionID, meta); err != nil {
+	if err := store.CreateSession(sessionID, meta); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	if err := store.AppendEvent(runner, sessionID, types.AgentEvent{
+	if err := store.AppendEvent(sessionID, types.AgentEvent{
 		Type: types.ActionMessage,
 		Role: "assistant",
 		Text: "First running event",

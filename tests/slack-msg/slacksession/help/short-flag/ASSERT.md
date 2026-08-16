@@ -1,7 +1,26 @@
+## Expected Output
+
+```
+slack-msg session: session-bound management, reply and history.
+
+Usage:
+  slack-msg session <command> \[options\]
+
+Commands:
+  list     List sessions from the local map
+  info     Show details for one session
+  update   Update session fields (e.g. workspace dir)
+  reply    Post a channel reply for the bound session
+  history  Show local session message history
+
+Options:
+  -h, --help  Show help
+```
+
 ## Expected
 
 - Exit code 0.
-- Stdout matches same session usage as `-h` (lists `list`, `info`, `update`, `reply`, `history`).
+- Stdout lists `list`, `info`, `update`, `reply`, and `history`.
 - Stderr empty.
 
 ## Exit Code
@@ -37,7 +56,7 @@ version: 2
 slack-msg session: session-bound management, reply and history.
 
 Usage:
-  slack-msg session <command> [options]
+  slack-msg session <command> \[options\]
 
 Commands:
   list     List sessions from the local map

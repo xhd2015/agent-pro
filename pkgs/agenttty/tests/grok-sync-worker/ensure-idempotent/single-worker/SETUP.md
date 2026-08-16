@@ -16,7 +16,10 @@ pre-seeded updates line on disk
 3. Hold until events flushed.
 
 ```go
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 const idempotentUserPrompt = "idempotent-probe-prompt"
 

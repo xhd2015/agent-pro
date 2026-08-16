@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xhd2015/agent-pro/pkgs/agenttty"
+	"github.com/xhd2015/agent-pro/pkgs/agentsync"
 )
 
 const turnIndexRestoreUser = "turn-index-restore-user-prompt"
@@ -39,7 +39,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 		return err
 	}
 	offset := updatesFileSize(t, req.UpdatesPath)
-	req.PreCheckpoint = &agenttty.GrokSyncState{
+	req.PreCheckpoint = &agentsync.GrokSyncState{
 		GrokSessionID: req.GrokSessionID,
 		UpdatesPath:   req.UpdatesPath,
 		UpdatesOffset: offset,

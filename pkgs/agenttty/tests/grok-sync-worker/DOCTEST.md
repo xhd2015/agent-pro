@@ -105,7 +105,7 @@ import (
 	"time"
 
 	types "github.com/xhd2015/agent-pro/agent/event/types"
-	"github.com/xhd2015/agent-pro/pkgs/agenttty"
+	"github.com/xhd2015/agent-pro/pkgs/agentsync"
 	"github.com/xhd2015/doctest/session"
 )
 
@@ -126,7 +126,7 @@ type Request struct {
 	InitialLines               []string
 	AppendSchedules            []AppendSchedule
 	PostRestartAppendSchedules []AppendSchedule
-	PreCheckpoint              *agenttty.GrokSyncState
+	PreCheckpoint              *agentsync.GrokSyncState
 
 	ConcurrentEnsure bool
 	StopAfterTurn    int // 0 = no stop; 1 = stop after first turn_completed
@@ -138,7 +138,7 @@ type Request struct {
 
 type Response struct {
 	Events       []types.AgentEvent
-	Checkpoint   agenttty.GrokSyncState
+	Checkpoint   agentsync.GrokSyncState
 	CheckpointOK bool
 	WorkerCount  int
 	WorkerActive bool
@@ -177,7 +177,7 @@ func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 		return nil, fmt.Errorf("create updates.jsonl: %w", err)
 	}
 
-	sink := agenttty.NewFileGrokSyncSink(req.SessionDir, req.GrokSessionID, req.UpdatesPath)
+	sink := agentsync.NewFileGrokSyncSink(req.SessionDir, req.GrokSessionID, req.UpdatesPath)
 	if req.PreCheckpoint != nil {
 		if err := sink.SaveCheckpoint(*req.PreCheckpoint); err != nil {
 			return nil, err
@@ -187,7 +187,7 @@ func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	opts := agenttty.GrokSyncOptions{
+	opts := agentsync.GrokSyncOptions{
 		Runner:        req.Runner,
 		SessionID:     req.SessionID,
 		GrokSessionID: req.GrokSessionID,
@@ -204,7 +204,7 @@ func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				errs <- agenttty.EnsureGrokSync(ctx, opts)
+				errs <- agentsync.EnsureGrokSync(ctx, opts)
 			}()
 		}
 		wg.Wait()
@@ -215,7 +215,7 @@ func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 			}
 		}
 	} else {
-		ensureErr = agenttty.EnsureGrokSync(ctx, opts)
+		ensureErr = agentsync.EnsureGrokSync(ctx, opts)
 	}
 
 	startDelay := req.WorkerStartDelay
@@ -247,18 +247,18 @@ func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	}
 
 	if req.StopAfterTurn > 0 {
-		resp.StopErr = agenttty.StopGrokSync(req.Runner, req.SessionID)
+		resp.StopErr = agentsync.StopGrokSync(req.Runner, req.SessionID)
 		if cp, err := sink.LoadCheckpoint(); err == nil && cp.UpdatesPath != "" {
 			resp.Checkpoint = cp
 			resp.CheckpointOK = true
 		}
-		resp.WorkerCount = agenttty.GrokSyncWorkerCount()
-		resp.WorkerActive = agenttty.GrokSyncWorkerActive(req.Runner, req.SessionID)
+		resp.WorkerCount = agentsync.GrokSyncWorkerCount()
+		resp.WorkerActive = agentsync.GrokSyncWorkerActive(req.Runner, req.SessionID)
 	}
 
 	if req.RestartAfterStop {
 		time.Sleep(200 * time.Millisecond)
-		if err := agenttty.EnsureGrokSync(ctx, opts); err != nil && ensureErr == nil {
+		if err := agentsync.EnsureGrokSync(ctx, opts); err != nil && ensureErr == nil {
 			ensureErr = err
 			resp.EnsureErr = err
 		}
@@ -277,8 +277,8 @@ func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 		resp.Checkpoint = cp
 		resp.CheckpointOK = true
 	}
-	resp.WorkerCount = agenttty.GrokSyncWorkerCount()
-	resp.WorkerActive = agenttty.GrokSyncWorkerActive(req.Runner, req.SessionID)
+	resp.WorkerCount = agentsync.GrokSyncWorkerCount()
+	resp.WorkerActive = agentsync.GrokSyncWorkerActive(req.Runner, req.SessionID)
 	return resp, nil
 }
 ```

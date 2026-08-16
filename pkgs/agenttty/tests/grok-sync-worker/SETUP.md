@@ -11,7 +11,7 @@ updates.jsonl appends (turn 1, turn 2, …)
 
 ## Preconditions
 
-- Package `github.com/xhd2015/agent-pro/pkgs/agenttty` exports `EnsureGrokSync`,
+- Package `github.com/xhd2015/agent-pro/pkgs/agentsync` exports `EnsureGrokSync`,
   `StopGrokSync`, `GrokSyncWorkerCount`, `GrokSyncWorkerActive`, `GrokSyncOptions`,
   `GrokSyncState`, `GrokSyncSink`, and `NewFileGrokSyncSink`.
 - Tests use isolated `t.TempDir()`; `NewFileGrokSyncSink` writes `events.jsonl` and
@@ -43,7 +43,7 @@ import (
 	"time"
 
 	types "github.com/xhd2015/agent-pro/agent/event/types"
-	"github.com/xhd2015/agent-pro/pkgs/agenttty"
+	"github.com/xhd2015/agent-pro/pkgs/agentsync"
 )
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
@@ -176,13 +176,13 @@ func eventsContainUserText(events []types.AgentEvent, text string) bool {
 	return countUserMessagesByText(events, text) > 0
 }
 
-func readGrokSyncCheckpoint(t *testing.T, sessionDir string) agenttty.GrokSyncState {
+func readGrokSyncCheckpoint(t *testing.T, sessionDir string) agentsync.GrokSyncState {
 	t.Helper()
 	data, err := os.ReadFile(grokSyncJSONPath(sessionDir))
 	if err != nil {
 		t.Fatalf("read grok-sync.json: %v", err)
 	}
-	var st agenttty.GrokSyncState
+	var st agentsync.GrokSyncState
 	if err := json.Unmarshal(data, &st); err != nil {
 		t.Fatalf("parse grok-sync.json: %v\n%s", err, string(data))
 	}

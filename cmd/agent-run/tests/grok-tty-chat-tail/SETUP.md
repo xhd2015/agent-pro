@@ -790,10 +790,10 @@ func seedRunningSessionForFollow(t *testing.T, req *Request, runner, sessionID s
 		Status:    "running",
 		Workspace: req.TempDir,
 	}
-	if err := store.CreateSession(runner, sessionID, meta); err != nil {
+	if err := store.CreateSession(sessionID, meta); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	if err := store.AppendEvent(runner, sessionID, types.AgentEvent{
+	if err := store.AppendEvent(sessionID, types.AgentEvent{
 		Type: types.ActionMessage,
 		Role: "assistant",
 		Text: "Initial running event",
@@ -805,7 +805,7 @@ func seedRunningSessionForFollow(t *testing.T, req *Request, runner, sessionID s
 func markSessionFinished(t *testing.T, req *Request, runner, sessionID string) {
 	t.Helper()
 	store := openAgentStore(t, req)
-	if err := store.UpdateSessionStatus(runner, sessionID, "finished"); err != nil {
+	if err := store.UpdateSessionStatus(sessionID, "finished"); err != nil {
 		t.Fatalf("UpdateSessionStatus finished: %v", err)
 	}
 }
@@ -819,13 +819,13 @@ func seedFinishedSession(t *testing.T, req *Request, runner, sessionID, firstTex
 		Status:    "finished",
 		Workspace: req.TempDir,
 	}
-	if err := store.CreateSession(runner, sessionID, meta); err != nil {
+	if err := store.CreateSession(sessionID, meta); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	if err := store.UpdateSessionStatus(runner, sessionID, "finished"); err != nil {
+	if err := store.UpdateSessionStatus(sessionID, "finished"); err != nil {
 		t.Fatalf("UpdateSessionStatus: %v", err)
 	}
-	if err := store.AppendEvent(runner, sessionID, types.AgentEvent{
+	if err := store.AppendEvent(sessionID, types.AgentEvent{
 		Type: types.ActionMessage,
 		Role: "assistant",
 		Text: firstText,
@@ -837,7 +837,7 @@ func seedFinishedSession(t *testing.T, req *Request, runner, sessionID, firstTex
 func appendSessionEvent(t *testing.T, req *Request, runner, sessionID, text string) {
 	t.Helper()
 	store := openAgentStore(t, req)
-	if err := store.AppendEvent(runner, sessionID, types.AgentEvent{
+	if err := store.AppendEvent(sessionID, types.AgentEvent{
 		Type: types.ActionMessage,
 		Role: "assistant",
 		Text: text,
