@@ -315,5 +315,6 @@ func defaultOpenTerminal(dir, followUp string) error {
 	return iterm2.OpenConfig(dir, &iterm2.Config{
 		Mode:             iterm2.ModeForceNew,
 		FollowUpCommands: []string{followUp},
+		SafeInputIgnore:  true,
 	})
 }

@@ -711,6 +711,7 @@ func openAutoInNewTerminal(opts autoSendOrResumeOpts, meta agentstorage.SessionM
 	if err := iterm2.OpenConfig(dir, &iterm2.Config{
 		Mode:             iterm2.ModeForceNew,
 		FollowUpCommands: []string{followUp},
+		SafeInputIgnore:  true,
 	}); err != nil {
 		return err
 	}

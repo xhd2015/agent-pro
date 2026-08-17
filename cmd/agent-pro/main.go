@@ -1348,6 +1348,7 @@ func defaultGrokSessionOpenInNewTerminal(dir, followUp string) error {
 	return lib.OpenConfig(dir, &lib.Config{
 		Mode:             lib.ModeForceNew,
 		FollowUpCommands: []string{followUp},
+		SafeInputIgnore:  true,
 	})
 }
 
