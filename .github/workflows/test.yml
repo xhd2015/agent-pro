@@ -7,8 +7,8 @@ on:
 env:
   GOFLAGS: -buildvcs=false
 
-# PR excludes: ui-automation, chromium, real-grok, real-codex, flaky.
-# doctest --label flags are OR'd, so e2e vs !e2e is one expression per job.
+# Every labeled and unlabeled leaf runs on PR. Split is only e2e vs !e2e
+# (doctest --label flags are OR'd, so each job uses one expression).
 
 jobs:
   go-test:
@@ -36,43 +36,43 @@ jobs:
       matrix:
         include:
           - name: agent-run-l2
-            label: "!e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            label: "!e2e"
             paths: ./cmd/agent-run/tests/...
           - name: agent-run-e2e
-            label: "e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            label: e2e
             paths: ./cmd/agent-run/tests/...
           - name: pkgs-l2
-            label: "!e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            label: "!e2e"
             paths: ./pkgs/...
           - name: repo-l2
-            label: "!e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            label: "!e2e"
             paths: ./tests/...
           - name: repo-e2e
-            label: "e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            label: e2e
             paths: ./tests/...
           - name: rest-l2
-            label: "!e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            label: "!e2e"
             paths: ./cmd/agent-pro/... ./cmd/agent-hub/... ./cmd/fake-codex/... ./cmd/fake-opencode/... ./cmd/migrate-sessions/... ./script/...
           - name: rest-e2e
-            label: "e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            label: e2e
             paths: ./cmd/agent-pro/... ./cmd/agent-hub/... ./cmd/fake-codex/... ./cmd/fake-opencode/... ./cmd/migrate-sessions/... ./script/...
           - name: agent-event
-            label: "!e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            label: "!e2e"
             paths: ./agent/event/...
           - name: agent-grok
-            label: "!e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            label: "!e2e"
             paths: ./agent/grok/...
           - name: agent-llm
-            label: "e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            label: e2e
             paths: ./agent/llm/...
           - name: agent-lib
-            label: "!e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            label: "!e2e"
             paths: ./agent/subagent/... ./agent/cli/... ./agent/commit_msg/... ./agent/git_runner/... ./agent/usage/... ./agent/codex/...
           - name: agents-l2
-            label: "!e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            label: "!e2e"
             paths: ./agents/...
           - name: agents-e2e
-            label: "e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            label: e2e
             paths: ./agents/...
     steps:
       - uses: actions/checkout@v4
