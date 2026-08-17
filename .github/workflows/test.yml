@@ -4,27 +4,84 @@ on:
   push:
   pull_request:
 
+env:
+  GOFLAGS: -buildvcs=false
+
+# PR excludes: ui-automation, chromium, real-grok, real-codex, flaky.
+# doctest --label flags are OR'd, so e2e vs !e2e is one expression per job.
+
 jobs:
-  test:
+  go-test:
     runs-on: ubuntu-latest
     container:
       # Match go.work / go.mod (GOTOOLCHAIN=local in official images rejects lower runtimes).
       image: golang:1.25.10
-    env:
-      GOFLAGS: -buildvcs=false
     steps:
       - uses: actions/checkout@v4
       - name: Expose go on default PATH
         run: ln -sf "$(go env GOROOT)/bin/go" /usr/bin/go
       - name: Go test cmd
-        run: go -C cmd test -v ./...
+        run: go -C cmd test ./...
       - name: Go test
-        run: go test -v ./...
+        run: go test ./...
 
+  doctest:
+    name: doctest ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    container:
+      image: golang:1.25.10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: agent-run-l2
+            label: "!e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            paths: ./cmd/agent-run/tests/...
+          - name: agent-run-e2e
+            label: "e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            paths: ./cmd/agent-run/tests/...
+          - name: pkgs-l2
+            label: "!e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            paths: ./pkgs/...
+          - name: repo-l2
+            label: "!e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            paths: ./tests/...
+          - name: repo-e2e
+            label: "e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            paths: ./tests/...
+          - name: rest-l2
+            label: "!e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            paths: ./cmd/agent-pro/... ./cmd/agent-hub/... ./cmd/fake-codex/... ./cmd/fake-opencode/... ./cmd/migrate-sessions/... ./script/...
+          - name: rest-e2e
+            label: "e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            paths: ./cmd/agent-pro/... ./cmd/agent-hub/... ./cmd/fake-codex/... ./cmd/fake-opencode/... ./cmd/migrate-sessions/... ./script/...
+          - name: agent-event
+            label: "!e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            paths: ./agent/event/...
+          - name: agent-grok
+            label: "!e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            paths: ./agent/grok/...
+          - name: agent-llm
+            label: "e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            paths: ./agent/llm/...
+          - name: agent-lib
+            label: "!e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            paths: ./agent/subagent/... ./agent/cli/... ./agent/commit_msg/... ./agent/git_runner/... ./agent/usage/... ./agent/codex/...
+          - name: agents-l2
+            label: "!e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            paths: ./agents/...
+          - name: agents-e2e
+            label: "e2e && !ui-automation && !chromium && !real-grok && !real-codex && !flaky"
+            paths: ./agents/...
+    steps:
+      - uses: actions/checkout@v4
+      - name: Expose go on default PATH
+        run: ln -sf "$(go env GOROOT)/bin/go" /usr/bin/go
       - name: Install doctest
         run: |
           if ! command -v doctest >/dev/null 2>&1; then
             go install github.com/xhd2015/doctest/cmd/doctest@latest
           fi
-      - name: Doctest
-        run: doctest test -v --label-all -timeout 30m ./...
+      - name: Doctest ${{ matrix.name }}
+        run: doctest test --no-color -timeout 25m --label "${{ matrix.label }}" ${{ matrix.paths }}
