@@ -50,6 +50,7 @@ const (
 	fixtureDoubleAngleIdle                     = "codex-double-angle-prompt-idle.txt"
 	fixtureDoubleAngleMCP                      = "codex-double-angle-mcp-incomplete.txt"
 	fixtureHistoricalWorkingBottomPromptIdle   = "codex-historical-working-bottom-prompt-idle.txt"
+	fixtureMCPServersStarting                  = "codex-mcp-servers-starting.txt"
 )
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {

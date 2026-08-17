@@ -1,0 +1,13 @@
+CODEX_HOME=/var/folders/s_/nd3t_zbx61747w0qdryxh4wm0000gp/T/TestDoctestSuitelive-mcp-starting-not-inject-ready3533924176/001/.codex
+⚠ `--dangerously-bypass-hook-trust` is enabled. Enabled hooks may run withoutreview for this invocation.
+╭----------------------------------------------------------╮
+│ >_ OpenAI Codex (v0.147.0)                               │
+│                                                          │
+│ model:       mock-model   /model to change               │
+│ directory:   /private/var/folders/s_/…/T/…/001/workspace │
+│ permissions: YOLO mode                                   │
+╰----------------------------------------------------------╯
+  Tip:
+⚠ `--dangerously-bypass-hook-trust` is enabled. Enabled hooks may run withoutreview for this invocation.
+◦ Starting MCP servers (0/8): slowinit_01, slowinit_02, slowinit_03, … (1s • es…
+› Run /review on my current changesmock-model default · /private/var/folders/s_/nd3t_zbx61747w0qdryxh4wm0000gp/T…

@@ -14,6 +14,10 @@ import (
 	"github.com/xhd2015/agent-pro/agent/llm/llm-mock/mockconfig"
 )
 
+// EnvExtraMCPTOMLFile, when set, is a TOML file appended to the generated
+// CODEX_HOME/config.toml (typically [mcp_servers.*] blocks for tests).
+const EnvExtraMCPTOMLFile = "LLM_MOCK_EXTRA_MCP_TOML_FILE"
+
 // RunCodexOptions configures optional behavior for RunCodex.
 type RunCodexOptions struct {
 	MockEventsPreset string // --mock-events-preset; passed to mock server
@@ -309,6 +313,16 @@ env_key = "OPENAI_API_KEY"
 shell_tool = true
 unified_exec = true
 `, baseURL)
+	if extraFile := strings.TrimSpace(os.Getenv(EnvExtraMCPTOMLFile)); extraFile != "" {
+		b, err := os.ReadFile(extraFile)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", EnvExtraMCPTOMLFile, err)
+		}
+		content += "\n" + string(b)
+		if !strings.HasSuffix(content, "\n") {
+			content += "\n"
+		}
+	}
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		return fmt.Errorf("write codex config.toml: %w", err)
 	}

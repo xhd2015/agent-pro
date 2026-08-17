@@ -39,6 +39,7 @@ Environment (orchestrator, codex):
   LLM_MOCK_CODEX_HOME                     Explicit codex home (default: temp dir)
   LLM_MOCK_RUN_CODEX_COMMAND              Replace codex executable (tests/plumbing)
   LLM_MOCK_RUN_CODEX_DEBUG=1              Verbose codex orchestrator stderr debug logs
+  LLM_MOCK_EXTRA_MCP_TOML_FILE            Append TOML (e.g. [mcp_servers.*]) to generated config.toml
 
 Environment (orchestrator, opencode):
   LLM_MOCK_OPENCODE_HOME                  Explicit opencode HOME (default: temp dir)

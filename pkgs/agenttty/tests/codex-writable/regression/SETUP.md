@@ -22,6 +22,7 @@ load single regression fixture
 - F2–F8 are narrow guards complementing the full fixture table (F1).
 - F4 keeps legacy `›` idle GREEN; F6–F7 lock Codex 0.146 `»` idle (RED before implementer).
 - F8 locks post-turn idle when historical `• Working` remains above bottom `›` (RED before fix).
+- F9 locks inject-ready (`BannerDetected`) false on live `Starting MCP servers`.
 
 ```go
 import "testing"

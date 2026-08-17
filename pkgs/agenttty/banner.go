@@ -21,6 +21,12 @@ const (
 	bannerPollInterval           = 75 * time.Millisecond
 )
 
+// bannerSnapshotText is the scrollback source for waitForBannerRemoteOpts.
+// Tests replace it; production uses ttywatch.SnapshotText.
+var bannerSnapshotText = func(listenAddr, sessionID string) (string, error) {
+	return ttywatch.SnapshotText(listenAddr, sessionID)
+}
+
 type runConfig struct {
 	runnerID       string
 	bannerProvider string
@@ -52,7 +58,7 @@ func waitForBannerRemoteOpts(ctx context.Context, listenAddr, sessionID, provide
 		if abort != nil && abort() {
 			return fmt.Errorf("%s agent exited before TUI banner", provider)
 		}
-		snapshot, err := ttywatch.SnapshotText(listenAddr, sessionID)
+		snapshot, err := bannerSnapshotText(listenAddr, sessionID)
 		if err != nil {
 			time.Sleep(bannerPollInterval)
 			continue
@@ -63,6 +69,13 @@ func waitForBannerRemoteOpts(ctx context.Context, listenAddr, sessionID, provide
 			if err := ttywatch.SendMessage(listenAddr, sessionID, "", true); err != nil {
 				return err
 			}
+			time.Sleep(bannerPollInterval)
+			continue
+		}
+		// MCP boot can last arbitrarily long: do not burn inject-ready budget.
+		// Abort / ctx still stop the wait. Clock restarts when MCP chrome leaves.
+		if isCodexProvider(provider) && codexMCPServersStarting(scrollback) {
+			deadline = time.Now().Add(waitTimeout)
 			time.Sleep(bannerPollInterval)
 			continue
 		}
@@ -168,6 +181,11 @@ func bannerDetectedConfig(scrollback []byte, provider string, markers []string) 
 		if codexModelLoadingScreen(compact) {
 			return false
 		}
+		// Same gate as checkCodexWritable: MCP boot is not inject-ready.
+		// Must run before "codex" + › / Codex › true-returns.
+		if codexMCPServersStarting(scrollback) {
+			return false
+		}
 		if strings.Contains(plain, "Codex ›") || strings.Contains(plain, "Codex \u203a") ||
 			strings.Contains(plain, "Codex »") || strings.Contains(plain, "Codex \u00bb") {
 			return true
@@ -209,6 +227,17 @@ func codexModelLoadingScreen(compact string) bool {
 	return strings.Contains(compact, "openaicodex") &&
 		strings.Contains(compact, "model:loading") &&
 		strings.Contains(compact, "/modeltochange")
+}
+
+// codexMCPServersStarting reports live MCP-boot chrome (not "MCP startup incomplete").
+func codexMCPServersStarting(scrollback []byte) bool {
+	plain := stripPlain(scrollback)
+	lower := strings.ToLower(plain)
+	compact := compactBannerText(lower)
+	return strings.Contains(compact, "startingmcpservers") ||
+		strings.Contains(compact, "bootingmcpserver") ||
+		strings.Contains(lower, "starting mcp") ||
+		strings.Contains(lower, "booting mcp")
 }
 
 func codexTrustPromptDetected(scrollback []byte, provider string) bool {

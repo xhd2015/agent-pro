@@ -32,6 +32,8 @@ rendered tty-watch snapshot text fixtures under `pkgs/agenttty/testdata/codex-wr
   `state=loading` (non-idle), `ready=false` — **must not** be `idle`.
 - MCP startup incomplete without main prompt glyph → `loading`; with main chat `›` **or**
   `»` present → `idle`.
+- Live `Starting MCP servers` (even with main `›` / `»` and the word `codex`) →
+  `CheckWritable` `loading`; **`BannerDetected` false** so `agent-run run` does not inject.
 - Main chat prompt `›` (U+203A) **or** `»` (U+00BB) visible without busy/loading signals →
   `state=idle`, `ready=true`.
 - DetectScreenStatus for idle chat with only `›` or only `»` → not `unknown`
@@ -42,7 +44,7 @@ rendered tty-watch snapshot text fixtures under `pkgs/agenttty/testdata/codex-wr
 
 ## Version
 
-0.0.4
+0.0.5
 
 ## Decision Tree
 
@@ -61,14 +63,15 @@ pkgs/agenttty/tests/codex-writable/
     ├── empty-snapshot-unknown/              # F5: empty bytes → unknown
     ├── double-angle-prompt-idle/            # F6: Codex 0.146 » only → idle (RED before fix)
     ├── double-angle-mcp-idle/               # F7: MCP incomplete + » only → idle (RED before fix)
-    └── historical-working-bottom-prompt-idle/ # F8: historical • Working + bottom › → idle (RED before fix)
+    ├── historical-working-bottom-prompt-idle/ # F8: historical • Working + bottom › → idle (RED before fix)
+    └── mcp-starting-not-inject-ready/         # F9: Starting MCP servers → not BannerDetected
 ```
 
 Parameter ranking (most → least significant):
 
 1. **Scenario class** — full fixture table vs targeted regression
 2. **Writable outcome** — not-idle (loading) vs idle vs unknown
-3. **Snapshot source** — live update modal vs model-loading vs main prompt vs empty vs double-angle
+3. **Snapshot source** — live update modal vs model-loading vs main prompt vs empty vs double-angle vs MCP-starting
 4. **Prompt glyph** — legacy `›` (U+203A) vs Codex 0.146+ `»` (U+00BB)
 5. **Fixture variant** — which live/synthetic capture within an outcome class
 
@@ -84,6 +87,7 @@ Parameter ranking (most → least significant):
 | 6 | `regression/double-angle-prompt-idle` | Usage-limit + main `»` only → idle + screen≠unknown (F6, RED before fix) |
 | 7 | `regression/double-angle-mcp-idle` | MCP incomplete + main `»` only → idle (F7, RED before fix) |
 | 8 | `regression/historical-working-bottom-prompt-idle` | Historical `• Working` + settled bottom `›` → idle (F8, RED before fix) |
+| 9 | `regression/mcp-starting-not-inject-ready` | Live `Starting MCP servers` + `›` → writable loading **and** `BannerDetected` false (F9) |
 
 ## How to Run
 
@@ -94,6 +98,7 @@ doctest test -v ./pkgs/agenttty/tests/codex-writable/regression/update-modal-not
 doctest test -v ./pkgs/agenttty/tests/codex-writable/regression/double-angle-prompt-idle
 doctest test -v ./pkgs/agenttty/tests/codex-writable/regression/double-angle-mcp-idle
 doctest test -v ./pkgs/agenttty/tests/codex-writable/regression/historical-working-bottom-prompt-idle
+doctest test -v ./pkgs/agenttty/tests/codex-writable/regression/mcp-starting-not-inject-ready
 doctest test -v ./pkgs/agenttty/tests/codex-writable/fixture-table/all-expectations-match
 ```
 
