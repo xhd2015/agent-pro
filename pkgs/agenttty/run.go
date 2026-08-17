@@ -203,7 +203,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	runStart := time.Now()
 	// Normalize before inject paths (resume / NoSubmit / codex). New-session argv
 	// also normalizes inside appendNewSessionPrompt.
-	promptText := normalizeRunnerPrompt(strings.TrimSpace(opts.Prompt))
+	promptText := prepareRunnerPrompt(runnerID, strings.TrimSpace(opts.Prompt))
 	isResume := strings.TrimSpace(opts.ResumeSessionID) != ""
 
 	// --detach: keep-alive daemon only — no attach, no event stream, no wait for turn.
@@ -666,7 +666,7 @@ func resolveOpenDetachRunnerSessionID(ctx context.Context, opts RunOptions, runn
 		return ""
 	}
 	codexHome := CodexHomeForRunner(configHome)
-	prompt := normalizeRunnerPrompt(strings.TrimSpace(opts.Prompt))
+	prompt := prepareRunnerPrompt(runnerID, strings.TrimSpace(opts.Prompt))
 	sid := WaitDiscoverCodexSessionID(ctx, codexHome, opts.Workspace, runStart, listenAddr, termSessionID, prompt, openCodexBindBudget)
 	if sid == "" {
 		return ""
@@ -682,7 +682,7 @@ func tryDiscoverCodexOnce(opts RunOptions, configHome string, runStart time.Time
 			scrollback = string(snap)
 		}
 	}
-	prompt := normalizeRunnerPrompt(strings.TrimSpace(opts.Prompt))
+	prompt := prepareRunnerPrompt("codex-tty", strings.TrimSpace(opts.Prompt))
 	id, ok := DiscoverCodexSessionID(CodexHomeForRunner(configHome), opts.Workspace, runStart, scrollback, prompt)
 	if !ok {
 		return ""

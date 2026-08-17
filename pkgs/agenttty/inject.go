@@ -20,6 +20,7 @@ const CodexSubmitSettle = 350 * time.Millisecond
 //   - other runners: SendMessage with suffixCR=true (existing contract)
 func InjectMessage(listenAddr, sessionID, runner, text string, submit bool) error {
 	runner = strings.TrimSpace(runner)
+	text = SanitizePromptForRunner(runner, text)
 	if !submit {
 		return ttywatch.SendMessage(listenAddr, sessionID, text, false)
 	}

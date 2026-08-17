@@ -20,7 +20,7 @@ func appendNewSessionPrompt(argv []string, runnerID, prompt string, noSubmit, op
 	if noSubmit {
 		return argv
 	}
-	p := normalizeRunnerPrompt(strings.TrimSpace(prompt))
+	p := prepareRunnerPrompt(runnerID, strings.TrimSpace(prompt))
 	if p == "" {
 		return argv
 	}
