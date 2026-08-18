@@ -29,6 +29,16 @@ type Session struct {
 	ListenAddr        string
 }
 
+// QueueLen returns the number of pending send-queue entries for the session.
+// A missing queue file is length 0.
+func QueueLen(home, runner, terminalSessionID string) (int, error) {
+	entries, err := readEntries(queuePath(home, runner, terminalSessionID))
+	if err != nil {
+		return 0, err
+	}
+	return len(entries), nil
+}
+
 func queueDir(home, runner string) string {
 	return filepath.Join(home, "send-queue", runner)
 }
@@ -230,4 +240,3 @@ func dequeueHead(path string) error {
 	}
 	return writeEntries(path, entries[1:])
 }
-

@@ -59,6 +59,9 @@ Options:
   --prepend-path DIR  prepend DIR to the TTY agent runner child PATH (repeatable; TTY only)
   -e, --env KEY=VALUE set env var on the TTY agent runner child process (repeatable; TTY only)
   --color             force color on the TTY agent runner child (unset NO_COLOR; FORCE_COLOR/CLICOLOR; TTY only)
+--exit-on-idle      exit the keep-alive TTY after idle-timeout at a sendable prompt
+                      (no-op unless --open, --detach, or --keep-tty actually keep a TTY)
+--idle-timeout DUR  idle window used with --exit-on-idle (default: 10m)
   --event-bus-url URL publish agent.tty.started after a successful new-terminal open (best-effort)
   --event-bus-token TOKEN  optional Bearer token for event-bus publish
   -h, --help          show help
@@ -105,6 +108,8 @@ func runHeadless(args []string, defaultRunner string) error {
 	var prependPaths []string
 	var envEntries []string
 	var colorFlag bool
+	var exitOnIdle bool
+	var idleTimeoutRaw string
 	var keepTTY bool
 	var openFlag bool
 	var detachFlag bool
@@ -138,11 +143,17 @@ func runHeadless(args []string, defaultRunner string) error {
 		StringSlice("--prepend-path", &prependPaths).
 		StringSlice("-e,--env", &envEntries).
 		Bool("--color", &colorFlag).
+		Bool("--exit-on-idle", &exitOnIdle).
+		String("--idle-timeout", &idleTimeoutRaw).
 		String("--event-bus-url", &eventBusURL).
 		String("--event-bus-token", &eventBusToken).
 		Help("-h,--help", runHelp).
 		CollectParsedFlags(&recorded).
 		Parse(args)
+	if err != nil {
+		return err
+	}
+	idleEnabled, idleTimeout, err := ParseRunIdle(exitOnIdle, idleTimeoutRaw)
 	if err != nil {
 		return err
 	}
@@ -214,6 +225,8 @@ func runHeadless(args []string, defaultRunner string) error {
 			prependPaths:                  absPrepend,
 			envEntries:                    envEntries,
 			color:                         colorFlag,
+			exitOnIdle:                    idleEnabled,
+			idleTimeout:                   idleTimeout,
 			keepTTY:                       keepTTY,
 			openFlag:                      openFlag,
 			detachFlag:                    detachFlag,
@@ -289,6 +302,8 @@ func runHeadless(args []string, defaultRunner string) error {
 		PrependPaths:          absPrepend,
 		Env:                   envEntries,
 		Color:                 colorFlag,
+		ExitOnIdle:            idleEnabled,
+		IdleTimeout:           idleTimeout,
 		JSON:                  jsonFlag,
 		Workspace:             workspace,
 		KeepTerminalAlive:     keepAliveOpenDetach(keepTTY, openFlag, detachFlag),
@@ -532,6 +547,8 @@ type autoSendOrResumeOpts struct {
 	prependPaths                  []string
 	envEntries                    []string
 	color                         bool
+	exitOnIdle                    bool
+	idleTimeout                   time.Duration
 	keepTTY                       bool
 	openFlag                      bool
 	detachFlag                    bool
@@ -600,6 +617,8 @@ func runAutoSendOrResume(opts autoSendOrResumeOpts) error {
 		Env:                           opts.envEntries,
 		PrependPaths:                  opts.prependPaths,
 		Color:                         opts.color,
+		ExitOnIdle:                    opts.exitOnIdle,
+		IdleTimeout:                   opts.idleTimeout,
 		Store:                         store,
 		Stdout:                        os.Stdout,
 		Stderr:                        os.Stderr,
@@ -696,6 +715,8 @@ func openAutoInNewTerminal(opts autoSendOrResumeOpts, meta agentstorage.SessionM
 		Open:                          opts.openFlag,
 		Detach:                        opts.detachFlag,
 		Color:                         opts.color,
+		ExitOnIdle:                    opts.exitOnIdle,
+		IdleTimeout:                   opts.idleTimeout,
 		Model:                         opts.model,
 		ModelReasoningEffort:          opts.modelReasoningEffort,
 		Env:                           append([]string(nil), opts.envEntries...),
@@ -879,6 +900,8 @@ func autoRunCreate(store agentstorage.Store, sessionID string, opts autoSendOrRe
 		PrependPaths:          opts.prependPaths,
 		Env:                   opts.envEntries,
 		Color:                 opts.color,
+		ExitOnIdle:            opts.exitOnIdle,
+		IdleTimeout:           opts.idleTimeout,
 		JSON:                  opts.jsonFlag,
 		Workspace:             workspace,
 		KeepTerminalAlive:     keepAliveOpenDetach(opts.keepTTY, opts.openFlag, opts.detachFlag),

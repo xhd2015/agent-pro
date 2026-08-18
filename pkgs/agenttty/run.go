@@ -12,15 +12,16 @@ import (
 
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	"github.com/xhd2015/agent-pro/pkgs/agentdriver"
+	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 	"github.com/xhd2015/tty-watch/pkgs/ttywatch"
 )
 
 // RunOptions configures a headless TTY runner invocation via detached serve.
 type RunOptions struct {
-	Home            string
-	Workspace       string
-	Prompt          string
-	Model           string
+	Home      string
+	Workspace string
+	Prompt    string
+	Model     string
 	// ModelReasoningEffort is optional Codex -c model_reasoning_effort=<level>.
 	// Applied after BuildArgv for codex-tty only; empty leaves Codex home config.
 	ModelReasoningEffort string
@@ -45,6 +46,11 @@ type RunOptions struct {
 	// Color forces TTY child color env last (unset NO_COLOR; FORCE_COLOR/CLICOLOR;
 	// TERM fixup when empty/dumb). Not persisted on session meta.
 	Color bool
+	// ExitOnIdle / IdleTimeout are launch-time idle-exit flags (not persisted
+	// on session meta). When enabled, RunHeadless writes idle-policy.json
+	// before ttywatch.HeadlessRun.
+	ExitOnIdle  bool
+	IdleTimeout time.Duration
 	// Driver is the host re-exec config for __serve_* children (see agentdriver).
 	// Zero → DefaultSelf. Prefer over BinaryPath.
 	Driver agentdriver.Driver
@@ -168,6 +174,10 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	driver := opts.Driver
 	if strings.TrimSpace(driver.Binary) == "" && strings.TrimSpace(opts.BinaryPath) != "" {
 		driver.Binary = opts.BinaryPath
+	}
+
+	if err := writeIdlePolicyBeforeServe(opts); err != nil {
+		return "", "", err
 	}
 
 	result, err := ttywatch.HeadlessRun(ctx, ttywatch.HeadlessRunOptions{
@@ -688,4 +698,29 @@ func tryDiscoverCodexOnce(opts RunOptions, configHome string, runStart time.Time
 		return ""
 	}
 	return id
+}
+
+// writeIdlePolicyBeforeServe persists launch-time idle-exit for the serve child.
+func writeIdlePolicyBeforeServe(opts RunOptions) error {
+	if !opts.ExitOnIdle {
+		return nil
+	}
+	if opts.IdleTimeout < 0 {
+		return nil
+	}
+	home := strings.TrimSpace(os.Getenv("AGENT_RUN_HOME"))
+	if home == "" {
+		home = strings.TrimSpace(opts.Home)
+	}
+	sessionID := strings.TrimSpace(opts.AgentSessionID)
+	if sessionID == "" {
+		sessionID = strings.TrimSpace(opts.SessionID)
+	}
+	if home == "" || sessionID == "" {
+		return nil
+	}
+	return agentstorage.WriteIdlePolicy(home, sessionID, agentstorage.IdlePolicy{
+		ExitOnIdle:  true,
+		IdleTimeout: opts.IdleTimeout,
+	})
 }

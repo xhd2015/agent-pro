@@ -28,9 +28,9 @@ import (
 
 // RunOptions configures a headless agent-run invocation.
 type RunOptions struct {
-	Prompt    string
-	Runner    string
-	Model     string
+	Prompt string
+	Runner string
+	Model  string
 	// ModelReasoningEffort is optional Codex -c model_reasoning_effort=<level>
 	// (codex-tty only; plumbed to agenttty.RunOptions).
 	ModelReasoningEffort string
@@ -52,7 +52,12 @@ type RunOptions struct {
 	Env []string
 	// Color forces TTY child color env last (not persisted on meta; does not
 	// recolor agent-run own stdout/JSON).
-	Color             bool
+	Color bool
+	// ExitOnIdle / IdleTimeout are launch-time idle-exit flags (not persisted
+	// on meta). When enabled, Run writes sessions/<id>/idle-policy.json before
+	// the TTY serve starts.
+	ExitOnIdle        bool
+	IdleTimeout       time.Duration
 	JSON              bool
 	Workspace         string
 	Store             agentstorage.Store
@@ -235,7 +240,11 @@ func Run(ctx context.Context, opts RunOptions) error {
 		}
 	}
 
-	newRunnerSessionID, newTerminalSessionID, runErr := streamRunner(ctx, runner, opts.Store.Home(), workspace, env, runnerPrompt, opts.Model, opts.ModelReasoningEffort, opts.AgentRunnerBinary, opts.AgentRunnerConfigHome, opts.PrependPaths, opts.Env, opts.Color, runnerSessionID, sessionID, ttySessionID, opts.StreamPhases, opts.KeepTerminalAlive, opts.Open, opts.Detach, opts.NoSubmit, opts.Fork, opts.ForkSessionID, ttyGrokSyncOwnsEvents, opts.Driver, persistTerminalSessionID, emit, stderr)
+	if err := writeIdlePolicyIfEnabled(opts.Store.Home(), sessionID, opts.ExitOnIdle, opts.IdleTimeout); err != nil {
+		return err
+	}
+
+	newRunnerSessionID, newTerminalSessionID, runErr := streamRunner(ctx, runner, opts.Store.Home(), workspace, env, runnerPrompt, opts.Model, opts.ModelReasoningEffort, opts.AgentRunnerBinary, opts.AgentRunnerConfigHome, opts.PrependPaths, opts.Env, opts.Color, opts.ExitOnIdle, opts.IdleTimeout, runnerSessionID, sessionID, ttySessionID, opts.StreamPhases, opts.KeepTerminalAlive, opts.Open, opts.Detach, opts.NoSubmit, opts.Fork, opts.ForkSessionID, ttyGrokSyncOwnsEvents, opts.Driver, persistTerminalSessionID, emit, stderr)
 	if strings.TrimSpace(newRunnerSessionID) != "" {
 		_ = opts.Store.UpdateSessionRunnerSessionID(sessionID, newRunnerSessionID)
 	}
@@ -439,6 +448,29 @@ func openGrokHardFailOnUnresolved(opts RunOptions) bool {
 // resolveTTYSessionID picks the custom terminal registry id for streamRunner.
 // PreferAutoTerminal → empty (auto session-N). Explicit TerminalSessionID wins.
 // Otherwise fall back to userSessionID (legacy --session-id behavior).
+// writeIdlePolicyIfEnabled persists launch-time idle-exit so __serve__ can
+// arm the watchdog. No-op when the flag is off. Zero timeout → 10m default.
+func writeIdlePolicyIfEnabled(home, sessionID string, exitOnIdle bool, timeout time.Duration) error {
+	if !exitOnIdle {
+		return nil
+	}
+	if timeout < 0 {
+		return nil
+	}
+	home = strings.TrimSpace(home)
+	sessionID = strings.TrimSpace(sessionID)
+	if home == "" || sessionID == "" {
+		return nil
+	}
+	if envHome := strings.TrimSpace(os.Getenv("AGENT_RUN_HOME")); envHome != "" {
+		home = envHome
+	}
+	return agentstorage.WriteIdlePolicy(home, sessionID, agentstorage.IdlePolicy{
+		ExitOnIdle:  true,
+		IdleTimeout: timeout,
+	})
+}
+
 func resolveTTYSessionID(opts RunOptions, userSessionID string) string {
 	if opts.PreferAutoTerminal {
 		return ""
@@ -451,7 +483,7 @@ func resolveTTYSessionID(opts RunOptions, userSessionID string) string {
 
 // streamRunner runs the selected agent. ttySessionID is the custom terminal
 // registry id (from --session / --session-id-from-prompt); empty keeps session-N.
-func streamRunner(ctx context.Context, runner, home, workspace string, env *agentexec.Env, prompt, model, modelReasoningEffort, agentRunnerBinary, agentRunnerConfigHome string, prependPaths, envEntries []string, color bool, runnerSessionID, agentSessionID, ttySessionID string, streamPhases, keepTerminalAlive, open, detach, noSubmit, fork bool, forkSessionID string, grokSyncOwnsEvents bool, driver agentdriver.Driver, onTerminalSessionID func(string), emit func(types.AgentEvent) error, stderr io.Writer) (string, string, error) {
+func streamRunner(ctx context.Context, runner, home, workspace string, env *agentexec.Env, prompt, model, modelReasoningEffort, agentRunnerBinary, agentRunnerConfigHome string, prependPaths, envEntries []string, color bool, exitOnIdle bool, idleTimeout time.Duration, runnerSessionID, agentSessionID, ttySessionID string, streamPhases, keepTerminalAlive, open, detach, noSubmit, fork bool, forkSessionID string, grokSyncOwnsEvents bool, driver agentdriver.Driver, onTerminalSessionID func(string), emit func(types.AgentEvent) error, stderr io.Writer) (string, string, error) {
 	if agenttty.IsTTYRunner(runner) {
 		terminalSessionID := ""
 		onID := func(id string) {
@@ -477,16 +509,18 @@ func streamRunner(ctx context.Context, runner, home, workspace string, env *agen
 			PrependPaths:          prependPaths,
 			Env:                   envEntries,
 			Color:                 color,
+			ExitOnIdle:            exitOnIdle,
+			IdleTimeout:           idleTimeout,
 			Driver:                driver,
 			// open keep-alive only if OpenCloseExits off (detach always keeps).
-			KeepTerminalAlive: keepTerminalAlive || detach || (open && !agenttty.OpenCloseExits()),
-			Open:                  open,
-			Detach:                detach,
-			NoSubmit:              noSubmit,
-			GrokSyncOwnsEvents:    grokSyncOwnsEvents,
-			Stderr:                stderr,
-			Emit:                  emit,
-			OnTerminalSessionID:   onID,
+			KeepTerminalAlive:   keepTerminalAlive || detach || (open && !agenttty.OpenCloseExits()),
+			Open:                open,
+			Detach:              detach,
+			NoSubmit:            noSubmit,
+			GrokSyncOwnsEvents:  grokSyncOwnsEvents,
+			Stderr:              stderr,
+			Emit:                emit,
+			OnTerminalSessionID: onID,
 		})
 		if strings.TrimSpace(newRunnerSessionID) != "" {
 			return newRunnerSessionID, terminalSessionID, err
