@@ -602,20 +602,20 @@ func metaMatchesProvider(metaRunner, providerKind string) bool {
 }
 
 func findMappedProviderMeta(store agentstorage.Store, providerKind, providerSessionID string) (agentstorage.SessionMeta, bool) {
-	list, err := store.ListSessions()
-	if err != nil {
+	var runners []string
+	switch providerKind {
+	case "grok":
+		runners = []string{"grok", "grok-tty"}
+	case "codex":
+		runners = []string{"codex", "codex-tty"}
+	default:
 		return agentstorage.SessionMeta{}, false
 	}
-	providerSessionID = strings.TrimSpace(providerSessionID)
-	for _, m := range list {
-		if !metaMatchesProvider(m.Runner, providerKind) {
-			continue
-		}
-		if strings.TrimSpace(m.RunnerSessionID) == providerSessionID {
-			return m, true
-		}
+	metas, err := agentstorage.ListByRunnerSessionID(store, providerSessionID, runners...)
+	if err != nil || len(metas) == 0 {
+		return agentstorage.SessionMeta{}, false
 	}
-	return agentstorage.SessionMeta{}, false
+	return metas[0], true
 }
 
 // sessionAlreadyManagedByRegistry reports whether any agent-run meta maps the

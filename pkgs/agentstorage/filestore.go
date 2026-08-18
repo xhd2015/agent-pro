@@ -94,7 +94,10 @@ func (s *fileStore) CreateSession(sessionID string, meta SessionMeta) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(metaPath, data, 0644)
+	if err := os.WriteFile(metaPath, data, 0644); err != nil {
+		return err
+	}
+	return s.bumpGeneration()
 }
 
 func (s *fileStore) GetSession(sessionID string) (*Session, error) {
@@ -142,7 +145,10 @@ func (s *fileStore) UpdateSessionRunnerSessionID(sessionID, runnerSessionID stri
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(s.sessionDir(sessionID), "meta.json"), data, 0644)
+	if err := os.WriteFile(filepath.Join(s.sessionDir(sessionID), "meta.json"), data, 0644); err != nil {
+		return err
+	}
+	return s.bumpGeneration()
 }
 
 func (s *fileStore) UpdateSessionTerminalSessionID(sessionID, terminalSessionID string) error {
@@ -211,7 +217,10 @@ func (s *fileStore) ClearAllSessions() error {
 	if err := os.RemoveAll(root); err != nil {
 		return err
 	}
-	return nil
+	if err := s.clearRunnerSessionIndex(); err != nil {
+		return err
+	}
+	return s.bumpGeneration()
 }
 
 func (s *fileStore) ListSessions() ([]SessionMeta, error) {

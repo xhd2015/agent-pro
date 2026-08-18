@@ -131,43 +131,14 @@ func resolveSessionRef(store agentstorage.Store, bareID string, grokSessionID *s
 
 // isGrokRunner reports whether meta.runner is exactly grok or grok-tty.
 func isGrokRunner(runner string) bool {
-	r := strings.TrimSpace(runner)
-	return r == "grok" || r == "grok-tty"
+	return agentstorage.IsGrokRunner(runner)
 }
 
 // resolveSessionMetaByGrokSessionID finds a session by meta.runner_session_id where
 // meta.runner is exactly "grok" or "grok-tty". CLI --agent-runner is ignored.
 // Cardinality: 0 → not found; 1 → resolve; 2+ → ambiguous.
 func resolveSessionMetaByGrokSessionID(store agentstorage.Store, id string) (agentstorage.SessionMeta, error) {
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return agentstorage.SessionMeta{}, fmt.Errorf("--grok-session-id requires a non-empty value")
-	}
-	list, err := store.ListSessions()
-	if err != nil {
-		return agentstorage.SessionMeta{}, err
-	}
-	var matches []agentstorage.SessionMeta
-	for _, m := range list {
-		if !isGrokRunner(m.Runner) {
-			continue
-		}
-		if strings.TrimSpace(m.RunnerSessionID) == id {
-			matches = append(matches, m)
-		}
-	}
-	switch len(matches) {
-	case 0:
-		return agentstorage.SessionMeta{}, fmt.Errorf("session not found: no grok session with runner_session_id %s", id)
-	case 1:
-		return matches[0], nil
-	default:
-		ids := make([]string, 0, len(matches))
-		for _, m := range matches {
-			ids = append(ids, m.SessionID)
-		}
-		return agentstorage.SessionMeta{}, fmt.Errorf("ambiguous grok-session-id %s: multiple matches: %s", id, strings.Join(ids, ", "))
-	}
+	return agentstorage.FindByGrokSessionID(store, id)
 }
 
 // resolveSessionMeta resolves a bare <session-id>. Compound runner/id refs are rejected (Q5).
