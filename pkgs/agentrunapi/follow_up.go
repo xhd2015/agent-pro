@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/xhd2015/agent-pro/pkgs/agentdriver"
@@ -72,6 +73,12 @@ type FollowUpOpts struct {
 	Detach                        bool
 	// Color true → emit --color after open/detach flags, before -e / -- / prompt.
 	Color bool
+	// ExitOnIdle true → emit --exit-on-idle and --idle-timeout=<compact> after
+	// open/detach/color, before -- / prompt. False → omit both (timeout ignored).
+	ExitOnIdle bool
+	// IdleTimeout is the idle window when ExitOnIdle is set. Zero → 10m at
+	// normalize/emit time. Negative with ExitOnIdle is an API error.
+	IdleTimeout time.Duration
 	// Model is optional; when non-empty, BuildFollowUpCommand emits --model=<m>
 	// (or two-token form). Empty → omit (no product default).
 	Model string
@@ -132,6 +139,14 @@ func BuildFollowUpCommand(opts FollowUpOpts) (string, error) {
 	}
 	if opts.Color {
 		remainder = append(remainder, "--color")
+	}
+	idleEnabled, idleTimeout, idleErr := NormalizeIdle(opts.ExitOnIdle, opts.IdleTimeout)
+	if idleErr != nil {
+		return "", idleErr
+	}
+	if idleEnabled {
+		remainder = append(remainder, "--exit-on-idle")
+		remainder = append(remainder, "--idle-timeout="+FormatCompactDuration(idleTimeout))
 	}
 	if m := strings.TrimSpace(opts.Model); m != "" {
 		remainder = append(remainder, "--model="+m)

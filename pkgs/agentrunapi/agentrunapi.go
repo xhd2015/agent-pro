@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/xhd2015/agent-pro/pkgs/agentdriver"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
@@ -80,13 +81,13 @@ type TTYStartedInfo struct {
 // Dispatch hooks, when set, replace production send/run/resume for unit tests
 // and prove no agent-run binary LookPath is required.
 type Opts struct {
-	SessionID                     string
-	Prompt                        string
-	WorkspaceDir                  string
-	AgentRunner                   string
-	AgentRunnerBinary             string
-	RunnerConfigHome              string
-	Model                         string
+	SessionID         string
+	Prompt            string
+	WorkspaceDir      string
+	AgentRunner       string
+	AgentRunnerBinary string
+	RunnerConfigHome  string
+	Model             string
 	// ModelReasoningEffort is optional Codex -c model_reasoning_effort=<level>.
 	// Plumbed into agentui/agenttty RunOptions for codex-tty (ApplyCodexReasoningEffort).
 	ModelReasoningEffort          string
@@ -100,16 +101,20 @@ type Opts struct {
 	// ForceNew FollowUp Driver (see pkgs/agentdriver). Zero → DefaultSelf in serve.
 	Driver agentdriver.Driver
 	// NewTerminal: P1 unit leaves keep false. When true, ForceNew may remain CLI-owned.
-	NewTerminal bool
-	Env         []string
+	NewTerminal  bool
+	Env          []string
 	PrependPaths []string
 	// Color forces TTY child color env last (same policy as agent-run run --color).
 	// Not persisted on meta; does not recolor agent-run own stdout/JSON.
-	Color  bool
-	Store  agentstorage.Store
-	Stdout       io.Writer
-	Stderr       io.Writer
-	Probe        ProbeFunc
+	Color bool
+	// ExitOnIdle / IdleTimeout are launch-time idle-exit flags (not persisted
+	// on session meta). Same normalize/emit rules as FollowUpOpts.
+	ExitOnIdle  bool
+	IdleTimeout time.Duration
+	Store       agentstorage.Store
+	Stdout      io.Writer
+	Stderr      io.Writer
+	Probe       ProbeFunc
 
 	// OnTTYStarted, when non-nil, is invoked once when AutoSendOrResume newly
 	// establishes a live TTY for the session (successful ModeRun / first open).

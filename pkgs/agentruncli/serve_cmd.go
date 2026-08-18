@@ -15,11 +15,14 @@ func runServeSession(args []string) error {
 	if err != nil {
 		return err
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	opts := ttywatch.ServeOptionsFromArgv(parsed)
-	opts.OnListening = func(ctx context.Context, listenAddr, home, registrySubdir string) {
-		startServeSendQueueDrainer(ctx, parsed.SessionID, listenAddr, home, registrySubdir)
+	opts.OnListening = func(onCtx context.Context, listenAddr, home, registrySubdir string) {
+		startServeSendQueueDrainer(onCtx, parsed.SessionID, listenAddr, home, registrySubdir)
+		startServeIdleWatchdog(onCtx, cancel, parsed.SessionID, listenAddr, home, registrySubdir)
 	}
-	return ttywatch.ServeSession(context.Background(), opts)
+	return ttywatch.ServeSession(ctx, opts)
 }
 
 // startServeSendQueueDrainer runs the session-owned send-queue consumer in the
