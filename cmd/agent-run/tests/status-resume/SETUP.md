@@ -158,7 +158,7 @@ func buildOnce(t *testing.T, d *session.Doctest) (agentRun string, err error) {
 	ready := filepath.Join(cache, "binaries.ready")
 	repoRoot, err := findAgentProRoot(d.DOCTEST_ROOT)
 	if err != nil {
-		return err
+		return "", err
 	}
 	err = withFileLock(t, lock, func() error {
 		if fileExists(ready) && fileExists(agentRun) {

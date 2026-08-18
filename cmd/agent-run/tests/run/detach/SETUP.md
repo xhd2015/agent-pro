@@ -162,7 +162,7 @@ func buildOnce(t *testing.T, d *session.Doctest) (agentRun, fakeCodex string, er
 	ready := filepath.Join(cache, "binaries.ready")
 	repoRoot, err := findAgentProRoot(d.DOCTEST_ROOT)
 	if err != nil {
-		return err
+		return "", err
 	}
 	err = withFileLock(t, lock, func() error {
 		if fileExists(ready) && fileExists(agentRun) && fileExists(fakeCodex) {
