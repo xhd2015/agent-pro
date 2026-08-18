@@ -3,7 +3,9 @@ package agentruncli
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -16,6 +18,7 @@ Usage: agent-run sessions [--json] [--limit N]
        agent-run sessions --clear
        agent-run sessions <session_id> --print
        agent-run sessions --print --grok-session-id ID
+       agent-run sessions resolve --grok-session-id ID
 
 Options:
   --json               list sessions as JSON (list mode only)
@@ -27,27 +30,53 @@ Options:
   -h, --help           show help
 `
 
+const sessionsResolveHelp = `
+Usage: agent-run sessions resolve --grok-session-id ID
+       agent-run sessions resolve [--json] --grok-session-id ID
+
+Resolve an agent-run session id from a Grok provider runner_session_id.
+Read-only; never creates a session.
+
+Options:
+  --grok-session-id ID   provider UUID (meta.runner grok|grok-tty)
+  --json                 print session meta as JSON
+  -h, --help             show help
+`
+
 const defaultSessionsListLimit = 10
 
-func runSessions(args []string) error {
+// RunSessions implements `agent-run sessions` with an injected store and writers.
+// Args are the tokens after the `sessions` command name.
+func RunSessions(args []string, store agentstorage.Store, stdout, stderr io.Writer) error {
+	if stdout == nil {
+		stdout = os.Stdout
+	}
+	if stderr == nil {
+		stderr = os.Stderr
+	}
+	if len(args) > 0 && args[0] == "resolve" {
+		return runSessionsResolve(args[1:], store, stdout, stderr)
+	}
+
 	var jsonFlag bool
 	var printFlag bool
 	var clearFlag bool
 	var grokSessionID *string
+	var wantHelp bool
 	limit := defaultSessionsListLimit
 	remaining, err := flags.Bool("--json", &jsonFlag).
 		Bool("--print", &printFlag).
 		Bool("--clear", &clearFlag).
 		Int("--limit", &limit).
 		String("--grok-session-id", &grokSessionID).
-		Help("-h,--help", sessionsHelp).
+		Bool("-h,--help", &wantHelp).
 		Parse(args)
 	if err != nil {
 		return err
 	}
-	store, err := openStore()
-	if err != nil {
-		return err
+	if wantHelp {
+		writeCLIHelp(stdout, sessionsHelp)
+		return nil
 	}
 	if clearFlag {
 		if len(remaining) > 0 {
@@ -120,15 +149,61 @@ func runSessions(args []string) error {
 	}
 	if jsonFlag {
 		out := map[string]any{"sessions": all}
-		enc := json.NewEncoder(os.Stdout)
+		enc := json.NewEncoder(stdout)
 		return enc.Encode(out)
 	}
-	return printSessionsListHuman(list, total, limit)
+	return printSessionsListHuman(stdout, list, total, limit)
 }
 
-func printSessionsListHuman(list []agentstorage.SessionMeta, total, limit int) error {
+func runSessionsResolve(args []string, store agentstorage.Store, stdout, stderr io.Writer) error {
+	var jsonFlag bool
+	var grokSessionID *string
+	var wantHelp bool
+	remaining, err := flags.Bool("--json", &jsonFlag).
+		String("--grok-session-id", &grokSessionID).
+		Bool("-h,--help", &wantHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+	if wantHelp {
+		writeCLIHelp(stdout, sessionsResolveHelp)
+		return nil
+	}
+	if len(remaining) > 0 {
+		return fmt.Errorf("sessions resolve does not accept positional arguments")
+	}
+	if grokSessionID == nil {
+		return fmt.Errorf("sessions resolve requires --grok-session-id")
+	}
+	meta, err := agentstorage.FindByGrokSessionID(store, *grokSessionID)
+	if err != nil {
+		return err
+	}
+	if jsonFlag {
+		enc := json.NewEncoder(stdout)
+		return enc.Encode(map[string]string{
+			"session_id":        meta.SessionID,
+			"runner":            meta.Runner,
+			"runner_session_id": meta.RunnerSessionID,
+			"status":            meta.Status,
+		})
+	}
+	_, err = fmt.Fprintln(stdout, meta.SessionID)
+	return err
+}
+
+func writeCLIHelp(w io.Writer, help string) {
+	txt := strings.TrimPrefix(help, "\n")
+	if !strings.HasSuffix(txt, "\n") {
+		txt += "\n"
+	}
+	_, _ = io.WriteString(w, txt)
+}
+
+func printSessionsListHuman(w io.Writer, list []agentstorage.SessionMeta, total, limit int) error {
 	now := time.Now()
-	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(tw, "SESSION_ID\tRUNNER\tSTATUS\tUPDATED")
 	for _, s := range list {
 		ts := s.UpdatedAt
@@ -142,7 +217,7 @@ func printSessionsListHuman(list []agentstorage.SessionMeta, total, limit int) e
 		return err
 	}
 	if limit > 0 && total > limit {
-		fmt.Fprintf(os.Stdout, "(showing %d of %d; use --limit N or --limit 0 for all)\n", limit, total)
+		fmt.Fprintf(w, "(showing %d of %d; use --limit N or --limit 0 for all)\n", limit, total)
 	}
 	return nil
 }

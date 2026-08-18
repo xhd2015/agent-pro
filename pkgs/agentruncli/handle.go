@@ -99,7 +99,11 @@ func Handle(args []string) error {
 	case "pty":
 		return runPty(sub)
 	case "sessions":
-		return runSessions(sub)
+		store, err := openStore()
+		if err != nil {
+			return err
+		}
+		return RunSessions(sub, store, os.Stdout, os.Stderr)
 	case "status":
 		return runStatus(sub)
 	case "assets":

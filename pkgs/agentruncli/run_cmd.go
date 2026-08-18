@@ -423,21 +423,16 @@ func runResumeFromGrokSession(opts resumeFromGrokOpts) error {
 	if err != nil {
 		return err
 	}
-	list, err := store.ListSessions()
-	if err != nil {
-		return err
-	}
 	// Without --fork: 1:1 import identity — reject re-import of an already-bound Grok id.
 	// With --fork: branch into a NEW agent-run session; parent may already be mapped.
 	if !opts.fork {
-		for _, m := range list {
-			if !isGrokRunner(m.Runner) {
-				continue
-			}
-			if strings.TrimSpace(m.RunnerSessionID) == id {
-				return fmt.Errorf("grok session %s is already mapped to agent-run session %s; use resume --grok-session-id %s (or re-run with --fork to branch)",
-					id, m.SessionID, id)
-			}
+		mapped, listErr := agentstorage.ListByRunnerSessionID(store, id, "grok", "grok-tty")
+		if listErr != nil {
+			return listErr
+		}
+		if len(mapped) > 0 {
+			return fmt.Errorf("grok session %s is already mapped to agent-run session %s; use resume --grok-session-id %s (or re-run with --fork to branch)",
+				id, mapped[0].SessionID, id)
 		}
 	}
 
