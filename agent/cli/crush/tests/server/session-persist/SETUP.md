@@ -12,9 +12,16 @@
 2. Set prompt and resume prompt.
 
 ```go
-import "testing"
+import (
+	osexec "os/exec"
+	"testing"
+)
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	if _, err := osexec.LookPath("crush"); err != nil {
+		t.Skip("crush not in PATH; skip integration test")
+		return nil
+	}
 	req.Mode = "server-ask"
 	req.Prompt = "what is the capital of France? answer in one word"
 	req.ResumePrompt = "what did I ask you about?"

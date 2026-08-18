@@ -68,7 +68,8 @@ func createZip(t *testing.T, zipPath string, entries map[string]string) {
 
 func readZipEntries(t *testing.T, zipPath string) []string {
 	t.Helper()
-	if _, err := os.Stat(zipPath); os.IsNotExist(err) {
+	// Any Stat error (not exist, ENOTDIR when parent is a file, etc.) means no zip.
+	if _, err := os.Stat(zipPath); err != nil {
 		return nil
 	}
 	r, err := zip.OpenReader(zipPath)
