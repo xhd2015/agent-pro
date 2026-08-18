@@ -11,8 +11,10 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/openai/openai-go/v3"
 	types "github.com/xhd2015/agent-pro/agent/event/types"
@@ -215,7 +217,22 @@ func main() {
 		}
 	}
 
+	// Orchestrators tear down the mock with SIGTERM after a one-shot client.
+	// Trailing preset events (e.g. message after tool_call) must still hit --agent-events-file.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		<-sigCh
+		handler.flushRemainingAgentEvents()
+		if agentEventsWriter != nil {
+			_ = agentEventsWriter.Close()
+		}
+		_ = listener.Close()
+		os.Exit(0)
+	}()
+
 	if err := http.Serve(listener, mux); err != nil {
+		handler.flushRemainingAgentEvents()
 		log.Fatalf("server error: %v", err)
 	}
 }
@@ -873,6 +890,19 @@ func (h *mockHandler) writeAgentEvents(events []types.AgentEvent) {
 		data, _ := json.Marshal(evt)
 		fmt.Fprintln(h.agentEventsWriter, string(data))
 	}
+}
+
+// flushRemainingAgentEvents appends unserved genQueue events (e.g. trailing message
+// after a tool_call breakpoint) when the mock is torn down after a one-shot client.
+func (h *mockHandler) flushRemainingAgentEvents() {
+	if h == nil {
+		return
+	}
+	h.genMu.Lock()
+	remaining := h.genQueue
+	h.genQueue = nil
+	h.genMu.Unlock()
+	h.writeAgentEvents(remaining)
 }
 
 type serveResult struct {

@@ -16,12 +16,17 @@ opencode run -> mock -> Paris
 ```go
 import (
     "os"
+    osexec "os/exec"
     "path/filepath"
     "testing"
 	"github.com/xhd2015/doctest/session"
 )
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+    if _, err := osexec.LookPath("opencode"); err != nil {
+        t.Skip("opencode not in PATH; skip integration test")
+        return nil
+    }
     workDir := t.TempDir()
     isolatedHome := filepath.Join(workDir, "home")
     opencodeConfigDir := filepath.Join(workDir, "opencode-config")

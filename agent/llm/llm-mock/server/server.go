@@ -182,6 +182,9 @@ func (s *Server) serve(ctx context.Context) {
 	httpSrv := &http.Server{Handler: s.mux}
 	go func() {
 		<-ctx.Done()
+		// One-shot clients (fake curl once) may leave trailing preset messages
+		// in GenQueue after a tool_call breakpoint; flush them to --agent-events-file.
+		s.Handler.flushRemainingAgentEvents()
 		httpSrv.Close()
 	}()
 	httpSrv.Serve(s.listener)
@@ -197,9 +200,24 @@ func (s *Server) Port() int {
 
 // Close shuts down the server.
 func (s *Server) Close() {
+	if s.Handler != nil {
+		s.Handler.flushRemainingAgentEvents()
+	}
 	if s.httpLog != nil {
 		s.httpLog.Close()
 	}
+}
+
+// flushRemainingAgentEvents appends any unserved GenQueue events to the agent-events log.
+func (h *Handler) flushRemainingAgentEvents() {
+	if h == nil {
+		return
+	}
+	h.genMu.Lock()
+	remaining := h.GenQueue
+	h.GenQueue = nil
+	h.genMu.Unlock()
+	h.writeAgentEvents(remaining)
 }
 
 // --- Alpha request types ---
