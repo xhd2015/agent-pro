@@ -72,23 +72,27 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	return nil
 }
 
+// keepAliveAfterPrint keeps the fake TUI PTY alive after printing so
+// waitForStatusSnapshot can observe the screen before the session dies under CI load.
+const keepAliveAfterPrint = `; while true; do sleep 1; done`
+
 // fakeTUIDefault mimics codex TUI: prompt, read /status, print canonical fixture status box.
 func fakeTUIDefault() string {
-	return `sh -c 'printf "Codex › "; read -r cmd; printf "Monthly credit limit: 42%% left (resets 08:00 on 1 Aug)\n6,519 of 11,250 credits used\n› "'`
+	return `sh -c 'printf "Codex › "; read -r cmd; printf "Monthly credit limit: 42%% left (resets 08:00 on 1 Aug)\n6,519 of 11,250 credits used\n› "` + keepAliveAfterPrint + `'`
 }
 
 // fakeTUICustom returns a fake TUI that prints the given percent-left, credits, and reset strings.
 func fakeTUICustom(percentLeft, creditsUsed, creditsTotal, reset string) string {
 	percentLeft = strings.ReplaceAll(percentLeft, "%", "%%")
 	return fmt.Sprintf(
-		`sh -c 'printf "Codex › "; read -r cmd; printf "Monthly credit limit: %s left (resets %s)\n%s of %s credits used\n› "'`,
+		`sh -c 'printf "Codex › "; read -r cmd; printf "Monthly credit limit: %s left (resets %s)\n%s of %s credits used\n› "`+keepAliveAfterPrint+`'`,
 		percentLeft, reset, creditsUsed, creditsTotal,
 	)
 }
 
 // fakeTUIExtraNoise prints MCP warnings and tips before the status box.
 func fakeTUIExtraNoise() string {
-	return `sh -c 'printf "Codex › "; read -r cmd; printf "Starting MCP servers...\nWarning: MCP server demo failed to start\nTip: type /help for available commands\nMonthly credit limit: 42%% left (resets 08:00 on 1 Aug)\n6,519 of 11,250 credits used\n› "'`
+	return `sh -c 'printf "Codex › "; read -r cmd; printf "Starting MCP servers...\nWarning: MCP server demo failed to start\nTip: type /help for available commands\nMonthly credit limit: 42%% left (resets 08:00 on 1 Aug)\n6,519 of 11,250 credits used\n› "` + keepAliveAfterPrint + `'`
 }
 
 // fakeTUINoStatus prints the prompt and reads input but never emits status fields.
@@ -98,7 +102,7 @@ func fakeTUINoStatus() string {
 
 // fakeTUIMalformed prints prompt then garbage without parseable status fields.
 func fakeTUIMalformed() string {
-	return `sh -c 'printf "Codex › "; read -r cmd; printf "not status data\n› "'`
+	return `sh -c 'printf "Codex › "; read -r cmd; printf "not status data\n› "` + keepAliveAfterPrint + `'`
 }
 
 // assertSuccessExit checks exit 0 and empty stderr for success leaves.

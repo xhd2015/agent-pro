@@ -637,6 +637,7 @@ func waitForStatusSnapshot(ctx context.Context, session *ttywatch.EphemeralSessi
 	lastParseable := false
 	pollCount := 0
 	var snapshotTotal time.Duration
+	var lastSnapshot string
 
 	for {
 		select {
@@ -671,8 +672,16 @@ func waitForStatusSnapshot(ctx context.Context, session *ttywatch.EphemeralSessi
 				sleepUntilPoll(ctx, deadline, retryPollInterval)
 				continue
 			}
+			// Fake/real TUIs may exit right after printing; prefer last observed
+			// screen over a bare "session not found" so callers still get parse errors.
+			if isSessionGoneError(err) {
+				if out, finalizeErr := finalizeStatusFromLastSnapshot(lastSnapshot, v); finalizeErr != nil || out != "" {
+					return out, finalizeErr
+				}
+			}
 			return "", err
 		}
+		lastSnapshot = snapshot
 
 		parseable := statusFieldsPresent(snapshot)
 		if parseable != lastParseable {
@@ -724,6 +733,33 @@ func waitForStatusSnapshot(ctx context.Context, session *ttywatch.EphemeralSessi
 
 		sleepUntilPoll(ctx, deadline, pollInterval)
 	}
+}
+
+// finalizeStatusFromLastSnapshot returns a parseable last screen, or a parse
+// error when the screen looked malformed / unparseable. Empty out+nil err means
+// there was nothing useful to finalize.
+func finalizeStatusFromLastSnapshot(lastSnapshot string, v *verboseLog) (string, error) {
+	if strings.TrimSpace(lastSnapshot) == "" {
+		return "", nil
+	}
+	if statusFieldsPresent(lastSnapshot) {
+		v.stateChange("status-ready", "using last snapshot after session exit")
+		return lastSnapshot, nil
+	}
+	_, err := parseStatusText(lastSnapshot)
+	if err != nil {
+		v.stateChange("parse-failed", err.Error())
+		return "", err
+	}
+	return lastSnapshot, nil
+}
+
+func isSessionGoneError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "not found") || strings.Contains(msg, "connection refused")
 }
 
 func malformedStatusResponse(text string) bool {

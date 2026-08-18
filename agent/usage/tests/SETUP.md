@@ -55,14 +55,18 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	return nil
 }
 
+// keepAliveAfterPrint keeps the fake TUI PTY alive after printing so FetchStatus
+// can observe the screen before the session dies under CI load.
+const keepAliveAfterPrint = `; while true; do sleep 1; done`
+
 // fakeGrokTUIDefault mimics grok TUI: prompt, read command, print fixture usage lines.
 func fakeGrokTUIDefault() string {
-	return `sh -c 'printf "Grok › "; read -r cmd; printf "Weekly limit: 1%%\nNext reset: July 9, 16:55 PT\n› "'`
+	return `sh -c 'printf "Grok › "; read -r cmd; printf "Weekly limit: 1%%\nNext reset: July 9, 16:55 PT\n› "` + keepAliveAfterPrint + `'`
 }
 
 // fakeCodexTUIDefault mimics codex TUI: prompt, read /status, print canonical fixture status box.
 func fakeCodexTUIDefault() string {
-	return `sh -c 'printf "Codex › "; read -r cmd; printf "Monthly credit limit: 42%% left (resets 08:00 on 1 Aug)\n6,519 of 11,250 credits used\n› "'`
+	return `sh -c 'printf "Codex › "; read -r cmd; printf "Monthly credit limit: 42%% left (resets 08:00 on 1 Aug)\n6,519 of 11,250 credits used\n› "` + keepAliveAfterPrint + `'`
 }
 
 // fakeCodexTUIBlocking never becomes idle / never prints status fields so FetchStatus
