@@ -6,9 +6,9 @@ label: e2e
 
 ```
 ---
-version: 2
+version: 3
 ---
-No matching explain sessions.
+No matching explain sessions\.
 ```
 
 ## Expected
@@ -50,9 +50,9 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	assertNotContains(t, resp.Stdout, "No explain sessions yet")
 	assertNotContains(t, resp.Stdout, "marker-cat")
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
-No matching explain sessions.
+No matching explain sessions\.
 `)
 }
 ```

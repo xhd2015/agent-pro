@@ -22,12 +22,12 @@ import (
 func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertNoError(t, err)
 	assert.Output(t, resp.ShortcutStdout, `---
-version: 2
+version: 3
 ---
 msg_1
 `)
 	assert.Output(t, resp.TTYSubcmdStdout, `---
-version: 2
+version: 3
 ---
 msg_2
 `)

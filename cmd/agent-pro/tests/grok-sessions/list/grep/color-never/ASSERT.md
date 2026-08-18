@@ -2,11 +2,11 @@
 
 ```
 ---
-version: 2
+version: 3
 ---
 SESSION ID                              KIND   LAST ACTIVE   TITLE                                        MSGS  CWD
 01900019-aaaa-7aaa-aaaa-aaaaaaaaaaaa    main   30m ago       Enable GREP_COLOR_TOKEN highlighting            0  /tmp/grep-color-never
-  summary.json:1:title: Enable GREP_COLOR_TOKEN highlighting
+  summary\.json:1:title: Enable GREP_COLOR_TOKEN highlighting
 ```
 
 ## Expected
@@ -38,10 +38,10 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 
 	// No trailing newline: matches FormatListTable TrimRight style.
 	assert.Output(t, resp.Output, `---
-version: 2
+version: 3
 ---
 SESSION ID                              KIND   LAST ACTIVE   TITLE                                        MSGS  CWD
 01900019-aaaa-7aaa-aaaa-aaaaaaaaaaaa    main   30m ago       Enable GREP_COLOR_TOKEN highlighting            0  /tmp/grep-color-never
-  summary.json:1:title: Enable GREP_COLOR_TOKEN highlighting`)
+  summary\.json:1:title: Enable GREP_COLOR_TOKEN highlighting`)
 }
 ```

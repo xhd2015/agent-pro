@@ -6,15 +6,15 @@ label: e2e
 
 ```
 ---
-version: 2
+version: 3
 ---
-Recent explain sessions (1 shown of 1, limit 10)
+Recent explain sessions \(1 shown of 1, limit 10\)
 
 ── 1 ──  2026-07-13 14:30:05  ·  opencode / deepseek-chat  ·  2 turns
-   Q  What is a goroutine?
-   A  A goroutine is a lightweight thread managed by the Go runtime.
-   Q  How does the scheduler work?
-   A  The Go scheduler multiplexes goroutines onto OS threads.
+   Q  What is a goroutine\?
+   A  A goroutine is a lightweight thread managed by the Go runtime\.
+   Q  How does the scheduler work\?
+   A  The Go scheduler multiplexes goroutines onto OS threads\.
 ```
 
 ## Expected
@@ -54,15 +54,15 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	assertStdoutEndsWithNewline(t, resp.Stdout)
 	assertNoANSI(t, resp.Stdout)
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
-Recent explain sessions (1 shown of 1, limit 10)
+Recent explain sessions \(1 shown of 1, limit 10\)
 
 ── 1 ──  2026-07-13 14:30:05  ·  opencode / deepseek-chat  ·  2 turns
-   Q  What is a goroutine?
-   A  A goroutine is a lightweight thread managed by the Go runtime.
-   Q  How does the scheduler work?
-   A  The Go scheduler multiplexes goroutines onto OS threads.
+   Q  What is a goroutine\?
+   A  A goroutine is a lightweight thread managed by the Go runtime\.
+   Q  How does the scheduler work\?
+   A  The Go scheduler multiplexes goroutines onto OS threads\.
 `)
 }
 ```

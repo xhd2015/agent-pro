@@ -5,7 +5,7 @@
 
 ```
 ---
-version: 2
+version: 3
 ---
 feat: add `--open` flag
 
@@ -31,7 +31,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	}
 	want := ReadAntiPatternWant(t, "legitimate_inner_backticks")
 	AssertStdoutMessage(t, resp.Stdout, want)
-	assert.Output(t, resp.Stdout, "---\nversion: 2\n---\nfeat: add `--open` flag\n\nPass path to `git` when needed\n")
+	assert.Output(t, resp.Stdout, "---\nversion: 3\n---\nfeat: add `--open` flag\n\nPass path to `git` when needed\n")
 	if !strings.Contains(resp.Stdout, "`--open`") {
 		t.Fatalf("legitimate inner backticks around --open were stripped:\n%s", resp.Stdout)
 	}

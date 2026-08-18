@@ -6,9 +6,9 @@ label: e2e
 
 ```
 ---
-version: 2
+version: 3
 ---
-Recent explain sessions (1 shown of 1, limit 10)
+Recent explain sessions \(1 shown of 1, limit 10\)
 
 ── 1 ──  2026-07-13 09:00:00  ·  opencode / deepseek-chat  ·  1 turn
    Q  valid question
@@ -53,9 +53,9 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	assertContains(t, resp.Stdout, "valid question")
 	assertNotContains(t, resp.Stdout, "corrupt")
 	assert.Output(t, resp.Stdout, `---
-version: 2
+version: 3
 ---
-Recent explain sessions (1 shown of 1, limit 10)
+Recent explain sessions \(1 shown of 1, limit 10\)
 
 ── 1 ──  2026-07-13 09:00:00  ·  opencode / deepseek-chat  ·  1 turn
    Q  valid question
