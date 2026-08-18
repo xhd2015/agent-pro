@@ -120,8 +120,8 @@ func ensureSessionBinaries(t *testing.T, d *session.Doctest, repoRoot string) (a
 			out  string
 			args []string
 		}{
-			{agentRun, []string{"build", "-o", agentRun, "./cmd/agent-run"}},
-			{fakeCodex, []string{"build", "-o", fakeCodex, "./cmd/fake-codex"}},
+			{agentRun, []string{"build", "-C", "cmd", "-o", agentRun, "./agent-run"}},
+			{fakeCodex, []string{"build", "-C", "cmd", "-o", fakeCodex, "./fake-codex"}},
 			{ttyWatch, []string{"build", "-o", ttyWatch, "github.com/xhd2015/tty-watch/cmd/tty-watch"}},
 		}
 		for _, b := range builds {

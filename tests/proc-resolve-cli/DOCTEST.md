@@ -328,12 +328,12 @@ func buildAgentProOnce(t *testing.T, sessionID, repoRoot string) (string, error)
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, runtime.GOROOT()+"/bin/go", "build", "-o", binPath, "./cmd/agent-pro")
+		cmd := exec.CommandContext(ctx, runtime.GOROOT()+"/bin/go", "build", "-C", "cmd", "-o", binPath, "./agent-pro")
 		cmd.Dir = repoRoot
 		var be bytes.Buffer
 		cmd.Stderr = &be
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("go build ./cmd/agent-pro: %w\n%s", err, be.String())
+			return fmt.Errorf("go build -C cmd ./agent-pro: %w\n%s", err, be.String())
 		}
 		return os.WriteFile(ready, []byte("ok"), 0o644)
 	})

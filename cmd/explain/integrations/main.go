@@ -158,7 +158,7 @@ func buildExplain() (string, error) {
 		return "", fmt.Errorf("cannot find module root")
 	}
 	bin := filepath.Join(tmpBase, "explain")
-	cmd := exec.Command("go", "build", "-o", bin, "./cmd/explain")
+	cmd := exec.Command("go", "build", "-C", "cmd", "-o", bin, "./explain")
 	cmd.Dir = modRoot
 	out, err := cmd.CombinedOutput()
 	if err != nil {

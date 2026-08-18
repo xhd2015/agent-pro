@@ -108,10 +108,10 @@ func goPathBinDir(root string) (string, error) {
 }
 
 func goInstallAgentTraces(root, binDir string) error {
-	fmt.Println("\n== go install ./cmd/agent-traces ==")
+	fmt.Println("\n== go install -C cmd ./agent-traces ==")
 	env := upsertEnv(os.Environ(), "GOBIN", binDir)
-	if err := runCmd(root, env, "go", "install", "./cmd/agent-traces"); err != nil {
-		return fmt.Errorf("go install ./cmd/agent-traces: %w", err)
+	if err := runCmd(root, env, "go", "install", "-C", "cmd", "./agent-traces"); err != nil {
+		return fmt.Errorf("go install -C cmd ./agent-traces: %w", err)
 	}
 	return nil
 }

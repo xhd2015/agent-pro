@@ -139,7 +139,7 @@ func buildOnce(t *testing.T, d *session.Doctest) (agentRun string, err error) {
 				return fmt.Errorf("ensure %s stub: %w", rel, err)
 			}
 		}
-		build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", agentRun, "./cmd/agent-run")
+		build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-C", "cmd", "-o", agentRun, "./agent-run")
 		build.Dir = repoRoot
 		if out, err := build.CombinedOutput(); err != nil {
 			return fmt.Errorf("build agent-run: %w\n%s", err, string(out))

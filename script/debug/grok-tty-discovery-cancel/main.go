@@ -162,7 +162,7 @@ func ensureBinaries(repoRoot, cacheDir string) (agentRun, llmMock string, err er
 		out  string
 		args []string
 	}{
-		{agentRun, []string{"build", "-o", agentRun, "./cmd/agent-run"}},
+		{agentRun, []string{"build", "-C", "cmd", "-o", agentRun, "./agent-run"}},
 		{llmMock, []string{"build", "-o", llmMock, "./agent/llm/llm-mock/llm-mock-run-grok"}},
 	} {
 		if st, statErr := os.Stat(spec.out); statErr == nil && st.Size() > 0 {

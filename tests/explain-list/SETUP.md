@@ -13,7 +13,7 @@ doctest <- stdout / stderr / exit code
 
 ## Preconditions
 
-- `go` is available in PATH (to build `./cmd/explain`). Tests skip otherwise.
+- `go` is available in PATH (to build `go build -C cmd ./explain`). Tests skip otherwise.
 - `cmd/explain` exists; implementer adds `list` dispatch + formatting (RED until then).
 - Session cache dir: `$TMPDIR/explain-list-doctest-<d.DOCTEST_SESSION_ID>/`
   (shared `explain` binary + fake agent stub across parallel leaves).

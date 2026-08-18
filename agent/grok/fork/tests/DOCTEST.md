@@ -3,7 +3,7 @@
 Classic TDD doctests for `github.com/xhd2015/agent-pro/agent/grok/fork`.
 **RED** until the implementer lands `fork.Main` (and `fork.Run` / `fork.Fork`).
 
-Harness calls the **library**, not `go build ./cmd/grok-fork`. Thin
+Harness calls the **library**, not `go build -C cmd ./grok-fork`. Thin
 `cmd/grok-fork` glue (`Error: %v\n`, `os.Exit(1)`) is out of this tree.
 
 # DSN (Domain Specific Notion)

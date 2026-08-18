@@ -171,8 +171,8 @@ func buildOnce(t *testing.T, d *session.Doctest) (agentRun, fakeCodex, llmMockSe
 			out  string
 			args []string
 		}{
-			{agentRun, []string{"build", "-o", agentRun, "./cmd/agent-run"}},
-			{fakeCodex, []string{"build", "-o", fakeCodex, "./cmd/fake-codex"}},
+			{agentRun, []string{"build", "-C", "cmd", "-o", agentRun, "./agent-run"}},
+			{fakeCodex, []string{"build", "-C", "cmd", "-o", fakeCodex, "./fake-codex"}},
 			{llmMockServer, []string{"build", "-o", llmMockServer, "./agent/llm/llm-mock"}},
 			{llmMockRunGrok, []string{"build", "-o", llmMockRunGrok, "./agent/llm/llm-mock/llm-mock-run-grok"}},
 		}

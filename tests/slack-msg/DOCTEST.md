@@ -855,12 +855,12 @@ func buildSlackMsg(t *testing.T, d *session.Doctest) (string, error) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 			defer cancel()
-			cmd := exec.CommandContext(ctx, runtime.GOROOT()+"/bin/go", "build", "-o", bin, "./cmd/slack-msg")
+			cmd := exec.CommandContext(ctx, runtime.GOROOT()+"/bin/go", "build", "-C", "cmd", "-o", bin, "./slack-msg")
 			cmd.Dir = repoRoot
 			var stderr bytes.Buffer
 			cmd.Stderr = &stderr
 			if err := cmd.Run(); err != nil {
-				return fmt.Errorf("go build ./cmd/slack-msg: %w\n%s", err, stderr.String())
+				return fmt.Errorf("go build -C cmd ./slack-msg: %w\n%s", err, stderr.String())
 			}
 			if err := os.WriteFile(ready, []byte("ok"), 0o644); err != nil {
 				return err

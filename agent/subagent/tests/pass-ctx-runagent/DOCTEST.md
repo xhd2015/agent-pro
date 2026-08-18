@@ -76,7 +76,7 @@ func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
     // until product accepts an explicit AgentPath on the runAgent test export.
     fakeCodexPath := filepath.Join(t.TempDir(), "fake-codex")
     moduleRoot := filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "..", "..", "..", ".."))
-    build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", fakeCodexPath, "./cmd/fake-codex")
+    build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-C", "cmd", "-o", fakeCodexPath, "./fake-codex")
     build.Dir = moduleRoot
     if out, err := build.CombinedOutput(); err != nil {
         return nil, fmt.Errorf("build fake-codex: %w\n%s", err, out)

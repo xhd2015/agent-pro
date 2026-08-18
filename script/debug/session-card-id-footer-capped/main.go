@@ -107,7 +107,7 @@ func main() {
 				os.Exit(2)
 			}
 			fmt.Fprintln(os.Stderr, "building agent-run...")
-			if err := goBuild(repoRoot, "./cmd/agent-run", agentRun); err != nil {
+			if err := goBuild(repoRoot, "./agent-run", agentRun); err != nil {
 				fmt.Fprintf(os.Stderr, "FAIL: %v\n", err)
 				os.Exit(2)
 			}
@@ -328,7 +328,12 @@ func waitHealth(ctx context.Context, baseURL, bearer string, timeout time.Durati
 }
 
 func goBuild(repoRoot, pkg, out string) error {
-	cmd := exec.Command("go", "build", "-o", out, pkg)
+	// Nested cmd module: packages like ./agent-run live under cmd/go.mod.
+	args := []string{"build", "-C", "cmd", "-o", out, pkg}
+	if strings.HasPrefix(pkg, "./agent/") || strings.HasPrefix(pkg, "github.com/") {
+		args = []string{"build", "-o", out, pkg}
+	}
+	cmd := exec.Command("go", args...)
 	cmd.Dir = repoRoot
 	if b, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("go build %s: %w\n%s", pkg, err, b)

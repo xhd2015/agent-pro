@@ -4,14 +4,14 @@
 
 ```
 # session-cached agent-pro binary
-doctest -> go build ./cmd/agent-pro -> $TMPDIR/proc-resolve-cli-doctest-<session>/agent-pro
+doctest -> go build -C cmd ./agent-pro -> $TMPDIR/proc-resolve-cli-doctest-<session>/agent-pro
 # leaves set Args (+ optional AGENT_PRO_PROCRESOLVE_TEST_SNAPSHOT)
 caller: agent-pro proc resolve … -> stdout/stderr/exit
 ```
 
 ## Preconditions
 
-- `go` is available in PATH (to build `./cmd/agent-pro`). Tests skip otherwise.
+- `go` is available in PATH (to build `go build -C cmd ./agent-pro`). Tests skip otherwise.
 - Module root has `go.mod` and `cmd/agent-pro` (located from `d.DOCTEST_ROOT`).
 - Session cache: `$TMPDIR/proc-resolve-cli-doctest-<d.DOCTEST_SESSION_ID>/`
   holds the shared binary (`binaries.ready` sentinel, `build.lock` flock).

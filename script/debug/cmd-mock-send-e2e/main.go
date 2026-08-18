@@ -19,7 +19,7 @@ func main() {
 	mockBin := "/tmp/llm-mock-run-commandcode"
 
 	// Build
-	build := exec.Command("go", "build", "-o", agentRun, "./cmd/agent-run")
+	build := exec.Command("go", "build", "-C", "cmd", "-o", agentRun, "./agent-run")
 	if out, err := build.CombinedOutput(); err != nil {
 		fmt.Printf("FAIL: build agent-run: %v\n%s\n", err, out)
 		os.Exit(1)

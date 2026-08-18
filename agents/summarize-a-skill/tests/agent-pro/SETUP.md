@@ -50,7 +50,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 			return fmt.Errorf("write frontend/dist stub: %w", err)
 		}
 	}
-	build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.AgentPro, "./cmd/agent-pro")
+	build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-C", "cmd", "-o", req.AgentPro, "./agent-pro")
 	build.Dir = req.RepoRoot
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("build agent-pro: %w\n%s", err, string(out))

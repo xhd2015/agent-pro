@@ -4,7 +4,7 @@
 
 ```
 # harness builds agent-hub, sets child Env (HOME, PATH)
-doctest -> go build ./cmd/agent-hub -> child agent-hub daemon status
+doctest -> go build -C cmd ./agent-hub -> child agent-hub daemon status
 
 # default home or AGENT_HUB_HOME override (no parent os.Setenv)
 doctest <- JSON home + running=false
@@ -51,7 +51,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 		return fmt.Errorf("mkdir bin: %w", err)
 	}
 
-	build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.AgentHub, "./cmd/agent-hub")
+	build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-C", "cmd", "-o", req.AgentHub, "./agent-hub")
 	build.Dir = req.RepoRoot
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("build agent-hub: %w\n%s", err, string(out))

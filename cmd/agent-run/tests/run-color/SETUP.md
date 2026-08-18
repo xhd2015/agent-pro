@@ -147,11 +147,11 @@ func buildOnce(t *testing.T, d *session.Doctest) (agentRun string, err error) {
 			}
 		}
 		// Package path: thin main under cmd/agent-run (may need main.go form on some modules).
-		build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", agentRun, "./cmd/agent-run")
+		build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-C", "cmd", "-o", agentRun, "./agent-run")
 		build.Dir = repoRoot
 		if out, err := build.CombinedOutput(); err != nil {
 			// Fallback: explicit main.go (some worktrees list package oddly).
-			build2 := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", agentRun, "./cmd/agent-run/main.go")
+			build2 := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-C", "cmd", "-o", agentRun, "./agent-run/main.go")
 			build2.Dir = repoRoot
 			if out2, err2 := build2.CombinedOutput(); err2 != nil {
 				return fmt.Errorf("build agent-run: %w\n%s\nfallback: %v\n%s", err, string(out), err2, string(out2))

@@ -87,7 +87,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	}
 
 	req.GenCommitMsgBin = filepath.Join(req.TempDir, "gen-commit-msg")
-	buildCLI := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.GenCommitMsgBin, "./cmd/gen-commit-msg")
+	buildCLI := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-C", "cmd", "-o", req.GenCommitMsgBin, "./gen-commit-msg")
 	buildCLI.Dir = req.RepoRoot
 	if out, err := buildCLI.CombinedOutput(); err != nil {
 		return fmt.Errorf("build gen-commit-msg: %w\n%s", err, string(out))

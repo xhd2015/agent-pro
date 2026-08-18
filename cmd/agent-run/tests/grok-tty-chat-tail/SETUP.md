@@ -128,7 +128,7 @@ func ensureSessionBinaries(t *testing.T, d *session.Doctest, repoRoot string) (a
 			out  string
 			args []string
 		}{
-			{agentRun, []string{"build", "-o", agentRun, "./cmd/agent-run"}},
+			{agentRun, []string{"build", "-C", "cmd", "-o", agentRun, "./agent-run"}},
 			{llmMock, []string{"build", "-o", llmMock, "./agent/llm/llm-mock/llm-mock-run-grok"}},
 		}
 		for _, b := range builds {

@@ -7,7 +7,7 @@ End-to-end tests for the `agent-term` daemon CLI: `serve`, `list`, `run`,
 
 **Participants**
 
-- **agent-term subprocess** — built from `./cmd/agent-term` (or implementer path);
+- **agent-term subprocess** — built via `go build -C cmd ./agent-term` (or implementer path);
   subcommands `serve`, `list`, `run`, `attach`, `rename`, `web`.
 - **ptywrap daemon** — TCP listener (default `127.0.0.1:7681`, overridable via
   `--listen`); in-memory session store.

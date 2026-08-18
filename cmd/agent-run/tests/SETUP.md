@@ -225,12 +225,12 @@ func ensureAgentRunBinaries(t *testing.T, req *Request) error {
 	if err := os.MkdirAll(filepath.Dir(req.AgentRun), 0755); err != nil {
 		return fmt.Errorf("mkdir bin: %w", err)
 	}
-	build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.AgentRun, "./cmd/agent-run")
+	build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-C", "cmd", "-o", req.AgentRun, "./agent-run")
 	build.Dir = req.RepoRoot
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("build agent-run: %w\n%s", err, string(out))
 	}
-	build2 := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.FakeCodex, "./cmd/fake-codex")
+	build2 := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-C", "cmd", "-o", req.FakeCodex, "./fake-codex")
 	build2.Dir = req.RepoRoot
 	if out, err := build2.CombinedOutput(); err != nil {
 		return fmt.Errorf("build fake-codex: %w\n%s", err, string(out))

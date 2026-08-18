@@ -4,7 +4,7 @@
 
 ```
 # session cache: build slack-msg once; slacktest for unit send/history/channels/auth; listen daemon probes
-doctest -> build ./cmd/slack-msg -> temp workdir -> exec with controlled env/args -> capture stdout/stderr/exit
+doctest -> build -C cmd ./slack-msg -> temp workdir -> exec with controlled env/args -> capture stdout/stderr/exit
 
 # send / history / channels / auth / session unit branch
 SLACK_API_URL -> slacktest (conversations.list + chat.postMessage + history/replies + auth.test + apps.connections.open)

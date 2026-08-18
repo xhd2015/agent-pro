@@ -104,10 +104,10 @@ func goPathBinDir(root string) (string, error) {
 }
 
 func goInstallAgentPro(root, binDir string) error {
-	fmt.Println("\n== go install ./cmd/agent-pro ==")
+	fmt.Println("\n== go install -C cmd ./agent-pro ==")
 	env := upsertEnv(os.Environ(), "GOBIN", binDir)
-	if err := runCmd(root, env, "go", "install", "./cmd/agent-pro"); err != nil {
-		return fmt.Errorf("go install ./cmd/agent-pro: %w", err)
+	if err := runCmd(root, env, "go", "install", "-C", "cmd", "./agent-pro"); err != nil {
+		return fmt.Errorf("go install -C cmd ./agent-pro: %w", err)
 	}
 	return nil
 }

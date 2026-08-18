@@ -11,7 +11,7 @@ doctest <- provider[id] = { npm, name, options.baseURL, models }
 
 ## Preconditions
 
-- `go` is available in PATH (to build `./cmd/agent-pro`). Tests skip otherwise.
+- `go` is available in PATH (to build `go build -C cmd ./agent-pro`). Tests skip otherwise.
 - `cmd/agent-pro/main.go` exists with the `opencode config add-provider` leaf
   wired into `handleOpenCodeConfig` (added by the implementer).
 - The opencode config layer `agent/opencode/config/config.go` (`ReadDir`,

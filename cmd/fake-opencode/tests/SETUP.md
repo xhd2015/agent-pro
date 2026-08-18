@@ -40,7 +40,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
     req.FakeOpencode = filepath.Join(req.TempDir, "fake-opencode")
     req.HookLogPath = filepath.Join(req.TempDir, "hooks.jsonl")
     req.MarkerPath = filepath.Join(req.TempDir, "markers.log")
-    build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.FakeOpencode, "./cmd/fake-opencode")
+    build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-C", "cmd", "-o", req.FakeOpencode, "./fake-opencode")
     build.Dir = req.RepoRoot
     if out, err := build.CombinedOutput(); err != nil {
         return fmt.Errorf("build fake-opencode: %w\n%s", err, string(out))

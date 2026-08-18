@@ -173,13 +173,13 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
         return fmt.Errorf("mkdir bin: %w", err)
     }
 
-    build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.AgentHub, "./cmd/agent-hub")
+    build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-C", "cmd", "-o", req.AgentHub, "./agent-hub")
     build.Dir = req.RepoRoot
     if out, err := build.CombinedOutput(); err != nil {
         return fmt.Errorf("build agent-hub: %w\n%s", err, string(out))
     }
 
-    build2 := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.FakeOpencode, "./cmd/fake-opencode")
+    build2 := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-C", "cmd", "-o", req.FakeOpencode, "./fake-opencode")
     build2.Dir = req.RepoRoot
     if out, err := build2.CombinedOutput(); err != nil {
         return fmt.Errorf("build fake-opencode: %w\n%s", err, string(out))
