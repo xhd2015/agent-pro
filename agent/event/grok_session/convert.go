@@ -118,8 +118,9 @@ func (c *Converter) processUpdate(upd SessionUpdate) []types.AgentEvent {
 		if text == "" {
 			return out
 		}
+		// Buffer like user/think chunks; flush on tool/turn/Flush so multi-chunk
+		// assistant text coalesces (e.g. "Hello " + "world" -> "Hello world").
 		c.pendingAssistant.WriteString(text)
-		out = append(out, c.flushAssistant()...)
 		return out
 	case "tool_call":
 		var out []types.AgentEvent
