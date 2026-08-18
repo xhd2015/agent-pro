@@ -63,10 +63,11 @@ import (
 var stubSessionIDRe = regexp.MustCompile(`stub-tty:\s*(session-\d+)`)
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
-	req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../.."))
-	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
-		return fmt.Errorf("repo root not found: %w", err)
+	repoRoot, err := findAgentProRoot(d.DOCTEST_ROOT)
+	if err != nil {
+		return err
 	}
+	req.RepoRoot = repoRoot
 	req.TempDir = t.TempDir()
 	req.Home = filepath.Join(req.TempDir, ".agent-run")
 	req.AgentRun, req.FakeCodex, req.TTYWatch = ensureSessionBinaries(t, d, req.RepoRoot)
@@ -161,9 +162,12 @@ func buildLLMMockRunGrok(t *testing.T, req *Request) error {
 		return err
 	}
 	build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.LLMMockRunGrok, "./agent/llm/llm-mock/llm-mock-run-grok")
+	if resolved, err := findAgentProRoot(req.RepoRoot); err == nil {
+		req.RepoRoot = resolved
+	}
 	build.Dir = req.RepoRoot
 	if out, err := build.CombinedOutput(); err != nil {
-		return fmt.Errorf("build llm-mock-run-grok: %w\n%s", err, string(out))
+		return fmt.Errorf("build llm-mock-run-grok (dir=%s): %w\n%s", req.RepoRoot, err, string(out))
 	}
 	req.GrokTTYRunnerBinary = req.LLMMockRunGrok
 	return nil
@@ -1153,4 +1157,28 @@ func upstreamAttachModeFromRegistryURL(serverURL string) string {
 	}
 	return u.Query().Get("attach_mode")
 }
+
+func findAgentProRoot(start string) (string, error) {
+	if start == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return "", err
+		}
+		start = wd
+	}
+	for dir := start; ; dir = filepath.Dir(dir) {
+		data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+		if err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				if strings.TrimSpace(line) == "module github.com/xhd2015/agent-pro" {
+					return dir, nil
+				}
+			}
+		}
+		if filepath.Dir(dir) == dir {
+			return "", fmt.Errorf("could not find agent-pro module root above %s", start)
+		}
+	}
+}
+
 ```

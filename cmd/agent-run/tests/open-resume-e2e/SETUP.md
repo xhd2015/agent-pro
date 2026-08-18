@@ -152,6 +152,11 @@ func ensureStubDist(distDir string) error {
 
 func ensureSessionBinaries(t *testing.T, d *session.Doctest, repoRoot string) (agentRun, llmMock string) {
 	t.Helper()
+	if root, rootErr := findAgentProRoot(repoRoot); rootErr != nil {
+		t.Fatalf("agent-pro root: %v", rootErr)
+	} else {
+		repoRoot = root
+	}
 	cache := sessionCacheDir(d)
 	agentRun = filepath.Join(cache, "agent-run")
 	llmMock = filepath.Join(cache, "llm-mock-run-grok")
@@ -902,10 +907,11 @@ func runOpenBindOnly(t *testing.T, req *Request) (*Response, error) {
 }
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
-	req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../.."))
-	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
-		return fmt.Errorf("repo root not found: %w", err)
+	repoRoot, err := findAgentProRoot(d.DOCTEST_ROOT)
+	if err != nil {
+		return err
 	}
+	req.RepoRoot = repoRoot
 	req.TempDir = t.TempDir()
 	req.Home = filepath.Join(req.TempDir, ".agent-run")
 	req.GrokHome = filepath.Join(req.TempDir, ".grok")
@@ -964,4 +970,28 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	configureMockGrokEnv(t, req)
 	return nil
 }
+
+func findAgentProRoot(start string) (string, error) {
+	if start == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return "", err
+		}
+		start = wd
+	}
+	for dir := start; ; dir = filepath.Dir(dir) {
+		data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+		if err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				if strings.TrimSpace(line) == "module github.com/xhd2015/agent-pro" {
+					return dir, nil
+				}
+			}
+		}
+		if filepath.Dir(dir) == dir {
+			return "", fmt.Errorf("could not find agent-pro module root above %s", start)
+		}
+	}
+}
+
 ```

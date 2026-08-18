@@ -328,14 +328,20 @@ func moduleRoot(d *session.Doctest) (string, error) {
 		}
 		start = wd
 	}
+	// Prefer the real agent-pro module (not cmd/go.mod harness or doctest testcase go.mod).
 	for dir := start; ; dir = filepath.Dir(dir) {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			if _, err := os.Stat(filepath.Join(dir, "agent", "llm", "llm-mock", "llm-mock-run-grok")); err == nil {
-				return dir, nil
+		data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+		if err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				if strings.TrimSpace(line) == "module github.com/xhd2015/agent-pro" {
+					if _, err := os.Stat(filepath.Join(dir, "agent", "llm", "llm-mock", "llm-mock-run-grok")); err == nil {
+						return dir, nil
+					}
+				}
 			}
 		}
 		if filepath.Dir(dir) == dir {
-			return "", os.ErrNotExist
+			return "", fmt.Errorf("could not find agent-pro module root above %s", start)
 		}
 	}
 }

@@ -71,10 +71,11 @@ var ptyChromeSubstrings = []string{
 }
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
-	req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../.."))
-	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
-		return fmt.Errorf("repo root not found: %w", err)
+	repoRoot, err := findAgentProRoot(d.DOCTEST_ROOT)
+	if err != nil {
+		return err
 	}
+	req.RepoRoot = repoRoot
 	req.TempDir = t.TempDir()
 	req.Home = filepath.Join(req.TempDir, ".agent-run")
 	req.AgentRun, req.LLMMockRunGrok = ensureSessionBinaries(t, d, req.RepoRoot)
@@ -116,6 +117,11 @@ func withFileLock(t *testing.T, lockPath string, fn func() error) error {
 
 func ensureSessionBinaries(t *testing.T, d *session.Doctest, repoRoot string) (agentRun, llmMock string) {
 	t.Helper()
+	if root, rootErr := findAgentProRoot(repoRoot); rootErr != nil {
+		t.Fatalf("agent-pro root: %v", rootErr)
+	} else {
+		repoRoot = root
+	}
 	cache := sessionCacheDir(d)
 	agentRun = filepath.Join(cache, "agent-run")
 	llmMock = filepath.Join(cache, "llm-mock-run-grok")
@@ -661,4 +667,28 @@ func startWebGrokSession(t *testing.T, req *Request) {
 	startAgentRunWeb(t, req)
 	req.SessionID = postCreateSession(t, req, req.Runner, req.Prompt)
 }
+
+func findAgentProRoot(start string) (string, error) {
+	if start == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return "", err
+		}
+		start = wd
+	}
+	for dir := start; ; dir = filepath.Dir(dir) {
+		data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+		if err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				if strings.TrimSpace(line) == "module github.com/xhd2015/agent-pro" {
+					return dir, nil
+				}
+			}
+		}
+		if filepath.Dir(dir) == dir {
+			return "", fmt.Errorf("could not find agent-pro module root above %s", start)
+		}
+	}
+}
+
 ```

@@ -315,10 +315,11 @@ func runWebGrokMockProbe(t *testing.T, req *Request) (*Response, error) {
 }
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
-	req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../../.."))
-	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
-		return fmt.Errorf("repo root not found: %w", err)
+	repoRoot, err := findAgentProRoot(d.DOCTEST_ROOT)
+	if err != nil {
+		return err
 	}
+	req.RepoRoot = repoRoot
 	req.TempDir = t.TempDir()
 	req.Home = filepath.Join(req.TempDir, ".agent-run")
 	req.AgentRun = filepath.Join(req.TempDir, "bin", "agent-run")
@@ -337,6 +338,9 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if err := os.MkdirAll(req.GrokHome, 0755); err != nil {
 		return err
 	}
+	if resolved, err := findAgentProRoot(req.RepoRoot); err == nil {
+		req.RepoRoot = resolved
+	}
 	build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-C", "cmd", "-o", req.AgentRun, "./agent-run")
 	build.Dir = req.RepoRoot
 	if out, err := build.CombinedOutput(); err != nil {
@@ -345,7 +349,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	buildMock := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.LLMMockRunGrok, "./agent/llm/llm-mock/llm-mock-run-grok")
 	buildMock.Dir = req.RepoRoot
 	if out, err := buildMock.CombinedOutput(); err != nil {
-		return fmt.Errorf("build llm-mock-run-grok: %w\n%s", err, string(out))
+		return fmt.Errorf("build llm-mock-run-grok (dir=%s): %w\n%s", req.RepoRoot, err, string(out))
 	}
 	if err := writeMockWrapper(t, req.MockWrapperPath, req.ArgvProbePath, req.CreatePrompt, webGrokMockUUID, "WEB_MOCK_STREAM_MARKER"); err != nil {
 		return err
@@ -357,4 +361,28 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	)
 	return nil
 }
+
+func findAgentProRoot(start string) (string, error) {
+	if start == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return "", err
+		}
+		start = wd
+	}
+	for dir := start; ; dir = filepath.Dir(dir) {
+		data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+		if err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				if strings.TrimSpace(line) == "module github.com/xhd2015/agent-pro" {
+					return dir, nil
+				}
+			}
+		}
+		if filepath.Dir(dir) == dir {
+			return "", fmt.Errorf("could not find agent-pro module root above %s", start)
+		}
+	}
+}
+
 ```

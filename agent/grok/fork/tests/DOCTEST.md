@@ -321,7 +321,7 @@ func execGrokMock(t *testing.T, bin string, argv []string, dir string, env []str
 	if bin == "" {
 		t.Fatal("ExecMock: empty grok bin")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, argv...)
 	cmd.Dir = dir

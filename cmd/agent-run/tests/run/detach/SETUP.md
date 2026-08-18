@@ -160,7 +160,10 @@ func buildOnce(t *testing.T, d *session.Doctest) (agentRun, fakeCodex string, er
 	fakeCodex = filepath.Join(cache, "fake-codex")
 	lock := filepath.Join(cache, "build.lock")
 	ready := filepath.Join(cache, "binaries.ready")
-	repoRoot := filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../../.."))
+	repoRoot, err := findAgentProRoot(d.DOCTEST_ROOT)
+	if err != nil {
+		return err
+	}
 	err = withFileLock(t, lock, func() error {
 		if fileExists(ready) && fileExists(agentRun) && fileExists(fakeCodex) {
 			return nil
@@ -793,10 +796,11 @@ func runAgentRun(t *testing.T, req *Request, args ...string) (*Response, error) 
 }
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
-	req.RepoRoot = filepath.Clean(filepath.Join(d.DOCTEST_ROOT, "../../../../.."))
-	if _, err := os.Stat(filepath.Join(req.RepoRoot, "go.mod")); err != nil {
-		return fmt.Errorf("repo root not found: %w", err)
+	repoRoot, err := findAgentProRoot(d.DOCTEST_ROOT)
+	if err != nil {
+		return err
 	}
+	req.RepoRoot = repoRoot
 	req.TempDir = t.TempDir()
 	req.WorkDir = req.TempDir
 	req.Home = filepath.Join(req.TempDir, ".agent-run")
@@ -834,4 +838,28 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Args = []string{"run"}
 	return nil
 }
+
+func findAgentProRoot(start string) (string, error) {
+	if start == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return "", err
+		}
+		start = wd
+	}
+	for dir := start; ; dir = filepath.Dir(dir) {
+		data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+		if err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				if strings.TrimSpace(line) == "module github.com/xhd2015/agent-pro" {
+					return dir, nil
+				}
+			}
+		}
+		if filepath.Dir(dir) == dir {
+			return "", fmt.Errorf("could not find agent-pro module root above %s", start)
+		}
+	}
+}
+
 ```
