@@ -31,6 +31,7 @@ Pick the **first** matching mode:
 | Issue | existing behavior wrong (`fix`, symptom, screenshot, "stays / still / broken") | **First sentence = one-line root cause.** Then the same plan fields as a feature |
 | Pure doc | markdown / comments / skill text only | structural edit; no tests |
 | + CLI | designing a command, flag, help, or terminal UX | also **CLI output examples** below |
+| + Output layers | plan changes a produced contract | layer list, underlying → caller (see **Output-change layers**) |
 
 ## If this is an issue
 
@@ -59,6 +60,16 @@ plan, add running tests to the todo list when you later implement.
 
 No test needed. Analyse the document, propose the structural edit, and explain
 it in detail.
+
+# Output-change layers
+
+When a **produced contract** changes (API return, CLI/HTTP/UI payload, on-disk record):
+
+| Order | Layer | Document |
+|-------|--------|----------|
+| Bottom-up (producer → callers) | Project + module (`go.mod`, `package.json`, …). Inside one module, producer package then callers if the output crosses a package API | How this layer changes (current → new) |
+
+Skip if nothing a caller or user consumes changes. One layer is enough.
 
 # CLI output examples
 
