@@ -19,8 +19,10 @@ func runServeSession(args []string) error {
 	defer cancel()
 	opts := ttywatch.ServeOptionsFromArgv(parsed)
 	opts.OnListening = func(onCtx context.Context, listenAddr, home, registrySubdir string) {
-		startServeSendQueueDrainer(onCtx, parsed.SessionID, listenAddr, home, registrySubdir)
+		// Watchdog first: RunSessionDrainer blocks this callback for the
+		// serve lifetime, so it must not run before idle-exit is armed.
 		startServeIdleWatchdog(onCtx, cancel, parsed.SessionID, listenAddr, home, registrySubdir)
+		startServeSendQueueDrainer(onCtx, parsed.SessionID, listenAddr, home, registrySubdir)
 	}
 	return ttywatch.ServeSession(ctx, opts)
 }

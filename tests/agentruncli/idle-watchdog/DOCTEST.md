@@ -35,9 +35,11 @@ down after grace.
 - **`NewIdleWatchdog` + `IdleWatchdog.Tick`** — armed only when the policy
   file is found and `exit_on_idle` is true. `Now` / `Sample` / `SoftExit` /
   `Shutdown` are injectable. Grace defaults to **5s**.
-- **Soft `/exit` then shutdown** — first continuous idle of `idle_timeout`
-  calls `SoftExit` once; after grace, if still reachable, `Shutdown` once.
-  Clock does not start until the first idle sample.
+- **Soft `/exit` then shutdown** — three consecutive idle samples call
+  `SoftExit` once; after grace (no extra snapshot on the serve loop),
+  `Shutdown` once. A non-idle sample resets the hit count. Serve sleeps
+  `IdleWatchSchedule(timeout)` between the three samples (first delay 30s
+  unless timeout < 30s).
 
 **Behaviors**
 
@@ -46,7 +48,7 @@ down after grace.
 - Missing file → found=false, no error; watchdog never starts (Tick never exits).
 - `exit_on_idle=false` → watchdog never starts / Tick never SoftExit/Shutdown.
 - `SampleIsIdle` true only when all four idle conditions hold; any fail → false.
-- Continuous idle from t=0 for timeout → SoftExit once; +grace → Shutdown once.
+- Three consecutive idle samples → SoftExit once; +grace Tick → Shutdown once.
 - Busy every tick past timeout → no SoftExit.
 - Idle almost-timeout, then occupied, then idle almost-timeout → no SoftExit
   (clock resets).
@@ -115,11 +117,11 @@ Parameter ranking (most → least significant):
 | 12 | `predicate/not-idle/screen/unknown` | screen unknown → not idle |
 | 13 | `predicate/not-idle/screen/starting` | screen starting → not idle |
 | 14 | `predicate/not-idle/screen/modal` | screen modal → not idle |
-| 15 | `watchdog/holds-for-timeout` | idle t=0..timeout → SoftExit 1; +grace → Shutdown 1 |
+| 15 | `watchdog/holds-for-timeout` | 3 idle samples → SoftExit 1; +grace Tick → Shutdown 1 |
 | 16 | `watchdog/never-idle-busy` | busy every tick > timeout → SoftExit 0 |
-| 17 | `watchdog/reset-mid-window` | idle 9s, occupied, idle 9s (timeout 10s) → SoftExit 0 |
-| 18 | `watchdog/late-first-idle` | first idle at 8s; no exit at 10s; SoftExit at 18s |
-| 19 | `watchdog/soft-exit-once` | Tick after timeout does not SoftExit twice |
+| 17 | `watchdog/reset-mid-window` | idle, idle, occupied, idle → SoftExit 0 (hits reset) |
+| 18 | `watchdog/late-first-idle` | busy then 3 idles → SoftExit on third idle |
+| 19 | `watchdog/soft-exit-once` | Tick after third idle does not SoftExit twice |
 
 ## How to Run
 

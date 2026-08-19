@@ -3,13 +3,13 @@
 **Feature**: idle from t=0 for timeout → SoftExit once; +grace → Shutdown once
 
 ```
-Tick idle @0, @10s -> SoftExit=1, Shutdown=0
+Tick idle @0, @5s, @10s -> SoftExit=1, Shutdown=0
 Tick idle @15s -> Shutdown=1
 ```
 
 ## Steps
 
-1. Idle samples at 0, 10s, 15s (timeout 10s, default grace 5s).
+1. Three consecutive idle samples at 0, T/2, T (timeout 10s); grace tick at 15s.
 
 ```go
 import "testing"
@@ -19,6 +19,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	_ = d
 	req.Steps = []TickStep{
 		idleAt(0),
+		idleAt(defaultFakeTimeout / 2),
 		idleAt(defaultFakeTimeout),
 		idleAt(defaultFakeTimeout + defaultFakeGrace),
 	}

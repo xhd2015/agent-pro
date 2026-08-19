@@ -1,0 +1,12 @@
+CODEX_HOME=/tmp/crime-scene-codex-idle-exit/homes/CODEX_HOME
+╭--------------------------------------------╮
+│ >_ OpenAI Codex (v0.147.0)                 │
+│                                            │
+│ model:       mock-model   /model to change │
+│ directory:   /private/var/folders/s_/…/ws  │
+│ permissions: YOLO mode                     │
+╰--------------------------------------------╯
+  Tip:
+⚠ `--dangerously-bypass-hook-trust` is enabled. Enabled hooks may run withoutreview for this invocation.
+› reply with exactly: pong
+› Use /skills to list available skillsmock-model default · /private/var/folders/s_/nd3t_zbx61747w0qdryxh4wm0000gp/T…

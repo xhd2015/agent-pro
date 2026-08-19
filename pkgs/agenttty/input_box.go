@@ -37,7 +37,7 @@ func DetectInputBox(text string) InputBoxStatus {
 	line := lineAt(plain, idx)
 	remainder := remainderAfterGlyph(plain, idx, glyph)
 	if family == "grok" {
-		if strings.TrimSpace(remainder) == "" {
+		if grokRemainderUserText(remainder) == "" {
 			return InputBoxEmpty
 		}
 		return InputBoxOccupied
@@ -85,6 +85,38 @@ func lineAt(text string, idx int) string {
 		end = idx + i
 	}
 	return text[start:end]
+}
+
+// grokRemainderUserText is the composer draft after ❯, ignoring box borders
+// and block-cursor glyphs (live chrome is `│ ❯ … │` plus a cursor).
+func grokRemainderUserText(remainder string) string {
+	s := strings.TrimSpace(remainder)
+	s = strings.TrimRightFunc(s, grokComposerChromeRune)
+	return strings.TrimSpace(s)
+}
+
+func grokComposerChromeRune(r rune) bool {
+	switch {
+	case r >= 0x2500 && r <= 0x257F: // box drawing
+		return true
+	case r >= 0x2580 && r <= 0x259F: // block elements (cursor)
+		return true
+	case r == 0x25A0, r == 0x25A1, r == 0x25AE, r == 0x25AF:
+		return true
+	default:
+		return false
+	}
+}
+
+// LastComposerRemainder is the text after the last ›/»/❯ on its line
+// (ANSI stripped). Empty if there is no composer glyph.
+func LastComposerRemainder(text string) string {
+	plain := StripANSI([]byte(text))
+	idx, glyph, _ := lastComposerGlyph(plain)
+	if idx < 0 {
+		return ""
+	}
+	return remainderAfterGlyph(plain, idx, glyph)
 }
 
 func remainderAfterGlyph(text string, idx int, glyph string) string {

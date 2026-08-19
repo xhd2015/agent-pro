@@ -3,10 +3,35 @@ package agenttty
 import "strings"
 
 func detectGrokScreenStatus(scrollback []byte) string {
-	return detectGenericScreenStatus(scrollback, []string{"GROK_TTY_BANNER"})
+	// Align tty status / idle watchdog with ClassifyGrokScreen (and writable
+	// Ready). Generic banner markers never appear on live Grok chrome.
+	switch class := ClassifyGrokScreen(scrollback); class {
+	case "idle", "busy", "starting", "modal":
+		return class
+	case "empty":
+		return "unknown"
+	}
+	st := checkGrokWritable(scrollback)
+	if st.Ready {
+		return "idle"
+	}
+	if s := strings.TrimSpace(st.State); s != "" && s != "unknown" {
+		return s
+	}
+	return "unknown"
 }
 
 func detectCodexScreenStatus(scrollback []byte) string {
+	// Align tty status / idle watchdog with checkCodexWritable. Live Codex
+	// never prints CODEX_TTY_BANNER, so the generic stub detector would
+	// leave a finished ›/» prompt at "banner" and SampleIsIdle never arms.
+	st := checkCodexWritable(scrollback)
+	if st.Ready {
+		return "idle"
+	}
+	if s := strings.TrimSpace(st.State); s != "" && s != "unknown" {
+		return s
+	}
 	return detectGenericScreenStatus(scrollback, []string{"CODEX_TTY_BANNER"})
 }
 

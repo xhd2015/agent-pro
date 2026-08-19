@@ -3,13 +3,13 @@
 **Feature**: SoftExit fires only once even if Tick continues after timeout
 
 ```
-idle @0, @10s, @11s, @12s, @15s, @16s
-  -> SoftExit=1 (at 10s), Shutdown=1 (at 15s)
+idle @0, @5s, @10s, @11s, @12s, @15s, @16s
+  -> SoftExit=1 (at 10s, third idle), Shutdown=1 (at 15s)
 ```
 
 ## Steps
 
-1. Idle ticks at 0, timeout, +1s, +2s, +grace, +grace+1s.
+1. Three idle ticks to SoftExit, then extra ticks must not SoftExit again.
 
 ```go
 import (
@@ -22,6 +22,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	_ = d
 	req.Steps = []TickStep{
 		idleAt(0),
+		idleAt(defaultFakeTimeout / 2),
 		idleAt(defaultFakeTimeout),
 		idleAt(defaultFakeTimeout + time.Second),
 		idleAt(defaultFakeTimeout + 2*time.Second),

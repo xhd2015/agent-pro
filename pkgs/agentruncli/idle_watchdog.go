@@ -4,6 +4,13 @@ import "time"
 
 const defaultIdleGrace = 5 * time.Second
 
+// idleWatchFirstDelay is the earliest first snapshot when IdleTimeout >= this.
+// Timeouts shorter than this (e.g. 10s probes) sample immediately.
+const idleWatchFirstDelay = 30 * time.Second
+
+// idleWatchSamplesPerCycle is the max snapshots in one idle-exit cycle.
+const idleWatchSamplesPerCycle = 3
+
 // IdleSample is one watchdog observation of TTY + queue idleness.
 type IdleSample struct {
 	Sendable bool
@@ -27,6 +34,7 @@ type IdleWatchdog struct {
 	Shutdown func()
 
 	armed     bool
+	idleHits  int
 	idleSince time.Time
 	exitAt    time.Time
 	softDone  bool
@@ -50,8 +58,27 @@ func NewIdleWatchdog(found bool, p IdlePolicy, cfg IdleWatchdog) *IdleWatchdog {
 	return &w
 }
 
-// Tick advances the idle clock one sample. SoftExit fires once at timeout;
-// Shutdown fires once after grace. Non-idle clears idleSince only.
+// IdleWatchSchedule is the serve-loop sleep plan for one cycle: first delay,
+// then two gaps. Timeouts < 30s start immediately (0, T/2, T). Longer
+// timeouts wait 30s first (30s, 30s+(T-30s)/2, T). At most 3 snapshots.
+func IdleWatchSchedule(timeout time.Duration) (first, gap time.Duration) {
+	if timeout <= 0 {
+		return 0, 0
+	}
+	first = idleWatchFirstDelay
+	if timeout < idleWatchFirstDelay {
+		first = 0
+	}
+	remain := timeout - first
+	if remain < 0 {
+		remain = 0
+	}
+	return first, remain / 2
+}
+
+// Tick advances one sample. SoftExit fires once after idleWatchSamplesPerCycle
+// consecutive idle samples; Shutdown fires once after grace on a later Tick.
+// Non-idle clears the hit count. The serve loop sleeps between Ticks.
 func (w *IdleWatchdog) Tick() {
 	if w == nil || !w.armed {
 		return
@@ -65,13 +92,17 @@ func (w *IdleWatchdog) Tick() {
 		sample = w.Sample()
 	}
 	if !SampleIsIdle(sample) {
+		w.idleHits = 0
 		w.idleSince = time.Time{}
 		return
 	}
 	if w.idleSince.IsZero() {
 		w.idleSince = now
 	}
-	if !w.softDone && now.Sub(w.idleSince) >= w.Timeout {
+	if w.idleHits < idleWatchSamplesPerCycle {
+		w.idleHits++
+	}
+	if !w.softDone && w.idleHits >= idleWatchSamplesPerCycle {
 		w.softDone = true
 		w.exitAt = now
 		if w.SoftExit != nil {
@@ -83,5 +114,15 @@ func (w *IdleWatchdog) Tick() {
 		if w.Shutdown != nil {
 			w.Shutdown()
 		}
+	}
+}
+
+func (w *IdleWatchdog) forceShutdown() {
+	if w == nil || w.shutDone {
+		return
+	}
+	w.shutDone = true
+	if w.Shutdown != nil {
+		w.Shutdown()
 	}
 }

@@ -69,6 +69,7 @@ pkgs/agenttty/tests/input-box/
 │       └── historical-draft-then-empty/      # leftover › above empty live line
 ├── grok/                                     # last live glyph is ❯ (conservative)
 │   ├── empty-padding/
+│   ├── boxed-empty/                          # │ ❯ … │ right border is chrome
 │   ├── occupied-text/
 │   └── footer-glue-ignored/                  # medium · on ❯ line still occupied
 ├── sendable-independent/                     # occupancy ≠ sendable
@@ -102,12 +103,13 @@ Parameter ranking (most → least significant):
 | 9 | `codex/occupied/double-angle-draft` | `»` + draft; footer on next line → `occupied` |
 | 10 | `codex/last-glyph-wins/historical-draft-then-empty` | Historical `› leftover` then empty glued line → `empty` |
 | 11 | `grok/empty-padding` | Last `❯` + padding only → `empty` |
-| 12 | `grok/occupied-text` | Last `❯ leftover note` → `occupied` |
-| 13 | `grok/footer-glue-ignored` | `❯` + text containing ` medium · ` → `occupied` |
-| 14 | `sendable-independent/empty-still-idle` | Empty glued snapshot still CheckWritable idle |
-| 15 | `sendable-independent/occupied-still-idle` | Occupied draft snapshot still CheckWritable idle |
-| 16 | `report/human-json-empty` | `input box: empty` / JSON token `empty` |
-| 17 | `report/unreachable-unknown` | No snapshot / unreachable → report `unknown` |
+| 12 | `grok/boxed-empty` | Boxed `│ ❯ … │` → `empty` |
+| 13 | `grok/occupied-text` | Last `❯ leftover note` → `occupied` |
+| 14 | `grok/footer-glue-ignored` | `❯` + text containing ` medium · ` → `occupied` |
+| 15 | `sendable-independent/empty-still-idle` | Empty glued snapshot still CheckWritable idle |
+| 16 | `sendable-independent/occupied-still-idle` | Occupied draft snapshot still CheckWritable idle |
+| 17 | `report/human-json-empty` | `input box: empty` / JSON token `empty` |
+| 18 | `report/unreachable-unknown` | No snapshot / unreachable → report `unknown` |
 
 ## How to Run
 

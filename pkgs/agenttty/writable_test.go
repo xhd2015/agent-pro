@@ -2,6 +2,48 @@ package agenttty
 
 import "testing"
 
+func TestDetectGrokScreenStatus_modernIdleBoxedComposer(t *testing.T) {
+	scrollback := []byte("" +
+		"pong\n" +
+		"    Worked for 6.0s\n" +
+		" │ ❯                                                        │\n" +
+		" Grok 4.6 (high) · always-approve\n" +
+		" Shift+Tab:mode\n")
+	got := detectGrokScreenStatus(scrollback)
+	if got != "idle" {
+		t.Fatalf("detectGrokScreenStatus=%q want idle", got)
+	}
+	if DetectInputBox(string(scrollback)) != InputBoxEmpty {
+		t.Fatalf("DetectInputBox=%q want empty", DetectInputBox(string(scrollback)))
+	}
+}
+
+func TestDetectCodexScreenStatus_liveIdleEmptyComposer(t *testing.T) {
+	// Crime scene idle-probe-10s-verify-v10: finished › + medium · glue.
+	scrollback := []byte("" +
+		"⚠ MCP startup incomplete (failed: computer-use)\n" +
+		"› reply with exactly: pong\n" +
+		"› Run /review on my current changesgpt-5.6-terra medium · ~\n")
+	got := detectCodexScreenStatus(scrollback)
+	if got != "idle" {
+		t.Fatalf("detectCodexScreenStatus=%q want idle", got)
+	}
+	if DetectInputBox(string(scrollback)) != InputBoxEmpty {
+		t.Fatalf("DetectInputBox=%q want empty", DetectInputBox(string(scrollback)))
+	}
+	st := checkCodexWritable(scrollback)
+	if !st.Ready || st.State != "idle" {
+		t.Fatalf("checkCodexWritable ready=%v state=%q want idle", st.Ready, st.State)
+	}
+}
+
+func TestDetectInputBox_grokBoxedDraftStillOccupied(t *testing.T) {
+	scrollback := " │ ❯ leftover                                                │\n Shift+Tab:mode\n"
+	if DetectInputBox(scrollback) != InputBoxOccupied {
+		t.Fatalf("DetectInputBox=%q want occupied", DetectInputBox(scrollback))
+	}
+}
+
 func TestCheckGrokWritable_realTUIHeavyPrompt(t *testing.T) {
 	scrollback := []byte("     ❯ one word of France captial\n     Turn completed in 1.6s.\n  │ ❯                                                        │\n  Mock Model · always-approve")
 	st := checkGrokWritable(scrollback)
