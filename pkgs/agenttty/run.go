@@ -2,6 +2,7 @@ package agenttty
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -574,11 +575,21 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 			waitErr = nil
 		} else {
 			var extraComplete func() bool
-			if runnerID == "grok-tty" && !opts.GrokSyncOwnsEvents {
-				extraComplete = func() bool {
-					tailState.Lock()
-					defer tailState.Unlock()
-					return tailState.streamed
+			if runnerID == "grok-tty" {
+				if !opts.GrokSyncOwnsEvents {
+					extraComplete = func() bool {
+						tailState.Lock()
+						defer tailState.Unlock()
+						return tailState.streamed
+					}
+				} else {
+					// Sync owns discovery/events: settle when runner_session_id is
+					// bound or a resolve error was written (never via PTY chrome).
+					agentHome := opts.Home
+					agentSID := opts.AgentSessionID
+					extraComplete = func() bool {
+						return grokKeepTTYTurnSettled(agentHome, agentSID)
+					}
 				}
 			}
 			waitErr = waitForPersistentTurnRemote(ctx, listenAddr, sessionID, promptText, cfg, extraComplete)
@@ -764,4 +775,53 @@ func writeIdlePolicyBeforeServe(opts RunOptions) error {
 		ExitOnIdle:  true,
 		IdleTimeout: opts.IdleTimeout,
 	})
+}
+
+// grokKeepTTYTurnSettled reports whether keep-tty + sync-owned discovery has
+// either bound a runner_session_id or recorded a resolve error in events.jsonl.
+func grokKeepTTYTurnSettled(home, agentSessionID string) bool {
+	home = strings.TrimSpace(home)
+	agentSessionID = strings.TrimSpace(agentSessionID)
+	if home == "" || agentSessionID == "" {
+		return false
+	}
+	sessionDir := filepath.Join(home, "sessions", agentSessionID)
+	metaPath := filepath.Join(sessionDir, "meta.json")
+	if data, err := os.ReadFile(metaPath); err == nil {
+		var meta struct {
+			RunnerSessionID string `json:"runner_session_id"`
+		}
+		if json.Unmarshal(data, &meta) == nil && strings.TrimSpace(meta.RunnerSessionID) != "" {
+			return true
+		}
+	}
+	eventsPath := filepath.Join(sessionDir, "events.jsonl")
+	data, err := os.ReadFile(eventsPath)
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var ev struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+			Role string `json:"role"`
+		}
+		if json.Unmarshal([]byte(line), &ev) != nil {
+			continue
+		}
+		if ev.Type == "error" && strings.Contains(ev.Text, "Cannot resolve session id:") {
+			return true
+		}
+		if ev.Type == "message" && ev.Role == "assistant" && strings.TrimSpace(ev.Text) != "" {
+			return true
+		}
+		if ev.Type == "done" {
+			return true
+		}
+	}
+	return false
 }

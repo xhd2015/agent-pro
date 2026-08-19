@@ -345,8 +345,12 @@ func waitForPersistentTurnRemote(ctx context.Context, listenAddr, sessionID, pro
 		case <-ticker.C:
 		}
 		complete := false
-		if extraComplete != nil && cfg.runnerID == "grok-tty" {
-			complete = extraComplete()
+		if cfg.runnerID == "grok-tty" {
+			// keep-tty must never treat PTY chrome (composer/footer glyphs) as
+			// turn-complete — that cancels DiscoverSession / agentsync early.
+			if extraComplete != nil {
+				complete = extraComplete()
+			}
 		} else {
 			snapshot, err := fetchSnapshotBytes(listenAddr, sessionID)
 			if err == nil {

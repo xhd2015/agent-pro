@@ -83,15 +83,11 @@ func ResolveByTerminalID(home, terminalSessionID string) (*TTYSession, error) {
 	if sess.AgentSessionID == "" {
 		sess.AgentSessionID = findAgentSessionByTerminalID(home, runnerID, terminalSessionID)
 	}
-	if reachable && provider.DetectScreenStatus != nil &&
-		(sess.ScreenStatus == "" || sess.ScreenStatus == "unknown") {
-		scrollback, err := fetchSnapshotBytes(entry.ListenAddr, terminalSessionID)
-		if err == nil {
-			if live := provider.DetectScreenStatus(scrollback); live != "" && live != "unknown" {
-				sess.ScreenStatus = live
-			}
-		}
-	}
+	// Do not live-snapshot here to upgrade "unknown" screen status: SnapshotText
+	// observer reads can block ~2s and regress `agent-run send --no-wait`.
+	// Callers that need live screen (status / tty status) snapshot explicitly.
+	_ = reachable
+	_ = provider
 	return sess, nil
 }
 
@@ -153,12 +149,8 @@ func ResolveByAgentSession(store agentstorage.Store, runner, agentSessionID stri
 			result.ScreenStatus = snap.ScreenStatus
 		}
 	}
-	if result.ScreenStatus == "" && provider.DetectScreenStatus != nil {
-		scrollback, err := fetchSnapshotBytes(entry.ListenAddr, terminalSessionID)
-		if err == nil {
-			result.ScreenStatus = provider.DetectScreenStatus(scrollback)
-		}
-	}
+	// Skip live DetectScreenStatus snapshot (see ResolveByTerminalID).
+	_ = provider
 	return result, nil
 }
 

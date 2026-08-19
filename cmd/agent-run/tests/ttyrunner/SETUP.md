@@ -470,6 +470,10 @@ func dialPTYAttach(t *testing.T, listenAddr, sessionID, attachMode string) *wsAt
 		t.Fatalf("dial ws %s: %v", u.String(), err)
 	}
 	client := &wsAttachClient{conn: conn, role: attachMode}
+	// Handshake first — gorilla/websocket forbids concurrent ReadMessage.
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, _, _ = conn.ReadMessage()
+	conn.SetReadDeadline(time.Time{})
 	go func() {
 		for {
 			_, msg, err := conn.ReadMessage()
@@ -484,10 +488,6 @@ func dialPTYAttach(t *testing.T, listenAddr, sessionID, attachMode string) *wsAt
 			client.outputMu.Unlock()
 		}
 	}()
-	// Read role handshake if server sends attach_role JSON
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	_, _, _ = conn.ReadMessage()
-	conn.SetReadDeadline(time.Time{})
 	return client
 }
 
@@ -929,8 +929,9 @@ func runMultiAttachOp(t *testing.T, req *Request) (*Response, error) {
 		sessionID = startStubTTYBackground(t, req)
 		addr = readRegistryListenAddr(t, req.Home, "stub-tty", sessionID)
 		waitForPortOpen(t, addr, 10*time.Second)
-		req.ExecTimeout = 15 * time.Second
-		sendResp, err := execAgentRun(t, req, "tty", "send", sessionID, "timeout-probe")
+		// Default tty send waits indefinitely; pin --max-wait 10s for this leaf.
+		req.ExecTimeout = 20 * time.Second
+		sendResp, err := execAgentRun(t, req, "tty", "send", "--max-wait", "10s", sessionID, "timeout-probe")
 		if err != nil && !errors.Is(err, context.DeadlineExceeded) {
 			return resp, err
 		}

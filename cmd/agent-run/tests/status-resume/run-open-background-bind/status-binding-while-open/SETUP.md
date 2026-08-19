@@ -45,8 +45,8 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.GrokTTYCommand = fakeTUIHoldSeconds(10)
 	req.OpenInstantAttach = true
 	req.Mode = "open-status-mid"
-	// Probe soon after meta appears, while delayed discover is still pending.
-	req.StatusProbeAfter = 300 * time.Millisecond
+	// Probe after meta + bind.json in_progress; CI parallel load can exceed 300ms.
+	req.StatusProbeAfter = 1500 * time.Millisecond
 	req.Args = []string{
 		"run", "--agent-runner", "grok-tty",
 		"--session", bgBindStatusSession,
