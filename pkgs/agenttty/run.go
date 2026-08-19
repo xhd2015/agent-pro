@@ -638,7 +638,9 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 			go func() {
 				waitDone <- waitForPersistentTurnRemote(ctx, listenAddr, sessionID, promptText, cfg, extraComplete)
 			}()
-			ticker := time.NewTicker(100 * time.Millisecond)
+			// 250ms: avoid stampeding ptywrap snapshots with the codex tail
+			// goroutine under parallel CI load (stream-probe flakes).
+			ticker := time.NewTicker(250 * time.Millisecond)
 			defer ticker.Stop()
 		keepWaitLoop:
 			for {

@@ -742,11 +742,12 @@ func runCodexJSONLStreamProbe(t *testing.T, req *Request) (*Response, error) {
 		probeTimeout = 8 * time.Second
 	}
 	resp := &Response{}
-	deadline := time.After(probeTimeout)
+	probeDeadline := time.Now().Add(probeTimeout)
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
 	var waitErr error
 	waited := false
+	probeExpired := false
 	for !waited {
 		select {
 		case waitErr = <-waitDone:
@@ -756,9 +757,21 @@ func runCodexJSONLStreamProbe(t *testing.T, req *Request) (*Response, error) {
 				resp.StreamProbeSeen = true
 				resp.StreamProbeBeforeExit = true
 			}
-		case <-deadline:
-			if want != "" && strings.Contains(stdout.String(), want) {
-				resp.StreamProbeSeen = true
+			if !probeExpired && time.Now().After(probeDeadline) {
+				probeExpired = true
+				if want != "" && strings.Contains(stdout.String(), want) {
+					resp.StreamProbeSeen = true
+				}
+				// Do not burn the full ExecTimeout when the stream marker never
+				// appeared — kill and surface a probe timeout with I/O dumps.
+				if want != "" && !resp.StreamProbeSeen {
+					if cmd.Process != nil {
+						_ = cmd.Process.Kill()
+					}
+					waitErr = fmt.Errorf("stream probe timeout after %s waiting for %q; stdout:\n%s\nstderr:\n%s",
+						probeTimeout, want, stdout.String(), stderr.String())
+					waited = true
+				}
 			}
 		case <-ctx.Done():
 			if cmd.Process != nil {
