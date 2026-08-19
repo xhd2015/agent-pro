@@ -30,12 +30,20 @@ type RunGrokOptions struct {
 
 // RunGrok starts the mock server in the background, configures an isolated GROK_HOME,
 // runs grok in the foreground, and tears down the mock when grok exits.
+//
+// When LLM_MOCK_RUN_GROK_COMMAND is set, the mock HTTP server is skipped: the hook
+// replaces the grok binary entirely (fork/open-resume harnesses). Starting the mock
+// first would otherwise require a sibling `llm-mock` next to `llm-mock-run-grok`.
 func RunGrok(grokArgs []string, opts RunGrokOptions) error {
 	if opts.LogEventsPath != "" && !strings.HasSuffix(opts.LogEventsPath, ".jsonl") {
 		return fmt.Errorf("--log-events path must end with .jsonl")
 	}
 	if opts.LogHTTPPath != "" && !strings.HasSuffix(opts.LogHTTPPath, ".jsonl") {
 		return fmt.Errorf("--log-http path must end with .jsonl")
+	}
+
+	if strings.TrimSpace(os.Getenv("LLM_MOCK_RUN_GROK_COMMAND")) != "" {
+		return runGrokWithHookOnly(grokArgs, opts)
 	}
 
 	loaded, err := mockconfig.LoadMerged("")
@@ -152,6 +160,48 @@ func RunGrok(grokArgs []string, opts RunGrokOptions) error {
 	} else {
 		runGrokDebugf("skipping waitAndMirrorSessions (LLM_MOCK_RUN_GROK_COMMAND hook)")
 	}
+	if runErr != nil {
+		if exitErr, ok := runErr.(*exec.ExitError); ok {
+			os.Exit(exitErr.ExitCode())
+		}
+		return fmt.Errorf("run grok: %w", runErr)
+	}
+	return nil
+}
+
+// runGrokWithHookOnly runs LLM_MOCK_RUN_GROK_COMMAND without starting the mock HTTP
+// server (fork / open-resume harnesses replace the TUI entirely).
+func runGrokWithHookOnly(grokArgs []string, opts RunGrokOptions) error {
+	tmpDir, err := os.MkdirTemp("", "llm-mock-run-grok-hook-*")
+	if err != nil {
+		return fmt.Errorf("create temp dir: %w", err)
+	}
+	grokHome, _, err := resolveGrokHome(tmpDir, opts.AgentRunnerConfigHome)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "GROK_HOME=%s\n", grokHome)
+
+	grokCmd, _, err := buildGrokCommand(grokArgs)
+	if err != nil {
+		return err
+	}
+	grokCmd.Env = append(os.Environ(),
+		"GROK_HOME="+grokHome,
+		"XAI_API_KEY=sk-mock",
+	)
+	workDir, err := workDirForSessionEncoding(".")
+	if err != nil {
+		return err
+	}
+	grokCmd.Dir = workDir
+	grokCmd.Stdin = os.Stdin
+	grokCmd.Stdout = os.Stdout
+	grokCmd.Stderr = os.Stderr
+
+	runGrokDebugf("starting grok hook-only args=%q workDir=%q grokHome=%q", grokArgs, workDir, grokHome)
+	runErr := grokCmd.Run()
+	runGrokDebugf("skipping waitAndMirrorSessions (LLM_MOCK_RUN_GROK_COMMAND hook)")
 	if runErr != nil {
 		if exitErr, ok := runErr.(*exec.ExitError); ok {
 			os.Exit(exitErr.ExitCode())
@@ -312,6 +362,7 @@ func mockServerExecutable() (string, error) {
 		if _, err := os.Stat(sibling); err == nil {
 			return sibling, nil
 		}
+		return "", fmt.Errorf("mock server binary %q not found next to %s (build llm-mock into the same directory)", sibling, base)
 	}
 	return exe, nil
 }

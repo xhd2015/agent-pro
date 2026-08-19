@@ -967,11 +967,21 @@ func (h *mockHandler) findGeneratedMatch(messages []openai.ChatCompletionMessage
 
 	h.genMu.Lock()
 	if batch, ok := queue.DequeueToBreakpoint(&h.genQueue); ok {
+		var trailing []types.AgentEvent
+		for _, evt := range h.genQueue {
+			if evt.Type == types.ActionMessage {
+				trailing = append(trailing, evt)
+			}
+		}
 		h.genMu.Unlock()
 		batch = sanitizeBatch(batch)
+		events := queue.ConsumedEvents(batch)
+		if batch.Breakpoint.Type == types.ActionToolCall {
+			events = append(events, trailing...)
+		}
 		return &serveResult{
 			batch:       batch,
-			agentEvents: queue.ConsumedEvents(batch),
+			agentEvents: events,
 		}, true
 	}
 

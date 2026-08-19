@@ -75,7 +75,8 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-C", "cmd", "-o", req.AgentRun, "./agent-run")
 	build.Dir = req.RepoRoot
 	if out, err := build.CombinedOutput(); err != nil {
-		return fmt.Errorf("build agent-run: %w\n%s", err, string(out))
+		return fmt.Errorf("build agent-run: %w
+%s", err, string(out))
 	}
 	req.Env = append(req.Env,
 		"AGENT_RUN_HOME="+req.Home,
@@ -111,7 +112,15 @@ func buildLLMMockRunGrok(t *testing.T, req *Request) error {
 	build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", req.LLMMockRunGrok, "./agent/llm/llm-mock/llm-mock-run-grok")
 	build.Dir = root
 	if out, err := build.CombinedOutput(); err != nil {
-		return fmt.Errorf("build llm-mock-run-grok (dir=%s): %w\n%s", root, err, string(out))
+		return fmt.Errorf("build llm-mock-run-grok (dir=%s): %w
+%s", root, err, string(out))
+	}
+	sibling := filepath.Join(filepath.Dir(req.LLMMockRunGrok), "llm-mock")
+	buildSibling := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-o", sibling, "./agent/llm/llm-mock")
+	buildSibling.Dir = req.RepoRoot
+	if out, err := buildSibling.CombinedOutput(); err != nil {
+		return fmt.Errorf("build llm-mock sibling: %w
+%s", err, string(out))
 	}
 	req.GrokTTYRunnerBinary = req.LLMMockRunGrok
 	return nil

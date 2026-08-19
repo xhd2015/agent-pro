@@ -357,9 +357,12 @@ func buildMockGrokOnce(t *testing.T, d *session.Doctest) string {
 	ready := filepath.Join(cache, "binaries.ready")
 	lock := filepath.Join(cache, "build.lock")
 	err = withFileLock(lock, func() error {
+		sibling := filepath.Join(cache, "llm-mock")
 		if _, e := os.Stat(ready); e == nil {
-			if _, e := os.Stat(binPath); e == nil {
-				return nil
+			if _, e1 := os.Stat(binPath); e1 == nil {
+				if _, e2 := os.Stat(sibling); e2 == nil {
+					return nil
+				}
 			}
 		}
 		if err := os.MkdirAll(cache, 0o755); err != nil {
@@ -367,12 +370,19 @@ func buildMockGrokOnce(t *testing.T, d *session.Doctest) string {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, runtime.GOROOT()+"/bin/go", "build", "-o", binPath, "./agent/llm/llm-mock/llm-mock-run-grok")
-		cmd.Dir = root
-		var be bytes.Buffer
-		cmd.Stderr = &be
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("go build llm-mock-run-grok: %w\n%s", err, be.String())
+		for _, b := range []struct {
+			out, pkg string
+		}{
+			{binPath, "./agent/llm/llm-mock/llm-mock-run-grok"},
+			{sibling, "./agent/llm/llm-mock"},
+		} {
+			cmd := exec.CommandContext(ctx, runtime.GOROOT()+"/bin/go", "build", "-o", b.out, b.pkg)
+			cmd.Dir = root
+			var be bytes.Buffer
+			cmd.Stderr = &be
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("go build %s: %w\n%s", b.pkg, err, be.String())
+			}
 		}
 		return os.WriteFile(ready, []byte("ok\n"), 0o644)
 	})

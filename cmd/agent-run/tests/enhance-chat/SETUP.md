@@ -128,7 +128,8 @@ func ensureSessionBinaries(t *testing.T, d *session.Doctest, repoRoot string) (a
 	ready := filepath.Join(cache, "binaries.ready")
 	lock := filepath.Join(cache, "build.lock")
 	err := withFileLock(t, lock, func() error {
-		if fileExists(ready) && fileExists(agentRun) && fileExists(llmMock) {
+		llmMockServer := filepath.Join(filepath.Dir(llmMock), "llm-mock")
+		if fileExists(ready) && fileExists(agentRun) && fileExists(llmMock) && fileExists(llmMockServer) {
 			return nil
 		}
 		if err := os.MkdirAll(cache, 0755); err != nil {
@@ -140,6 +141,7 @@ func ensureSessionBinaries(t *testing.T, d *session.Doctest, repoRoot string) (a
 		}{
 			{agentRun, []string{"build", "-C", "cmd", "-o", agentRun, "./agent-run"}},
 			{llmMock, []string{"build", "-o", llmMock, "./agent/llm/llm-mock/llm-mock-run-grok"}},
+			{llmMockServer, []string{"build", "-o", llmMockServer, "./agent/llm/llm-mock"}},
 		}
 		for _, b := range builds {
 			cmd := exec.Command(runtime.GOROOT()+"/bin/go", b.args...)
