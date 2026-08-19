@@ -21,6 +21,8 @@ Options:
   --mock-events-preset NAME
         Named AgentEvent sequence to seed mock genQueue after config exchanges,
         or "list" to print the preset catalog and exit (no agent, no mock server).
+  --mock-events-file FILE
+        AgentEvent JSONL appended to genQueue (delay_ms / type=sleep honored).
   --log-events FILE
         Append standard AgentEvent JSONL for each served mock response.
         FILE must end with .jsonl. Passed to the mock as --agent-events-file.
@@ -112,8 +114,9 @@ func ParseRunFlags(args []string) (RunGrokOptions, []string, error) {
 }
 
 func parseRunFlags(args []string, stopOnFirstArg bool) (RunGrokOptions, []string, error) {
-	var logEvents, logHTTP, mockEventsPreset, agentRunnerConfigHome *string
+	var logEvents, logHTTP, mockEventsPreset, mockEventsFile, agentRunnerConfigHome *string
 	builder := lessflags.String("--mock-events-preset", &mockEventsPreset).
+		String("--mock-events-file", &mockEventsFile).
 		String("--log-events", &logEvents).
 		String("--log-http", &logHTTP).
 		String("--agent-runner-config-home", &agentRunnerConfigHome).
@@ -129,6 +132,9 @@ func parseRunFlags(args []string, stopOnFirstArg bool) (RunGrokOptions, []string
 	opts := RunGrokOptions{}
 	if mockEventsPreset != nil {
 		opts.MockEventsPreset = *mockEventsPreset
+	}
+	if mockEventsFile != nil {
+		opts.MockEventsFile = *mockEventsFile
 	}
 	if logEvents != nil {
 		opts.LogEventsPath = *logEvents

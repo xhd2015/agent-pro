@@ -15,6 +15,7 @@ import (
 // RunCommandCodeOptions configures optional behavior for RunCommandCode.
 type RunCommandCodeOptions struct {
 	MockEventsPreset string // --mock-events-preset; passed to mock server
+	MockEventsFile   string // --mock-events-file; AgentEvent JSONL for genQueue
 	LogEventsPath    string // --log-events output path; passed to mock server as --agent-events-file
 	LogHTTPPath      string // --log-http output path; passed to mock server as --log-http
 }
@@ -62,10 +63,11 @@ func RunCommandCode(cmdArgs []string, opts RunCommandCodeOptions) error {
 	defer cancel()
 
 	srv, err := server.Start(ctx, server.Options{
-		Config: loaded,
-		LogHTTPPath:     opts.LogHTTPPath,
-		AgentEventsFile: opts.LogEventsPath,
+		Config:           loaded,
+		LogHTTPPath:      opts.LogHTTPPath,
+		AgentEventsFile:  opts.LogEventsPath,
 		MockEventsPreset: opts.MockEventsPreset,
+		MockEventsFile:   opts.MockEventsFile,
 	})
 	if err != nil {
 		return err

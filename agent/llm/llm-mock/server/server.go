@@ -25,13 +25,14 @@ import (
 
 // Options configures the mock server.
 type Options struct {
-	ConfigPath        string
-	MockEventsPreset  string
-	EventsFile        string
-	AgentEventsFile   string
-	LogHTTPPath       string
-	PresetEvents      []types.AgentEvent
-	Config            *mockconfig.Loaded
+	ConfigPath       string
+	MockEventsPreset string
+	MockEventsFile   string
+	EventsFile       string
+	AgentEventsFile  string
+	LogHTTPPath      string
+	PresetEvents     []types.AgentEvent
+	Config           *mockconfig.Loaded
 }
 
 // RecordedRequest stores a received HTTP request.
@@ -53,16 +54,16 @@ type Server struct {
 
 // Handler is the mock request handler.
 type Handler struct {
-	Config           mockconfig.Config
-	Exchanges        []mockconfig.ParsedExchange
-	EffectiveIndices []int
-	counter          int
-	GenQueue         []types.AgentEvent
-	genStream        *events.EventStream
-	genMu            sync.Mutex
-	mu               sync.Mutex
-	Requests         []RecordedRequest
-	eventsWriter     io.Writer
+	Config            mockconfig.Config
+	Exchanges         []mockconfig.ParsedExchange
+	EffectiveIndices  []int
+	counter           int
+	GenQueue          []types.AgentEvent
+	genStream         *events.EventStream
+	genMu             sync.Mutex
+	mu                sync.Mutex
+	Requests          []RecordedRequest
+	eventsWriter      io.Writer
 	agentEventsWriter io.Writer
 }
 
@@ -88,6 +89,13 @@ func Start(ctx context.Context, opts Options) (*Server, error) {
 		if err != nil {
 			return nil, err
 		}
+	}
+	if strings.TrimSpace(opts.MockEventsFile) != "" {
+		extra, err := mockpreset.LoadJSONL(opts.MockEventsFile)
+		if err != nil {
+			return nil, err
+		}
+		presetEvents = append(presetEvents, extra...)
 	}
 
 	var eventsWriter io.WriteCloser
@@ -288,6 +296,7 @@ func (h *Handler) handleResponses(w http.ResponseWriter, r *http.Request) {
 		writeError(w, "no matching exchange", "no_match", http.StatusBadRequest)
 		return
 	}
+	queue.SleepFor(serveResult.agentEvents)
 	h.writeAgentEvents(serveResult.agentEvents)
 
 	stream, _ := rawBody["stream"].(bool)
@@ -322,6 +331,7 @@ func (h *Handler) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 		writeError(w, "no matching exchange", "no_match", http.StatusBadRequest)
 		return
 	}
+	queue.SleepFor(serveResult.agentEvents)
 	h.writeAgentEvents(serveResult.agentEvents)
 
 	stream, _ := rawBody["stream"].(bool)
@@ -365,6 +375,7 @@ func (h *Handler) handleMessages(w http.ResponseWriter, r *http.Request) {
 		writeError(w, "no matching exchange", "no_match", http.StatusBadRequest)
 		return
 	}
+	queue.SleepFor(serveResult.agentEvents)
 	h.writeAgentEvents(serveResult.agentEvents)
 
 	stream, _ := rawBody["stream"].(bool)
@@ -416,6 +427,7 @@ func (h *Handler) handleAlphaGenerate(w http.ResponseWriter, r *http.Request) {
 		WriteAlphaFallbackNDJSON(w, model)
 		return
 	}
+	queue.SleepFor(serveResult.agentEvents)
 	h.writeAgentEvents(serveResult.agentEvents)
 	WriteAlphaNDJSON(w, model, serveResult)
 }

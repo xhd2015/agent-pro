@@ -15,7 +15,6 @@ import (
 	"sync"
 
 	"github.com/openai/openai-go/v3"
-	lessflags "github.com/xhd2015/less-flags"
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	anthropicenc "github.com/xhd2015/agent-pro/agent/llm/anthropic"
 	"github.com/xhd2015/agent-pro/agent/llm/llm-mock/mockconfig"
@@ -25,6 +24,7 @@ import (
 	openaienc "github.com/xhd2015/agent-pro/agent/llm/openai"
 	"github.com/xhd2015/agent-pro/agent/llm/queue"
 	"github.com/xhd2015/agent-pro/pkgs/fake-agent/events"
+	lessflags "github.com/xhd2015/less-flags"
 	"github.com/xhd2015/skills/install"
 )
 
@@ -41,7 +41,7 @@ Commands:
   skill     Show or install the llm-mock skill (llm-mock skill show)
 
 Server mode (default, no subcommand):
-  llm-mock [--config FILE] [--mock-events-preset NAME] [--events-file FILE] [--agent-events-file FILE] [--log-http FILE]
+  llm-mock [--config FILE] [--mock-events-preset NAME] [--mock-events-file FILE] [--events-file FILE] [--agent-events-file FILE] [--log-http FILE]
 
   OpenAI-compatible mock HTTP server for /v1/chat/completions, /v1/models, etc.
 
@@ -50,6 +50,8 @@ Options:
         Path to JSON config file (or LLM_MOCK_CONFIG / LLM_MOCK_CONFIG_FILE)
   -mock-events-preset string
         Named AgentEvent sequence to seed genQueue after config exchanges, or "list" for catalog
+  -mock-events-file string
+        AgentEvent JSONL appended to genQueue (delay_ms / type=sleep honored before HTTP write)
   -events-file string
         Path to append RecordedRequest JSONL (admin/debug)
   -agent-events-file string
@@ -92,6 +94,7 @@ func main() {
 
 	configPath := flag.String("config", "", "Path to JSON config file")
 	mockEventsPreset := flag.String("mock-events-preset", "", "Named AgentEvent sequence for genQueue, or \"list\" for catalog")
+	mockEventsFile := flag.String("mock-events-file", "", "AgentEvent JSONL appended to genQueue")
 	eventsFile := flag.String("events-file", "", "Path to write request events as JSON lines")
 	agentEventsFile := flag.String("agent-events-file", "", "Path to write served AgentEvents as JSON lines")
 	logHTTPPath := flag.String("log-http", "", "Path to append HTTP exchange JSONL (must end with .jsonl)")
@@ -113,6 +116,13 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+	}
+	if strings.TrimSpace(*mockEventsFile) != "" {
+		extra, err := mockpreset.LoadJSONL(*mockEventsFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		presetEvents = append(presetEvents, extra...)
 	}
 
 	loaded, err := mockconfig.LoadMerged(*configPath)
@@ -220,12 +230,12 @@ func printMainHelp() {
 
 // alphaGenerateRequest mirrors the JSON shape Command Code sends to /alpha/generate.
 type alphaGenerateRequest struct {
-	Config   map[string]any        `json:"config"`
-	Memory   string                `json:"memory"`
-	Taste    any                   `json:"taste"`
-	Skills   string                `json:"skills"`
-	Params   alphaGenerateParams   `json:"params"`
-	ThreadID string                `json:"threadId"`
+	Config   map[string]any      `json:"config"`
+	Memory   string              `json:"memory"`
+	Taste    any                 `json:"taste"`
+	Skills   string              `json:"skills"`
+	Params   alphaGenerateParams `json:"params"`
+	ThreadID string              `json:"threadId"`
 }
 
 type alphaGenerateParams struct {
@@ -281,7 +291,7 @@ func extractAlphaContentText(raw json.RawMessage) string {
 		}
 	}
 	return strings.Join(parts, "")
-}// handleAlphaLifecycleEvents accepts lifecycle events (no-op).
+} // handleAlphaLifecycleEvents accepts lifecycle events (no-op).
 func (h *mockHandler) handleAlphaLifecycleEvents(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -361,7 +371,7 @@ func (h *mockHandler) handleAlphaGenerate(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	serve, ok := h.findMatch(chatMsgs)
+	serve, ok := h.matchAndHold(chatMsgs)
 	if !ok {
 		writeAlphaFallbackNDJSON(w, model, "Hello from llm-mock!")
 		return
@@ -470,18 +480,21 @@ func handleRunCommand(args []string) error {
 	case "codex":
 		return runpkg.RunCodex(remain[1:], runpkg.RunCodexOptions{
 			MockEventsPreset: opts.MockEventsPreset,
+			MockEventsFile:   opts.MockEventsFile,
 			LogEventsPath:    opts.LogEventsPath,
 			LogHTTPPath:      opts.LogHTTPPath,
 		})
 	case "opencode":
 		return runpkg.RunOpencode(remain[1:], runpkg.RunOpencodeOptions{
 			MockEventsPreset: opts.MockEventsPreset,
+			MockEventsFile:   opts.MockEventsFile,
 			LogEventsPath:    opts.LogEventsPath,
 			LogHTTPPath:      opts.LogHTTPPath,
 		})
 	case "commandcode":
 		return runpkg.RunCommandCode(remain[1:], runpkg.RunCommandCodeOptions{
 			MockEventsPreset: opts.MockEventsPreset,
+			MockEventsFile:   opts.MockEventsFile,
 			LogEventsPath:    opts.LogEventsPath,
 			LogHTTPPath:      opts.LogHTTPPath,
 		})
@@ -513,14 +526,14 @@ func handleSkillCommand(args []string) error {
 }
 
 type mockHandler struct {
-	config           mockconfig.Config
-	exchanges        []mockconfig.ParsedExchange
-	effectiveIndices []int
-	counter          int
-	genQueue         []types.AgentEvent
-	genStream        *events.EventStream
-	genMu            sync.Mutex
-	mu               sync.Mutex
+	config            mockconfig.Config
+	exchanges         []mockconfig.ParsedExchange
+	effectiveIndices  []int
+	counter           int
+	genQueue          []types.AgentEvent
+	genStream         *events.EventStream
+	genMu             sync.Mutex
+	mu                sync.Mutex
 	requests          []RecordedRequest
 	eventsWriter      io.Writer
 	agentEventsWriter io.Writer
@@ -620,7 +633,7 @@ func (h *mockHandler) handleResponses(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	serve, ok := h.findMatch(req.Messages)
+	serve, ok := h.matchAndHold(req.Messages)
 	if !ok {
 		writeError(w, "no matching exchange", "no_match", http.StatusBadRequest)
 		return
@@ -730,7 +743,7 @@ func (h *mockHandler) handleChatCompletions(w http.ResponseWriter, r *http.Reque
 	h.mu.Unlock()
 	h.writeEvent(rec)
 
-	serve, ok := h.findMatch(req.Messages)
+	serve, ok := h.matchAndHold(req.Messages)
 	if !ok {
 		writeError(w, "no matching exchange", "no_match", http.StatusBadRequest)
 		return
@@ -816,7 +829,7 @@ func (h *mockHandler) handleMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	serve, ok := h.findMatch(req.Messages)
+	serve, ok := h.matchAndHold(req.Messages)
 	if !ok {
 		writeError(w, "no matching exchange", "no_match", http.StatusBadRequest)
 		return
@@ -866,6 +879,14 @@ type serveResult struct {
 	batch       queue.Batch
 	agentEvents []types.AgentEvent
 	fromLegacy  bool
+}
+
+func (h *mockHandler) matchAndHold(messages []openai.ChatCompletionMessageParamUnion) (*serveResult, bool) {
+	serve, ok := h.findMatch(messages)
+	if ok {
+		queue.SleepFor(serve.agentEvents)
+	}
+	return serve, ok
 }
 
 func (h *mockHandler) findMatch(messages []openai.ChatCompletionMessageParamUnion) (*serveResult, bool) {
@@ -1068,5 +1089,3 @@ func writeError(w http.ResponseWriter, message, typ string, statusCode int) {
 		},
 	})
 }
-
-

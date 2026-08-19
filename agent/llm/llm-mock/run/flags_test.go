@@ -21,6 +21,17 @@ func TestParseRunFlagsFromEnv_parsesMockFlagsOnly(t *testing.T) {
 	}
 }
 
+func TestParseRunFlagsFromEnv_mockEventsFile(t *testing.T) {
+	t.Setenv(RunFlagsEnvVar, "--mock-events-file /tmp/ev.jsonl")
+	opts, err := ParseRunFlagsFromEnv()
+	if err != nil {
+		t.Fatalf("ParseRunFlagsFromEnv: %v", err)
+	}
+	if opts.MockEventsFile != "/tmp/ev.jsonl" {
+		t.Fatalf("MockEventsFile = %q", opts.MockEventsFile)
+	}
+}
+
 func TestParseRunFlagsFromEnv_emptyWhenUnset(t *testing.T) {
 	t.Setenv(RunFlagsEnvVar, "")
 	opts, err := ParseRunFlagsFromEnv()

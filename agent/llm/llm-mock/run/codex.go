@@ -21,6 +21,7 @@ const EnvExtraMCPTOMLFile = "LLM_MOCK_EXTRA_MCP_TOML_FILE"
 // RunCodexOptions configures optional behavior for RunCodex.
 type RunCodexOptions struct {
 	MockEventsPreset string // --mock-events-preset; passed to mock server
+	MockEventsFile   string // --mock-events-file; AgentEvent JSONL for genQueue
 	LogEventsPath    string // --log-events output path; passed to mock server as --agent-events-file
 	LogHTTPPath      string // --log-http output path; passed to mock server as --log-http
 }
@@ -63,7 +64,7 @@ func RunCodex(codexArgs []string, opts RunCodexOptions) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mockCmd, port, err := startMockServer(ctx, mergedConfigPath, opts.MockEventsPreset, opts.LogEventsPath, opts.LogHTTPPath)
+	mockCmd, port, err := startMockServer(ctx, mergedConfigPath, opts.MockEventsPreset, opts.MockEventsFile, opts.LogEventsPath, opts.LogHTTPPath)
 	if err != nil {
 		return err
 	}
@@ -161,39 +162,39 @@ type codexModelsCache struct {
 }
 
 type codexModelEntry struct {
-	Slug                           string                     `json:"slug"`
-	DisplayName                    string                     `json:"display_name"`
-	Description                    string                     `json:"description"`
-	DefaultReasoningLevel          string                     `json:"default_reasoning_level"`
-	SupportedReasoningLevels       []codexReasoningLevel      `json:"supported_reasoning_levels"`
-	ShellType                      string                     `json:"shell_type"`
-	Visibility                     string                     `json:"visibility"`
-	SupportedInAPI                 bool                       `json:"supported_in_api"`
-	Priority                       int                        `json:"priority"`
-	AdditionalSpeedTiers           []string                   `json:"additional_speed_tiers"`
-	ServiceTiers                   []codexServiceTier         `json:"service_tiers"`
-	DefaultServiceTier             string                     `json:"default_service_tier"`
-	AvailabilityNUX                codexAvailabilityNUX       `json:"availability_nux"`
-	Upgrade                        *string                    `json:"upgrade"`
-	BaseInstructions               string                     `json:"base_instructions"`
-	ModelMessages                  codexModelMessages         `json:"model_messages"`
-	SupportsReasoningSummaries     bool                       `json:"supports_reasoning_summaries"`
-	DefaultReasoningSummary        string                     `json:"default_reasoning_summary"`
-	SupportVerbosity               bool                       `json:"support_verbosity"`
-	DefaultVerbosity               string                     `json:"default_verbosity"`
-	ApplyPatchToolType             string                     `json:"apply_patch_tool_type"`
-	WebSearchToolType              string                     `json:"web_search_tool_type"`
-	TruncationPolicy               codexTruncationPolicy      `json:"truncation_policy"`
-	SupportsParallelToolCalls      bool                       `json:"supports_parallel_tool_calls"`
-	SupportsImageDetailOriginal    bool                       `json:"supports_image_detail_original"`
-	ContextWindow                  int                        `json:"context_window"`
-	MaxContextWindow               int                        `json:"max_context_window"`
-	CompHash                       string                     `json:"comp_hash"`
-	EffectiveContextWindowPercent  int                        `json:"effective_context_window_percent"`
-	ExperimentalSupportedTools     []string                   `json:"experimental_supported_tools"`
-	InputModalities                []string                   `json:"input_modalities"`
-	SupportsSearchTool             bool                       `json:"supports_search_tool"`
-	UseResponsesLite               bool                       `json:"use_responses_lite"`
+	Slug                          string                `json:"slug"`
+	DisplayName                   string                `json:"display_name"`
+	Description                   string                `json:"description"`
+	DefaultReasoningLevel         string                `json:"default_reasoning_level"`
+	SupportedReasoningLevels      []codexReasoningLevel `json:"supported_reasoning_levels"`
+	ShellType                     string                `json:"shell_type"`
+	Visibility                    string                `json:"visibility"`
+	SupportedInAPI                bool                  `json:"supported_in_api"`
+	Priority                      int                   `json:"priority"`
+	AdditionalSpeedTiers          []string              `json:"additional_speed_tiers"`
+	ServiceTiers                  []codexServiceTier    `json:"service_tiers"`
+	DefaultServiceTier            string                `json:"default_service_tier"`
+	AvailabilityNUX               codexAvailabilityNUX  `json:"availability_nux"`
+	Upgrade                       *string               `json:"upgrade"`
+	BaseInstructions              string                `json:"base_instructions"`
+	ModelMessages                 codexModelMessages    `json:"model_messages"`
+	SupportsReasoningSummaries    bool                  `json:"supports_reasoning_summaries"`
+	DefaultReasoningSummary       string                `json:"default_reasoning_summary"`
+	SupportVerbosity              bool                  `json:"support_verbosity"`
+	DefaultVerbosity              string                `json:"default_verbosity"`
+	ApplyPatchToolType            string                `json:"apply_patch_tool_type"`
+	WebSearchToolType             string                `json:"web_search_tool_type"`
+	TruncationPolicy              codexTruncationPolicy `json:"truncation_policy"`
+	SupportsParallelToolCalls     bool                  `json:"supports_parallel_tool_calls"`
+	SupportsImageDetailOriginal   bool                  `json:"supports_image_detail_original"`
+	ContextWindow                 int                   `json:"context_window"`
+	MaxContextWindow              int                   `json:"max_context_window"`
+	CompHash                      string                `json:"comp_hash"`
+	EffectiveContextWindowPercent int                   `json:"effective_context_window_percent"`
+	ExperimentalSupportedTools    []string              `json:"experimental_supported_tools"`
+	InputModalities               []string              `json:"input_modalities"`
+	SupportsSearchTool            bool                  `json:"supports_search_tool"`
+	UseResponsesLite              bool                  `json:"use_responses_lite"`
 }
 
 type codexReasoningLevel struct {
@@ -250,10 +251,10 @@ func writeCodexModelsCache(path string) error {
 					{Effort: "medium", Description: "Balances speed and reasoning depth for everyday tasks"},
 					{Effort: "high", Description: "Greater reasoning depth for complex problems"},
 				},
-				ShellType:      "shell_command",
-				Visibility:     "list",
-				SupportedInAPI: true,
-				Priority:       0,
+				ShellType:            "shell_command",
+				Visibility:           "list",
+				SupportedInAPI:       true,
+				Priority:             0,
 				AdditionalSpeedTiers: []string{"fast"},
 				ServiceTiers: []codexServiceTier{
 					{ID: "priority", Name: "Fast", Description: "1.5x speed, increased usage"},

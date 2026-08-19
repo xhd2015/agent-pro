@@ -6,24 +6,36 @@ import (
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 )
 
-// Batch is the slice consumed for one HTTP serve: leading think events plus one breakpoint.
+// Batch is the slice consumed for one HTTP serve: leading sleep/think events
+// plus one breakpoint.
 type Batch struct {
+	PrefixSleep []types.AgentEvent
 	PrefixThink []types.AgentEvent
 	Breakpoint  types.AgentEvent
 }
 
-// DequeueToBreakpoint pops leading think events and exactly one tool_call or message
-// breakpoint from the front of queue. If the queue holds only think events (no breakpoint),
-// nothing is consumed and ok is false.
+// DequeueToBreakpoint pops leading sleep and think events and exactly one
+// tool_call or message breakpoint. Sleep events are consumed (not a breakpoint).
+// If the queue holds only sleep/think (no breakpoint), nothing is consumed and ok is false.
 func DequeueToBreakpoint(queue *[]types.AgentEvent) (batch Batch, ok bool) {
 	if queue == nil || len(*queue) == 0 {
 		return Batch{}, false
 	}
 
 	i := 0
-	for i < len(*queue) && (*queue)[i].Type == types.ActionThink {
-		batch.PrefixThink = append(batch.PrefixThink, (*queue)[i])
-		i++
+	for i < len(*queue) {
+		t := (*queue)[i].Type
+		if t == types.ActionThink {
+			batch.PrefixThink = append(batch.PrefixThink, (*queue)[i])
+			i++
+			continue
+		}
+		if t == types.ActionSleep {
+			batch.PrefixSleep = append(batch.PrefixSleep, (*queue)[i])
+			i++
+			continue
+		}
+		break
 	}
 	if i >= len(*queue) {
 		return Batch{}, false
@@ -40,7 +52,8 @@ func DequeueToBreakpoint(queue *[]types.AgentEvent) (batch Batch, ok bool) {
 
 // ConsumedEvents returns all AgentEvents served for one breakpoint dequeue.
 func ConsumedEvents(batch Batch) []types.AgentEvent {
-	out := make([]types.AgentEvent, 0, len(batch.PrefixThink)+1)
+	out := make([]types.AgentEvent, 0, len(batch.PrefixSleep)+len(batch.PrefixThink)+1)
+	out = append(out, batch.PrefixSleep...)
 	out = append(out, batch.PrefixThink...)
 	out = append(out, batch.Breakpoint)
 	return out

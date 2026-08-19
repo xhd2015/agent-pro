@@ -17,6 +17,7 @@ import (
 // RunOpencodeOptions configures optional behavior for RunOpencode.
 type RunOpencodeOptions struct {
 	MockEventsPreset string // --mock-events-preset; passed to mock server
+	MockEventsFile   string // --mock-events-file; AgentEvent JSONL for genQueue
 	LogEventsPath    string // --log-events output path; passed to mock server as --agent-events-file
 	LogHTTPPath      string // --log-http output path; passed to mock server as --log-http
 }
@@ -59,7 +60,7 @@ func RunOpencode(opencodeArgs []string, opts RunOpencodeOptions) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mockCmd, port, err := startMockServer(ctx, mergedConfigPath, opts.MockEventsPreset, opts.LogEventsPath, opts.LogHTTPPath)
+	mockCmd, port, err := startMockServer(ctx, mergedConfigPath, opts.MockEventsPreset, opts.MockEventsFile, opts.LogEventsPath, opts.LogHTTPPath)
 	if err != nil {
 		return err
 	}

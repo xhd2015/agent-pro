@@ -21,6 +21,7 @@ import (
 // RunGrokOptions configures optional behavior for RunGrok.
 type RunGrokOptions struct {
 	MockEventsPreset      string // --mock-events-preset; passed to mock server
+	MockEventsFile        string // --mock-events-file; AgentEvent JSONL for genQueue
 	LogEventsPath         string // --log-events output path; passed to mock server as --agent-events-file
 	LogHTTPPath           string // --log-http output path; passed to mock server as --log-http
 	AgentRunnerConfigHome string // --agent-runner-config-home or AGENT_RUNNER_CONFIG_HOME
@@ -66,7 +67,7 @@ func RunGrok(grokArgs []string, opts RunGrokOptions) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mockCmd, port, err := startMockServer(ctx, mergedConfigPath, opts.MockEventsPreset, opts.LogEventsPath, opts.LogHTTPPath)
+	mockCmd, port, err := startMockServer(ctx, mergedConfigPath, opts.MockEventsPreset, opts.MockEventsFile, opts.LogEventsPath, opts.LogHTTPPath)
 	if err != nil {
 		return err
 	}
@@ -241,7 +242,7 @@ func waitAndMirrorSessions(grokHome, workDir string) error {
 	}
 }
 
-func startMockServer(ctx context.Context, configPath, mockEventsPreset, eventsFile, logHTTPPath string) (*exec.Cmd, int, error) {
+func startMockServer(ctx context.Context, configPath, mockEventsPreset, mockEventsFile, eventsFile, logHTTPPath string) (*exec.Cmd, int, error) {
 	exe, err := mockServerExecutable()
 	if err != nil {
 		return nil, 0, err
@@ -250,6 +251,9 @@ func startMockServer(ctx context.Context, configPath, mockEventsPreset, eventsFi
 	serverArgs := []string{"--config", configPath}
 	if mockEventsPreset != "" {
 		serverArgs = append(serverArgs, "--mock-events-preset", mockEventsPreset)
+	}
+	if mockEventsFile != "" {
+		serverArgs = append(serverArgs, "--mock-events-file", mockEventsFile)
 	}
 	if eventsFile != "" {
 		serverArgs = append(serverArgs, "--agent-events-file", eventsFile)
