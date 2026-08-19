@@ -75,6 +75,21 @@ func extractProviderExitMessage(scrollback string) string {
 			}
 		}
 	}
+	// TUI wrap: "already running" / "active writer" often land on the next line
+	// after a chopped Error: UUID.
+	if strings.HasPrefix(strings.ToLower(best), "error:") {
+		bestLower := strings.ToLower(best)
+		if !strings.Contains(bestLower, "already running") && !strings.Contains(bestLower, "active writer") {
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				lower := strings.ToLower(line)
+				if strings.Contains(lower, "already running") || strings.Contains(lower, "active writer") {
+					best = strings.TrimSpace(best + " " + line)
+					break
+				}
+			}
+		}
+	}
 	// Collapse whitespace for multi-line paste noise.
 	best = strings.Join(strings.Fields(best), " ")
 	if len(best) > 400 {
@@ -100,6 +115,12 @@ func suggestFromProviderExit(runnerID, providerMsg, scrollback string) string {
 		}
 		return "provider local database is corrupted; repair or reset its on-disk store, then retry"
 	}
+	if providerExitLooksLikeLiveThread(blob) {
+		if isCodex {
+			return "this Codex thread is already running in another terminal; use that tab"
+		}
+		return "this thread is already running in another terminal; use that tab"
+	}
 	if strings.Contains(blob, "failed to resume session") || strings.Contains(blob, "error resuming thread") {
 		if isCodex {
 			return "codex resume failed for this runner_session_id. " +
@@ -112,4 +133,10 @@ func suggestFromProviderExit(runnerID, providerMsg, scrollback string) string {
 		return "provider refused non-TTY stdin (unexpected under agent-run PTY); report as agent-run bug with this log"
 	}
 	return ""
+}
+
+func providerExitLooksLikeLiveThread(blob string) bool {
+	return strings.Contains(blob, "already running") ||
+		strings.Contains(blob, "active writer") ||
+		strings.Contains(blob, "thread/resume failed")
 }
