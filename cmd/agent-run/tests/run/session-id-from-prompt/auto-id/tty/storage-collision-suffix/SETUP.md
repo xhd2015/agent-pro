@@ -16,6 +16,7 @@ agent-run run --agent-runner grok-tty --keep-tty --session-id-from-prompt "hello
 ```go
 import (
 	"testing"
+	"time"
 
 	"github.com/xhd2015/doctest/session"
 )
@@ -24,6 +25,8 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Prompt = "hello world"
 	seedStorageCollisionsForBase(t, req.Home, "grok-tty", "hello-world")
 	req.Args = append(req.Args, req.Prompt)
+	// KeepAlive grok + collision scan is near the old 60s default under CI load.
+	req.ExecTimeout = 120 * time.Second
 	return nil
 }
 ```
