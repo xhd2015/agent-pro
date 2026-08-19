@@ -361,11 +361,19 @@ func waitForPersistentTurnRemote(ctx context.Context, listenAddr, sessionID, pro
 			}
 		}
 		if complete {
+			settle := 750 * time.Millisecond
+			// Agent-exit completion (codex/commandcode KeepAlive fakes) does not
+			// need the scrollback stability window — return quickly so stream-
+			// probe ExecTimeout budgets are not burned waiting on a dead child.
+			if extraComplete != nil && extraComplete() &&
+				(cfg.runnerID == "codex-tty" || cfg.runnerID == "commandcode-tty") {
+				settle = 100 * time.Millisecond
+			}
 			if completeSince.IsZero() {
 				completeSince = time.Now()
 				continue
 			}
-			if time.Since(completeSince) >= 750*time.Millisecond {
+			if time.Since(completeSince) >= settle {
 				return nil
 			}
 			continue

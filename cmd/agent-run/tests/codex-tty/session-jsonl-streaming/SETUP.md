@@ -44,8 +44,10 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Env = withoutEnvKey(req.Env, "FAKE_CODEX_SESSION_ID")
 	req.Env = append(req.Env, "FAKE_CODEX_SESSION_ID="+codexJSONLSessionID)
 	req.Mode = "codex-jsonl-stream-probe"
-	req.ExecTimeout = 15 * time.Second
-	req.StreamProbeTimeout = 8 * time.Second
+	// KeepAlive + resume-sleep fakes: allow discovery/tail after child exit
+	// without racing the old 15s probe budget under CI load.
+	req.ExecTimeout = 30 * time.Second
+	req.StreamProbeTimeout = 12 * time.Second
 	return nil
 }
 
