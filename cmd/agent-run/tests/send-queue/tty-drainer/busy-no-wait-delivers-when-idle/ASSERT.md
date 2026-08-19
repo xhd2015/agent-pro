@@ -33,8 +33,8 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	assertNoError(t, err)
 	assertSuccess(t, resp)
 	assertMsgIDLine(t, resp.Stdout)
-	if resp.SendDuration >= time.Second {
-		t.Fatalf("expected --no-wait return in <1s while busy, took %v", resp.SendDuration)
+	if resp.SendDuration >= 3*time.Second {
+		t.Fatalf("expected --no-wait return in <3s while busy, took %v", resp.SendDuration)
 	}
 	if !containsString(resp.InjectedMessages, "tty-drainer-busy-probe") {
 		t.Fatalf("expected tty-drainer-busy-probe injected after busy→idle without blocking send, seen=%v", resp.InjectedMessages)

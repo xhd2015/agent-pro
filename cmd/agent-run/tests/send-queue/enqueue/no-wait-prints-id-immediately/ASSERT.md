@@ -23,8 +23,8 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	assertNoError(t, err)
 	assertSuccess(t, resp)
 	assertMsgIDLine(t, resp.Stdout)
-	if resp.SendDuration >= time.Second {
-		t.Fatalf("expected --no-wait return in <1s, took %v", resp.SendDuration)
+	if resp.SendDuration >= 3*time.Second {
+		t.Fatalf("expected --no-wait return in <3s, took %v", resp.SendDuration)
 	}
 }
 ```

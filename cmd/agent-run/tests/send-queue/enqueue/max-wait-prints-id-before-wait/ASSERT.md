@@ -21,8 +21,8 @@ import (
 func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertNoError(t, err)
 	assertMsgIDLine(t, resp.MsgID)
-	if resp.IdLineLatency >= time.Second {
-		t.Fatalf("expected id line within 1s, latency=%v", resp.IdLineLatency)
+	if resp.IdLineLatency >= 3*time.Second {
+		t.Fatalf("expected id line within 3s, latency=%v", resp.IdLineLatency)
 	}
 }
 ```

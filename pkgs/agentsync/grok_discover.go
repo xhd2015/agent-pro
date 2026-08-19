@@ -13,7 +13,9 @@ import (
 )
 
 const (
-	sessionDiscoveryGrace = 2 * time.Second
+	// Match pkgs/agenttty sessionDiscoveryGrace: 2s was too tight under parallel
+	// doctest / CI load (preseed exists but filtered → context canceled).
+	sessionDiscoveryGrace = 1 * time.Minute
 	discoveryBindTimeout  = 20 * time.Second
 )
 

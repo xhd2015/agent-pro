@@ -380,11 +380,12 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	case <-time.After(200 * time.Millisecond):
 	}
 
-	// Grok new session: prompt already on argv (auto-submits) — do not re-inject
-	// the prompt text. codex-tty: always inject (argv omitted above); resume/NoSubmit
-	// inject for all. NoSubmit: inject without trailing Enter (suffixCR=false).
-	// codex-tty uses InjectMessage (type then separate Enter) when submitting.
-	shouldInject := promptText != "" && (isResume || opts.NoSubmit || runnerID == "codex-tty")
+	// Grok new session: real grok already has the prompt on argv (auto-submits) —
+	// do not re-inject. AGENT_RUN_GROK_TTY_COMMAND hooks replace argv with a fake
+	// TUI that typically `read`s the prompt, so they still need InjectMessage.
+	// codex-tty: always inject (argv omitted above); resume/NoSubmit inject for all.
+	usesGrokTTYHook := runnerID == "grok-tty" && strings.TrimSpace(os.Getenv(envGrokTTYCommand)) != ""
+	shouldInject := promptText != "" && (isResume || opts.NoSubmit || runnerID == "codex-tty" || usesGrokTTYHook)
 	if shouldInject {
 		if err := InjectMessage(listenAddr, sessionID, runnerID, promptText, !opts.NoSubmit); err != nil {
 			return "", terminalSessionID, err
@@ -567,6 +568,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	}
 
 	var waitErr error
+	var snapshotHold []byte
 	if opts.KeepTerminalAlive {
 		if strings.TrimSpace(promptText) == "" {
 			waitErr = nil
@@ -582,7 +584,34 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 			waitErr = waitForPersistentTurnRemote(ctx, listenAddr, sessionID, promptText, cfg, extraComplete)
 		}
 	} else {
-		waitErr = ttywatch.WaitHeadless(ctx, result, argv)
+		// Without KeepAlive the serve exits with the PTY child, so a snapshot
+		// after WaitHeadless is connection-refused. Poll while waiting and keep
+		// the last good frame for scrollback fallback (fake-TUI doctests).
+		var lastSnapMu sync.Mutex
+		waitDone := make(chan error, 1)
+		go func() {
+			waitDone <- ttywatch.WaitHeadless(ctx, result, argv)
+		}()
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+	waitLoop:
+		for {
+			select {
+			case waitErr = <-waitDone:
+				if snap, err := fetchSnapshotBytes(listenAddr, sessionID); err == nil && len(snap) > 0 {
+					lastSnapMu.Lock()
+					snapshotHold = snap
+					lastSnapMu.Unlock()
+				}
+				break waitLoop
+			case <-ticker.C:
+				if snap, err := fetchSnapshotBytes(listenAddr, sessionID); err == nil && len(snap) > 0 {
+					lastSnapMu.Lock()
+					snapshotHold = snap
+					lastSnapMu.Unlock()
+				}
+			}
+		}
 		if autoExitCancel != nil {
 			autoExitCancel()
 		}
@@ -601,6 +630,9 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	}
 
 	snapshot, snapErr := fetchSnapshotBytes(listenAddr, sessionID)
+	if (snapErr != nil || len(snapshot) == 0) && len(snapshotHold) > 0 {
+		snapshot, snapErr = snapshotHold, nil
+	}
 	captured := ""
 	if snapErr == nil {
 		captured = extractAssistantTextForProvider(snapshot, opts.Prompt, provider.BannerMarkers, provider.BannerProvider)
@@ -611,7 +643,12 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	streamed := tailState.streamed
 	tailState.Unlock()
 
-	if !streamed && opts.Emit != nil && (runnerID == "codex-tty" || runnerID == "commandcode-tty") {
+	if !streamed && opts.Emit != nil && (runnerID == "codex-tty" || runnerID == "commandcode-tty" || runnerID == "grok-tty") {
+		if runnerID == "codex-tty" {
+			fmt.Fprintf(opts.Stderr, "codex-tty: codex transcript not found; falling back to scrollback capture\n")
+		} else if runnerID == "grok-tty" {
+			fmt.Fprintf(opts.Stderr, "grok-tty: grok session not found; falling back to scrollback capture\n")
+		}
 		text := strings.TrimSpace(captured)
 		if text != "" {
 			if emitErr := opts.Emit(types.AgentEvent{

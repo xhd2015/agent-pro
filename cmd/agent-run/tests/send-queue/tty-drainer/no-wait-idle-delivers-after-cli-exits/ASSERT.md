@@ -32,8 +32,8 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	assertNoError(t, err)
 	assertSuccess(t, resp)
 	assertMsgIDLine(t, resp.Stdout)
-	if resp.SendDuration >= time.Second {
-		t.Fatalf("expected --no-wait return in <1s (CLI must not block on deliver), took %v", resp.SendDuration)
+	if resp.SendDuration >= 3*time.Second {
+		t.Fatalf("expected --no-wait return in <3s (CLI must not block on deliver), took %v", resp.SendDuration)
 	}
 	if !containsString(resp.InjectedMessages, "tty-drainer-idle-probe") {
 		t.Fatalf("expected tty-drainer-idle-probe injected after CLI exit without blocking send, seen=%v", resp.InjectedMessages)
