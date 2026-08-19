@@ -468,8 +468,12 @@ func runTerminalWebSocket(t *testing.T, req *Request) (*Response, error) {
 	t.Helper()
 	wsURL := "ws" + strings.TrimPrefix(req.WebBaseURL, "http") + req.WSPath
 	header := http.Header{}
-	if req.WSAuth != "" {
-		header.Set("Authorization", "Bearer "+req.WSAuth)
+	auth := strings.TrimSpace(req.WSAuth)
+	if auth == "" {
+		auth = strings.TrimSpace(req.WebToken)
+	}
+	if auth != "" {
+		header.Set("Authorization", "Bearer "+auth)
 	}
 	conn, resp, err := websocket.DefaultDialer.Dial(wsURL, header)
 	if err != nil {

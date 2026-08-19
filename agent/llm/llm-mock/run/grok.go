@@ -42,13 +42,13 @@ func RunGrok(grokArgs []string, opts RunGrokOptions) error {
 		return fmt.Errorf("--log-http path must end with .jsonl")
 	}
 
-	// Opt-in hook-only: fork/open-resume harnesses that never curl the mock can set
-	// LLM_MOCK_SKIP_MOCK_SERVER=1 to avoid requiring a sibling llm-mock binary.
-	// Default path always starts the mock and writes GROK_HOME/config.toml so
-	// FakeGrokCmd curl hooks (events-input, grok-home, random-fallback) work.
-	if strings.TrimSpace(os.Getenv("LLM_MOCK_RUN_GROK_COMMAND")) != "" &&
-		envTruthy("LLM_MOCK_SKIP_MOCK_SERVER") {
-		return runGrokWithHookOnly(grokArgs, opts)
+	// Hook-only when the hook does not curl the mock (fork/open-resume seed hooks),
+	// or when LLM_MOCK_SKIP_MOCK_SERVER=1. Curl-based FakeGrokCmd doctests still
+	// take the full path (mock + config.toml).
+	if hook := strings.TrimSpace(os.Getenv("LLM_MOCK_RUN_GROK_COMMAND")); hook != "" {
+		if envTruthy("LLM_MOCK_SKIP_MOCK_SERVER") || !hookLikelyNeedsMock(hook) {
+			return runGrokWithHookOnly(grokArgs, opts)
+		}
 	}
 
 	loaded, err := mockconfig.LoadMerged("")
@@ -185,6 +185,10 @@ func runGrokWithHookOnly(grokArgs []string, opts RunGrokOptions) error {
 	}
 	grokHome, _, err := resolveGrokHome(tmpDir, opts.AgentRunnerConfigHome)
 	if err != nil {
+		return err
+	}
+	// Still write config.toml so grok-home doctests and hooks see an isolated home layout.
+	if err := writeGrokConfigToml(filepath.Join(grokHome, "config.toml"), 0); err != nil {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "GROK_HOME=%s\n", grokHome)
@@ -402,6 +406,17 @@ func envWithout(base []string, key string) []string {
 func envTruthy(key string) bool {
 	v := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
 	return v == "1" || v == "true" || v == "yes" || v == "on"
+}
+
+// hookLikelyNeedsMock reports whether LLM_MOCK_RUN_GROK_COMMAND is expected to
+// HTTP-call the mock (curl / GROK_MODELS_BASE_URL). Seed-only hooks return false.
+func hookLikelyNeedsMock(hook string) bool {
+	h := strings.ToLower(hook)
+	return strings.Contains(h, "curl") ||
+		strings.Contains(h, "grok_models_base_url") ||
+		strings.Contains(h, "${base}") ||
+		strings.Contains(h, "$base") ||
+		strings.Contains(h, "$base/")
 }
 
 func writeGrokConfigToml(path string, port int) error {

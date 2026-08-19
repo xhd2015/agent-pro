@@ -47,6 +47,8 @@ jobs:
           - name: repo-l2
             label: "!e2e"
             paths: ./tests/...
+            # Large ./tests/... suite: 372 leaves passed but hit 25m package timeout.
+            timeout: 35m
           - name: repo-e2e
             label: e2e
             paths: ./tests/...
@@ -84,4 +86,7 @@ jobs:
             go install github.com/xhd2015/doctest/cmd/doctest@latest
           fi
       - name: Doctest ${{ matrix.name }}
-        run: doctest test --no-color -timeout 25m --label "${{ matrix.label }}" ${{ matrix.paths }}
+        run: |
+          TIMEOUT="${{ matrix.timeout }}"
+          TIMEOUT="${TIMEOUT:-25m}"
+          doctest test --no-color -timeout "$TIMEOUT" --label "${{ matrix.label }}" ${{ matrix.paths }}
