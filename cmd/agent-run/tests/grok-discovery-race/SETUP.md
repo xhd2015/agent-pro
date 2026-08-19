@@ -306,12 +306,19 @@ func parseEventLines(t *testing.T, lines []string) []map[string]any {
 }
 
 func parseGrokTTYSessionID(stderr string) (string, bool) {
-	re := regexp.MustCompile(`grok-tty:\s*(session-\d+)`)
-	m := re.FindStringSubmatch(stderr)
-	if len(m) < 2 {
-		return "", false
+	// Terminal registry id line is `grok-tty: <id>` (session-N or explicit --session).
+	// Later lines (`grok-tty: grok session …`, updates path) must not match.
+	// Bug: only matching session-\d+ delayed OnFire by ~15s for --session names,
+	// past agentsync's bind timeout → "grok updates not found".
+	re := regexp.MustCompile(`(?m)^grok-tty:\s+(\S+)\s*$`)
+	for _, m := range re.FindAllStringSubmatch(stderr, -1) {
+		id := m[1]
+		if id == "" || id == "grok" || strings.Contains(id, "/") {
+			continue
+		}
+		return id, true
 	}
-	return m[1], true
+	return "", false
 }
 
 func startGrokUpdatesScheduler(t *testing.T, req *Request, sessionReady <-chan struct{}) {

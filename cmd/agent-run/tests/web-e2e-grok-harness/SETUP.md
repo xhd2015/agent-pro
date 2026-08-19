@@ -40,10 +40,11 @@ const harnessGrokMockUUID = "e5555555-5555-4555-8555-555555555555"
 const harnessSmokeMarker = "WEB_E2E_GROK_HARNESS_MARKER"
 
 func llmMockHarnessHook(prompt, sessionUUID, marker string) string {
+	// Seed updates.jsonl before any stdin read so keep-tty/web sync can bind
+	// even when soft-kick Enter is late (argv prompt path does not PTY-inject).
 	return fmt.Sprintf(`sh -c '
 printf "GROK_TTY_BANNER\nGrok › "
-read -r line || true
-submitted="${line:-%s}"
+submitted=%q
 wd=$(pwd)
 enc=$(python3 -c '"'"'import os,sys,urllib.parse
 p=os.path.abspath(sys.argv[1])
@@ -60,6 +61,7 @@ cat > "$dir/updates.jsonl" <<EOF
 {"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"$submitted"}}
 {"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"%s"}}
 EOF
+read -t 5 -r _ || true
 exit 0
 '`, prompt, sessionUUID, sessionUUID, marker)
 }
@@ -172,13 +174,14 @@ func waitForSessionFinished(t *testing.T, baseURL, bearer, runner, sessionID str
 		if status == http.StatusNotFound {
 			t.Fatalf("session detail 404 while waiting for finished: %s", body)
 		}
-		if sessionStatus(body) == "finished" {
+		// keep-tty/web leaves meta.status=running after the turn; treat marker as success.
+		if sessionStatus(body) == "finished" || strings.Contains(body, harnessSmokeMarker) {
 			return body
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 	_, body := httpGet(t, url, bearer)
-	t.Fatalf("timeout waiting for finished status, got %q: %s", sessionStatus(body), body)
+	t.Fatalf("timeout waiting for finished/marker, got %q: %s", sessionStatus(body), body)
 	return body
 }
 

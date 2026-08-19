@@ -149,10 +149,10 @@ func llmMockGrokTTYHook(prompt, sessionUUID, assistantText string, sleepSec int)
 	if sleepSec < 0 {
 		sleepSec = 0
 	}
+	// Write updates before stdin so keep-tty sync can bind without waiting on read.
 	return fmt.Sprintf(`sh -c '
 printf "GROK_TTY_BANNER\nGrok › "
-read -r line || true
-submitted="${line:-%s}"
+submitted=%q
 wd=$(pwd)
 enc=$(python3 -c '"'"'import os,sys,urllib.parse
 p=os.path.abspath(sys.argv[1])
@@ -175,12 +175,10 @@ exit 0
 }
 
 func llmMockGrokTTYTwoTurnHook(firstPrompt, sessionUUID string) string {
+	// Seed turn-1 updates immediately; timed reads wait for follow-up inject.
 	return fmt.Sprintf(`sh -c '
 printf "GROK_TTY_BANNER\nGrok › "
-read -r first || true
-first="${first:-%s}"
-printf "\nResponse: Paris\nGrok › "
-read -r second || true
+first=%q
 wd=$(pwd)
 enc=$(python3 -c '"'"'import os,sys,urllib.parse
 p=os.path.abspath(sys.argv[1])
@@ -197,6 +195,8 @@ cat > "$dir/updates.jsonl" <<EOF
 {"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"$first"}}
 {"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Response: Paris"}}
 EOF
+printf "\nResponse: Paris\nGrok › "
+read -t 8 -r second || true
 if [ -n "$second" ]; then
   printf "\nFOLLOWUP_RESPONSE: received %%s\n" "$second" >> "$dir/updates.jsonl"
 fi

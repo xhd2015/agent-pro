@@ -381,20 +381,28 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	case <-time.After(200 * time.Millisecond):
 	}
 
-	// Grok new session: real grok already has the prompt on argv (auto-submits) —
-	// do not re-inject. AGENT_RUN_GROK_TTY_COMMAND hooks replace argv with a fake
-	// TUI that typically `read`s the prompt, so they still need InjectMessage.
-	// codex-tty: always inject (argv omitted above); resume/NoSubmit inject for all.
+	// Grok new session: prompt already on argv (auto-submits) — do not re-inject
+	// the prompt text. Re-injecting under AGENT_RUN_GROK_TTY_COMMAND broke
+	// no-double-inject / delayed-banner doctests and raced short-lived fakes
+	// ("inject endpoint not found" once the PTY exited). codex-tty: always
+	// inject (argv omitted above); resume/NoSubmit inject for all.
+	shouldInject := promptText != "" && (isResume || opts.NoSubmit || runnerID == "codex-tty")
 	usesGrokTTYHook := runnerID == "grok-tty" && strings.TrimSpace(os.Getenv(envGrokTTYCommand)) != ""
-	shouldInject := promptText != "" && (isResume || opts.NoSubmit || runnerID == "codex-tty" || usesGrokTTYHook)
+	usesLLMMockGrokHook := runnerID == "grok-tty" && strings.TrimSpace(os.Getenv("LLM_MOCK_RUN_GROK_COMMAND")) != ""
 	if shouldInject {
 		if err := InjectMessage(listenAddr, sessionID, runnerID, promptText, !opts.NoSubmit); err != nil {
-			return "", terminalSessionID, err
+			// KeepAlive serves stay up after PTY exit; scrollback/transcript
+			// discovery can still proceed (codex-jsonl fixtures). Hard-fail only
+			// when the serve is gone too or keep-alive is off.
+			if !(opts.KeepTerminalAlive && injectSessionGone(err)) {
+				return "", terminalSessionID, err
+			}
+			fmt.Fprintf(opts.Stderr, "%s: inject skipped (pty gone under keep-alive): %v\n", runnerID, err)
 		}
-	} else if !opts.KeepTerminalAlive {
-		// Soft kick for shell env-logger fakes that `read` after printing the
-		// banner (session-env / run-color). Real grok already received the
-		// prompt on argv; a bare newline only unblocks read without retyping.
+	} else if !opts.KeepTerminalAlive || usesGrokTTYHook || usesLLMMockGrokHook {
+		// Soft kick: bare newline unblocks fake TUIs that `read` after the
+		// banner without retyping the argv prompt (not a double-submit).
+		// KeepAlive + real grok (no hook): skip — avoid spurious Enter.
 		_ = ttywatch.InjectInput(listenAddr, sessionID, []byte("\n"))
 	}
 

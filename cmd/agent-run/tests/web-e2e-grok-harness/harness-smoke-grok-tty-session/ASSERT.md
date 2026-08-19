@@ -4,8 +4,8 @@ label: e2e
 
 ## Expected
 
-- POST `grok-tty` session reaches `status=finished`.
 - Session detail JSON includes assistant content with `WEB_E2E_GROK_HARNESS_MARKER`.
+- Status is `finished`, or `running` under keep-tty once the marker has streamed.
 - Runner is `grok-tty` (not `fake-codex`).
 
 ## Side Effects
@@ -27,14 +27,16 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	if resp.HTTPStatus != 200 {
 		t.Fatalf("session detail status=%d body=%s", resp.HTTPStatus, resp.HTTPBody)
 	}
-	if !strings.Contains(resp.HTTPBody, `"status":"finished"`) && !strings.Contains(resp.HTTPBody, `"status": "finished"`) {
-		t.Fatalf("expected finished status, got: %s", resp.HTTPBody)
+	if !strings.Contains(resp.HTTPBody, harnessSmokeMarker) {
+		t.Fatalf("expected harness marker %q in detail/events path; body=%s", harnessSmokeMarker, resp.HTTPBody)
+	}
+	finished := strings.Contains(resp.HTTPBody, `"status":"finished"`) || strings.Contains(resp.HTTPBody, `"status": "finished"`)
+	running := strings.Contains(resp.HTTPBody, `"status":"running"`) || strings.Contains(resp.HTTPBody, `"status": "running"`)
+	if !finished && !running {
+		t.Fatalf("expected finished or running (keep-tty) status, got: %s", resp.HTTPBody)
 	}
 	if !strings.Contains(resp.HTTPBody, "grok-tty") {
 		t.Fatalf("expected grok-tty runner in detail: %s", resp.HTTPBody)
-	}
-	if !strings.Contains(resp.HTTPBody, harnessSmokeMarker) {
-		t.Fatalf("expected harness marker %q in detail/events path; body=%s", harnessSmokeMarker, resp.HTTPBody)
 	}
 }
 ```

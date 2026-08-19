@@ -51,8 +51,7 @@ func writeMockWrapper(t *testing.T, wrapperPath, probePath, prompt, sessionUUID,
 echo "MOCK_WRAPPER_INVOKED=1" >> %q
 echo "ARGV_RECORD=$*" >> %q
 printf "GROK_TTY_BANNER\nGrok › "
-read -r line || true
-submitted="${line:-%s}"
+submitted=%q
 wd=$(pwd)
 enc=$(python3 -c 'import os,sys,urllib.parse
 p=os.path.abspath(sys.argv[1])
@@ -76,10 +75,10 @@ exit 0
 }
 
 func llmMockWebGrokHook(prompt, sessionUUID, marker string) string {
+	// Seed updates before stdin so keep-tty sync binds without blocking on read.
 	return fmt.Sprintf(`sh -c '
 printf "GROK_TTY_BANNER\nGrok › "
-read -r line || true
-submitted="${line:-%s}"
+submitted=%q
 wd=$(pwd)
 enc=$(python3 -c 'import os,sys,urllib.parse
 p=os.path.abspath(sys.argv[1])
@@ -93,9 +92,10 @@ cat > "$dir/summary.json" <<EOF
 {"info":{"cwd":"$wd","sessionId":"%s","openedAt":"$now"},"created_at":"$now"}
 EOF
 cat > "$dir/updates.jsonl" <<EOF
-{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"$submitted"}
+{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"$submitted"}}
 {"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"%s"}}
 EOF
+read -t 5 -r _ || true
 exit 0
 '`, prompt, sessionUUID, sessionUUID, marker)
 }

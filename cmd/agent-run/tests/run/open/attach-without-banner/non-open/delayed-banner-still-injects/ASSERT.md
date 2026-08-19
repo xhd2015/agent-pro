@@ -58,13 +58,24 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 		t.Fatalf("probe missing argv prompt %q:\n%s", req.Prompt, probe)
 	}
 
-	// Double-submit fix: no PTY re-inject of new-session prompt after delayed banner.
-	if strings.Contains(probe, "STDIN_COUNT=1") || strings.Contains(probe, "STDIN=") {
+	// Soft newline kick is OK; re-injecting the prompt text after delayed banner is not.
+	if strings.Contains(probe, "STDIN="+req.Prompt) {
 		t.Fatalf("new-session non-open must not re-inject after delayed banner; probe:\n%s\nstdout:\n%s\nstderr:\n%s",
 			probe, resp.Stdout, resp.Stderr)
 	}
-	if !strings.Contains(probe, "STDIN_COUNT=0") {
-		t.Fatalf("probe missing STDIN_COUNT=0 (did fake TUI write probe?):\n%s", probe)
+	if !strings.Contains(probe, "STDIN_COUNT=0") && !strings.Contains(probe, "STDIN_COUNT=1") {
+		t.Fatalf("probe missing STDIN_COUNT (did fake TUI write probe?):\n%s", probe)
+	}
+	if strings.Contains(probe, "STDIN_COUNT=1") {
+		for _, line := range strings.Split(probe, "\n") {
+			if strings.HasPrefix(line, "STDIN=") {
+				got := strings.TrimPrefix(line, "STDIN=")
+				if strings.TrimSpace(got) != "" {
+					t.Fatalf("new-session non-open must not inject prompt text after delayed banner; probe:\n%s\nstderr:\n%s",
+						probe, resp.Stderr)
+				}
+			}
+		}
 	}
 
 	// Prefer clean success; allow non-zero only after no-inject proof (discovery flake).

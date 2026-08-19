@@ -16,7 +16,9 @@ const (
 	// Match pkgs/agenttty sessionDiscoveryGrace: 2s was too tight under parallel
 	// doctest / CI load (preseed exists but filtered → context canceled).
 	sessionDiscoveryGrace = 1 * time.Minute
-	discoveryBindTimeout  = 20 * time.Second
+	// Cover delayed-session fixtures (materialize ~8s after registry id) plus
+	// scheduler/CI scheduling lag; 20s was too tight when sessionReady was late.
+	discoveryBindTimeout = 45 * time.Second
 )
 
 func waitFindUpdatesBySessionID(ctx context.Context, grokHome, workspace, sessionID string) (string, bool) {

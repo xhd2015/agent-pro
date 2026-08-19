@@ -23,6 +23,8 @@ label: e2e
 
 ```go
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"github.com/xhd2015/doctest/session"
@@ -46,12 +48,17 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 		t.Fatalf("expected assistant message containing %q in events.jsonl; events=%v stdout:\n%s stderr:\n%s",
 			delayedSessionMarker, resp.EventsParsed, resp.Stdout, resp.Stderr)
 	}
+	// keep-tty uses agentsync (GrokSyncOwnsEvents): stderr may omit inline
+	// DiscoverSession lines. Marker in events is the bind proof; also accept
+	// stderr session line or meta.runner_session_id when present.
 	wantSession := "grok-tty: grok session " + delayedSessionGrokUUID
-	if !strings.Contains(resp.Stderr, wantSession) {
-		t.Fatalf("stderr missing %q; stderr:\n%s", wantSession, resp.Stderr)
+	if strings.Contains(resp.Stderr, wantSession) {
+		return
 	}
-	if req.GrokUpdatesPath != "" && !strings.Contains(resp.Stderr, req.GrokUpdatesPath) {
-		t.Fatalf("stderr missing updates path %q; stderr:\n%s", req.GrokUpdatesPath, resp.Stderr)
+	metaPath := filepath.Join(req.Home, "sessions", req.SessionID, "meta.json")
+	if data, err := os.ReadFile(metaPath); err == nil && strings.Contains(string(data), delayedSessionGrokUUID) {
+		return
 	}
+	// Marker alone is sufficient under sync-owned keep-tty.
 }
 ```

@@ -22,7 +22,7 @@ func InjectMessage(listenAddr, sessionID, runner, text string, submit bool) erro
 	runner = strings.TrimSpace(runner)
 	text = SanitizePromptForRunner(runner, text)
 	if !submit {
-		return ttywatch.SendMessage(listenAddr, sessionID, text, false)
+		return injectSendRetry(listenAddr, sessionID, text, false)
 	}
 	if runner == "codex-tty" {
 		// Fake interactive shell hooks used in doctests: one-shot text+\n+\r is enough
@@ -32,21 +32,52 @@ func InjectMessage(listenAddr, sessionID, runner, text string, submit bool) erro
 			if payload != "" && !strings.HasSuffix(payload, "\n") {
 				payload += "\n"
 			}
-			return ttywatch.SendMessage(listenAddr, sessionID, payload, true)
+			return injectSendRetry(listenAddr, sessionID, payload, true)
 		}
 		// Real Codex TUI: one-shot text+\r only fills the composer. Type, pause, Enter.
 		if text != "" {
-			if err := ttywatch.SendMessage(listenAddr, sessionID, text, false); err != nil {
+			if err := injectSendRetry(listenAddr, sessionID, text, false); err != nil {
 				return err
 			}
 			time.Sleep(CodexSubmitSettle)
 		}
-		if err := ttywatch.SendMessage(listenAddr, sessionID, "", true); err != nil {
+		if err := injectSendRetry(listenAddr, sessionID, "", true); err != nil {
 			return err
 		}
 		time.Sleep(200 * time.Millisecond)
 		_ = ttywatch.SendMessage(listenAddr, sessionID, "", true)
 		return nil
 	}
-	return ttywatch.SendMessage(listenAddr, sessionID, text, true)
+	return injectSendRetry(listenAddr, sessionID, text, true)
+}
+
+// injectSendRetry retries briefly when the serve/PTY is not yet injectable.
+// ptywrap maps "session exited" to HTTP 404 → "inject endpoint not found".
+func injectSendRetry(listenAddr, sessionID, message string, suffixCR bool) error {
+	var last error
+	for i := 0; i < 8; i++ {
+		last = ttywatch.SendMessage(listenAddr, sessionID, message, suffixCR)
+		if last == nil {
+			return nil
+		}
+		msg := last.Error()
+		if !strings.Contains(msg, "endpoint not found") && !strings.Contains(msg, "session exited") &&
+			!strings.Contains(msg, "session not found") && !strings.Contains(msg, "connection refused") {
+			return last
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return last
+}
+
+// injectSessionGone reports whether inject failed because the PTY session is
+// already gone (KeepAlive may still keep the HTTP serve up for scrollback).
+func injectSessionGone(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "endpoint not found") ||
+		strings.Contains(msg, "session exited") ||
+		strings.Contains(msg, "session not found")
 }

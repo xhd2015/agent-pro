@@ -54,12 +54,25 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 			t.Fatalf("probe missing argv prompt %q:\n%s", req.Prompt, probe)
 		}
 	}
-	if strings.Contains(probe, "STDIN_COUNT=1") || strings.Contains(probe, "STDIN=") {
+	// Soft newline kick (unblock `read` fakes) is OK; re-injecting the prompt text is not.
+	if strings.Contains(probe, "STDIN="+req.Prompt) {
 		t.Fatalf("new-session non-open must not re-inject prompt via PTY; probe:\n%s\nstderr:\n%s",
 			probe, resp.Stderr)
 	}
-	if !strings.Contains(probe, "STDIN_COUNT=0") {
-		t.Fatalf("probe missing STDIN_COUNT=0 (did fake TUI write probe?):\n%s", probe)
+	if !strings.Contains(probe, "STDIN_COUNT=0") && !strings.Contains(probe, "STDIN_COUNT=1") {
+		t.Fatalf("probe missing STDIN_COUNT (did fake TUI write probe?):\n%s", probe)
+	}
+	if strings.Contains(probe, "STDIN_COUNT=1") {
+		// COUNT=1 with empty STDIN= is the soft \\n kick; only fail if a non-empty payload arrived.
+		for _, line := range strings.Split(probe, "\n") {
+			if strings.HasPrefix(line, "STDIN=") {
+				got := strings.TrimPrefix(line, "STDIN=")
+				if strings.TrimSpace(got) != "" {
+					t.Fatalf("new-session non-open must not inject prompt text via PTY; probe:\n%s\nstderr:\n%s",
+						probe, resp.Stderr)
+				}
+			}
+		}
 	}
 
 	// Prefer clean success; allow non-zero only after no-inject proof (discovery flake).
