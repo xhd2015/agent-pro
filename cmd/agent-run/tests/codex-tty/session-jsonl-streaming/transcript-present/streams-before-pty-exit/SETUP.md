@@ -41,8 +41,9 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 		},
 	}
 	req.StreamProbeSubstring = codexPreExitStreamText
-	req.StreamProbeTimeout = 4 * time.Second
-	req.ExecTimeout = 12 * time.Second
+	// Fake sleeps 5s before exit; probe + ExecTimeout must clear that window.
+	req.StreamProbeTimeout = 8 * time.Second
+	req.ExecTimeout = 20 * time.Second
 	return nil
 }
 ```

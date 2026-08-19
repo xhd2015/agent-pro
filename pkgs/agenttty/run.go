@@ -610,6 +610,15 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 						return grokKeepTTYTurnSettled(agentHome, agentSID)
 					}
 				}
+			} else if runnerID == "codex-tty" || runnerID == "commandcode-tty" {
+				// KeepAlive leaves the HTTP serve up after resume-sleep / late-
+				// resume fakes exit. Without this, waitForPersistentTurnRemote
+				// polls until its 3m cap while stream-probe ExecTimeout fires.
+				home := opts.Home
+				rid, sid := runnerID, sessionID
+				extraComplete = func() bool {
+					return RegistryAgentExited(home, rid, sid)
+				}
 			}
 			waitDone := make(chan error, 1)
 			go func() {
