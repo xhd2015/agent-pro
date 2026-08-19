@@ -17,9 +17,14 @@ type IdleSample struct {
 	Screen   string // idle|busy|starting|modal|unknown
 	InputBox string // empty|occupied|unknown
 	QueueLen int
+	// LogFound / LogBytes are the Codex rollout jsonl Stat.Size gate.
+	// Missing file → LogFound=false and Tick skips this gate.
+	LogFound bool
+	LogBytes int64
 }
 
 // SampleIsIdle is true only when sendable, screen idle, box empty, and queue empty.
+// Log size is a separate Tick gate (not part of this predicate).
 func SampleIsIdle(s IdleSample) bool {
 	return s.Sendable && s.Screen == "idle" && s.InputBox == "empty" && s.QueueLen == 0
 }
@@ -39,6 +44,9 @@ type IdleWatchdog struct {
 	exitAt    time.Time
 	softDone  bool
 	shutDone  bool
+
+	haveLogSize bool
+	lastLogSize int64
 }
 
 // NewIdleWatchdog copies cfg. Tick is a no-op when !found or !p.ExitOnIdle.
@@ -78,7 +86,8 @@ func IdleWatchSchedule(timeout time.Duration) (first, gap time.Duration) {
 
 // Tick advances one sample. SoftExit fires once after idleWatchSamplesPerCycle
 // consecutive idle samples; Shutdown fires once after grace on a later Tick.
-// Non-idle clears the hit count. The serve loop sleeps between Ticks.
+// Non-idle (chrome or jsonl size change) clears the hit count.
+// The serve loop sleeps between Ticks.
 func (w *IdleWatchdog) Tick() {
 	if w == nil || !w.armed {
 		return
@@ -91,7 +100,8 @@ func (w *IdleWatchdog) Tick() {
 	if w.Sample != nil {
 		sample = w.Sample()
 	}
-	if !SampleIsIdle(sample) {
+	logGrew := w.noteLogSize(sample)
+	if !SampleIsIdle(sample) || logGrew {
 		w.idleHits = 0
 		w.idleSince = time.Time{}
 		return
@@ -115,6 +125,24 @@ func (w *IdleWatchdog) Tick() {
 			w.Shutdown()
 		}
 	}
+}
+
+// noteLogSize records rollout size. First observation is a baseline (not a
+// change). Later Stat.Size != last → grew. Missing file skips the gate.
+func (w *IdleWatchdog) noteLogSize(sample IdleSample) (grew bool) {
+	if w == nil || !sample.LogFound {
+		return false
+	}
+	if !w.haveLogSize {
+		w.lastLogSize = sample.LogBytes
+		w.haveLogSize = true
+		return false
+	}
+	if sample.LogBytes != w.lastLogSize {
+		w.lastLogSize = sample.LogBytes
+		return true
+	}
+	return false
 }
 
 func (w *IdleWatchdog) forceShutdown() {

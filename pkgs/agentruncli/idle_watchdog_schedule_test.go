@@ -56,6 +56,32 @@ func TestRunIdleWatchLoop_threeIdleSamplesThenShutdown(t *testing.T) {
 	}
 }
 
+func TestIdleWatchdog_jsonlGrowthResetsIdleHits(t *testing.T) {
+	var soft int
+	sample := IdleSample{Sendable: true, Screen: "idle", InputBox: "empty", LogFound: true, LogBytes: 10}
+	w := NewIdleWatchdog(true, IdlePolicy{ExitOnIdle: true}, IdleWatchdog{
+		Timeout:  10 * time.Millisecond,
+		Grace:    time.Second,
+		Sample:   func() IdleSample { return sample },
+		SoftExit: func() { soft++ },
+	})
+	w.Tick()
+	sample.LogBytes = 20
+	w.Tick()
+	sample.LogBytes = 30
+	w.Tick()
+	if soft != 0 {
+		t.Fatalf("SoftExit=%d want 0 when jsonl grows", soft)
+	}
+	sample.LogBytes = 30
+	w.Tick()
+	w.Tick()
+	w.Tick()
+	if soft != 1 {
+		t.Fatalf("SoftExit=%d want 1 after stable size", soft)
+	}
+}
+
 func TestSleepCtx_canceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

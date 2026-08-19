@@ -514,7 +514,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 				if snapErr == nil {
 					codexSessionID = FindCodexResumeSessionID(string(snapshot))
 					if codexSessionID != "" {
-						path, ok, discErr := findCodexTranscriptBySessionID(codexHome, codexSessionID)
+						path, ok, discErr := FindCodexTranscriptBySessionID(codexHome, codexSessionID)
 						if discErr != nil {
 							if tailCtx.Err() == nil {
 								fmt.Fprintf(opts.Stderr, "codex-tty: codex transcript discovery failed: %v\n", discErr)

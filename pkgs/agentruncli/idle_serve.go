@@ -49,9 +49,12 @@ func startServeIdleWatchdog(ctx context.Context, cancel context.CancelFunc, sess
 		return
 	}
 	provider, _ := providerForRegistrySubdir(registrySubdir)
+	var logSize idleLogSizeCache
 	w := NewIdleWatchdog(found, p, IdleWatchdog{
 		Sample: func() IdleSample {
-			return sampleServeIdle(listenAddr, sessionID, home, provider)
+			sample := sampleServeIdle(listenAddr, sessionID, home, provider)
+			logSize.fill(&sample, home, sessionID)
+			return sample
 		},
 		SoftExit: func() {
 			runner := strings.TrimSpace(provider.ID)

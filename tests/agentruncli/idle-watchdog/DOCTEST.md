@@ -54,6 +54,9 @@ down after grace.
   (clock resets).
 - First idle late → no exit at wall-clock timeout; exit at first-idle+timeout.
 - SoftExit is not called twice if Tick continues after timeout.
+- Chrome-idle + `LogFound` with growing `LogBytes` → no SoftExit (jsonl activity).
+- Chrome-idle + `LogFound` with stable `LogBytes` → SoftExit as today.
+- `LogFound=false` (missing jsonl) skips the size gate.
 
 ## Version
 
@@ -89,7 +92,10 @@ tests/agentruncli/idle-watchdog/
     ├── never-idle-busy/            # no SoftExit
     ├── reset-mid-window/           # interrupt resets clock
     ├── late-first-idle/            # clock starts at first idle
-    └── soft-exit-once/             # no second /exit
+    ├── soft-exit-once/             # no second /exit
+    └── log-size/                   # rollout jsonl Stat.Size gate
+        ├── grows-resets/           # chrome-idle + growing size → no SoftExit
+        └── stable-still-exits/     # chrome-idle + same size → SoftExit
 ```
 
 Parameter ranking (most → least significant):
@@ -122,6 +128,8 @@ Parameter ranking (most → least significant):
 | 17 | `watchdog/reset-mid-window` | idle, idle, occupied, idle → SoftExit 0 (hits reset) |
 | 18 | `watchdog/late-first-idle` | busy then 3 idles → SoftExit on third idle |
 | 19 | `watchdog/soft-exit-once` | Tick after third idle does not SoftExit twice |
+| 20 | `watchdog/log-size/grows-resets` | chrome-idle + growing jsonl size → SoftExit 0 |
+| 21 | `watchdog/log-size/stable-still-exits` | chrome-idle + stable jsonl size → SoftExit + Shutdown |
 
 ## How to Run
 
@@ -159,6 +167,8 @@ type IdleSample struct {
     Screen   string // idle|busy|starting|modal|unknown
     InputBox string // empty|occupied|unknown
     QueueLen int
+    LogFound bool
+    LogBytes int64
 }
 
 func SampleIsIdle(s IdleSample) bool

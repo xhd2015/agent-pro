@@ -63,7 +63,7 @@ func DiscoverCodexSessionID(codexHome, workspace string, runStart time.Time, scr
 
 	// Footer first — exclusive to this terminal's scrollback.
 	if footer := FindCodexResumeSessionID(scrollback); footer != "" {
-		if path, found, err := findCodexTranscriptBySessionID(codexHome, footer); err == nil && found && path != "" {
+		if path, found, err := FindCodexTranscriptBySessionID(codexHome, footer); err == nil && found && path != "" {
 			// With a known open prompt, reject a stale footer that points at
 			// another thread's rollout.
 			if prompt == "" || codexRolloutPromptMatches(path, prompt) {
@@ -115,7 +115,18 @@ func WaitDiscoverCodexSessionID(ctx context.Context, codexHome, workspace string
 	}
 }
 
-func findCodexTranscriptBySessionID(codexHome, sessionID string) (string, bool, error) {
+// FindCodexTranscriptBySessionID locates
+// $CODEX_HOME/sessions/*/*/*/rollout-*-<sessionID>.jsonl.
+// Missing / empty id → found=false, no error. Multiple matches → newest mtime.
+func FindCodexTranscriptBySessionID(codexHome, sessionID string) (string, bool, error) {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return "", false, nil
+	}
+	codexHome = strings.TrimSpace(codexHome)
+	if codexHome == "" {
+		codexHome = CodexHome()
+	}
 	pattern := filepath.Join(codexHome, "sessions", "*", "*", "*", "rollout-*-"+sessionID+".jsonl")
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
@@ -124,7 +135,25 @@ func findCodexTranscriptBySessionID(codexHome, sessionID string) (string, bool, 
 	if len(matches) == 0 {
 		return "", false, nil
 	}
-	return matches[len(matches)-1], true, nil
+	if len(matches) == 1 {
+		return matches[0], true, nil
+	}
+	best := ""
+	var bestMod time.Time
+	for _, candidate := range matches {
+		info, statErr := os.Stat(candidate)
+		if statErr != nil || info.IsDir() {
+			continue
+		}
+		if best == "" || info.ModTime().After(bestMod) {
+			best = candidate
+			bestMod = info.ModTime()
+		}
+	}
+	if best == "" {
+		return "", false, nil
+	}
+	return best, true, nil
 }
 
 // scanActiveCodexTranscripts finds a cwd-matched rollout after runStart.

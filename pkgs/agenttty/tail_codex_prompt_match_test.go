@@ -171,3 +171,33 @@ func TestFirstCodexRealUserPrompt_SkipsEnvironmentContext(t *testing.T) {
 		t.Fatalf("got ok=%v text=%q", ok, got)
 	}
 }
+
+func TestFindCodexTranscriptBySessionID_globAndSkip(t *testing.T) {
+	root := t.TempDir()
+	id := "01a018f9-a81b-76e1-84df-9c7ae9a054ef"
+	day := filepath.Join(root, "sessions", "2026", "08", "19")
+	if err := os.MkdirAll(day, 0755); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(day, "rollout-2026-08-19T15-43-29-"+id+".jsonl")
+	if err := os.WriteFile(want, []byte("{}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	path, found, err := FindCodexTranscriptBySessionID(root, id)
+	if err != nil || !found {
+		t.Fatalf("found=%v err=%v", found, err)
+	}
+	if path != want {
+		t.Fatalf("path=%q want %q", path, want)
+	}
+
+	_, found, err = FindCodexTranscriptBySessionID(root, "missing-session-id-00000000-0000-0000-0000-000000000000")
+	if err != nil || found {
+		t.Fatalf("missing: found=%v err=%v", found, err)
+	}
+	_, found, err = FindCodexTranscriptBySessionID(root, "")
+	if err != nil || found {
+		t.Fatalf("empty id: found=%v err=%v", found, err)
+	}
+}
