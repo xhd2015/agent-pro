@@ -109,12 +109,11 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 			opts.KeepTerminalAlive = true
 		}
 	}
-	// commandcode-tty: keep PTY alive for headless snapshot/attach after run.
-	// Open + OpenCloseExits: do not re-force keep-alive (window-close teardown).
+	// commandcode-tty: always keep PTY alive for snapshot/attach after run/open.
+	// OpenCloseExits still tears down on window-close via attach_mode=open; the
+	// serve must remain reachable for post-open snapshot probes in the meantime.
 	if runnerID == "commandcode-tty" {
-		if !(opts.Open && OpenCloseExits()) {
-			opts.KeepTerminalAlive = true
-		}
+		opts.KeepTerminalAlive = true
 	}
 	// codex-tty headless: keep serve alive through inject+turn. Without keep-alive,
 	// /input can 404 mid-inject on short-lived serve teardown ("inject endpoint not found").
@@ -391,13 +390,14 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	usesLLMMockGrokHook := runnerID == "grok-tty" && strings.TrimSpace(os.Getenv("LLM_MOCK_RUN_GROK_COMMAND")) != ""
 	if shouldInject {
 		if err := InjectMessage(listenAddr, sessionID, runnerID, promptText, !opts.NoSubmit); err != nil {
-			// KeepAlive serves stay up after PTY exit (codex headless always
-			// KeepAlive). Soft-skip so transcript/scrollback discovery can run;
-			// hard-fail when keep-alive is off (serve is gone too).
-			if !(opts.KeepTerminalAlive && injectSessionGone(err)) {
+			// Soft-skip only when the PTY/serve is actually gone (e.g. resume-
+			// then-sleep fakes). If TCP is still up, the child is likely blocked
+			// on read — soft-skip would hang discovery (cwd-before-resume leaves).
+			serveGone := !ttywatch.TCPReachable(listenAddr)
+			if !(opts.KeepTerminalAlive && serveGone && injectSessionGone(err)) {
 				return "", terminalSessionID, err
 			}
-			fmt.Fprintf(opts.Stderr, "%s: inject skipped (pty gone under keep-alive): %v\n", runnerID, err)
+			fmt.Fprintf(opts.Stderr, "%s: inject skipped (serve gone under keep-alive): %v\n", runnerID, err)
 		}
 	} else if !opts.KeepTerminalAlive || usesGrokTTYHook || usesLLMMockGrokHook {
 		// Soft kick: bare newline unblocks fake TUIs that `read` after the

@@ -33,9 +33,10 @@ import (
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Mode = "followup"
 	req.FollowUpPrompt = "what did I say?"
-	req.RegistryTranscript = "followup-live-pty-ready\n"
-	listenAddr := startControlFramePtywrap(t, req)
+	req.RegistryTranscript = "CODEX_TTY_BANNER\nCodex › followup-live-pty-ready\n"
+	// Use HTTP-inject-capable fake (agentsend drains via prepare-inject/input).
 	writeMappedSessionFixture(t, req)
+	listenAddr := startStaleInputPtywrap(t, req, "")
 	writeTTYRegistryFixture(t, req, req.TerminalSessionID, listenAddr)
 	return nil
 }

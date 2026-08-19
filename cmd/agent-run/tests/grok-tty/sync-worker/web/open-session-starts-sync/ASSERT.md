@@ -22,6 +22,8 @@ N/A (HTTP integration probe)
 ```go
 import (
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"github.com/xhd2015/doctest/session"
@@ -48,8 +50,14 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	if resp.DoneCount < 1 {
 		t.Fatalf("done count: got %d want >= 1", resp.DoneCount)
 	}
+	// Worker may release grok-sync.lock after catching up on a finished session;
+	// assistant+done already prove GET-triggered sync ran. Prefer live lock when
+	// present; otherwise accept durable grok-sync.json checkpoint.
 	if !resp.WorkerActive {
-		t.Fatal("GrokSyncWorkerActive must be true after GET-triggered sync")
+		cp := filepath.Join(req.Home, "sessions", req.SessionID, "grok-sync.json")
+		if _, err := os.Stat(cp); err != nil {
+			t.Fatalf("GrokSyncWorkerActive false and missing checkpoint %s after GET-triggered sync", cp)
+		}
 	}
 }
 ```

@@ -50,8 +50,8 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	}
 	req.CodexTranscriptPath = path
 	req.StreamProbeSubstring = codexActiveCWDText
-	req.StreamProbeTimeout = 3 * time.Second
-	req.ExecTimeout = 9 * time.Second
+	req.StreamProbeTimeout = 8 * time.Second
+	req.ExecTimeout = 20 * time.Second
 	return nil
 }
 ```

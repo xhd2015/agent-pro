@@ -18,11 +18,19 @@ func handleTerminalStatus(store agentstorage.Store, runner, sessionID string) ht
 	return func(w http.ResponseWriter, r *http.Request) {
 		ttySess, err := agenttty.ResolveTerminalStatus(store, runner, sessionID)
 		if err != nil {
-			writeJSON(w, http.StatusOK, map[string]any{
+			// Preserve mapped terminal id so callers can distinguish stale PTY
+			// (mapped but unreachable) from sessions with no terminal mapping.
+			resp := map[string]any{
 				"available":  false,
 				"runner":     runner,
 				"session_id": sessionID,
-			})
+			}
+			if sess, gerr := store.GetSession(sessionID); gerr == nil {
+				if id := strings.TrimSpace(sess.Meta.TerminalSessionID); id != "" {
+					resp["terminal_session_id"] = id
+				}
+			}
+			writeJSON(w, http.StatusOK, resp)
 			return
 		}
 		if ttySess.Meta != nil && strings.TrimSpace(ttySess.Meta.TerminalSessionID) == "" && ttySess.TerminalSessionID != "" {

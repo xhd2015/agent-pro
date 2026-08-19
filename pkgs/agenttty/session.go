@@ -131,7 +131,8 @@ func ResolveByAgentSession(store agentstorage.Store, runner, agentSessionID stri
 		return nil, err
 	}
 	if !ttywatch.TCPReachable(entry.ListenAddr) {
-		ttywatch.RemoveRegistryIfMatch(cfg, terminalSessionID, entry.ListenAddr, entry.PID)
+		// Do not RemoveRegistry here: status probes need the mapped id, and a
+		// transient TCP blip must not destroy the mapping for follow-up inject.
 		return nil, fmt.Errorf("tty session not found or expired")
 	}
 	provider, _ := Get(runner)

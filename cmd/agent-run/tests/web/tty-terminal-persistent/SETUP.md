@@ -397,6 +397,27 @@ func startControlFramePtywrap(t *testing.T, req *Request) string {
 	req.PTYConnectionCount = &count
 	req.PTYInputSeen = &inputSeen
 	mux := http.NewServeMux()
+	// agentsend.StartDrainer injects via HTTP prepare-inject + input (not WS).
+	recordInput := func(b []byte) {
+		inputSeen += string(b)
+	}
+	mux.HandleFunc("/api/terminal/sessions/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/prepare-inject") {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/input") {
+			body, _ := io.ReadAll(r.Body)
+			recordInput(body)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		http.NotFound(w, r)
+	})
 	mux.HandleFunc("/api/terminal", func(w http.ResponseWriter, r *http.Request) {
 		count++
 		conn, err := upgrader.Upgrade(w, r, nil)
@@ -419,7 +440,7 @@ func startControlFramePtywrap(t *testing.T, req *Request) string {
 				return
 			}
 			if mt == websocket.BinaryMessage {
-				inputSeen += string(msg)
+				recordInput(msg)
 				_ = conn.WriteMessage(websocket.BinaryMessage, []byte("echo:"+string(msg)))
 			}
 		}
@@ -428,6 +449,91 @@ func startControlFramePtywrap(t *testing.T, req *Request) string {
 	t.Cleanup(server.Close)
 	req.RegistryListenAddr = strings.TrimPrefix(server.URL, "http://")
 	return req.RegistryListenAddr
+}
+
+func startStaleInputPtywrap(t *testing.T, req *Request, staleInput string) string {
+	t.Helper()
+	upgrader := websocket.Upgrader{}
+	inputSeen := ""
+	req.PTYInputSeen = &inputSeen
+	mux := http.NewServeMux()
+	// Ctrl+U may arrive in a separate HTTP inject from the follow-up text.
+	composer := staleInput
+	handleTyped := func(typed string) string {
+		inputSeen += typed
+		if strings.Contains(typed, "\x15") {
+			composer = ""
+			parts := strings.Split(typed, "\x15")
+			typed = parts[len(parts)-1]
+		}
+		trimmed := strings.TrimRight(typed, "\r\n")
+		if trimmed == "" {
+			return composer
+		}
+		submitted := composer + trimmed
+		composer = "" // submitted line consumed
+		return submitted
+	}
+	// agentsend drains via HTTP inject; mirror prepare-inject/input.
+	mux.HandleFunc("/api/terminal/sessions/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/prepare-inject") {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/input") {
+			body, _ := io.ReadAll(r.Body)
+			submitted := handleTyped(string(body))
+			if submitted == req.FollowUpPrompt {
+				// Mirror WS path: durable assistant event for session detail polls.
+				eventsPath := filepath.Join(req.Home, "sessions", req.ChatSessionID, "events.jsonl")
+				line := `{"type":"message","role":"assistant","text":"FOLLOWUP_RESPONSE: received ` + submitted + `","timestamp":3}` + "\n"
+				f, err := os.OpenFile(eventsPath, os.O_APPEND|os.O_WRONLY, 0644)
+				if err == nil {
+					_, _ = f.WriteString(line)
+					_ = f.Close()
+				}
+			}
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		http.NotFound(w, r)
+	})
+	mux.HandleFunc("/api/terminal", func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		requestedID := r.URL.Query().Get("session_id")
+		if requestedID == "" {
+			requestedID = req.TerminalSessionID
+		}
+		_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"session_id","session_id":"`+requestedID+`"}`))
+		// Writable chrome so WaitUntilWritable can become Ready via snapshot.
+		_ = conn.WriteMessage(websocket.BinaryMessage, []byte("CODEX_TTY_BANNER\nCodex › "+staleInput))
+		for {
+			mt, msg, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+			if mt != websocket.BinaryMessage {
+				continue
+			}
+			submitted := handleTyped(string(msg))
+			if submitted == req.FollowUpPrompt {
+				_ = conn.WriteMessage(websocket.BinaryMessage, []byte("\r\nFOLLOWUP_RESPONSE: received "+submitted+"\r\n"))
+				continue
+			}
+			_ = conn.WriteMessage(websocket.BinaryMessage, []byte("\r\nMALFORMED_SUBMISSION: "+submitted+"\r\n"))
+		}
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	return strings.TrimPrefix(server.URL, "http://")
 }
 
 func unusedLocalAddr(t *testing.T) string {
@@ -549,7 +655,13 @@ func runFollowUpReuseProbe(t *testing.T, req *Request) (*Response, error) {
 	req.RegistryIDsBefore = registryIDs(t, req)
 	payload := `{"text":` + jsQuote(req.FollowUpPrompt) + `}`
 	followStatus, followBody := doHTTP(t, "POST", req.WebBaseURL+"/api/agent-run/sessions/"+req.ChatSessionID+"/messages", req.WebToken, "application/json", payload)
-	time.Sleep(300 * time.Millisecond)
+	// Drain WaitUntilWritable is bounded (3s) before inject; allow that budget.
+	for i := 0; i < 40; i++ {
+		if req.PTYInputSeen != nil && strings.Contains(*req.PTYInputSeen, req.FollowUpPrompt) {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 	sessionStatus, sessionBody := doHTTP(t, "GET", req.WebBaseURL+"/api/agent-run/sessions/"+req.ChatSessionID, req.WebToken, "", "")
 	secondStatus, secondBody := doHTTP(t, "GET", req.WebBaseURL+statusPath, req.WebToken, "", "")
 	return &Response{

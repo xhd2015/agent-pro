@@ -38,7 +38,7 @@ import (
 const snapshotMockPrompt = "one word of France captial"
 
 func fakeGrokPostTurnSnapshotTUI() string {
-	return `sh -c 'printf "GROK_TTY_BANNER\nGrok Build Beta\n"; sleep 0.5; printf "one word of France captial\n               New worktree                                 ctrl+w\n               Resume session                               ctrl+s\n               Changelog\n               Quit                                              q\n"; sleep 2; printf "\x1b[2J\x1b[H     Turn completed in 5.3s.                                                   █\n                                                                               █\n                     Ctrl+.:shortcuts\n"; sleep 120'`
+	return `sh -c 'printf "GROK_TTY_BANNER\nGrok Build Beta\n"; sleep 0.5; printf "one word of France captial\n               New worktree                                 ctrl+w\n               Resume session                               ctrl+s\n               Changelog\n               Quit                                              q\n"; sleep 30; printf "\x1b[2J\x1b[H     Turn completed in 5.3s.                                                   █\n                                                                               █\n                     Ctrl+.:shortcuts\n"; sleep 120'`
 }
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {

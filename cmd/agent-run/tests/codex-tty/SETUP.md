@@ -87,7 +87,7 @@ func fakeTUIRequiresCR() string {
 }
 
 func fakeTUIRawCodexScrollback() string {
-	return `sh -c 'printf "CODEX_TTY_BANNER\n"; read -r line; printf ">4;0m>7u\n╭────────────────────────╮\n│ >_ OpenAI Codex        │\n│ model: loading /model to change │\n│ directory: /tmp/work   │\n╰────────────────────────╯\nStarting MCP servers...\nBooting MCP...\nWorking...\nWorking...\n› %s\nls output:\nAGENTS.md\ncmd\npkgs\n" "$line"'`
+	return `sh -c 'printf "CODEX_TTY_BANNER\n"; sleep 0.2; read -r line; printf ">4;0m>7u\n╭────────────────────────╮\n│ >_ OpenAI Codex        │\n│ model: loading /model to change │\n│ directory: /tmp/work   │\n╰────────────────────────╯\nStarting MCP servers...\nBooting MCP...\nWorking...\nWorking...\n› %s\nls output:\nAGENTS.md\ncmd\npkgs\n" "$line"; sleep 0.5'`
 }
 
 func codexTTYRegistryDir(home string) string {

@@ -34,18 +34,17 @@ func InjectMessage(listenAddr, sessionID, runner, text string, submit bool) erro
 			}
 			return injectSendRetry(listenAddr, sessionID, payload, true)
 		}
-		// Real Codex TUI: one-shot text+\r only fills the composer. Type, pause, Enter.
-		if text != "" {
-			if err := injectSendRetry(listenAddr, sessionID, text, false); err != nil {
-				return err
-			}
-			time.Sleep(CodexSubmitSettle)
-		}
-		if err := injectSendRetry(listenAddr, sessionID, "", true); err != nil {
+		// Real Codex TUI / web follow-up: Ctrl+U clears stale composer, then type+Enter.
+		// Single /input write for clear+text so fixture servers see one atomic payload.
+		var payload []byte
+		payload = append(payload, 0x15) // Ctrl+U
+		payload = append(payload, []byte(text)...)
+		payload = append(payload, '\r')
+		if err := ttywatch.InjectInput(listenAddr, sessionID, payload); err != nil {
 			return err
 		}
-		time.Sleep(200 * time.Millisecond)
-		_ = ttywatch.SendMessage(listenAddr, sessionID, "", true)
+		time.Sleep(CodexSubmitSettle)
+		_ = ttywatch.InjectInput(listenAddr, sessionID, []byte("\r"))
 		return nil
 	}
 	return injectSendRetry(listenAddr, sessionID, text, true)

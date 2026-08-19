@@ -30,8 +30,11 @@ finished tty chat with live mapped terminal
 
 ```go
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -51,53 +54,6 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	listenAddr := startStaleInputPtywrap(t, req, "Explain this codebase")
 	writeTTYRegistryFixture(t, req, req.TerminalSessionID, listenAddr)
 	return nil
-}
-
-func startStaleInputPtywrap(t *testing.T, req *Request, staleInput string) string {
-	t.Helper()
-	upgrader := websocket.Upgrader{}
-	inputSeen := ""
-	req.PTYInputSeen = &inputSeen
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/terminal", func(w http.ResponseWriter, r *http.Request) {
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			return
-		}
-		defer conn.Close()
-		requestedID := r.URL.Query().Get("session_id")
-		if requestedID == "" {
-			requestedID = req.TerminalSessionID
-		}
-		_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"session_id","session_id":"`+requestedID+`"}`))
-		// The stale prompt text is terminal input state, not assistant output.
-		// Do not send it as a frame; the server combines it with incoming input
-		// unless the client clears the line first.
-		for {
-			mt, msg, err := conn.ReadMessage()
-			if err != nil {
-				return
-			}
-			if mt != websocket.BinaryMessage {
-				continue
-			}
-			typed := string(msg)
-			inputSeen += typed
-			submitted := staleInput + strings.TrimRight(typed, "\r\n")
-			if strings.Contains(typed, "\x15") {
-				parts := strings.Split(typed, "\x15")
-				submitted = strings.TrimRight(parts[len(parts)-1], "\r\n")
-			}
-			if submitted == req.FollowUpPrompt {
-				_ = conn.WriteMessage(websocket.BinaryMessage, []byte("\r\nFOLLOWUP_RESPONSE: received "+submitted+"\r\n"))
-				continue
-			}
-			_ = conn.WriteMessage(websocket.BinaryMessage, []byte("\r\nMALFORMED_SUBMISSION: "+submitted+"\r\n"))
-		}
-	})
-	server := httptest.NewServer(mux)
-	t.Cleanup(server.Close)
-	return strings.TrimPrefix(server.URL, "http://")
 }
 
 func staleInputSessionBodyEventually(t *testing.T, req *Request, timeout time.Duration) string {

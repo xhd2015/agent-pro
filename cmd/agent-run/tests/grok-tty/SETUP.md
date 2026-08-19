@@ -79,7 +79,8 @@ func fakeTUIDelayedBanner() string {
 // but read(2) only completes after Enter (\r). Bare \n without \r leaves text
 // visible yet unsubmitted (the user-reported grok-tty bug).
 func fakeTUIRequiresCR() string {
-	return `sh -c 'printf "GROK_TTY_BANNER\nGrok › "; read -r line; echo "SUBMITTED:$line"'`
+	// Prefer argv prompt ($1); soft \n kick must not yield empty SUBMITTED.
+	return `sh -c 'printf "GROK_TTY_BANNER\nGrok › "; line="${1:-}"; [ -n "$line" ] || read -r line; echo "SUBMITTED:$line"; sleep 0.25' x`
 }
 
 // fakeTUIRequiresCRDelayed waits before reading so attach can observe the PTY
