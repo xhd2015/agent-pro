@@ -654,7 +654,8 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	streamed := tailState.streamed
 	tailState.Unlock()
 
-	if !streamed && opts.Emit != nil && (runnerID == "codex-tty" || runnerID == "commandcode-tty" || runnerID == "grok-tty") {
+	// keep-tty / sync-owned paths must not treat PTY chrome as assistant output.
+	if !streamed && opts.Emit != nil && !opts.KeepTerminalAlive && (runnerID == "codex-tty" || runnerID == "commandcode-tty" || runnerID == "grok-tty") {
 		if runnerID == "codex-tty" {
 			fmt.Fprintf(opts.Stderr, "codex-tty: codex transcript not found; falling back to scrollback capture\n")
 		} else if runnerID == "grok-tty" {

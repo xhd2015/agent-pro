@@ -17,7 +17,8 @@ import (
 	"github.com/xhd2015/doctest/session"
 )
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
-	req.FakePTYWrapScrollback = "GROK_TTY_BANNER\r\nGrok > \r\n"
+	// Banner only — a prompt glyph would make DetectScreenStatus return "idle".
+	req.FakePTYWrapScrollback = "GROK_TTY_BANNER\r\n"
 	req.Args = []string{"tty", "status", req.RegistrySessionID}
 	return nil
 }

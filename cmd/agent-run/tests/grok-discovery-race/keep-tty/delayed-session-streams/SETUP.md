@@ -37,6 +37,10 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	}
 	stripEnvPrefix(req, "GROK_HOME=")
 	req.Env = append(req.Env, "GROK_HOME="+req.GrokHome)
+	// Pin discovery to the delayed UUID so agentsync polls FindUpdatesBySessionID
+	// (cwd/prompt scan can miss under keep-tty + chrome until updates exist).
+	stripEnvPrefix(req, "AGENT_RUN_GROK_TTY_GROK_SESSION_ID=")
+	req.Env = append(req.Env, "AGENT_RUN_GROK_TTY_GROK_SESSION_ID="+delayedSessionGrokUUID)
 
 	sched, updatesPath := delayedGrokSessionSchedule(t, 8*time.Second, req.GrokHome, req.TempDir, delayedSessionGrokUUID, req.Prompt,
 		acpAgentMessageChunk(delayedSessionMarker),

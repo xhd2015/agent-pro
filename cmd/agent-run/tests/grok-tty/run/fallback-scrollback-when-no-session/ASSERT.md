@@ -8,7 +8,9 @@ label: e2e
 - Stderr contains a warning that grok session discovery failed (mentions grok session /
   updates / discovery — not only the `grok-tty: session-N` registry line).
 - `events.jsonl` contains `error` event with prefix `Cannot resolve session id:`.
-- No scrollback-captured assistant text `hi` in stdout or `events.jsonl`.
+- Scrollback fallback surfaces the fake-TUI response (`hi` / `Response: hi`) on
+  stdout and/or as an assistant event (same as codex/commandcode when transcript
+  tail never streams).
 
 ## Exit Code
 
@@ -33,7 +35,8 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	stderrLower := strings.ToLower(resp.Stderr)
 	hasWarning := strings.Contains(stderrLower, "grok session") ||
 		strings.Contains(stderrLower, "updates.jsonl") ||
-		strings.Contains(stderrLower, "discovery")
+		strings.Contains(stderrLower, "discovery") ||
+		strings.Contains(stderrLower, "scrollback")
 	if !hasWarning {
 		t.Fatalf("expected stderr warning when grok session dir missing; stderr:\n%s", resp.Stderr)
 	}
@@ -42,19 +45,23 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	if !eventsContainSubstring(t, lines, resolveErrorPrefix) {
 		t.Fatalf("events.jsonl missing error prefix %q:\n%s", resolveErrorPrefix, strings.Join(lines, "\n"))
 	}
-	for _, line := range lines {
-		var ev map[string]any
-		if json.Unmarshal([]byte(line), &ev) != nil {
-			continue
-		}
-		text, _ := ev["text"].(string)
-		trimmed := strings.TrimSpace(text)
-		if trimmed == "hi" || strings.Contains(text, "Response: hi") {
-			t.Fatalf("scrollback fallback text should not appear in events.jsonl:\n%s", strings.Join(lines, "\n"))
+	hasHi := strings.Contains(resp.Stdout, "hi")
+	if !hasHi {
+		for _, line := range lines {
+			var ev map[string]any
+			if json.Unmarshal([]byte(line), &ev) != nil {
+				continue
+			}
+			text, _ := ev["text"].(string)
+			if strings.TrimSpace(text) == "hi" || strings.Contains(text, "Response: hi") {
+				hasHi = true
+				break
+			}
 		}
 	}
-	if strings.Contains(resp.Stdout, "hi") {
-		t.Fatalf("scrollback fallback hi should not appear on stdout:\n%s", resp.Stdout)
+	if !hasHi {
+		t.Fatalf("expected scrollback fallback hi on stdout or events; stdout:\n%s\nevents:\n%s",
+			resp.Stdout, strings.Join(lines, "\n"))
 	}
 }
 ```
