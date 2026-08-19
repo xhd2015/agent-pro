@@ -391,7 +391,13 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	usesLLMMockGrokHook := runnerID == "grok-tty" && strings.TrimSpace(os.Getenv("LLM_MOCK_RUN_GROK_COMMAND")) != ""
 	if shouldInject {
 		if err := InjectMessage(listenAddr, sessionID, runnerID, promptText, !opts.NoSubmit); err != nil {
-			return "", terminalSessionID, err
+			// KeepAlive serves stay up after PTY exit (codex headless always
+			// KeepAlive). Soft-skip so transcript/scrollback discovery can run;
+			// hard-fail when keep-alive is off (serve is gone too).
+			if !(opts.KeepTerminalAlive && injectSessionGone(err)) {
+				return "", terminalSessionID, err
+			}
+			fmt.Fprintf(opts.Stderr, "%s: inject skipped (pty gone under keep-alive): %v\n", runnerID, err)
 		}
 	} else if !opts.KeepTerminalAlive || usesGrokTTYHook || usesLLMMockGrokHook {
 		// Soft kick: bare newline unblocks fake TUIs that `read` after the

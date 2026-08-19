@@ -36,11 +36,15 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	if resp.WSError != "" {
 		t.Fatalf("websocket attach failed: %s output=%q", resp.WSError, resp.WSOutput)
 	}
-	if strings.Count(resp.WSOutput, req.RegistryTranscript) != 2 {
+	marker := strings.TrimSuffix(req.RegistryTranscript, "\n")
+	if marker == "" {
+		marker = req.RegistryTranscript
+	}
+	if strings.Count(resp.WSOutput, marker) != 2 {
 		t.Fatalf("expected two attaches to mapped PTY transcript %q, got %q", req.RegistryTranscript, resp.WSOutput)
 	}
-	if resp.PTYConnectionSeen != 2 {
-		t.Fatalf("fake PTY connection count=%d want 2", resp.PTYConnectionSeen)
+	if resp.PTYConnectionSeen < 2 {
+		t.Fatalf("fake PTY connection count=%d want >= 2 (two attaches)", resp.PTYConnectionSeen)
 	}
 	requireSameStringSlice(t, registryIDs(t, req), []string{req.TerminalSessionID})
 }

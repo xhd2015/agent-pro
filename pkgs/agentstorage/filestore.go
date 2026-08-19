@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 )
@@ -22,6 +23,18 @@ func osMkdirAll(path string) error {
 
 func (s *fileStore) Home() string {
 	return s.home
+}
+
+// writeMetaJSON atomically replaces sessions/<id>/meta.json (tmp + rename).
+// Plain WriteFile can tear under concurrent UpdateSession* and yield empty
+// reads → "unexpected end of JSON input" on GetSession (web detail/SSE 404s).
+func (s *fileStore) writeMetaJSON(sessionID string, data []byte) error {
+	path := filepath.Join(s.sessionDir(sessionID), "meta.json")
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 func (s *fileStore) configPath() string {
@@ -94,7 +107,7 @@ func (s *fileStore) CreateSession(sessionID string, meta SessionMeta) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(metaPath, data, 0644); err != nil {
+	if err := s.writeMetaJSON(sessionID, data); err != nil {
 		return err
 	}
 	return s.bumpGeneration()
@@ -102,18 +115,31 @@ func (s *fileStore) CreateSession(sessionID string, meta SessionMeta) error {
 
 func (s *fileStore) GetSession(sessionID string) (*Session, error) {
 	path := filepath.Join(s.sessionDir(sessionID), "meta.json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("session not found: %s", sessionID)
+	var data []byte
+	var err error
+	for attempt := 0; attempt < 5; attempt++ {
+		data, err = os.ReadFile(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil, fmt.Errorf("session not found: %s", sessionID)
+			}
+			return nil, err
 		}
-		return nil, err
+		if len(strings.TrimSpace(string(data))) == 0 {
+			time.Sleep(5 * time.Millisecond)
+			continue
+		}
+		var meta SessionMeta
+		if err := json.Unmarshal(data, &meta); err != nil {
+			if attempt < 4 {
+				time.Sleep(5 * time.Millisecond)
+				continue
+			}
+			return nil, err
+		}
+		return &Session{Meta: meta}, nil
 	}
-	var meta SessionMeta
-	if err := json.Unmarshal(data, &meta); err != nil {
-		return nil, err
-	}
-	return &Session{Meta: meta}, nil
+	return nil, fmt.Errorf("session meta empty or unreadable: %s", sessionID)
 }
 
 func (s *fileStore) UpdateSessionStatus(sessionID, status string) error {
@@ -127,7 +153,7 @@ func (s *fileStore) UpdateSessionStatus(sessionID, status string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(s.sessionDir(sessionID), "meta.json"), data, 0644)
+	return s.writeMetaJSON(sessionID, data)
 }
 
 func (s *fileStore) UpdateSessionRunnerSessionID(sessionID, runnerSessionID string) error {
@@ -145,7 +171,7 @@ func (s *fileStore) UpdateSessionRunnerSessionID(sessionID, runnerSessionID stri
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(s.sessionDir(sessionID), "meta.json"), data, 0644); err != nil {
+	if err := s.writeMetaJSON(sessionID, data); err != nil {
 		return err
 	}
 	return s.bumpGeneration()
@@ -166,7 +192,7 @@ func (s *fileStore) UpdateSessionTerminalSessionID(sessionID, terminalSessionID 
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(s.sessionDir(sessionID), "meta.json"), data, 0644)
+	return s.writeMetaJSON(sessionID, data)
 }
 
 func (s *fileStore) UpdateSessionWorkspace(sessionID, workspace string) error {
@@ -184,7 +210,7 @@ func (s *fileStore) UpdateSessionWorkspace(sessionID, workspace string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(s.sessionDir(sessionID), "meta.json"), data, 0644)
+	return s.writeMetaJSON(sessionID, data)
 }
 
 // UpdateSessionEnvConfig replaces prepend_paths/env when provided (including empty
@@ -209,7 +235,7 @@ func (s *fileStore) UpdateSessionEnvConfig(sessionID string, prependPaths, env [
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(s.sessionDir(sessionID), "meta.json"), data, 0644)
+	return s.writeMetaJSON(sessionID, data)
 }
 
 func (s *fileStore) ClearAllSessions() error {

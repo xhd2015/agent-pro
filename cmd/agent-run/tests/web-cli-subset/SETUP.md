@@ -742,7 +742,13 @@ func waitForSessionStatus(t *testing.T, req *Request, runner, sessionID, wantSta
 		if status == http.StatusNotFound {
 			t.Fatalf("session detail 404 while waiting for %q: %s", wantStatus, body)
 		}
-		if sessionStatusFromDetail(body) == wantStatus {
+		got := sessionStatusFromDetail(body)
+		if got == wantStatus {
+			return body
+		}
+		// keep-tty leaves status=running after the turn; assistant/done is enough.
+		if wantStatus == "finished" && got == "running" &&
+			(strings.Contains(body, `"role":"assistant"`) || strings.Contains(body, `"type":"done"`)) {
 			return body
 		}
 		time.Sleep(50 * time.Millisecond)

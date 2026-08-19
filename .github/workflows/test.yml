@@ -48,7 +48,7 @@ jobs:
             label: "!e2e"
             paths: ./tests/...
             # Large ./tests/... suite: 372 leaves passed but hit 25m package timeout.
-            timeout: 38m
+            timeout: 45m
           - name: repo-e2e
             label: e2e
             paths: ./tests/...
