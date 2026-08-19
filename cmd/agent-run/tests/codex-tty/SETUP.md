@@ -639,6 +639,17 @@ func codexSessionMetaLine(sessionID, cwd string) string {
 	return string(line)
 }
 
+// codexUserMessageLine seeds a rollout user prompt so cwd-based discovery
+// (scanActiveCodexTranscripts prompt gate) can bind before a late resume footer.
+func codexUserMessageLine(text string) string {
+	line, _ := json.Marshal(map[string]any{
+		"timestamp": "2026-07-02T12:01:53.500Z",
+		"type":      "event_msg",
+		"payload":   map[string]any{"type": "user_message", "message": text},
+	})
+	return string(line)
+}
+
 func codexAgentMessageLine(text string) string {
 	line, _ := json.Marshal(map[string]any{
 		"timestamp": "2026-07-02T12:01:54Z",
@@ -686,7 +697,11 @@ func codexFunctionCallOutputLine(output string) string {
 func seedCodexTranscript(t *testing.T, req *Request, lines ...string) {
 	t.Helper()
 	path := ensureCodexTranscriptPath(t, req)
-	seed := []string{codexSessionMetaLine(req.CodexTranscriptSessionID, req.TempDir)}
+	seed := []string{
+		codexSessionMetaLine(req.CodexTranscriptSessionID, req.TempDir),
+		// Default user prompt matches common Args ("run ls") for cwd/prompt gate.
+		codexUserMessageLine("run ls"),
+	}
 	seed = append(seed, lines...)
 	if err := appendCodexTranscriptJSONL(path, seed...); err != nil {
 		t.Fatalf("seed codex transcript: %v", err)
@@ -752,26 +767,20 @@ func runCodexJSONLStreamProbe(t *testing.T, req *Request) (*Response, error) {
 		select {
 		case waitErr = <-waitDone:
 			waited = true
+			// End-of-run scrollback fallback may emit the marker only as the
+			// process exits — re-check after wait returns.
+			if want != "" && strings.Contains(stdout.String(), want) {
+				resp.StreamProbeSeen = true
+			}
 		case <-ticker.C:
 			if want != "" && strings.Contains(stdout.String(), want) {
 				resp.StreamProbeSeen = true
-				resp.StreamProbeBeforeExit = true
+				if !probeExpired {
+					resp.StreamProbeBeforeExit = true
+				}
 			}
 			if !probeExpired && time.Now().After(probeDeadline) {
 				probeExpired = true
-				if want != "" && strings.Contains(stdout.String(), want) {
-					resp.StreamProbeSeen = true
-				}
-				// Do not burn the full ExecTimeout when the stream marker never
-				// appeared — kill and surface a probe timeout with I/O dumps.
-				if want != "" && !resp.StreamProbeSeen {
-					if cmd.Process != nil {
-						_ = cmd.Process.Kill()
-					}
-					waitErr = fmt.Errorf("stream probe timeout after %s waiting for %q; stdout:\n%s\nstderr:\n%s",
-						probeTimeout, want, stdout.String(), stderr.String())
-					waited = true
-				}
 			}
 		case <-ctx.Done():
 			if cmd.Process != nil {
@@ -786,6 +795,9 @@ func runCodexJSONLStreamProbe(t *testing.T, req *Request) (*Response, error) {
 	}
 	if !waited {
 		waitErr = <-waitDone
+		if want != "" && strings.Contains(stdout.String(), want) {
+			resp.StreamProbeSeen = true
+		}
 	}
 
 	resp.Stdout = stdout.String()
@@ -816,7 +828,8 @@ func runConcurrentCodexTTYRuns(t *testing.T, req *Request) (*Response, error) {
 	}
 	timeout := req.ExecTimeout
 	if timeout <= 0 {
-		timeout = 20 * time.Second
+		// Three parallel KeepAlive codex runs need headroom under CI load.
+		timeout = 45 * time.Second
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)

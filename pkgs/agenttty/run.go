@@ -612,22 +612,18 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 				}
 			} else if runnerID == "codex-tty" || runnerID == "commandcode-tty" {
 				// KeepAlive leaves the HTTP serve up after the PTY child exits.
-				// Settle when: resume/exit footer is on screen (resume-sleep
-				// fakes print it before sleep), agent PID is dead, or registry
-				// command_exited is set. Footer is the fast path — waiting only
-				// on registry/PID burned stream-probe ExecTimeout under CI load.
+				// Settle on real process death / registry exit only.
+				// Do NOT treat a scrollback "codex resume" footer as complete:
+				// resume-with-fallback and resume-then-read fakes print the
+				// footer while still alive (before read/sleep), which raced
+				// wait return ahead of fallback scrollback paint.
 				home := opts.Home
 				rid, sid := runnerID, sessionID
-				addr := listenAddr
 				commandPID := 0
 				if result.Entry != nil {
 					commandPID = result.Entry.CommandPID
 				}
 				extraComplete = func() bool {
-					if snap, err := fetchSnapshotBytes(addr, sid); err == nil &&
-						ScrollbackSuggestsAgentExited(string(snap), rid) {
-						return true
-					}
 					if commandPID > 0 && !ttywatch.ProcessAlive(commandPID) {
 						return true
 					}

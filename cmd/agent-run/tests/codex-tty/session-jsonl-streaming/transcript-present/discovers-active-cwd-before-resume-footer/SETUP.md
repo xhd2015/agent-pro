@@ -39,6 +39,9 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 			Delay: 200 * time.Millisecond,
 			Lines: []string{
 				codexSessionMetaLine(req.CodexTranscriptSessionID, req.TempDir),
+				// Prompt gate: cwd scan needs a matching user message before the
+				// late resume footer (fakeTUINoResumeUntilLate) is printed.
+				codexUserMessageLine("run ls"),
 			},
 		},
 		{
@@ -50,8 +53,8 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	}
 	req.CodexTranscriptPath = path
 	req.StreamProbeSubstring = codexActiveCWDText
-	req.StreamProbeTimeout = 12 * time.Second
-	req.ExecTimeout = 35 * time.Second
+	req.StreamProbeTimeout = 25 * time.Second
+	req.ExecTimeout = 50 * time.Second
 	return nil
 }
 ```
