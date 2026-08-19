@@ -90,6 +90,41 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
+// ensureStubDist writes a DistComplete SPA stub (index.html with #root + assets/*).
+func ensureStubDist(distDir string) error {
+	if err := os.MkdirAll(filepath.Join(distDir, "assets"), 0755); err != nil {
+		return err
+	}
+	const shell = `<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>agent-run</title></head>
+<body>
+<div id="root"></div>
+</body>
+</html>
+`
+	indexPath := filepath.Join(distDir, "index.html")
+	needIndex := true
+	if data, err := os.ReadFile(indexPath); err == nil {
+		s := string(data)
+		if strings.Contains(s, `id="root"`) || strings.Contains(s, "id='root'") {
+			needIndex = false
+		}
+	}
+	if needIndex {
+		if err := os.WriteFile(indexPath, []byte(shell), 0644); err != nil {
+			return err
+		}
+	}
+	assetPath := filepath.Join(distDir, "assets", "doctest-stub.js")
+	if st, err := os.Stat(assetPath); err != nil || st.Size() == 0 {
+		if err := os.WriteFile(assetPath, []byte("/* doctest stub */\n"), 0644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func ensureSessionBinaries(t *testing.T, d *session.Doctest, repoRoot string) (agentRun, llmMock, llmMockRunCodex string) {
 	t.Helper()
 	cache := sessionCacheDir(d)
@@ -105,20 +140,10 @@ func ensureSessionBinaries(t *testing.T, d *session.Doctest, repoRoot string) (a
 		if err := os.MkdirAll(cache, 0755); err != nil {
 			return err
 		}
-		// Stub frontend embeds if needed (same as sibling open-bind trees).
-		for _, rel := range []string{
-			"frontend-agent-run/dist/index.html",
-			"frontend/dist/index.html",
-		} {
-			p := filepath.Join(repoRoot, rel)
-			if fileExists(p) {
-				continue
-			}
-			if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
-				return err
-			}
-			if err := os.WriteFile(p, []byte("<!doctype html><title>stub</title>\n"), 0644); err != nil {
-				return err
+		// DistComplete stub: index.html with #root + assets/* (placeholder.txt alone is incomplete).
+		for _, rel := range []string{"frontend-agent-run/dist", "frontend/dist"} {
+			if err := ensureStubDist(filepath.Join(repoRoot, rel)); err != nil {
+				return fmt.Errorf("ensure %s stub: %w", rel, err)
 			}
 		}
 		cmdDir := filepath.Join(repoRoot, "cmd")

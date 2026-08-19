@@ -266,7 +266,7 @@ func writeSessionFixtureWithoutTerminalID(t *testing.T, req *Request) {
 
 func writeSessionFixture(t *testing.T, req *Request, includeTerminalID bool) {
 	t.Helper()
-	dir := filepath.Join(req.Home, "sessions", req.Runner, req.ChatSessionID)
+	dir := filepath.Join(req.Home, "sessions", req.ChatSessionID)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatalf("mkdir session: %v", err)
 	}

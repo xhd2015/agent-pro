@@ -538,9 +538,8 @@ func runAttachInteractiveProbe(t *testing.T, req *Request) (*Response, error) {
 
 func findCodexTTYEventsJSONL(t *testing.T, home string) (string, []string) {
 	t.Helper()
-	// Prefer legacy sessions/codex-tty/, then flat sessions/sess_*/ layout.
+	// Flat AGENT_RUN_HOME/sessions/<sessionID>/ layout.
 	candidates := []string{
-		filepath.Join(home, "sessions", "codex-tty"),
 		filepath.Join(home, "sessions"),
 	}
 	var found string

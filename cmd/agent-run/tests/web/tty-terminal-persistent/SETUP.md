@@ -311,7 +311,7 @@ func doHTTP(t *testing.T, method, url, bearer, contentType, body string) (int, s
 
 func writeMappedSessionFixture(t *testing.T, req *Request) {
 	t.Helper()
-	dir := filepath.Join(req.Home, "sessions", req.Runner, req.ChatSessionID)
+	dir := filepath.Join(req.Home, "sessions", req.ChatSessionID)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatalf("mkdir session: %v", err)
 	}

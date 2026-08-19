@@ -42,7 +42,10 @@ func RunGrok(grokArgs []string, opts RunGrokOptions) error {
 		return fmt.Errorf("--log-http path must end with .jsonl")
 	}
 
-	if strings.TrimSpace(os.Getenv("LLM_MOCK_RUN_GROK_COMMAND")) != "" {
+	// Hook-only path: fork/open-resume replace the TUI and do not curl the mock.
+	// run-grok doctests set a curl hook AND --log-events / presets — those still need the server.
+	if strings.TrimSpace(os.Getenv("LLM_MOCK_RUN_GROK_COMMAND")) != "" &&
+		opts.LogEventsPath == "" && opts.LogHTTPPath == "" && opts.MockEventsPreset == "" {
 		return runGrokWithHookOnly(grokArgs, opts)
 	}
 

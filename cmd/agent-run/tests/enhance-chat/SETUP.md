@@ -434,7 +434,7 @@ func waitForSessionComplete(t *testing.T, req *Request, runner, sessionID string
 
 func readSessionEventsJSONL(t *testing.T, home, runner, sessionID string) (string, []string) {
 	t.Helper()
-	path := filepath.Join(home, "sessions", runner, sessionID, "events.jsonl")
+	path := filepath.Join(home, "sessions", sessionID, "events.jsonl")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read events.jsonl: %v", err)

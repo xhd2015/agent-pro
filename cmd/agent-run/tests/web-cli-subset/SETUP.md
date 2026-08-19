@@ -602,7 +602,7 @@ func startFakePtywrap(t *testing.T, req *Request) string {
 
 func writeSessionFixture(t *testing.T, req *Request, runner, sessionID, status, terminalSessionID string) {
 	t.Helper()
-	dir := filepath.Join(req.Home, "sessions", runner, sessionID)
+	dir := filepath.Join(req.Home, "sessions", sessionID)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatalf("mkdir session: %v", err)
 	}
@@ -768,7 +768,7 @@ func waitForTerminalSessionID(t *testing.T, req *Request, runner, sessionID stri
 
 func readEventsJSONL(t *testing.T, home, runner, sessionID string) (string, []string) {
 	t.Helper()
-	path := filepath.Join(home, "sessions", runner, sessionID, "events.jsonl")
+	path := filepath.Join(home, "sessions", sessionID, "events.jsonl")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read events: %v", err)
@@ -976,7 +976,7 @@ func waitForPortOpen(t *testing.T, addr string, timeout time.Duration) {
 
 func seedAgentSessionForStubTTY(t *testing.T, req *Request, agentSessionID, terminalSessionID string) {
 	t.Helper()
-	dir := filepath.Join(req.Home, "sessions", req.Runner, agentSessionID)
+	dir := filepath.Join(req.Home, "sessions", agentSessionID)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatalf("mkdir session: %v", err)
 	}

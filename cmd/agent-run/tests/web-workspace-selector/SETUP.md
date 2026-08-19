@@ -95,11 +95,8 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 
 func ensureFrontendDistShell(repoRoot string) error {
 	distDir := filepath.Join(repoRoot, "frontend-agent-run", "dist")
-	indexPath := filepath.Join(distDir, "index.html")
-	if st, err := os.Stat(indexPath); err == nil && !st.IsDir() {
-		return nil
-	}
-	if err := os.MkdirAll(distDir, 0755); err != nil {
+	// DistComplete needs non-empty index.html + assets/*; upgrade thin placeholders.
+	if err := os.MkdirAll(filepath.Join(distDir, "assets"), 0755); err != nil {
 		return err
 	}
 	const shell = `<!doctype html>
@@ -110,7 +107,26 @@ func ensureFrontendDistShell(repoRoot string) error {
 </body>
 </html>
 `
-	return os.WriteFile(indexPath, []byte(shell), 0644)
+	indexPath := filepath.Join(distDir, "index.html")
+	needIndex := true
+	if data, err := os.ReadFile(indexPath); err == nil {
+		s := string(data)
+		if strings.Contains(s, `id="root"`) || strings.Contains(s, "id='root'") {
+			needIndex = false
+		}
+	}
+	if needIndex {
+		if err := os.WriteFile(indexPath, []byte(shell), 0644); err != nil {
+			return err
+		}
+	}
+	assetPath := filepath.Join(distDir, "assets", "doctest-stub.js")
+	if st, err := os.Stat(assetPath); err != nil || st.Size() == 0 {
+		if err := os.WriteFile(assetPath, []byte("/* doctest stub */\n"), 0644); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func buildAgentRun(t *testing.T, repoRoot, out string) error {

@@ -662,7 +662,7 @@ func runAttachInteractiveProbe(t *testing.T, req *Request) (*Response, error) {
 
 func findGrokTTYEventsJSONL(t *testing.T, home string) (string, []string) {
 	t.Helper()
-	root := filepath.Join(home, "sessions", "grok-tty")
+	root := filepath.Join(home, "sessions")
 	var found string
 	var lines []string
 	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
@@ -688,7 +688,7 @@ func findGrokTTYEventsJSONL(t *testing.T, home string) (string, []string) {
 
 func findGrokTTYMetaJSON(t *testing.T, home string) (string, map[string]any) {
 	t.Helper()
-	root := filepath.Join(home, "sessions", "grok-tty")
+	root := filepath.Join(home, "sessions")
 	var found string
 	var meta map[string]any
 	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {

@@ -312,7 +312,7 @@ func stripEnvPrefix(req *Request, prefix string) {
 }
 
 func eventsJSONLPath(home, sessionID string) string {
-	return filepath.Join(home, "sessions", "grok-tty", sessionID, "events.jsonl")
+	return filepath.Join(home, "sessions", sessionID, "events.jsonl")
 }
 
 func readEventsJSONL(path string) ([]string, error) {
@@ -554,7 +554,7 @@ func delayedGrokSessionSchedule(t *testing.T, delay time.Duration, grokHome, wor
 
 func readSessionMetaRunnerSessionID(t *testing.T, home, sessionID string) string {
 	t.Helper()
-	path := filepath.Join(home, "sessions", "grok-tty", sessionID, "meta.json")
+	path := filepath.Join(home, "sessions", sessionID, "meta.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return ""
@@ -599,7 +599,7 @@ func waitForUserAndAssistant(t *testing.T, home, sessionID, prompt, assistantSub
 
 func seedFinishedSessionEmptyEvents(t *testing.T, req *Request) {
 	t.Helper()
-	sessionDir := filepath.Join(req.Home, "sessions", req.Runner, req.SessionID)
+	sessionDir := filepath.Join(req.Home, "sessions", req.SessionID)
 	if err := os.MkdirAll(sessionDir, 0755); err != nil {
 		t.Fatalf("mkdir session dir: %v", err)
 	}

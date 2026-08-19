@@ -75,7 +75,7 @@ await assistantMsg.waitFor({ state: 'visible', timeout: 15000 });
 
 func seedWorkspaceSession(t *testing.T, home, runner, sessionID, workspace string) error {
 	t.Helper()
-	sessDir := filepath.Join(home, "sessions", runner, sessionID)
+	sessDir := filepath.Join(home, "sessions", sessionID)
 	if err := os.MkdirAll(sessDir, 0755); err != nil {
 		return err
 	}

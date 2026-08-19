@@ -57,18 +57,39 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 // ensureStubDistForDir makes sure distDir has at least one embeddable file so
 // //go:embed dist compiles when the real SPA dist is absent (gitignored).
 func ensureStubDistForDir(distDir string) error {
-	entries, statErr := os.ReadDir(distDir)
-	if statErr == nil {
-		for _, e := range entries {
-			if !e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
-				return nil
-			}
-		}
-	}
-	if err := os.MkdirAll(distDir, 0755); err != nil {
+	// DistComplete needs non-empty index.html and at least one assets/* file.
+	// placeholder.txt alone is not enough; always ensure a minimal SPA shell.
+	if err := os.MkdirAll(filepath.Join(distDir, "assets"), 0755); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(distDir, "index.html"), []byte("stub\n"), 0644)
+	const shell = `<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>agent-run</title></head>
+<body>
+<div id="root"></div>
+</body>
+</html>
+`
+	indexPath := filepath.Join(distDir, "index.html")
+	needIndex := true
+	if data, err := os.ReadFile(indexPath); err == nil {
+		s := string(data)
+		if strings.Contains(s, `id="root"`) || strings.Contains(s, "id='root'") {
+			needIndex = false
+		}
+	}
+	if needIndex {
+		if err := os.WriteFile(indexPath, []byte(shell), 0644); err != nil {
+			return err
+		}
+	}
+	assetPath := filepath.Join(distDir, "assets", "doctest-stub.js")
+	if st, err := os.Stat(assetPath); err != nil || st.Size() == 0 {
+		if err := os.WriteFile(assetPath, []byte("/* doctest stub */\n"), 0644); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func canonicalPath(path string) string {

@@ -133,21 +133,39 @@ func fileExists(path string) bool {
 }
 
 func ensureStubDist(distDir string) error {
-	entries, statErr := os.ReadDir(distDir)
-	if statErr == nil {
-		for _, e := range entries {
-			if e.IsDir() || strings.HasPrefix(e.Name(), ".") {
-				continue
-			}
-			return nil
-		}
-	} else if !os.IsNotExist(statErr) {
-		return statErr
-	}
-	if err := os.MkdirAll(distDir, 0755); err != nil {
+	// DistComplete needs non-empty index.html and at least one assets/* file.
+	// placeholder.txt alone is not enough; always ensure a minimal SPA shell.
+	if err := os.MkdirAll(filepath.Join(distDir, "assets"), 0755); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(distDir, "index.html"), []byte("stub\n"), 0644)
+	const shell = `<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>agent-run</title></head>
+<body>
+<div id="root"></div>
+</body>
+</html>
+`
+	indexPath := filepath.Join(distDir, "index.html")
+	needIndex := true
+	if data, err := os.ReadFile(indexPath); err == nil {
+		s := string(data)
+		if strings.Contains(s, `id="root"`) || strings.Contains(s, "id='root'") {
+			needIndex = false
+		}
+	}
+	if needIndex {
+		if err := os.WriteFile(indexPath, []byte(shell), 0644); err != nil {
+			return err
+		}
+	}
+	assetPath := filepath.Join(distDir, "assets", "doctest-stub.js")
+	if st, err := os.Stat(assetPath); err != nil || st.Size() == 0 {
+		if err := os.WriteFile(assetPath, []byte("/* doctest stub */\n"), 0644); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func ensureSessionBinaries(t *testing.T, d *session.Doctest, repoRoot string) (agentRun, llmMock string) {
@@ -494,7 +512,7 @@ func waitSendableBestEffort(t *testing.T, req *Request, max time.Duration) {
 }
 
 func eventsJSONLPath(home, sessionID string) string {
-	return filepath.Join(home, "sessions", "grok-tty", sessionID, "events.jsonl")
+	return filepath.Join(home, "sessions", sessionID, "events.jsonl")
 }
 
 func readEventsBlob(req *Request) string {
@@ -502,7 +520,7 @@ func readEventsBlob(req *Request) string {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		// Session id may differ if open rewrote it; scan home.
-		root := filepath.Join(req.Home, "sessions", "grok-tty")
+		root := filepath.Join(req.Home, "sessions")
 		var blob strings.Builder
 		_ = filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
 			if err != nil || info == nil || info.IsDir() {

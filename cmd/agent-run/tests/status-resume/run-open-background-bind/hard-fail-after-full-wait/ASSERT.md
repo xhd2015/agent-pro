@@ -40,7 +40,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	)
 
 	// No false successful bind id under home.
-	root := filepath.Join(req.Home, "sessions", "grok-tty")
+	root := filepath.Join(req.Home, "sessions")
 	_ = filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil || info == nil || info.IsDir() {
 			return nil

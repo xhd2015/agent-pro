@@ -27,7 +27,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	sessionID, _, _ := postCreateSession(t, req, req.Runner, req.Prompt)
 	req.SessionID = sessionID
 	waitForSessionStatus(t, req, req.Runner, sessionID, "finished", 45*time.Second)
-	eventsPath := filepath.Join(req.Home, "sessions", req.Runner, sessionID, "events.jsonl")
+	eventsPath := filepath.Join(req.Home, "sessions", sessionID, "events.jsonl")
 	info, err := os.Stat(eventsPath)
 	if err != nil {
 		t.Fatalf("stat events: %v", err)

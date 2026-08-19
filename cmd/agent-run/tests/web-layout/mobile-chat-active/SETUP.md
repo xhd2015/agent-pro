@@ -66,7 +66,7 @@ if (count < 1) throw new Error('expected at least one message-item, got ' + coun
 
 func seedActiveSession(t *testing.T, home, runner, sessionID string) error {
 	t.Helper()
-	sessDir := filepath.Join(home, "sessions", runner, sessionID)
+	sessDir := filepath.Join(home, "sessions", sessionID)
 	if err := os.MkdirAll(sessDir, 0755); err != nil {
 		return err
 	}

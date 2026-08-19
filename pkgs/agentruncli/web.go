@@ -186,11 +186,6 @@ func writeAuthToken(home, token string) error {
 	return os.WriteFile(filepath.Join(home, "auth.token"), []byte(token), 0600)
 }
 
-func isTerminalWebSocketPath(path string) bool {
-	path = strings.TrimSuffix(strings.Trim(path, "/"), "/ws")
-	return strings.HasSuffix(path, "/terminal")
-}
-
 func registerAPI(mux *http.ServeMux, store agentstorage.Store, token string, requireAuth bool, runCfg webRunConfig) {
 	wrap := func(next http.HandlerFunc) http.HandlerFunc {
 		if !requireAuth {
@@ -200,13 +195,10 @@ func registerAPI(mux *http.ServeMux, store agentstorage.Store, token string, req
 			got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 			got = strings.TrimSpace(got)
 			if got == "" {
+				// Browser WS clients may pass ?token= when they cannot set Authorization.
 				got = strings.TrimSpace(r.URL.Query().Get("token"))
 			}
-			if got != "" && got != token {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
-				return
-			}
-			if got == "" && !isTerminalWebSocketPath(r.URL.Path) {
+			if got == "" || got != token {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}

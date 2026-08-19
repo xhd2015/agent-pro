@@ -504,17 +504,6 @@ func (h *Handler) writeAgentEvents(events []types.AgentEvent) {
 	}
 }
 
-// peekTrailingMessages returns ActionMessage events still in queue without removing them.
-func peekTrailingMessages(queue []types.AgentEvent) []types.AgentEvent {
-	var msgs []types.AgentEvent
-	for _, evt := range queue {
-		if evt.Type == types.ActionMessage {
-			msgs = append(msgs, evt)
-		}
-	}
-	return msgs
-}
-
 // --- Exchange matching (moved from main.go mockHandler) ---
 
 type serveResult struct {
@@ -562,16 +551,9 @@ func (h *Handler) findGeneratedMatch(messages []openai.ChatCompletionMessagePara
 
 	h.genMu.Lock()
 	if batch, ok := queue.DequeueToBreakpoint(&h.GenQueue); ok {
-		trailing := peekTrailingMessages(h.GenQueue)
 		h.genMu.Unlock()
 		batch = sanitizeBatch(batch)
-		events := queue.ConsumedEvents(batch)
-		if batch.Breakpoint.Type == types.ActionToolCall {
-			// Include trailing preset messages in the agent-events log for one-shot
-			// clients (fake curl once) without dequeuing them from GenQueue.
-			events = append(events, trailing...)
-		}
-		return &serveResult{batch: batch, agentEvents: events}, true
+		return &serveResult{batch: batch, agentEvents: queue.ConsumedEvents(batch)}, true
 	}
 
 	if h.genStream == nil {

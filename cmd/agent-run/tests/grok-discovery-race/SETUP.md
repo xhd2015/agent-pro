@@ -275,7 +275,7 @@ func configureLLMMockChromeEnv(t *testing.T, req *Request, prompt string, holdSe
 }
 
 func eventsJSONLPath(home, sessionID string) string {
-	return filepath.Join(home, "sessions", "grok-tty", sessionID, "events.jsonl")
+	return filepath.Join(home, "sessions", sessionID, "events.jsonl")
 }
 
 func readEventsJSONL(path string) ([]string, error) {

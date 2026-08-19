@@ -59,7 +59,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 
 func seedIdleSession(t *testing.T, home, runner, sessionID string) error {
 	t.Helper()
-	sessDir := filepath.Join(home, "sessions", runner, sessionID)
+	sessDir := filepath.Join(home, "sessions", sessionID)
 	if err := os.MkdirAll(sessDir, 0755); err != nil {
 		return err
 	}

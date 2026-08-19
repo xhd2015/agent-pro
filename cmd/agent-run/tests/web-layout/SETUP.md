@@ -287,7 +287,7 @@ if (bottomGap > 80) {
 
 func seedProgressCompactionSession(t *testing.T, home, runner, sessionID, workspace string) error {
 	t.Helper()
-	sessDir := filepath.Join(home, "sessions", runner, sessionID)
+	sessDir := filepath.Join(home, "sessions", sessionID)
 	if err := os.MkdirAll(sessDir, 0755); err != nil {
 		return err
 	}
@@ -324,7 +324,7 @@ func seedProgressCompactionSession(t *testing.T, home, runner, sessionID, worksp
 
 func seedProgressMultiToolOrderingSession(t *testing.T, home, runner, sessionID, workspace string) error {
 	t.Helper()
-	sessDir := filepath.Join(home, "sessions", runner, sessionID)
+	sessDir := filepath.Join(home, "sessions", sessionID)
 	if err := os.MkdirAll(sessDir, 0755); err != nil {
 		return err
 	}
@@ -359,7 +359,7 @@ func seedProgressMultiToolOrderingSession(t *testing.T, home, runner, sessionID,
 func seedGrokTTYMessageCardSession(t *testing.T, home, sessionID, workspace string) error {
 	t.Helper()
 	runner := "grok-tty"
-	sessDir := filepath.Join(home, "sessions", runner, sessionID)
+	sessDir := filepath.Join(home, "sessions", sessionID)
 	if err := os.MkdirAll(sessDir, 0755); err != nil {
 		return err
 	}
@@ -411,7 +411,7 @@ func seedGrokTTYMessageCardSession(t *testing.T, home, sessionID, workspace stri
 
 func seedRoleTimelineSession(t *testing.T, home, runner, sessionID, workspace string, userTS, assistantTS int64) error {
 	t.Helper()
-	sessDir := filepath.Join(home, "sessions", runner, sessionID)
+	sessDir := filepath.Join(home, "sessions", sessionID)
 	if err := os.MkdirAll(sessDir, 0755); err != nil {
 		return err
 	}
@@ -458,7 +458,7 @@ func makeDeepWorkspaceDir(t *testing.T, base string) string {
 
 func seedRunningSessionAwaitingAssistant(t *testing.T, home, runner, sessionID string) error {
 	t.Helper()
-	sessDir := filepath.Join(home, "sessions", runner, sessionID)
+	sessDir := filepath.Join(home, "sessions", sessionID)
 	if err := os.MkdirAll(sessDir, 0755); err != nil {
 		return err
 	}
@@ -851,7 +851,7 @@ if (!grew) {
 
 func seedRunningSession(t *testing.T, home, runner, sessionID string, runningFor time.Duration) error {
 	t.Helper()
-	sessDir := filepath.Join(home, "sessions", runner, sessionID)
+	sessDir := filepath.Join(home, "sessions", sessionID)
 	if err := os.MkdirAll(sessDir, 0755); err != nil {
 		return err
 	}
@@ -926,7 +926,7 @@ func seedIdleSessionWithUserAndAssistant(t *testing.T, home, runner, sessionID, 
 
 func seedIdleSessionForRunningCardNegative(t *testing.T, home, runner, sessionID string) error {
 	t.Helper()
-	sessDir := filepath.Join(home, "sessions", runner, sessionID)
+	sessDir := filepath.Join(home, "sessions", sessionID)
 	if err := os.MkdirAll(sessDir, 0755); err != nil {
 		return err
 	}
@@ -1007,7 +1007,7 @@ func seedLayoutScrollSession(t *testing.T, home, runner, sessionID string, messa
 	if messageCount < 15 {
 		messageCount = 15
 	}
-	sessDir := filepath.Join(home, "sessions", runner, sessionID)
+	sessDir := filepath.Join(home, "sessions", sessionID)
 	if err := os.MkdirAll(sessDir, 0755); err != nil {
 		return err
 	}

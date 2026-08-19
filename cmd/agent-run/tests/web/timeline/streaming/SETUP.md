@@ -34,7 +34,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 
 func readEventsJSONL(t *testing.T, home, runner, sessionID string) []map[string]any {
 	t.Helper()
-	path := filepath.Join(home, "sessions", runner, sessionID, "events.jsonl")
+	path := filepath.Join(home, "sessions", sessionID, "events.jsonl")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read events: %v", err)

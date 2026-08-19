@@ -35,6 +35,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -230,21 +231,34 @@ func runTerminalWebSocket(t *testing.T, req *Request) (*Response, error) {
 			return nil, err
 		}
 	}
-	deadline := time.Now().Add(5 * time.Second)
+	wantResize := strings.TrimSpace(req.WSResizeJSON) != ""
+	// Single overall deadline — avoid tight retry loops (gorilla panics after
+	// ~1000 repeated reads when a sticky failure is misclassified as timeout).
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	var out strings.Builder
-	for time.Now().Before(deadline) {
-		_ = conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+	for {
 		_, msg, readErr := conn.ReadMessage()
 		if readErr != nil {
-			continue
+			resp := &Response{WSOutput: out.String(), WSResize: req.RegistryResize}
+			errText := readErr.Error()
+			isDeadline := errors.Is(readErr, os.ErrDeadlineExceeded) ||
+				strings.Contains(errText, "i/o timeout") ||
+				strings.Contains(errText, "deadline exceeded")
+			if !isDeadline {
+				resp.WSError = errText
+			}
+			return resp, nil
 		}
 		out.Write(msg)
 		got := out.String()
-		if strings.Contains(got, req.RegistryTranscript) || strings.Contains(got, "echo:"+strings.TrimSpace(req.WSInput)) {
+		resizeDone := !wantResize || strings.Contains(got, "resize-ok") || strings.Contains(req.RegistryResize, `"cols"`)
+		ioDone := (req.RegistryTranscript != "" && strings.Contains(got, req.RegistryTranscript)) ||
+			(req.WSInput != "" && strings.Contains(got, "echo:"+strings.TrimSpace(req.WSInput))) ||
+			(wantResize && (strings.Contains(got, "resize-ok") || strings.Contains(req.RegistryResize, `"cols"`)))
+		if resizeDone && ioDone {
 			return &Response{WSOutput: got, WSResize: req.RegistryResize}, nil
 		}
 	}
-	return &Response{WSOutput: out.String(), WSResize: req.RegistryResize}, nil
 }
 
 func statusFromWSResponse(resp *http.Response) int {
@@ -256,16 +270,19 @@ func statusFromWSResponse(resp *http.Response) int {
 
 func writeSessionFixture(t *testing.T, req *Request, runner, sessionID, status string) {
 	t.Helper()
-	dir := filepath.Join(req.Home, "sessions", runner, sessionID)
+	dir := filepath.Join(req.Home, "sessions", sessionID)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatalf("mkdir session: %v", err)
 	}
+	// terminal_session_id matches writeTTYRegistryFixture's registry filename so
+	// ResolveByAgentSession can attach WS without a separate tty.json.
 	meta := map[string]any{
-		"runner":     runner,
-		"session_id": sessionID,
-		"status":     status,
-		"workspace":  req.TempDir,
-		"created_at": time.Now().UnixMilli(),
+		"runner":              runner,
+		"session_id":          sessionID,
+		"status":              status,
+		"workspace":           req.TempDir,
+		"terminal_session_id": sessionID,
+		"created_at":          time.Now().UnixMilli(),
 	}
 	writeJSONFile(t, filepath.Join(dir, "meta.json"), meta)
 	events := `{"type":"message","role":"user","text":"` + req.Prompt + `","timestamp":1}` + "\n" +
