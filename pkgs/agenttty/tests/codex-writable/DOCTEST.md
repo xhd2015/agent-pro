@@ -41,6 +41,8 @@ rendered tty-watch snapshot text fixtures under `pkgs/agenttty/testdata/codex-wr
 - Busy: queued follow-up, **live** working / esc-to-interrupt in the active turn → `state=busy`.
 - Historical working / esc-to-interrupt **above** a settled bottom main-chat `›`/`»` → still
   `idle` (post-turn); full-scrollback busy match is a false negative for WaitDone/send.
+- Live `• Working` immediately **above** a placeholder composer `›` → `busy` (prompt region
+  includes lines above the last glyph).
 
 ## Version
 
@@ -64,7 +66,8 @@ pkgs/agenttty/tests/codex-writable/
     ├── double-angle-prompt-idle/            # F6: Codex 0.146 » only → idle (RED before fix)
     ├── double-angle-mcp-idle/               # F7: MCP incomplete + » only → idle (RED before fix)
     ├── historical-working-bottom-prompt-idle/ # F8: historical • Working + bottom › → idle (RED before fix)
-    └── mcp-starting-not-inject-ready/         # F9: Starting MCP servers → not BannerDetected
+    ├── mcp-starting-not-inject-ready/         # F9: Starting MCP servers → not BannerDetected
+    └── working-above-placeholder-prompt-busy/ # F10: live • Working above placeholder › → busy
 ```
 
 Parameter ranking (most → least significant):
@@ -88,6 +91,7 @@ Parameter ranking (most → least significant):
 | 7 | `regression/double-angle-mcp-idle` | MCP incomplete + main `»` only → idle (F7, RED before fix) |
 | 8 | `regression/historical-working-bottom-prompt-idle` | Historical `• Working` + settled bottom `›` → idle (F8, RED before fix) |
 | 9 | `regression/mcp-starting-not-inject-ready` | Live `Starting MCP servers` + `›` → writable loading **and** `BannerDetected` false (F9) |
+| 10 | `regression/working-above-placeholder-prompt-busy` | Live `• Working` above placeholder `›` → `busy` (F10) |
 
 ## How to Run
 

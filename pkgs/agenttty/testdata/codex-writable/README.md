@@ -36,6 +36,7 @@ pkgs/agenttty/testdata/codex-writable/
 | `codex-double-angle-mcp-incomplete.txt` | MCP incomplete + only `»` (no `›`) → `ready=true`, `idle` |
 | `codex-historical-working-bottom-prompt-idle.txt` | Historical `• Working` / `esc to interrupt` **above** settled bottom `›` → `ready=true`, `idle` (desired; RED until tail-scoped busy) |
 | `codex-mcp-servers-starting.txt` | Live `llm-mock-run-codex` + 8 hang MCPs: `Starting MCP servers (0/8)` + main `›` → writable `loading`; `BannerDetected` must be **false** (desired; RED until banner wait ignores MCP boot). Refresh via `CODEX_MCP_BOOT_DUMP_SNAPSHOT`. |
+| `codex-working-above-placeholder-prompt-busy.txt` | Live `• Working` immediately **above** placeholder composer `›` → `ready=false`, `busy` |
 
 Sources: live captures from `/tmp/codex-status-fixtures-for-req/` (content preserved) plus
 synthetic Codex 0.146 double-angle fixtures from the SeaTalk incident, plus scorer WaitDone

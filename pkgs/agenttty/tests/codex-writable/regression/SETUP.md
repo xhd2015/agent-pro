@@ -23,6 +23,7 @@ load single regression fixture
 - F4 keeps legacy `›` idle GREEN; F6–F7 lock Codex 0.146 `»` idle (RED before implementer).
 - F8 locks post-turn idle when historical `• Working` remains above bottom `›` (RED before fix).
 - F9 locks inject-ready (`BannerDetected`) false on live `Starting MCP servers`.
+- F10 locks live `• Working` above a placeholder composer `›` as busy.
 
 ```go
 import "testing"

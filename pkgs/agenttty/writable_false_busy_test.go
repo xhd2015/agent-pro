@@ -53,3 +53,24 @@ func TestCheckCodexWritable_LiveWorkingNoSettledPrompt_Busy(t *testing.T) {
 		t.Fatalf("expected busy for live Working, got state=%q reason=%q", st.State, st.Reason)
 	}
 }
+
+// Live Working immediately above a placeholder composer › must stay busy.
+// Experiment snap-00: last › is "Write tests for @filename"; snapping to that
+// line dropped "• Working (6s • esc to interrupt)".
+func TestCheckCodexWritable_WorkingAbovePlaceholderPrompt_Busy(t *testing.T) {
+	scrollback := []byte("" +
+		"› run sleep 20 then say done\n" +
+		"• Working (6s • esc to interrupt) · 1 background terminal running · /ps to view…\n" +
+		"› Write tests for @filenamemock-model default · ~/project…\n")
+	st := checkCodexWritable(scrollback)
+	t.Logf("Ready=%v State=%s Reason=%q", st.Ready, st.State, st.Reason)
+	if st.Ready {
+		t.Fatalf("Working above placeholder › must not be ready; got ready state=%q reason=%q", st.State, st.Reason)
+	}
+	if st.State != "busy" {
+		t.Fatalf("expected busy, got state=%q reason=%q", st.State, st.Reason)
+	}
+	if detectCodexScreenStatus(scrollback) != "busy" {
+		t.Fatalf("DetectScreenStatus=%q want busy", detectCodexScreenStatus(scrollback))
+	}
+}

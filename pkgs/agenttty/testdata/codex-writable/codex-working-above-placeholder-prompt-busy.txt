@@ -1,0 +1,13 @@
+CODEX_HOME=/tmp/experiment-codex-home
+╭--------------------------------------------╮
+│ >_ OpenAI Codex (v0.147.0)                 │
+│                                            │
+│ model:       mock-model   /model to change │
+│ directory:   /private/var/folders/s_/…/ws  │
+│ permissions: YOLO mode                     │
+╰--------------------------------------------╯
+  Tip:
+⚠ `--dangerously-bypass-hook-trust` is enabled. Enabled hooks may run withoutreview for this invocation.
+› run sleep 20 then say done
+• Working (6s • esc to interrupt) · 1 background terminal running · /ps to view…
+› Write tests for @filenamemock-model default · /private/var/folders/s_/nd3t_zbx61747w0qdryxh4wm0000gp/T…

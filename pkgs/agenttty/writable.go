@@ -118,9 +118,15 @@ func grokBusyInPromptRegion(plain string) bool {
 	return strings.Contains(region, "working") || strings.Contains(region, "thinking")
 }
 
+// codexPromptLookbackLines is how many line starts to include before the last ›/».
+// Live chrome is `• Working` immediately above a placeholder composer ›; snapping
+// to the › line itself dropped that Working line (experiment snap-00).
+const codexPromptLookbackLines = 3
+
 // codexPromptRegion returns the active/post-turn slice of Codex scrollback used for
 // busy vs idle. Prefer the last settled "Worked for" footer (everything above is
-// historical). Otherwise prefer context around the last main-chat ›/» glyph.
+// historical). Otherwise include the last ›/» line plus a few lines above it so
+// live "• Working" just above a placeholder composer still matches.
 // Falls back to a short tail so live "• Working" without a prompt still matches.
 func codexPromptRegion(plain string) string {
 	lower := strings.ToLower(plain)
@@ -134,20 +140,30 @@ func codexPromptRegion(plain string) string {
 		}
 	}
 	if best >= 0 {
-		// Include lines above the prompt so live Working chrome just above › still counts.
-		start := best
-		if start > 500 {
-			start -= 500
-		} else {
-			start = 0
-		}
-		// Snap back to a line start when possible.
-		if nl := strings.LastIndex(plain[start:best], "\n"); nl >= 0 {
-			start = start + nl + 1
-		}
-		return plain[start:]
+		return plain[codexPromptRegionStart(plain, best):]
 	}
 	return grokTailLines(plain, 16)
+}
+
+func codexPromptRegionStart(plain string, glyphAt int) int {
+	if glyphAt <= 0 {
+		return 0
+	}
+	start := glyphAt
+	for i := 0; i < codexPromptLookbackLines; i++ {
+		if start <= 0 {
+			return 0
+		}
+		nl := strings.LastIndex(plain[:start], "\n")
+		if nl < 0 {
+			return 0
+		}
+		start = nl
+	}
+	if start < len(plain) && plain[start] == '\n' {
+		start++
+	}
+	return start
 }
 
 // codexBusyInPromptRegion reports live Codex busy chrome (• + working / esc to interrupt)

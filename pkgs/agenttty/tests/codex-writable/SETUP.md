@@ -31,6 +31,8 @@ tty-watch snapshot <session> -> rendered scrollback text
   classify as idle when present without busy/loading signals.
 - Historical `• Working` / `esc to interrupt` **above** a settled bottom `›` must still be idle
   (post-turn scrollback); live Working in the prompt tail remains busy.
+- Live `• Working` immediately **above** a placeholder composer `›` must be busy (prompt-region
+  must not snap to the last `›` line).
 - `reason` in `expectations.jsonl` is a **substring** expectation (implementer-chosen full reason).
 
 ```go
@@ -51,6 +53,7 @@ const (
 	fixtureDoubleAngleMCP                      = "codex-double-angle-mcp-incomplete.txt"
 	fixtureHistoricalWorkingBottomPromptIdle   = "codex-historical-working-bottom-prompt-idle.txt"
 	fixtureMCPServersStarting                  = "codex-mcp-servers-starting.txt"
+	fixtureWorkingAbovePlaceholderBusy         = "codex-working-above-placeholder-prompt-busy.txt"
 )
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
