@@ -78,12 +78,20 @@ func drainStep(home string, sess Session, provider agenttty.Provider) bool {
 	release()
 
 	// Bounded wait: infinite wait hung follow-up inject against fixture PTYs
-	// whose snapshot text lacked prompt glyphs. After timeout, still attempt
-	// inject unless the terminal is known exited.
+	// whose snapshot text lacked prompt glyphs (State "unknown"). After timeout:
+	//   - exited → skip inject, keep polling
+	//   - busy/loading → do not force-inject; retry (honors send-queue busy contract)
+	//   - unknown/other → proceed to inject (glyph-less live-PTY follow-up)
 	writable := agenttty.WaitUntilWritable(provider, sess.ListenAddr, sess.TerminalSessionID, 3*time.Second)
-	if !writable.Ready && writable.State == "exited" {
-		time.Sleep(200 * time.Millisecond)
-		return queueHasWork(home, sess)
+	if !writable.Ready {
+		switch writable.State {
+		case "exited":
+			time.Sleep(200 * time.Millisecond)
+			return queueHasWork(home, sess)
+		case "busy", "loading":
+			time.Sleep(200 * time.Millisecond)
+			return true
+		}
 	}
 
 	release, err = acquireLock(home, sess.Runner, sess.TerminalSessionID)

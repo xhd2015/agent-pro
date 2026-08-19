@@ -33,17 +33,16 @@ resolveSessionID(Config, flag, prompt) -> sessionIDSources | error | generated
 
 ```go
 import (
-    "bytes"
     "context"
     "fmt"
     "os"
     "path/filepath"
     "strconv"
     "strings"
-    "sync"
     "testing"
 
     "github.com/xhd2015/agent-pro/agent/subagent"
+    "github.com/xhd2015/agent-pro/agent/teststdio"
 )
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
@@ -104,37 +103,9 @@ func runLogf(t *testing.T, req *Request) (*Response, error) {
     return &Response{Stdout: stdout}, nil
 }
 
-// captureStdoutStderr serializes os.Stdout/os.Stderr swaps so parallel leaves
-// do not steal each other's pipes (process-global streams).
-var captureIOMu sync.Mutex
-
 func captureStdoutStderr(fn func() error) (stdout, stderr string, err error) {
-    captureIOMu.Lock()
-    defer captureIOMu.Unlock()
-
-    oldOut, oldErr := os.Stdout, os.Stderr
-    rOut, wOut, e := os.Pipe()
-    if e != nil {
-        return "", "", fmt.Errorf("stdout pipe: %w", e)
-    }
-    rErr, wErr, e := os.Pipe()
-    if e != nil {
-        wOut.Close()
-        rOut.Close()
-        return "", "", fmt.Errorf("stderr pipe: %w", e)
-    }
-    os.Stdout, os.Stderr = wOut, wErr
-
-    err = fn()
-
-    wOut.Close()
-    wErr.Close()
-    os.Stdout, os.Stderr = oldOut, oldErr
-
-    var bufOut, bufErr bytes.Buffer
-    bufOut.ReadFrom(rOut)
-    bufErr.ReadFrom(rErr)
-    return bufOut.String(), bufErr.String(), err
+	// Process-wide lock across agent-lib packages (subagent + commit_msg + …).
+	return teststdio.Capture(fn)
 }
 
 func runSessionBase(t *testing.T, req *Request) (*Response, error) {

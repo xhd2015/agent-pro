@@ -24,6 +24,7 @@ import (
 )
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	withCommandcodeOpenTestEnv(req)
 	req.SessionID = fmt.Sprintf("e2e-%d", time.Now().UnixNano())
 	return nil
 }

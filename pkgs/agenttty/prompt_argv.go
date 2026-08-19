@@ -24,7 +24,12 @@ func appendNewSessionPrompt(argv []string, runnerID, prompt string, noSubmit, op
 	if p == "" {
 		return argv
 	}
-	if runnerID == "commandcode-tty" && !open {
+	// commandcode-tty: headless uses -p. Open omits argv prompt and injects
+	// after ready (positional "cmd Hello" one-shots and exits before attach).
+	if runnerID == "commandcode-tty" {
+		if open {
+			return argv
+		}
 		return append(argv, "-p", p)
 	}
 	if runnerID == "codex-tty" {

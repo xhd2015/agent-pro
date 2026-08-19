@@ -87,6 +87,11 @@ func TestAppendNewSessionPrompt_CommandcodeInvalidUTF8MustBeValidUTF8(t *testing
 	if !utf8.ValidString(argv[2]) {
 		t.Fatalf("BUG REPRO: commandcode -p value is invalid UTF-8: %q", argv[2])
 	}
+	// open omits argv prompt (inject after ready)
+	openArgv := appendNewSessionPrompt([]string{"commandcode"}, "commandcode-tty", "Hello", false, true)
+	if len(openArgv) != 1 || openArgv[0] != "commandcode" {
+		t.Fatalf("commandcode --open must omit argv prompt, got %q", openArgv)
+	}
 }
 
 func TestAppendNewSessionPrompt_ValidChineseUnchanged(t *testing.T) {

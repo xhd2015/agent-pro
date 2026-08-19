@@ -779,11 +779,32 @@ func runStubTTYOp(t *testing.T, req *Request) (*Response, error) {
 		sessionID := startStubTTYBackground(t, req)
 		addr := readRegistryListenAddr(t, req.Home, "stub-tty", sessionID)
 		waitForPortOpen(t, addr, 10*time.Second)
-		writer := dialPTYAttach(t, addr, sessionID, "interactive")
-		defer wsAttachClientClose(writer)
+		var writer *wsAttachClient
+		defer func() {
+			if writer != nil {
+				wsAttachClientClose(writer)
+			}
+		}()
 		time.Sleep(500 * time.Millisecond)
-		if err := wsAttachClientTryWriteInput(writer, []byte("probe\r")); err != nil {
-			return resp, err
+		// Retry briefly: stub/ptywrap may close the first writer race-y under load.
+		var writeErr error
+		for i := 0; i < 5; i++ {
+			if writer != nil {
+				wsAttachClientClose(writer)
+				writer = nil
+			}
+			writer = dialPTYAttach(t, addr, sessionID, "interactive")
+			writeErr = wsAttachClientTryWriteInput(writer, []byte("probe\r"))
+			if writeErr == nil {
+				break
+			}
+			if !strings.Contains(writeErr.Error(), "close sent") && !strings.Contains(writeErr.Error(), "broken pipe") {
+				return resp, writeErr
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+		if writeErr != nil {
+			return resp, writeErr
 		}
 		time.Sleep(500 * time.Millisecond)
 		resp.MultiAttachProbe = &MultiAttachProbeResult{WriterCanWrite: true, WriterReceived: wsAttachClientOutput(writer)}

@@ -32,10 +32,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/xhd2015/agent-pro/agent/commit_msg"
+	"github.com/xhd2015/agent-pro/agent/teststdio"
 
 	"github.com/xhd2015/doctest/session"
 )
@@ -144,9 +144,6 @@ type commitMsgTestLogger struct{}
 func (commitMsgTestLogger) Log(msg string)   { fmt.Fprintf(os.Stderr, "%s\n", msg) }
 func (commitMsgTestLogger) Error(msg string) { fmt.Fprintf(os.Stderr, "ERROR: %s\n", msg) }
 
-// captureIOMu serializes os.Stdout/os.Stderr redirection for parallel leaves.
-var captureIOMu sync.Mutex
-
 func captureRunGenCommitMsg(t *testing.T, req *Request) (*Response, error) {
 	t.Helper()
 
@@ -163,8 +160,8 @@ func captureRunGenCommitMsg(t *testing.T, req *Request) (*Response, error) {
 	}
 
 	// Serialize process stdout/stderr swaps under t.Parallel().
-	captureIOMu.Lock()
-	defer captureIOMu.Unlock()
+	teststdio.Lock()
+	defer teststdio.Unlock()
 
 	stdoutR, stdoutW, err := os.Pipe()
 	if err != nil {

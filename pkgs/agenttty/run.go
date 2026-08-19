@@ -390,14 +390,15 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	usesLLMMockGrokHook := runnerID == "grok-tty" && strings.TrimSpace(os.Getenv("LLM_MOCK_RUN_GROK_COMMAND")) != ""
 	if shouldInject {
 		if err := InjectMessage(listenAddr, sessionID, runnerID, promptText, !opts.NoSubmit); err != nil {
-			// Soft-skip only when the PTY/serve is actually gone (e.g. resume-
-			// then-sleep fakes). If TCP is still up, the child is likely blocked
-			// on read — soft-skip would hang discovery (cwd-before-resume leaves).
+			// Soft-skip when KeepAlive kept the HTTP serve up after the PTY
+			// child already exited (resume-then-sleep fakes). If the agent is
+			// still alive, hard-fail — soft-skip would hang discovery.
+			agentExited := RegistryAgentExited(opts.Home, runnerID, sessionID)
 			serveGone := !ttywatch.TCPReachable(listenAddr)
-			if !(opts.KeepTerminalAlive && serveGone && injectSessionGone(err)) {
+			if !(opts.KeepTerminalAlive && injectSessionGone(err) && (serveGone || agentExited)) {
 				return "", terminalSessionID, err
 			}
-			fmt.Fprintf(opts.Stderr, "%s: inject skipped (serve gone under keep-alive): %v\n", runnerID, err)
+			fmt.Fprintf(opts.Stderr, "%s: inject skipped (pty gone under keep-alive): %v\n", runnerID, err)
 		}
 	} else if !opts.KeepTerminalAlive || usesGrokTTYHook || usesLLMMockGrokHook {
 		// Soft kick: bare newline unblocks fake TUIs that `read` after the
@@ -578,6 +579,16 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 
 	var waitErr error
 	var snapshotHold []byte
+	var lastSnapMu sync.Mutex
+	// Poll snapshots while waiting so scrollback fallback still works when the
+	// PTY child exits under KeepAlive (serve stays up; session /input may 404).
+	holdSnap := func() {
+		if snap, err := fetchSnapshotBytes(listenAddr, sessionID); err == nil && len(snap) > 0 {
+			lastSnapMu.Lock()
+			snapshotHold = snap
+			lastSnapMu.Unlock()
+		}
+	}
 	if opts.KeepTerminalAlive {
 		if strings.TrimSpace(promptText) == "" {
 			waitErr = nil
@@ -600,13 +611,27 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 					}
 				}
 			}
-			waitErr = waitForPersistentTurnRemote(ctx, listenAddr, sessionID, promptText, cfg, extraComplete)
+			waitDone := make(chan error, 1)
+			go func() {
+				waitDone <- waitForPersistentTurnRemote(ctx, listenAddr, sessionID, promptText, cfg, extraComplete)
+			}()
+			ticker := time.NewTicker(100 * time.Millisecond)
+			defer ticker.Stop()
+		keepWaitLoop:
+			for {
+				select {
+				case waitErr = <-waitDone:
+					holdSnap()
+					break keepWaitLoop
+				case <-ticker.C:
+					holdSnap()
+				}
+			}
 		}
 	} else {
 		// Without KeepAlive the serve exits with the PTY child, so a snapshot
 		// after WaitHeadless is connection-refused. Poll while waiting and keep
 		// the last good frame for scrollback fallback (fake-TUI doctests).
-		var lastSnapMu sync.Mutex
 		waitDone := make(chan error, 1)
 		go func() {
 			waitDone <- ttywatch.WaitHeadless(ctx, result, argv)
@@ -617,18 +642,10 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 		for {
 			select {
 			case waitErr = <-waitDone:
-				if snap, err := fetchSnapshotBytes(listenAddr, sessionID); err == nil && len(snap) > 0 {
-					lastSnapMu.Lock()
-					snapshotHold = snap
-					lastSnapMu.Unlock()
-				}
+				holdSnap()
 				break waitLoop
 			case <-ticker.C:
-				if snap, err := fetchSnapshotBytes(listenAddr, sessionID); err == nil && len(snap) > 0 {
-					lastSnapMu.Lock()
-					snapshotHold = snap
-					lastSnapMu.Unlock()
-				}
+				holdSnap()
 			}
 		}
 		if autoExitCancel != nil {
@@ -649,8 +666,11 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	}
 
 	snapshot, snapErr := fetchSnapshotBytes(listenAddr, sessionID)
-	if (snapErr != nil || len(snapshot) == 0) && len(snapshotHold) > 0 {
-		snapshot, snapErr = snapshotHold, nil
+	lastSnapMu.Lock()
+	held := append([]byte(nil), snapshotHold...)
+	lastSnapMu.Unlock()
+	if (snapErr != nil || len(snapshot) == 0) && len(held) > 0 {
+		snapshot, snapErr = held, nil
 	}
 	captured := ""
 	if snapErr == nil {

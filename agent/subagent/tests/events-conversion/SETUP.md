@@ -24,13 +24,11 @@
 
 ```go
 import (
-    "bytes"
     "encoding/json"
     "fmt"
     "os"
     "path/filepath"
     "strconv"
-    "sync"
     "testing"
     "time"
 
@@ -38,33 +36,12 @@ import (
 
     "github.com/xhd2015/agent-pro/agent/event/convert"
     "github.com/xhd2015/agent-pro/agent/subagent"
+    "github.com/xhd2015/agent-pro/agent/teststdio"
 )
 
-var captureIOMu sync.Mutex
-
 func captureStdoutStderr(fn func() error) (stdout, stderr string, err error) {
-    captureIOMu.Lock()
-    defer captureIOMu.Unlock()
-    oldOut, oldErr := os.Stdout, os.Stderr
-    rOut, wOut, e := os.Pipe()
-    if e != nil {
-        return "", "", e
-    }
-    rErr, wErr, e := os.Pipe()
-    if e != nil {
-        wOut.Close()
-        rOut.Close()
-        return "", "", e
-    }
-    os.Stdout, os.Stderr = wOut, wErr
-    err = fn()
-    wOut.Close()
-    wErr.Close()
-    os.Stdout, os.Stderr = oldOut, oldErr
-    var bufOut, bufErr bytes.Buffer
-    bufOut.ReadFrom(rOut)
-    bufErr.ReadFrom(rErr)
-    return bufOut.String(), bufErr.String(), err
+	// Process-wide lock: agent-lib runs subagent + commit_msg in one go test binary.
+	return teststdio.Capture(fn)
 }
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {

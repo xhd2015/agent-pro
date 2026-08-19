@@ -31,6 +31,7 @@ deterministic fake TUI.
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/xhd2015/doctest/session"
 )
@@ -38,7 +39,9 @@ import (
 const snapshotMockPrompt = "one word of France captial"
 
 func fakeGrokPostTurnSnapshotTUI() string {
-	return `sh -c 'printf "GROK_TTY_BANNER\nGrok Build Beta\n"; sleep 0.5; printf "one word of France captial\n               New worktree                                 ctrl+w\n               Resume session                               ctrl+s\n               Changelog\n               Quit                                              q\n"; sleep 30; printf "\x1b[2J\x1b[H     Turn completed in 5.3s.                                                   █\n                                                                               █\n                     Ctrl+.:shortcuts\n"; sleep 120'`
+	// Sleep between banner and menu paint so PTY snapshot rows do not glue
+	// "Grok Build Beta" onto the prompt line.
+	return `sh -c 'printf "GROK_TTY_BANNER\nGrok Build Beta\n"; sleep 0.5; printf "one word of France captial\n"; sleep 0.2; printf "               New worktree                                 ctrl+w\n               Resume session                               ctrl+s\n               Changelog\n               Quit                                              q\n"; sleep 30; printf "\x1b[2J\x1b[H     Turn completed in 5.3s.                                                   █\n                                                                               █\n                     Ctrl+.:shortcuts\n"; sleep 120'`
 }
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
@@ -54,7 +57,10 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.GrokTTYPrompt = snapshotMockPrompt
 	startGrokTTYBackground(t, req)
 	req.Mode = "snapshot-probe"
-	req.SnapshotReadyMarker = "Done!"
+	// BackgroundStdout streams agent events (💬 …), not PTY paint. Wait for the
+	// prompt event then delay so the fake TUI menu is still on-screen (clear at 30s).
+	req.SnapshotReadyMarker = "one word of France captial"
+	req.SnapshotDelay = 3 * time.Second
 	return nil
 }
 ```

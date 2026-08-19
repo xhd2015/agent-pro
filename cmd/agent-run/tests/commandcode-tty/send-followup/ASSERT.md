@@ -13,6 +13,7 @@ label: e2e
 
 ```go
 import (
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -24,6 +25,7 @@ import (
 
 func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	sessionID := req.SessionID
+	childEnv := append(os.Environ(), req.Env...)
 
 	// Step 1: open session with --session-id
 	openArgs := []string{
@@ -35,17 +37,19 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	}
 	t.Logf("session id: %s", sessionID)
 	openCmd := exec.Command(req.AgentRun, openArgs...)
+	openCmd.Env = childEnv
 	openOut, err := openCmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("run --open failed: %v\n%s", err, string(openOut))
 	}
 	t.Logf("open output: %s", string(openOut))
 
-	time.Sleep(10 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	// Step 2: send
 	sendArgs := []string{"send", "--max-wait", "15s", sessionID, "Hello 2"}
 	sendCmd := exec.Command(req.AgentRun, sendArgs...)
+	sendCmd.Env = childEnv
 	sendOut, err := sendCmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("send failed: %v\n%s", err, string(sendOut))
@@ -56,10 +60,10 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	}
 	t.Logf("send result: %s", sendResult)
 
-	time.Sleep(10 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	// Step 3: snapshot
-	snapshot := execSnapshot(t, req.AgentRun, sessionID)
+	snapshot := execSnapshot(t, req.AgentRun, sessionID, req.Env...)
 	if !strings.Contains(snapshot, "Hello") {
 		t.Fatalf("snapshot missing 'Hello' for %s:\n%s", sessionID, snapshot)
 	}

@@ -109,8 +109,11 @@ type Response struct {
 	Duration time.Duration
 }
 
-func execSnapshot(t *testing.T, agentRun, sessionID string) string {
+func execSnapshot(t *testing.T, agentRun, sessionID string, env ...string) string {
 	cmd := exec.Command(agentRun, "tty", "snapshot", sessionID)
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	out, _ := cmd.CombinedOutput()
 	return string(out)
 }

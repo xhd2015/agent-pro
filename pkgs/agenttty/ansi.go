@@ -11,7 +11,10 @@ var ansiEscapeRe = regexp.MustCompile(`\x1b\[[0-9;?=>]*[ -/]*[@-~]|\x1b\][^\x07\
 func StripANSI(data []byte) string {
 	s := string(data)
 	s = ansiEscapeRe.ReplaceAllString(s, "")
-	s = strings.ReplaceAll(s, "\r", "")
+	// PTY scrollback often uses bare \r or \r\n as line separators. Dropping
+	// \r entirely concatenates rows (e.g. "ls output:" + "AGENTS.md" + …).
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
 	return s
 }
 

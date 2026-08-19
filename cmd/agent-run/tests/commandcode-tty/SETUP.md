@@ -55,6 +55,20 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	return nil
 }
 
+// fakeCommandcodeKeepAliveTUI prints a banner then echoes each injected line.
+// Used by --open leaves so real `cmd` one-shot exit cannot race attach.
+func fakeCommandcodeKeepAliveTUI() string {
+	return `sh -c 'printf "COMMANDCODE_TTY_BANNER\n"; while IFS= read -r line; do printf "%s\n" "$line"; done'`
+}
+
+// withCommandcodeOpenTestEnv installs keep-alive fake TUI + instant attach for --open e2e.
+func withCommandcodeOpenTestEnv(req *Request) {
+	req.Env = append(req.Env,
+		"AGENT_RUN_COMMANDCODE_TTY_COMMAND="+fakeCommandcodeKeepAliveTUI(),
+		"AGENT_RUN_OPEN_ATTACH_INSTANT=1",
+	)
+}
+
 func findAgentProRoot(start string) (string, error) {
 	if start == "" {
 		wd, err := os.Getwd()

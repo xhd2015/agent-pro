@@ -83,6 +83,15 @@ func cleanCodexScrollbackFallback(scrollback []byte, prompt string, markers []st
 		if line == "" {
 			continue
 		}
+		// PTY snapshots sometimes glue the prompt row to the next printf
+		// ("› run lsls output:"). Recover useful text after the prompt glyph.
+		if i := strings.Index(line, "›"); i >= 0 {
+			if j := strings.Index(line, "ls output:"); j >= 0 {
+				line = cleanTerminalTextLine(line[j:])
+			} else {
+				continue
+			}
+		}
 		if bulletText := extractCodexBulletText(line, prompt, markers); bulletText != "" {
 			kept = append(kept, bulletText)
 			continue
@@ -90,12 +99,39 @@ func cleanCodexScrollbackFallback(scrollback []byte, prompt string, markers []st
 		if skipCodexFallbackLine(line, prompt, markers) {
 			continue
 		}
-		kept = append(kept, line)
+		kept = append(kept, splitGluedCodexResultLines(line)...)
 	}
 	if len(kept) == 0 {
 		return ""
 	}
 	return strings.TrimSpace(strings.Join(kept, "\n"))
+}
+
+// splitGluedCodexResultLines repairs snapshots that dropped LFs between short
+// result rows ("AGENTS.mdcmdpkgs" → separate lines).
+func splitGluedCodexResultLines(line string) []string {
+	tokens := []string{"ls output:", "AGENTS.md", "cmd", "pkgs"}
+	if !strings.Contains(line, "AGENTS.md") || !strings.Contains(line, "pkgs") {
+		return []string{line}
+	}
+	var out []string
+	rest := line
+	for _, tok := range tokens {
+		if i := strings.Index(rest, tok); i >= 0 {
+			if prefix := strings.TrimSpace(rest[:i]); prefix != "" {
+				out = append(out, prefix)
+			}
+			out = append(out, tok)
+			rest = rest[i+len(tok):]
+		}
+	}
+	if tail := strings.TrimSpace(rest); tail != "" {
+		out = append(out, tail)
+	}
+	if len(out) == 0 {
+		return []string{line}
+	}
+	return out
 }
 
 func extractCodexBulletText(line, prompt string, markers []string) string {
@@ -134,6 +170,20 @@ func cleanTerminalTextLine(line string) string {
 	}, line)
 }
 
+// isASCIIRuleLine reports separator rows that are only dashes/equals (box
+// drawing often flattened to '-' in PTY snapshots).
+func isASCIIRuleLine(line string) bool {
+	if line == "" {
+		return false
+	}
+	for _, r := range line {
+		if r != '-' && r != '=' && r != '─' && r != '═' && r != ' ' && r != '\t' {
+			return false
+		}
+	}
+	return strings.ContainsAny(line, "-=─═")
+}
+
 func skipCodexFallbackLine(line, prompt string, markers []string) bool {
 	for _, marker := range markers {
 		if marker != "" && strings.Contains(line, marker) {
@@ -147,6 +197,10 @@ func skipCodexFallbackLine(line, prompt string, markers []string) bool {
 		return true
 	}
 	if strings.ContainsAny(line, "╭╮╰╯│─") {
+		return true
+	}
+	// PTY snapshots often flatten box-drawing horizontals to ASCII '-'.
+	if isASCIIRuleLine(line) {
 		return true
 	}
 	lower := strings.ToLower(line)

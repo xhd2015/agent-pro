@@ -15,7 +15,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/xhd2015/doctest/assert"
 	"github.com/xhd2015/doctest/session"
 )
 
@@ -31,10 +30,11 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 		t.Fatalf("snapshot stdout empty; background stdout:\n%s\nbackground stderr:\n%s",
 			resp.BackgroundStdout, resp.BackgroundStderr)
 	}
-	assert.Output(t, text, `
-<contains>
-one word of France captial
-</contains>`)
+	// Substring check: PTY snapshots may glue adjacent printf rows
+	// ("Grok Build Beta" + "one word…") so line-oriented assert.Output flakes.
+	if !strings.Contains(text, "one word of France captial") {
+		t.Fatalf("snapshot missing prompt; got %q", text)
+	}
 	if !strings.Contains(text, "New worktree") && !strings.Contains(text, "Grok Build") {
 		t.Fatalf("snapshot missing grok TUI screen content (want menu or build banner like tty-watch snapshot), got %q", text)
 	}

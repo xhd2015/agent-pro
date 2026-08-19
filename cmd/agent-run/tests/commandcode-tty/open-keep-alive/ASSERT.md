@@ -40,8 +40,8 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 		t.Fatalf("failed to extract session id from stderr:\n%s", resp.Stderr)
 	}
 
-	time.Sleep(10 * time.Second)
-	snapshot := execSnapshot(t, req.AgentRun, sessionID)
+	time.Sleep(2 * time.Second)
+	snapshot := execSnapshot(t, req.AgentRun, sessionID, req.Env...)
 
 	if strings.TrimSpace(snapshot) == "" {
 		t.Fatalf("snapshot is empty for session %s", sessionID)
