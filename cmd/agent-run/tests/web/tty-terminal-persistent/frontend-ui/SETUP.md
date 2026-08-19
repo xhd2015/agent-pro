@@ -24,12 +24,18 @@ fixture leaves (modal-renders-*, finished-status-*) keep seeded ptywrap only
 
 ```go
 import (
+	"os/exec"
 	"testing"
 
 	"github.com/xhd2015/doctest/session"
 )
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	// Skip before leaf Setup creates web sessions / mock processes. Skipping
+	// only in Run left TempDir unclean (running children) and failed cleanup.
+	if _, err := exec.LookPath("playwright-debug"); err != nil {
+		t.Skipf("playwright-debug not on PATH: %v", err)
+	}
 	req.Mode = "ui"
 	return nil
 }
