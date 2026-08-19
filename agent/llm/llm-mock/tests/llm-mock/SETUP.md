@@ -171,9 +171,31 @@ func makeHTTPRequestWithTimeout(baseURL, endpoint, method, bodyJSON string, time
     }
 
     client := &http.Client{Timeout: timeout}
-    httpResp, err := client.Do(httpReq)
-    if err != nil {
-        return HTTPResponse{StatusCode: 0, Body: "", Headers: nil}, nil
+    var httpResp *http.Response
+    var lastErr error
+    // Retry briefly: server can still be binding after port is printed (CI flake).
+    for attempt := 0; attempt < 8; attempt++ {
+        httpResp, lastErr = client.Do(httpReq)
+        if lastErr == nil {
+            break
+        }
+        time.Sleep(50 * time.Millisecond)
+        // Rebuild request body reader for retries.
+        if bodyJSON != "" {
+            httpReq, err = http.NewRequest(method, url, strings.NewReader(bodyJSON))
+            if err != nil {
+                return HTTPResponse{}, fmt.Errorf("create request: %w", err)
+            }
+            httpReq.Header.Set("Content-Type", "application/json")
+        } else {
+            httpReq, err = http.NewRequest(method, url, nil)
+            if err != nil {
+                return HTTPResponse{}, fmt.Errorf("create request: %w", err)
+            }
+        }
+    }
+    if lastErr != nil {
+        return HTTPResponse{StatusCode: 0, Body: lastErr.Error(), Headers: nil}, nil
     }
     defer httpResp.Body.Close()
 

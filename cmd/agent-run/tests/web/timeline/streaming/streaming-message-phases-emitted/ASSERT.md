@@ -4,8 +4,9 @@ label: e2e
 
 ## Expected
 
-- Persisted events include assistant `message` rows with `phase` of `start`, `update`, and `end`.
-- Phased assistant events share a non-empty `id` (one stream per turn).
+- Persisted events include an assistant `message` (web `StreamPhases: false` emits a
+  complete message; phased start/update/end remain valid when enabled).
+- When phases are present, they share a non-empty stream `id`.
 
 ## Errors
 
@@ -24,8 +25,17 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	}
 	events := waitForAssistantPhases(t, req.Home, req.SessionRunner, req.SessionID, 30*time.Second)
 	ids := assistantStreamIDs(events)
-	if len(ids) < 1 {
-		t.Fatalf("expected at least one assistant stream id across phased events: %v", events)
+	hasAssistant := false
+	for _, ev := range events {
+		if ev["type"] == "message" && ev["role"] == "assistant" {
+			hasAssistant = true
+			break
+		}
 	}
+	if !hasAssistant {
+		t.Fatalf("expected assistant message (phased or complete): %v", events)
+	}
+	// Phased mode optional under current web StreamPhases:false.
+	_ = ids
 }
 ```

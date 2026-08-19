@@ -391,13 +391,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	usesLLMMockGrokHook := runnerID == "grok-tty" && strings.TrimSpace(os.Getenv("LLM_MOCK_RUN_GROK_COMMAND")) != ""
 	if shouldInject {
 		if err := InjectMessage(listenAddr, sessionID, runnerID, promptText, !opts.NoSubmit); err != nil {
-			// KeepAlive serves stay up after PTY exit; scrollback/transcript
-			// discovery can still proceed (codex-jsonl fixtures). Hard-fail only
-			// when the serve is gone too or keep-alive is off.
-			if !(opts.KeepTerminalAlive && injectSessionGone(err)) {
-				return "", terminalSessionID, err
-			}
-			fmt.Fprintf(opts.Stderr, "%s: inject skipped (pty gone under keep-alive): %v\n", runnerID, err)
+			return "", terminalSessionID, err
 		}
 	} else if !opts.KeepTerminalAlive || usesGrokTTYHook || usesLLMMockGrokHook {
 		// Soft kick: bare newline unblocks fake TUIs that `read` after the
@@ -662,8 +656,13 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	streamed := tailState.streamed
 	tailState.Unlock()
 
-	// keep-tty / sync-owned paths must not treat PTY chrome as assistant output.
-	if !streamed && opts.Emit != nil && !opts.KeepTerminalAlive && (runnerID == "codex-tty" || runnerID == "commandcode-tty" || runnerID == "grok-tty") {
+	// Scrollback fallback when no provider transcript streamed. keep-tty grok must
+	// not treat PTY chrome as assistant output; codex/commandcode headless always
+	// set KeepAlive, so fake-TUI hooks still need fallback under keep-alive.
+	allowScrollbackFallback := !opts.KeepTerminalAlive ||
+		(runnerID == "codex-tty" && strings.TrimSpace(os.Getenv(envCodexTTYCommand)) != "") ||
+		runnerID == "commandcode-tty"
+	if !streamed && opts.Emit != nil && allowScrollbackFallback && (runnerID == "codex-tty" || runnerID == "commandcode-tty" || runnerID == "grok-tty") {
 		if runnerID == "codex-tty" {
 			fmt.Fprintf(opts.Stderr, "codex-tty: codex transcript not found; falling back to scrollback capture\n")
 		} else if runnerID == "grok-tty" {

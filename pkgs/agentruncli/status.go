@@ -261,9 +261,21 @@ func probeSessionStatus(store agentstorage.Store, meta agentstorage.SessionMeta)
 	if runnerSID != "" {
 		report.Runner.Status = "bound"
 		report.Runner.SessionID = runnerSID
-	} else if bindInProgress(store.Home(), meta.Runner, meta.SessionID) {
-		// Mid-open background bind: durable bind.json state=in_progress.
-		report.Runner.Status = "binding"
+	} else if st, ok := readBindState(store.Home(), meta.SessionID); ok {
+		switch st.state {
+		case "in_progress":
+			// Mid-open background bind still discovering.
+			report.Runner.Status = "binding"
+		case "ok":
+			// bind.json finished before meta.runner_session_id was visible to
+			// this probe (rename/read race). Treat durable ok as bound.
+			report.Runner.Status = "bound"
+			if id := strings.TrimSpace(st.runnerSessionID); id != "" {
+				report.Runner.SessionID = id
+			}
+		default:
+			report.Runner.Status = "unbound"
+		}
 	} else {
 		report.Runner.Status = "unbound"
 	}
@@ -308,20 +320,37 @@ func probeSessionStatus(store agentstorage.Store, meta agentstorage.SessionMeta)
 	return report
 }
 
-// bindInProgress reports durable open-bind state for concurrent status.
-func bindInProgress(home, runner, sessionID string) bool {
+type bindStateSnapshot struct {
+	state           string
+	runnerSessionID string
+}
+
+// readBindState loads sessions/<id>/bind.json for mid-open status probes.
+func readBindState(home, sessionID string) (bindStateSnapshot, bool) {
 	path := filepath.Join(home, "sessions", sessionID, "bind.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return false
+		return bindStateSnapshot{}, false
 	}
 	var st struct {
-		State string `json:"state"`
+		State           string `json:"state"`
+		RunnerSessionID string `json:"runner_session_id"`
 	}
 	if json.Unmarshal(data, &st) != nil {
-		return false
+		return bindStateSnapshot{}, false
 	}
-	return strings.EqualFold(strings.TrimSpace(st.State), "in_progress")
+	state := strings.ToLower(strings.TrimSpace(st.State))
+	if state == "" {
+		return bindStateSnapshot{}, false
+	}
+	return bindStateSnapshot{state: state, runnerSessionID: strings.TrimSpace(st.RunnerSessionID)}, true
+}
+
+// bindInProgress reports durable open-bind state for concurrent status.
+func bindInProgress(home, runner, sessionID string) bool {
+	_ = runner
+	st, ok := readBindState(home, sessionID)
+	return ok && st.state == "in_progress"
 }
 
 func runnerKindFromMeta(runner string) string {

@@ -24,10 +24,10 @@ grok-tty: session-
 
 ```go
 import (
+	"regexp"
 	"strings"
 	"testing"
 
-	"github.com/xhd2015/doctest/assert"
 	"github.com/xhd2015/doctest/session"
 )
 
@@ -36,10 +36,10 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 		t.Fatal(err)
 	}
 	assertSuccess(t, resp)
-	assert.Output(t, resp.Stderr, `
-<contains>
-<regex>grok-tty:\s*session-\d+</regex>
-</contains>`)
+	re := regexp.MustCompile(`(?m)^grok-tty:\s*session-\d+\s*$`)
+	if !re.MatchString(resp.Stderr) {
+		t.Fatalf("stderr missing grok-tty: session-N; stderr:\n%s", resp.Stderr)
+	}
 	if strings.Contains(resp.Stdout, "grok-tty:") {
 		t.Fatalf("session id prefix must not appear on stdout:\n%s", resp.Stdout)
 	}

@@ -61,7 +61,10 @@ import (
 const grokTTYBannerMarker = "GROK_TTY_BANNER"
 
 func fakeTUIRespondHi() string {
-	return `sh -c 'printf "GROK_TTY_BANNER\nGrok › "; read line; echo "Response: $line"'`
+	// Prefer argv prompt ($1) from appendNewSessionPrompt; fall back to stdin read.
+	// Soft newline kick must not yield an empty Response when the prompt is on argv.
+	// Brief sleep so headless snapshotHold can catch Response before serve teardown.
+	return `sh -c 'printf "GROK_TTY_BANNER\nGrok › "; line="${1:-}"; [ -n "$line" ] || read line; echo "Response: $line"; sleep 0.25' x`
 }
 
 func fakeTUILongRun() string {

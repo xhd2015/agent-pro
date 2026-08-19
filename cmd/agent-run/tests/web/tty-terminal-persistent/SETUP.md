@@ -705,7 +705,10 @@ func waitForCreatedTTYSessionFinished(t *testing.T, req *Request) {
 				if parsed.Session.TerminalSessionID != "" {
 					req.TerminalSessionID = parsed.Session.TerminalSessionID
 				}
-				if parsed.Session.Status == "finished" && parsed.Session.TerminalSessionID != "" {
+				// keep-tty leaves status=running after the turn; assistant events suffice.
+				if parsed.Session.TerminalSessionID != "" &&
+					(parsed.Session.Status == "finished" ||
+						(parsed.Session.Status == "running" && strings.Contains(body, `"role":"assistant"`))) {
 					return
 				}
 			}

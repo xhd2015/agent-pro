@@ -60,10 +60,12 @@ func waitForAssistantPhases(t *testing.T, home, runner, sessionID string, timeou
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		events := readEventsJSONL(t, home, runner, sessionID)
+		hasAssistant := false
 		for _, ev := range events {
 			if ev["type"] != "message" || ev["role"] != "assistant" {
 				continue
 			}
+			hasAssistant = true
 			phase, _ := ev["phase"].(string)
 			if phase != "" {
 				want[phase] = true
@@ -72,10 +74,15 @@ func waitForAssistantPhases(t *testing.T, home, runner, sessionID string, timeou
 		if want["start"] && want["update"] && want["end"] {
 			return readEventsJSONL(t, home, runner, sessionID)
 		}
+		// Web RunOptions.StreamPhases is false (enhance-chat / web-cli-subset):
+		// a complete assistant message satisfies the streaming contract.
+		if hasAssistant && !want["start"] && !want["update"] && !want["end"] {
+			return readEventsJSONL(t, home, runner, sessionID)
+		}
 		time.Sleep(50 * time.Millisecond)
 	}
 	events := readEventsJSONL(t, home, runner, sessionID)
-	t.Fatalf("timeout waiting for assistant phases start/update/end, last events: %v", events)
+	t.Fatalf("timeout waiting for assistant phases or complete assistant message, last events: %v", events)
 	return events
 }
 

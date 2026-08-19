@@ -61,7 +61,9 @@ import (
 const codexTTYBannerMarker = "CODEX_TTY_BANNER"
 
 func fakeTUIRespondHi() string {
-	return `sh -c 'printf "CODEX_TTY_BANNER\nCodex › "; read line; echo "Response: $line"'`
+	// Codex injects the prompt (no argv). Hold before read so inject wins;
+	// sleep after echo so snapshotHold can catch Response before serve teardown.
+	return `sh -c 'printf "CODEX_TTY_BANNER\nCodex › "; sleep 0.3; read line; echo "Response: $line"; sleep 0.25'`
 }
 
 func fakeTUILongRun() string {

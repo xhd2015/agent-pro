@@ -70,14 +70,3 @@ func injectSendRetry(listenAddr, sessionID, message string, suffixCR bool) error
 	return last
 }
 
-// injectSessionGone reports whether inject failed because the PTY session is
-// already gone (KeepAlive may still keep the HTTP serve up for scrollback).
-func injectSessionGone(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "endpoint not found") ||
-		strings.Contains(msg, "session exited") ||
-		strings.Contains(msg, "session not found")
-}
