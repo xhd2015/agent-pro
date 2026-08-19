@@ -890,6 +890,9 @@ func (h *mockHandler) writeAgentEvents(events []types.AgentEvent) {
 		data, _ := json.Marshal(evt)
 		fmt.Fprintln(h.agentEventsWriter, string(data))
 	}
+	if syncer, ok := h.agentEventsWriter.(interface{ Sync() error }); ok {
+		_ = syncer.Sync()
+	}
 }
 
 // flushRemainingAgentEvents appends unserved genQueue events (e.g. trailing message

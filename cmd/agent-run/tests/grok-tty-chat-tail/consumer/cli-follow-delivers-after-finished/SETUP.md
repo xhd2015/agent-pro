@@ -28,7 +28,8 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Runner = "grok-tty"
 	req.SessionID = "chat_tail_cli_follow"
 	seedRunningSessionForFollow(t, req, req.Runner, req.SessionID)
-	req.CLIArgs = []string{"sessions", req.Runner + "/" + req.SessionID, "--print"}
+	// Flat layout: sessions CLI expects bare session_id (not runner/id).
+	req.CLIArgs = []string{"sessions", req.SessionID, "--print"}
 	req.ExecTimeout = 12 * time.Second
 	runner := req.Runner
 	sid := req.SessionID

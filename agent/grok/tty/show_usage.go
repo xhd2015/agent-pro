@@ -154,12 +154,22 @@ func FetchUsageWithOptions(ctx context.Context, opts Options) (*UsageInfo, error
 				"attempt": attempt,
 			},
 		})
+		// Context kill surfaces as "signal: killed"; prefer the timeout wording.
+		if ctx.Err() == context.DeadlineExceeded || (isContextKill(err) && ctx.Err() != nil) {
+			if lastErr != nil {
+				return nil, fmt.Errorf("timeout waiting for usage output: %w", lastErr)
+			}
+			return nil, timeoutErr(ctx)
+		}
 		if isNonRetryable(err) {
 			return nil, err
 		}
 		select {
 		case <-ctx.Done():
-			return nil, lastErr
+			if lastErr != nil {
+				return nil, fmt.Errorf("timeout waiting for usage output: %w", lastErr)
+			}
+			return nil, timeoutErr(ctx)
 		default:
 		}
 		v.stateChange("retry", "restarting grok session")
@@ -524,6 +534,10 @@ func waitForUsageResponse(ctx context.Context, getScrollback func() []byte, v *v
 			return timeoutErr(ctx)
 		case <-readDone:
 			if err := waitCmd(); err != nil {
+				// Parent ctx timeout kills the PTY child with SIGKILL; surface as timeout.
+				if ctx.Err() == context.DeadlineExceeded || (isContextKill(err) && ctx.Err() != nil) {
+					return timeoutErr(ctx)
+				}
 				return fmt.Errorf("grok process exited: %w", err)
 			}
 			if _, parseErr := parseUsage(getScrollback()); parseErr != nil {
@@ -712,6 +726,14 @@ func timeoutErr(ctx context.Context) error {
 		return fmt.Errorf("timeout waiting for usage output")
 	}
 	return fmt.Errorf("timeout waiting for usage output: %w", ctx.Err())
+}
+
+func isContextKill(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "signal: killed") || strings.Contains(s, "killed")
 }
 
 type lockedWriter struct {

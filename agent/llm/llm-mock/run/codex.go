@@ -70,9 +70,9 @@ func RunCodex(codexArgs []string, opts RunCodexOptions) error {
 		return err
 	}
 	defer func() {
+		// SIGTERM first so the mock can flush trailing agent-events; cancel() on
+		// CommandContext would SIGKILL and skip the flush handler.
 		teardownStart := time.Now()
-		runCodexDebugf("mock teardown: cancel context")
-		cancel()
 		if mockCmd.Process != nil {
 			runCodexDebugf("mock teardown: SIGTERM pid=%d", mockCmd.Process.Pid)
 			_ = mockCmd.Process.Signal(syscall.SIGTERM)
@@ -80,6 +80,8 @@ func RunCodex(codexArgs []string, opts RunCodexOptions) error {
 			waitErr := mockCmd.Wait()
 			runCodexDebugf("mock teardown: Wait returned after %s err=%v", since(waitStart), waitErr)
 		}
+		runCodexDebugf("mock teardown: cancel context")
+		cancel()
 		runCodexDebugf("mock teardown done after %s", since(teardownStart))
 	}()
 

@@ -322,7 +322,10 @@ func terminateServePID(pid int) error {
 		_ = syscall.Kill(pid, syscall.SIGKILL)
 		// Best-effort process group (Setsid serve re-exec).
 		_ = syscall.Kill(-pid, syscall.SIGKILL)
-		time.Sleep(100 * time.Millisecond)
+		killDeadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(killDeadline) && processRunning(pid) {
+			time.Sleep(50 * time.Millisecond)
+		}
 	}
 	if processRunning(pid) {
 		return fmt.Errorf("pid %d still running", pid)

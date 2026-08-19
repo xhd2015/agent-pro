@@ -502,6 +502,9 @@ func (h *Handler) writeAgentEvents(events []types.AgentEvent) {
 		data, _ := json.Marshal(evt)
 		fmt.Fprintln(h.agentEventsWriter, string(data))
 	}
+	if syncer, ok := h.agentEventsWriter.(interface{ Sync() error }); ok {
+		_ = syncer.Sync()
+	}
 }
 
 // --- Exchange matching (moved from main.go mockHandler) ---

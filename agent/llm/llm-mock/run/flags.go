@@ -37,6 +37,7 @@ Options:
 Environment (orchestrator, grok):
   LLM_MOCK_GROK_HOME                      Explicit grok home (default: temp dir)
   LLM_MOCK_RUN_GROK_COMMAND               Replace grok executable (tests/plumbing)
+  LLM_MOCK_SKIP_MOCK_SERVER=1             With RUN_GROK_COMMAND: skip mock HTTP (fork harnesses)
   LLM_MOCK_RUN_GROK_DEBUG=1               Verbose grok orchestrator stderr debug logs
 
 Environment (orchestrator, codex):

@@ -42,10 +42,12 @@ func RunGrok(grokArgs []string, opts RunGrokOptions) error {
 		return fmt.Errorf("--log-http path must end with .jsonl")
 	}
 
-	// Hook-only path: fork/open-resume replace the TUI and do not curl the mock.
-	// run-grok doctests set a curl hook AND --log-events / presets — those still need the server.
+	// Opt-in hook-only: fork/open-resume harnesses that never curl the mock can set
+	// LLM_MOCK_SKIP_MOCK_SERVER=1 to avoid requiring a sibling llm-mock binary.
+	// Default path always starts the mock and writes GROK_HOME/config.toml so
+	// FakeGrokCmd curl hooks (events-input, grok-home, random-fallback) work.
 	if strings.TrimSpace(os.Getenv("LLM_MOCK_RUN_GROK_COMMAND")) != "" &&
-		opts.LogEventsPath == "" && opts.LogHTTPPath == "" && opts.MockEventsPreset == "" {
+		envTruthy("LLM_MOCK_SKIP_MOCK_SERVER") {
 		return runGrokWithHookOnly(grokArgs, opts)
 	}
 
@@ -84,9 +86,9 @@ func RunGrok(grokArgs []string, opts RunGrokOptions) error {
 		return err
 	}
 	defer func() {
+		// SIGTERM first so the mock can flush trailing agent-events; cancel() on
+		// CommandContext would SIGKILL and skip the flush handler.
 		teardownStart := time.Now()
-		runGrokDebugf("mock teardown: cancel context")
-		cancel()
 		if mockCmd.Process != nil {
 			runGrokDebugf("mock teardown: SIGTERM pid=%d", mockCmd.Process.Pid)
 			_ = mockCmd.Process.Signal(syscall.SIGTERM)
@@ -94,6 +96,8 @@ func RunGrok(grokArgs []string, opts RunGrokOptions) error {
 			waitErr := mockCmd.Wait()
 			runGrokDebugf("mock teardown: Wait returned after %s err=%v", since(waitStart), waitErr)
 		}
+		runGrokDebugf("mock teardown: cancel context")
+		cancel()
 		runGrokDebugf("mock teardown done after %s", since(teardownStart))
 	}()
 
@@ -393,6 +397,11 @@ func envWithout(base []string, key string) []string {
 		out = append(out, kv)
 	}
 	return out
+}
+
+func envTruthy(key string) bool {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+	return v == "1" || v == "true" || v == "yes" || v == "on"
 }
 
 func writeGrokConfigToml(path string, port int) error {

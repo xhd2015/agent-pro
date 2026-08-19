@@ -65,9 +65,9 @@ func RunOpencode(opencodeArgs []string, opts RunOpencodeOptions) error {
 		return err
 	}
 	defer func() {
+		// SIGTERM first so the mock can flush trailing agent-events; cancel() on
+		// CommandContext would SIGKILL and skip the flush handler.
 		teardownStart := time.Now()
-		runOpencodeDebugf("mock teardown: cancel context")
-		cancel()
 		if mockCmd.Process != nil {
 			runOpencodeDebugf("mock teardown: SIGTERM pid=%d", mockCmd.Process.Pid)
 			_ = mockCmd.Process.Signal(syscall.SIGTERM)
@@ -75,6 +75,8 @@ func RunOpencode(opencodeArgs []string, opts RunOpencodeOptions) error {
 			waitErr := mockCmd.Wait()
 			runOpencodeDebugf("mock teardown: Wait returned after %s err=%v", since(waitStart), waitErr)
 		}
+		runOpencodeDebugf("mock teardown: cancel context")
+		cancel()
 		runOpencodeDebugf("mock teardown done after %s", since(teardownStart))
 	}()
 

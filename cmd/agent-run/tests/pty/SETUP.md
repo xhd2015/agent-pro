@@ -237,8 +237,25 @@ func processAlive(pid int) bool {
 	if pid <= 0 {
 		return false
 	}
-	err := syscall.Kill(pid, 0)
-	return err == nil
+	// Signal 0 succeeds for zombies; treat non-zombie only (matches product processRunning).
+	if err := syscall.Kill(pid, 0); err != nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "ps", "-p", strconv.Itoa(pid), "-o", "state=").Output()
+	if err != nil {
+		return true
+	}
+	state := strings.TrimSpace(string(out))
+	if state == "" {
+		return false
+	}
+	// Zombie / dead states are not "alive" for kill-orphans asserts.
+	if strings.HasPrefix(state, "Z") || strings.HasPrefix(state, "X") {
+		return false
+	}
+	return true
 }
 
 func terminatePID(pid int) {
