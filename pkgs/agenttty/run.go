@@ -610,6 +610,27 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 						return grokKeepTTYTurnSettled(agentHome, agentSID)
 					}
 				}
+				// AGENT_RUN_GROK_TTY_COMMAND fakes never create a real grok
+				// session, so DiscoverSession/streamed never completes. Also
+				// settle when the PTY child exits (same KeepAlive serve pattern).
+				if strings.TrimSpace(os.Getenv(envGrokTTYCommand)) != "" {
+					prev := extraComplete
+					home := opts.Home
+					rid, sid := runnerID, sessionID
+					commandPID := 0
+					if result.Entry != nil {
+						commandPID = result.Entry.CommandPID
+					}
+					extraComplete = func() bool {
+						if prev != nil && prev() {
+							return true
+						}
+						if commandPID > 0 && !ttywatch.ProcessAlive(commandPID) {
+							return true
+						}
+						return RegistryAgentExited(home, rid, sid)
+					}
+				}
 			} else if runnerID == "codex-tty" || runnerID == "commandcode-tty" {
 				// KeepAlive leaves the HTTP serve up after the PTY child exits.
 				// Settle on real process death / registry exit only.
@@ -675,9 +696,13 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	}
 
 	if runnerID == "grok-tty" && opts.KeepTerminalAlive && turnCompleted != nil {
-		select {
-		case <-turnCompleted:
-		case <-ctx.Done():
+		// Fake TUI hooks never emit ActionDone via grok updates.jsonl — do not
+		// block the KeepAlive return path waiting for a turn that will not come.
+		if strings.TrimSpace(os.Getenv(envGrokTTYCommand)) == "" {
+			select {
+			case <-turnCompleted:
+			case <-ctx.Done():
+			}
 		}
 	}
 

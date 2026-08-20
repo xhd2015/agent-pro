@@ -18,6 +18,7 @@ agent-run run --agent-runner grok-tty --keep-tty --session my-task "hi"
 ```go
 import (
 	"testing"
+	"time"
 
 	"github.com/xhd2015/doctest/session"
 )
@@ -27,6 +28,8 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.KeepTTY = true
 	req.Prompt = "hi"
 	setGrokTTYCommand(req, fakeTUIRespondHi())
+	// Fake TUI + KeepAlive: settle on process death (no real grok session stream).
+	req.ExecTimeout = 45 * time.Second
 	req.Args = append(req.Args,
 		"--agent-runner", "grok-tty",
 		"--keep-tty",

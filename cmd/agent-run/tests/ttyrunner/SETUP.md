@@ -49,6 +49,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -387,6 +388,13 @@ func startStubTTYBackground(t *testing.T, req *Request) string {
 	}
 	req.BackgroundCmd = cmd
 	t.Cleanup(func() {
+		// KeepAlive serve is Setsid-detached from agent-run; killing only the
+		// parent leaves ptywrap holding stub-tty-registry (TempDir cleanup fail).
+		if sid := strings.TrimSpace(req.TerminalSessionID); sid != "" && req.Home != "" {
+			if entry := tryReadStubRegistry(req.Home, sid); entry != nil && entry.PID > 0 {
+				_ = killPID(entry.PID)
+			}
+		}
 		cancel()
 		if cmd.Process != nil {
 			_ = cmd.Process.Kill()
@@ -399,6 +407,31 @@ func startStubTTYBackground(t *testing.T, req *Request) string {
 	}
 	req.TerminalSessionID = sessionID
 	return sessionID
+}
+
+type stubRegistryEntry struct {
+	PID int `json:"pid"`
+}
+
+func tryReadStubRegistry(home, sessionID string) *stubRegistryEntry {
+	path := registryPathFor(home, "stub-tty-registry", sessionID)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var entry stubRegistryEntry
+	if json.Unmarshal(data, &entry) != nil || entry.PID <= 0 {
+		return nil
+	}
+	return &entry
+}
+
+func killPID(pid int) error {
+	p, err := os.FindProcess(pid)
+	if err != nil {
+		return err
+	}
+	return p.Kill()
 }
 
 func waitForStubSessionLine(t *testing.T, r io.Reader, timeout time.Duration) string {
