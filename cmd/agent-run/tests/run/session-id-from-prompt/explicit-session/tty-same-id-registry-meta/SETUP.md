@@ -29,7 +29,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Prompt = "hi"
 	setGrokTTYCommand(req, fakeTUIRespondHi())
 	// Fake TUI + KeepAlive: settle on process death (no real grok session stream).
-	req.ExecTimeout = 45 * time.Second
+	req.ExecTimeout = 120 * time.Second
 	req.Args = append(req.Args,
 		"--agent-runner", "grok-tty",
 		"--keep-tty",

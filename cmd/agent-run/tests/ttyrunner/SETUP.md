@@ -49,7 +49,6 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
@@ -400,6 +399,9 @@ func startStubTTYBackground(t *testing.T, req *Request) string {
 			_ = cmd.Process.Kill()
 		}
 		_ = cmd.Wait()
+		if req.Home != "" {
+			_ = os.RemoveAll(filepath.Join(req.Home, "stub-tty-registry"))
+		}
 	})
 	sessionID := waitForStubSessionLine(t, req.BackgroundStderr, 45*time.Second)
 	if sessionID == "" {
