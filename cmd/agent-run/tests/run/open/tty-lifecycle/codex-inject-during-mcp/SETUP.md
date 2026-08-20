@@ -39,6 +39,8 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	script := filepath.Join(req.TempDir, "fake-codex-mcp-inject.sh")
 	body := fmt.Sprintf(`#!/bin/sh
 printf 'OpenAI Codex\n• Starting MCP servers (0/2): slow_30\n› '
+# Keep MCP chrome visible while the PTY input endpoint and child stdin settle.
+sleep 2
 if read -t 20 line; then
   printf 'STDIN=%%s\n' "$line" > %q
 else

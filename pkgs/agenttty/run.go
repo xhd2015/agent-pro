@@ -311,12 +311,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 			// trust, and composer windows before beginning the retried injection.
 			// InjectMessage already retries until the serve endpoint is ready.
 			usesCodexHook := codexOpen && strings.TrimSpace(os.Getenv(envCodexTTYCommand)) != ""
-			if usesCodexHook {
-				// A hook can expose /input before its shell has attached stdin.
-				// Wait for its first frame so a successful HTTP inject cannot be
-				// silently lost during process startup.
-				_ = waitForOpenReady(ctx, listenAddr, sessionID, 12*time.Second)
-			} else {
+			if !usesCodexHook {
 				_ = waitForOpenReady(ctx, listenAddr, sessionID, 3*time.Second)
 			}
 			if codexOpen && !usesCodexHook {
