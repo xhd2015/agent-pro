@@ -55,9 +55,9 @@ type Response struct {
 	HTTPBody   string
 	DaemonPort int
 
-	DaemonStderr          string
-	SessionStillRunning   bool
-	DetachedSessionID     string
+	DaemonStderr        string
+	SessionStillRunning bool
+	DetachedSessionID   string
 }
 
 // Run executes an agent-term doctest phase.
@@ -256,7 +256,14 @@ func runWaitSession(t *testing.T, req *Request) (*Response, error) {
 				waitErr = fmt.Errorf("panic: %v", r)
 			}
 		}()
-		waitErr = ptyclient.WaitSession(c, id)
+		// WaitSession can block forever if HTTP List has no client timeout.
+		done := make(chan error, 1)
+		go func() { done <- ptyclient.WaitSession(c, id) }()
+		select {
+		case waitErr = <-done:
+		case <-time.After(15 * time.Second):
+			waitErr = fmt.Errorf("WaitSession timed out after 15s (session %s)", id)
+		}
 	}()
 	resp := &Response{Stdout: id}
 	if waitErr != nil {
@@ -273,7 +280,7 @@ func runAttachByName(t *testing.T, req *Request) (*Response, error) {
 	}
 	defer daemon.cleanup()
 	base := fmt.Sprintf("http://127.0.0.1:%d", port)
-	id, err := createSessionViaAPI(t, base, []string{"sleep", "60"}, req.RenameBeforeAttach)
+	id, err := createSessionViaAPI(t, base, []string{"sleep", "15"}, req.RenameBeforeAttach)
 	if err != nil {
 		return nil, err
 	}
@@ -473,7 +480,23 @@ func execPTYRun(t *testing.T, bin string, port int, req *Request) (*Response, er
 		_ = cmd.Process.Signal(syscall.SIGINT)
 	}
 
-	runErr := cmd.Wait()
+	// Unbounded Wait hung repo-l2: attach can miss exit/close and block until
+	// the package -timeout cancels the suite (337/341 + 1 cancelled).
+	waitDone := make(chan error, 1)
+	go func() { waitDone <- cmd.Wait() }()
+	waitTimeout := 20 * time.Second
+	if req.DetachSignal {
+		waitTimeout = 10 * time.Second // SIGINT should exit the client quickly
+	}
+	var runErr error
+	select {
+	case runErr = <-waitDone:
+	case <-time.After(waitTimeout):
+		terminateProcess(cmd)
+		_ = ptmx.Close()
+		<-readDone
+		return nil, fmt.Errorf("agent-term PTY run timed out after %s (argv=%v)", waitTimeout, runArgv)
+	}
 	_ = ptmx.Close()
 	<-readDone
 
@@ -607,7 +630,9 @@ func runDetachSurvives(t *testing.T, req *Request) (*Response, error) {
 	defer daemon.cleanup()
 
 	detachReq := *req
-	detachReq.RunCommand = []string{"sleep", "60"}
+	// Keep remote session alive past client detach, but short enough that a
+	// failed detach cannot burn minutes of repo-l2 wall time.
+	detachReq.RunCommand = []string{"sleep", "15"}
 	detachReq.DetachSignal = true
 	resp, err := execPTYRun(t, req.AgentTermBin, port, &detachReq)
 	if err != nil {
