@@ -669,6 +669,17 @@ func startStubTTYBackground(t *testing.T, req *Request) string {
 	}
 	req.BackgroundCmd = cmd
 	t.Cleanup(func() {
+		// --keep-tty owns a detached serve child. Reap it before TempDir
+		// cleanup; killing this foreground CLI alone leaves its registry writer
+		// racing the test's isolated home removal on CI.
+		if sid := strings.TrimSpace(req.TerminalSessionID); sid != "" {
+			killCtx, killCancel := context.WithTimeout(context.Background(), 3*time.Second)
+			kill := exec.CommandContext(killCtx, req.AgentRun, "tty", "kill", sid)
+			kill.Dir = req.TempDir
+			kill.Env = append(os.Environ(), stubEnvWithScenario(req, scenarioPath)...)
+			_ = kill.Run()
+			killCancel()
+		}
 		cancel()
 		if cmd.Process != nil {
 			_ = cmd.Process.Kill()

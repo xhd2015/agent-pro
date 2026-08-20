@@ -505,9 +505,28 @@ func dialPTYAttach(t *testing.T, listenAddr, sessionID, attachMode string) *wsAt
 		t.Fatalf("dial ws %s: %v", u.String(), err)
 	}
 	client := &wsAttachClient{conn: conn, role: attachMode}
-	// Handshake first — gorilla/websocket forbids concurrent ReadMessage.
+	// Wait for the attach-role control frame before another interactive client
+	// connects. The first frame is normally session_id; racing the second dial
+	// before the role assignment made the observer occasionally a writer under
+	// full CI parallelism. Gorilla/websocket forbids concurrent ReadMessage.
 	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	_, _, _ = conn.ReadMessage()
+	for {
+		_, msg, readErr := conn.ReadMessage()
+		if readErr != nil {
+			break
+		}
+		var control struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(msg, &control) == nil && control.Type == "attach_role" {
+			break
+		}
+		if !isPTYWrapControlFrame(msg) {
+			client.outputMu.Lock()
+			client.output.Write(msg)
+			client.outputMu.Unlock()
+		}
+	}
 	conn.SetReadDeadline(time.Time{})
 	go func() {
 		for {

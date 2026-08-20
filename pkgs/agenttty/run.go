@@ -248,7 +248,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 			select {
 			case <-ctx.Done():
 				return "", terminalSessionID, ctx.Err()
-			case <-time.After(200 * time.Millisecond):
+			case <-time.After(time.Second):
 			}
 		}
 
