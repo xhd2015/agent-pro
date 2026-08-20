@@ -307,8 +307,10 @@ func readAttachOutput(conn *websocket.Conn, stdout io.Writer) error {
 			// ptywrap may replay its terminal-exit lifecycle trailer inside the
 			// binary scrollback frame. It is transport metadata, not command
 			// output, so avoid printing it before `run` emits the session ID.
-			data = bytes.ReplaceAll(data, []byte("\x1b[?1049l\x1b[0m\r\n[Terminal exited]\r\n"), nil)
-			data = bytes.ReplaceAll(data, []byte("\r\n[Terminal exited]\r\n"), nil)
+			// The server may split the trailer across several binary frames.
+			data = bytes.ReplaceAll(data, []byte("\x1b[?1049l"), nil)
+			data = bytes.ReplaceAll(data, []byte("\x1b[0m"), nil)
+			data = bytes.ReplaceAll(data, []byte("[Terminal exited]"), nil)
 			if _, err := stdout.Write(data); err != nil {
 				return err
 			}
