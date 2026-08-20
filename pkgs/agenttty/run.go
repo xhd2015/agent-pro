@@ -305,20 +305,30 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 		}
 		bgCh := make(chan openBG, 1)
 		go func() {
-			_ = waitForOpenReady(ctx, listenAddr, sessionID, 3*time.Second)
-			if codexOpen {
+			// An explicitly configured Codex hook is a deterministic local TUI
+			// (used by integration callers). Its stdin deadline starts as soon as
+			// the process is launched, so do not spend the real-Codex readiness,
+			// trust, and composer windows before beginning the retried injection.
+			// InjectMessage already retries until the serve endpoint is ready.
+			usesCodexHook := codexOpen && strings.TrimSpace(os.Getenv(envCodexTTYCommand)) != ""
+			if !usesCodexHook {
+				_ = waitForOpenReady(ctx, listenAddr, sessionID, 3*time.Second)
+			}
+			if codexOpen && !usesCodexHook {
 				acceptCodexTrustRemote(ctx, listenAddr, sessionID, provider.BannerProvider, 15*time.Second, agentGone)
 			}
-			select {
-			case <-ctx.Done():
-				bgCh <- openBG{}
-				return
-			case <-time.After(200 * time.Millisecond):
+			if !usesCodexHook {
+				select {
+				case <-ctx.Done():
+					bgCh <- openBG{}
+					return
+				case <-time.After(200 * time.Millisecond):
+				}
 			}
 			if promptText != "" && (isResume || opts.NoSubmit || runnerID == "codex-tty" || runnerID == "commandcode-tty") {
-				if codexOpen {
+				if codexOpen && !usesCodexHook {
 					waitForOpenComposer(ctx, listenAddr, sessionID, provider.BannerProvider, openComposerWaitTimeout, agentGone)
-				} else {
+				} else if !usesCodexHook {
 					_ = waitForBannerRemoteOpts(ctx, listenAddr, sessionID, provider.BannerProvider, provider.BannerMarkers, 0, agentGone)
 				}
 				if err := InjectMessage(listenAddr, sessionID, runnerID, promptText, !opts.NoSubmit); err != nil {

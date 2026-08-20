@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/xhd2015/agent-pro/pkgs/agentsend"
@@ -50,9 +51,29 @@ func startServeIdleWatchdog(ctx context.Context, cancel context.CancelFunc, sess
 	}
 	provider, _ := providerForRegistrySubdir(registrySubdir)
 	var logSize idleLogSizeCache
+	var latest struct {
+		sync.RWMutex
+		sample IdleSample
+		have   bool
+	}
 	w := NewIdleWatchdog(found, p, IdleWatchdog{
 		Sample: func() IdleSample {
-			sample := sampleServeIdle(listenAddr, sessionID, home, provider)
+			// SnapshotText may wait up to ten seconds for a just-started PTY.
+			// Keep watchdog timing independent of that observer latency: consume
+			// the most recent completed observation and refresh it in the
+			// background for the next tick.
+			latest.RLock()
+			sample, have := latest.sample, latest.have
+			latest.RUnlock()
+			if !have {
+				sample = IdleSample{Screen: "unknown", InputBox: "unknown"}
+			}
+			go func() {
+				next := sampleServeIdle(listenAddr, sessionID, home, provider)
+				latest.Lock()
+				latest.sample, latest.have = next, true
+				latest.Unlock()
+			}()
 			logSize.fill(&sample, home, sessionID)
 			return sample
 		},
@@ -61,7 +82,12 @@ func startServeIdleWatchdog(ctx context.Context, cancel context.CancelFunc, sess
 			if runner == "" {
 				return
 			}
-			_ = agenttty.InjectMessage(listenAddr, sessionID, runner, "/exit", true)
+			// Injection has its own readiness retries. Do not let those retries
+			// postpone the watchdog grace deadline: the hard shutdown is the
+			// bounded fallback when a TUI does not consume /exit.
+			go func() {
+				_ = agenttty.InjectMessage(listenAddr, sessionID, runner, "/exit", true)
+			}()
 		},
 		Shutdown: func() {
 			if cancel != nil {
