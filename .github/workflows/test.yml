@@ -28,7 +28,9 @@ jobs:
   doctest:
     name: doctest ${{ matrix.name }}
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # Must exceed matrix timeout (repo-l2=45m) plus checkout/install overhead.
+    # At 40m the GHA job cancelled repo-l2 mid-suite (~39m) before doctest finished.
+    timeout-minutes: 55
     container:
       image: golang:1.25.10
     strategy:
