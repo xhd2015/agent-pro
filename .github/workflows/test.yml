@@ -28,9 +28,9 @@ jobs:
   doctest:
     name: doctest ${{ matrix.name }}
     runs-on: ubuntu-latest
-    # Must exceed matrix timeout (repo-l2=45m) plus checkout/install overhead.
-    # At 40m the GHA job cancelled repo-l2 mid-suite (~39m) before doctest finished.
-    timeout-minutes: 55
+    # Must exceed matrix timeout (repo-l2=60m) plus checkout/install overhead.
+    # At 40m GHA cancelled mid-suite; at 45m doctest timed out after 337/372 pass.
+    timeout-minutes: 70
     container:
       image: golang:1.25.10
     strategy:
@@ -49,8 +49,8 @@ jobs:
           - name: repo-l2
             label: "!e2e"
             paths: ./tests/...
-            # Large ./tests/... suite: 372 leaves passed but hit 25m package timeout.
-            timeout: 45m
+            # Large ./tests/... suite: 337 leaves passed in 45m then go test -timeout fired.
+            timeout: 60m
           - name: repo-e2e
             label: e2e
             paths: ./tests/...
