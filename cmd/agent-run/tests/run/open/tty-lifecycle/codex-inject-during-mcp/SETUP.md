@@ -41,7 +41,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 printf 'OpenAI Codex\n• Starting MCP servers (0/2): slow_30\n› '
 # Keep MCP chrome visible while the PTY input endpoint and child stdin settle.
 sleep 2
-if read -t 20 line; then
+if read -r line; then
   printf 'STDIN=%%s\n' "$line" > %q
 else
   printf 'STDIN_COUNT=0\n' > %q
