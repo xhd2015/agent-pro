@@ -38,8 +38,33 @@ func TestParseRunFlagsFromEnv_emptyWhenUnset(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseRunFlagsFromEnv: %v", err)
 	}
-	if opts != (RunGrokOptions{}) {
+	if opts.LogEventsPath != "" || opts.MockEventsFile != "" || opts.MockEventsPreset != "" ||
+		opts.LogHTTPPath != "" || opts.AgentRunnerConfigHome != "" || len(opts.MockMCP) != 0 {
 		t.Fatalf("opts = %+v, want zero", opts)
+	}
+}
+
+func TestParseRunFlags_mockMCP(t *testing.T) {
+	opts, remain, err := ParseRunFlags([]string{"--mock-mcp", "slow_01=1s-10s", "--mock-mcp", "slow_02=hang", "codex"})
+	if err != nil {
+		t.Fatalf("ParseRunFlags: %v", err)
+	}
+	if len(opts.MockMCP) != 2 || opts.MockMCP[0] != "slow_01=1s-10s" || opts.MockMCP[1] != "slow_02=hang" {
+		t.Fatalf("MockMCP = %#v", opts.MockMCP)
+	}
+	if len(remain) != 1 || remain[0] != "codex" {
+		t.Fatalf("remain = %#v", remain)
+	}
+}
+
+func TestParseRunFlagsFromEnv_mockMCP(t *testing.T) {
+	t.Setenv(RunFlagsEnvVar, "--mock-mcp=slow_01=1s-10s --mock-mcp=slow_02=hang")
+	opts, err := ParseRunFlagsFromEnv()
+	if err != nil {
+		t.Fatalf("ParseRunFlagsFromEnv: %v", err)
+	}
+	if len(opts.MockMCP) != 2 || opts.MockMCP[0] != "slow_01=1s-10s" || opts.MockMCP[1] != "slow_02=hang" {
+		t.Fatalf("MockMCP = %#v", opts.MockMCP)
 	}
 }
 

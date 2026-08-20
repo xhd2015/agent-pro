@@ -1,12 +1,13 @@
 # Scenario
 
-**Feature**: `run --new-terminal` with `--auto-send-or-resume` launches iTerm2
-ModeForceNew (run/resume) or ignores the flag on live send
+**Feature**: `run --new-terminal` launches iTerm2 ModeForceNew (new session in a
+new window). With `--auto-send-or-resume`, run/resume still ForceNew; live send
+ignores the flag.
 
 ```
-# gate
-run --new-terminal … (no --auto-send-or-resume)
-  -> exit 1; requires --auto-send-or-resume
+# placement (no auto-send)
+run --new-terminal … / run --open --new-terminal --session-id-from-prompt …
+  -> collect flags; strip --new-terminal; reconstruct argv; ForceNew; exit 0
 run -h -> documents --new-terminal
 
 # MODE=run | resume + --new-terminal

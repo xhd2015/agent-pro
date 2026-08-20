@@ -20,10 +20,11 @@ const EnvExtraMCPTOMLFile = "LLM_MOCK_EXTRA_MCP_TOML_FILE"
 
 // RunCodexOptions configures optional behavior for RunCodex.
 type RunCodexOptions struct {
-	MockEventsPreset string // --mock-events-preset; passed to mock server
-	MockEventsFile   string // --mock-events-file; AgentEvent JSONL for genQueue
-	LogEventsPath    string // --log-events output path; passed to mock server as --agent-events-file
-	LogHTTPPath      string // --log-http output path; passed to mock server as --log-http
+	MockEventsPreset string   // --mock-events-preset; passed to mock server
+	MockEventsFile   string   // --mock-events-file; AgentEvent JSONL for genQueue
+	LogEventsPath    string   // --log-events output path; passed to mock server as --agent-events-file
+	LogHTTPPath      string   // --log-http output path; passed to mock server as --log-http
+	MockMCP          []string // --mock-mcp SPECs; merged with LLM_MOCK_MCP
 }
 
 // RunCodex starts the mock server in the background, configures an isolated CODEX_HOME,
@@ -87,7 +88,18 @@ func RunCodex(codexArgs []string, opts RunCodexOptions) error {
 		return err
 	}
 
-	if err := writeCodexConfigToml(filepath.Join(codexHome, "config.toml"), port); err != nil {
+	specs, err := mergeMCPSpecs(opts.MockMCP, os.Getenv(EnvMockMCP))
+	if err != nil {
+		return err
+	}
+	var mockMCPBin string
+	if len(specs) > 0 {
+		mockMCPBin, err = resolveMockMCPPath()
+		if err != nil {
+			return err
+		}
+	}
+	if err := writeCodexConfigToml(filepath.Join(codexHome, "config.toml"), port, mockMCPBin, specs); err != nil {
 		return err
 	}
 
@@ -298,7 +310,7 @@ func writeCodexModelsCache(path string) error {
 	return nil
 }
 
-func writeCodexConfigToml(path string, port int) error {
+func writeCodexConfigToml(path string, port int, mockMCPBin string, specs []MCPSpec) error {
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d/v1", port)
 	content := fmt.Sprintf(`model = "mock-model"
 model_provider = "llm-mock"
@@ -314,6 +326,7 @@ env_key = "OPENAI_API_KEY"
 shell_tool = true
 unified_exec = true
 `, baseURL)
+	content += formatMCPBlocks(mockMCPBin, specs)
 	if extraFile := strings.TrimSpace(os.Getenv(EnvExtraMCPTOMLFile)); extraFile != "" {
 		b, err := os.ReadFile(extraFile)
 		if err != nil {

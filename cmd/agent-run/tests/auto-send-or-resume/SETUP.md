@@ -9,7 +9,7 @@ resume `--dir` vs `info.cwd` relocate gate
 agent-run run --auto-send-or-resume …  (gates)
   -> requires --session-id; mutex with --session-id-from-prompt
   -> run -h lists --auto-send-or-resume
-  -> --new-terminal requires --auto-send-or-resume; run -h lists --new-terminal
+  -> --new-terminal ForceNew-opens iTerm without --auto-send-or-resume; run -h lists --new-terminal
 
 # classify session
 seed or missing meta + optional registry/ptywrap

@@ -31,8 +31,9 @@ Options:
   --session-id ID     alias for --session
   --session-id-from-prompt   generate session id from prompt slug (storage + TTY registry)
   --auto-send-or-resume      with --session-id: live→send, exited+bound→resume, else→run
-  --new-terminal      with --auto-send-or-resume: open a new iTerm2 window for run/resume
-                      (ignored when MODE=send / live)
+  --new-terminal      open a new iTerm2 window and run this command there
+                      (stripped in the child so it does not loop).
+                      with --auto-send-or-resume: ignored when the session is live (send)
   --keep-tty          keep TTY session alive after run completes
   --open              open keep-alive TTY and attach interactively (silent until detach; prints session id after);
                       with --auto-send-or-resume: required shape for create/resume; ignored when live (send only)
@@ -208,10 +209,6 @@ func runHeadless(args []string, defaultRunner string) error {
 		return fmt.Errorf("--fork requires --resume-from-grok-session (or use: agent-run resume --fork …)")
 	}
 
-	if newTerminal && !autoSendOrResume {
-		return fmt.Errorf("--new-terminal requires --auto-send-or-resume")
-	}
-
 	if autoSendOrResume {
 		return runAutoSendOrResume(autoSendOrResumeOpts{
 			jsonFlag:                      jsonFlag,
@@ -279,6 +276,19 @@ func runHeadless(args []string, defaultRunner string) error {
 	}
 	if err := requireTTYForColor(runner, colorFlag); err != nil {
 		return err
+	}
+	if newTerminal {
+		ntDir, ntErr := resolveNewTerminalDir(dir, agentstorage.SessionMeta{}, false)
+		if ntErr != nil {
+			return ntErr
+		}
+		var ttyAlreadyNotified bool
+		return openInNewTerminalFromRecorded(ntDir, recorded, remaining, promptFile, EventBusOpts{
+			URL:             eventBusURL,
+			Token:           eventBusToken,
+			WarnWriter:      os.Stderr,
+			AlreadyNotified: &ttyAlreadyNotified,
+		}, sessionID, runner)
 	}
 	store, err := openStore()
 	if err != nil {

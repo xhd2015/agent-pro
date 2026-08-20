@@ -17,7 +17,8 @@ grok / real iTerm2 UI.
 - **agent-run CLI (`run`)** — with `--auto-send-or-resume` classifies a stable
   `--session-id` into MODE=run | send | resume and dispatches existing
   run/send/resume semantics. Without the flag, `run` is unchanged.
-  Optional `--new-terminal` is valid only with `--auto-send-or-resume`.
+  Optional `--new-terminal` ForceNew-opens iTerm for a new session (plain `run`
+  or auto run/resume). Live auto-send ignores it.
 - **agent-run CLI (`resume`)** — original subcommand; workspace must prefer
   `meta.workspace` when `--dir` is unset (same helper as auto→resume).
 - **Session storage** — `AGENT_RUN_HOME/sessions/<session_id>/meta.json` (flat;
@@ -46,7 +47,10 @@ run --auto-send-or-resume (no --session-id)
 run --auto-send-or-resume --session-id X --session-id-from-prompt …
   -> exit 1; mutually exclusive
 run --new-terminal … (without --auto-send-or-resume)
-  -> exit 1; error requires --auto-send-or-resume
+  -> ForceNew iTerm; child argv is reconstructed flags minus --new-terminal;
+     launcher exit 0; no in-process provider
+run --open --new-terminal --session-id-from-prompt … --agent-runner-binary …
+  -> child keeps --open, --session-id-from-prompt, binary, --env; strips --new-terminal
 run -h / run --help
   -> documents --auto-send-or-resume and --new-terminal; stdout ends with \n
 
@@ -72,7 +76,9 @@ run --auto-send-or-resume --session-id NEW "prompt" (+ argv recorder)
 + empty prompt     -> keep-tty reopen OK (exit 0 with fake runner)
 + --open/--no-submit -> accepted on resume path (not live-open error)
 
-# --new-terminal (requires --auto-send-or-resume)
+# --new-terminal (placement; auto-send live still ignores)
+run --new-terminal [flags…] [prompt]
+  -> strip --new-terminal; reconstruct; ForceNew; launcher exit 0
 run --auto-send-or-resume --new-terminal --session-id ID [flags…] [prompt]
   MODE=send  -> ignore --new-terminal (optional stderr note); existing send path;
                 no iTerm script; enqueue/deliver still works
@@ -151,7 +157,8 @@ cmd/agent-run/tests/auto-send-or-resume/
 │       ├── help-lists-flag/                 # E9 run -h + resume -h list allow flag
 │       └── auto-dir-mismatch-errors/        # E10 auto→resume same mismatch error as E7
 └── new-terminal/                            # --new-terminal + iTerm2 ModeForceNew
-    ├── requires-auto-flag/                  # NT-V1 without --auto-send-or-resume → exit 1
+    ├── plain-run-opens-iterm/               # NT-V1 without auto-send → ForceNew; no auto inject
+    ├── open-from-prompt-keeps-binary/       # NT-V1b --open --session-id-from-prompt keeps binary/env
     ├── run-help-lists-flag/                 # NT-V2 run -h documents --new-terminal
     ├── mode-run-opens-iterm/                # NT-D1 MODE=run → ForceNew script; no in-process spawn
     ├── mode-resume-opens-iterm/             # NT-D2 MODE=resume → ForceNew script; no parent resume spawn
@@ -163,7 +170,7 @@ Parameter ranking (most → least significant):
 
 1. **Invocation gate** — validation (missing session-id / mutex / help) vs runtime auto
 2. **Session lifecycle mode** — run (missing) | send (live) | resume (exited)
-3. **`--new-terminal` dispatch** — gate (requires auto) | ForceNew launcher (run/resume) | ignore (send)
+3. **`--new-terminal` dispatch** — ForceNew (plain run / auto run/resume) | ignore (send)
 4. **Prompt / open flags within mode** — empty vs non-empty; dash-leading prompt; `--open` on live vs resume
 5. **Workspace source** — meta.workspace | auto path | `--dir` override | missing meta.workspace error
 6. **Grok cwd relocate gate** — `--dir` vs summary `info.cwd`; allow flag; RelocateCWD
@@ -192,7 +199,8 @@ Parameter ranking (most → least significant):
 | 17 | `workspace/resume-dir-relocate/dir-mismatch-allow-relocates` | E8 | allow flag → warning; RelocateCWD; meta.workspace=`--dir`; resume continues |
 | 18 | `workspace/resume-dir-relocate/help-lists-flag` | E9 | `run -h` and `resume -h` list `--allow-relocate-resume-session-dir` |
 | 19 | `workspace/resume-dir-relocate/auto-dir-mismatch-errors` | E10 | auto→resume same mismatch error as E7 |
-| 20 | `new-terminal/requires-auto-flag` | NT-V1 | `--new-terminal` without auto → exit 1; requires `--auto-send-or-resume` |
+| 20 | `new-terminal/plain-run-opens-iterm` | NT-V1 | `--new-terminal` without auto → ForceNew; no `--auto-send-or-resume` inject |
+| 20b | `new-terminal/open-from-prompt-keeps-binary` | NT-V1b | `--open --session-id-from-prompt` keeps binary/config-home/env |
 | 21 | `new-terminal/run-help-lists-flag` | NT-V2 | `run -h` documents `--new-terminal`; trailing `\n` |
 | 22 | `new-terminal/mode-run-opens-iterm` | NT-D1 | auto+new-terminal missing session → exit 0; ForceNew script; no `--new-terminal` in follow-up; no in-process provider |
 | 23 | `new-terminal/mode-resume-opens-iterm` | NT-D2 | auto+new-terminal bound+exited → exit 0; script; no parent argv probe spawn |
@@ -241,7 +249,8 @@ doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/workspace/resume-dir-r
 
 # --new-terminal (iTerm2 ModeForceNew)
 doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/new-terminal
-doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/new-terminal/requires-auto-flag
+doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/new-terminal/plain-run-opens-iterm
+doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/new-terminal/open-from-prompt-keeps-binary
 doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/new-terminal/run-help-lists-flag
 doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/new-terminal/mode-run-opens-iterm
 doctest test -v ./cmd/agent-run/tests/auto-send-or-resume/new-terminal/mode-resume-opens-iterm

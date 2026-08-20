@@ -20,11 +20,12 @@ import (
 
 // RunGrokOptions configures optional behavior for RunGrok.
 type RunGrokOptions struct {
-	MockEventsPreset      string // --mock-events-preset; passed to mock server
-	MockEventsFile        string // --mock-events-file; AgentEvent JSONL for genQueue
-	LogEventsPath         string // --log-events output path; passed to mock server as --agent-events-file
-	LogHTTPPath           string // --log-http output path; passed to mock server as --log-http
-	AgentRunnerConfigHome string // --agent-runner-config-home or AGENT_RUNNER_CONFIG_HOME
+	MockEventsPreset      string   // --mock-events-preset; passed to mock server
+	MockEventsFile        string   // --mock-events-file; AgentEvent JSONL for genQueue
+	LogEventsPath         string   // --log-events output path; passed to mock server as --agent-events-file
+	LogHTTPPath           string   // --log-http output path; passed to mock server as --log-http
+	AgentRunnerConfigHome string   // --agent-runner-config-home or AGENT_RUNNER_CONFIG_HOME
+	MockMCP               []string // --mock-mcp SPECs (Codex only)
 }
 
 // RunGrok starts the mock server in the background, configures an isolated GROK_HOME,

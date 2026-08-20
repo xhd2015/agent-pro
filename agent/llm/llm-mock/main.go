@@ -483,6 +483,7 @@ func handleRunCommand(args []string) error {
 			MockEventsFile:   opts.MockEventsFile,
 			LogEventsPath:    opts.LogEventsPath,
 			LogHTTPPath:      opts.LogHTTPPath,
+			MockMCP:          opts.MockMCP,
 		})
 	case "opencode":
 		return runpkg.RunOpencode(remain[1:], runpkg.RunOpencodeOptions{

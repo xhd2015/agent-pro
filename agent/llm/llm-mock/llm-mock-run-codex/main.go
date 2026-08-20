@@ -28,6 +28,7 @@ func main() {
 		MockEventsFile:   opts.MockEventsFile,
 		LogEventsPath:    opts.LogEventsPath,
 		LogHTTPPath:      opts.LogHTTPPath,
+		MockMCP:          opts.MockMCP,
 	}); err != nil {
 		fmt.Fprintf(os.Stderr, "llm-mock-run-codex: %v\n", err)
 		os.Exit(1)

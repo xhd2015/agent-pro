@@ -11,7 +11,7 @@ const RunFlagsEnvVar = "LLM_MOCK_RUN_FLAGS"
 
 // RunCommandHelp documents llm-mock run flags and environment variables.
 const RunCommandHelp = `
-Usage: llm-mock run [--mock-events-preset NAME] [--log-events FILE] [--log-http FILE] (grok|codex|opencode|commandcode) [agent-args...]
+Usage: llm-mock run [--mock-events-preset NAME] [--mock-mcp SPEC] [--log-events FILE] [--log-http FILE] (grok|codex|opencode|commandcode) [agent-args...]
 
 Start a background llm-mock HTTP server, configure an isolated agent home pointing
 at the mock, and run grok, codex, opencode, or commandcode in the foreground.
@@ -23,6 +23,8 @@ Options:
         or "list" to print the preset catalog and exit (no agent, no mock server).
   --mock-events-file FILE
         AgentEvent JSONL appended to genQueue (delay_ms / type=sleep honored).
+  --mock-mcp SPEC
+        Codex only. Repeatable mock-mcp child: name=duration, name=min-max, or name=hang.
   --log-events FILE
         Append standard AgentEvent JSONL for each served mock response.
         FILE must end with .jsonl. Passed to the mock as --agent-events-file.
@@ -42,6 +44,8 @@ Environment (orchestrator, codex):
   LLM_MOCK_RUN_CODEX_COMMAND              Replace codex executable (tests/plumbing)
   LLM_MOCK_RUN_CODEX_DEBUG=1              Verbose codex orchestrator stderr debug logs
   LLM_MOCK_EXTRA_MCP_TOML_FILE            Append TOML (e.g. [mcp_servers.*]) to generated config.toml
+  LLM_MOCK_MCP                            Comma-separated --mock-mcp SPECs (CLI --mock-mcp wins on duplicate names)
+  LLM_MOCK_MCP_COMMAND                    Override mock-mcp executable path (tests/plumbing)
 
 Environment (orchestrator, opencode):
   LLM_MOCK_OPENCODE_HOME                  Explicit opencode HOME (default: temp dir)
@@ -75,6 +79,7 @@ Examples:
   llm-mock run --log-events session.jsonl --log-http http.jsonl grok -p hello --always-approve
   llm-mock run opencode run "hi" --model llm-mock/mock-model
   llm-mock run --mock-events-preset think-tool-message commandcode "list files"
+  llm-mock run --mock-mcp slow_01=1s-10s --mock-mcp slow_02=hang codex
 
   -h, --help
         Show this help
@@ -115,8 +120,10 @@ func ParseRunFlags(args []string) (RunGrokOptions, []string, error) {
 
 func parseRunFlags(args []string, stopOnFirstArg bool) (RunGrokOptions, []string, error) {
 	var logEvents, logHTTP, mockEventsPreset, mockEventsFile, agentRunnerConfigHome *string
+	var mockMCP []string
 	builder := lessflags.String("--mock-events-preset", &mockEventsPreset).
 		String("--mock-events-file", &mockEventsFile).
+		StringSlice("--mock-mcp", &mockMCP).
 		String("--log-events", &logEvents).
 		String("--log-http", &logHTTP).
 		String("--agent-runner-config-home", &agentRunnerConfigHome).
@@ -145,5 +152,6 @@ func parseRunFlags(args []string, stopOnFirstArg bool) (RunGrokOptions, []string
 	if agentRunnerConfigHome != nil {
 		opts.AgentRunnerConfigHome = *agentRunnerConfigHome
 	}
+	opts.MockMCP = mockMCP
 	return opts, remain, nil
 }
