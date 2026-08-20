@@ -482,11 +482,14 @@ func execPTYRun(t *testing.T, bin string, port int, req *Request) (*Response, er
 
 	// Unbounded Wait hung repo-l2: attach can miss exit/close and block until
 	// the package -timeout cancels the suite (337/341 + 1 cancelled).
+	// 45s: CI parallel load made attach+true / echo exceed the old 20s cap
+	// (prints-id-after-attached-exit, attaches-pty-output) while still finishing
+	// the full suite in well under the 60m package budget.
 	waitDone := make(chan error, 1)
 	go func() { waitDone <- cmd.Wait() }()
-	waitTimeout := 20 * time.Second
+	waitTimeout := 45 * time.Second
 	if req.DetachSignal {
-		waitTimeout = 10 * time.Second // SIGINT should exit the client quickly
+		waitTimeout = 15 * time.Second // SIGINT should exit the client quickly
 	}
 	var runErr error
 	select {

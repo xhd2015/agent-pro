@@ -138,20 +138,31 @@ func attachSession(c *ptyclient.Client, sessionID string) error {
 		stdinErrCh <- forwardAttachInput(writer, os.Stdin)
 	}()
 
-	select {
-	case <-sigCh:
-		return detachAndClose(writer)
-	case err := <-readerErrCh:
-		return normalizeAttachReadError(err)
-	case err := <-stdinErrCh:
-		if errors.Is(err, errDetached) {
+	// Poll session list: if the remote child already exited but the WS never
+	// delivered "[Terminal exited]", stdin forward would block forever.
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-sigCh:
 			return detachAndClose(writer)
+		case err := <-readerErrCh:
+			return normalizeAttachReadError(err)
+		case err := <-stdinErrCh:
+			if errors.Is(err, errDetached) {
+				return detachAndClose(writer)
+			}
+			if err != nil && err != io.EOF {
+				return err
+			}
+			_ = writer.close(websocket.CloseNormalClosure)
+			return nil
+		case <-ticker.C:
+			if sessionExited(c, sessionID) {
+				_ = writer.close(websocket.CloseNormalClosure)
+				return nil
+			}
 		}
-		if err != nil && err != io.EOF {
-			return err
-		}
-		_ = writer.close(websocket.CloseNormalClosure)
-		return nil
 	}
 }
 

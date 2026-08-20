@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/xhd2015/dot-pkgs/go-pkgs/shell/ptywrap"
 	ptyclient "github.com/xhd2015/dot-pkgs/go-pkgs/shell/ptywrap/client"
@@ -135,6 +136,16 @@ func runRun(args []string) error {
 		return err
 	}
 	if isInteractiveTerminal(os.Stdin, os.Stdout) {
+		// Fast commands (true, echo, …) often exit before WS attach connects.
+		// Brief poll avoids hanging in attach on a session that already exited
+		// (stdin forward would block forever without a Terminal-exited frame).
+		for i := 0; i < 15; i++ {
+			if sessionExited(c, info.ID) {
+				fmt.Printf("\n%s\n", info.ID)
+				return nil
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
 		attachErr := attachSession(c, info.ID)
 		if errors.Is(attachErr, errDetached) {
 			return attachErr
