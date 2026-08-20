@@ -527,6 +527,17 @@ func startGrokTTYBackground(t *testing.T, req *Request) {
 	}
 	req.BackgroundCmd = cmd
 	t.Cleanup(func() {
+		// HeadlessRun starts a detached __serve__ child. Reap it explicitly
+		// before removing the isolated home; killing only this foreground
+		// command leaves the child racing TempDir cleanup on busy CI runners.
+		if req.GrokTTYSessionID != "" {
+			killCtx, killCancel := context.WithTimeout(context.Background(), 3*time.Second)
+			kill := exec.CommandContext(killCtx, req.AgentRun, "tty", "kill", req.GrokTTYSessionID)
+			kill.Dir = req.TempDir
+			kill.Env = append(os.Environ(), req.Env...)
+			_ = kill.Run()
+			killCancel()
+		}
 		cancel()
 		if cmd.Process != nil {
 			_ = cmd.Process.Kill()

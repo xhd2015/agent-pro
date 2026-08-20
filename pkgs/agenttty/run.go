@@ -317,13 +317,14 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 			if codexOpen && !usesCodexHook {
 				acceptCodexTrustRemote(ctx, listenAddr, sessionID, provider.BannerProvider, 15*time.Second, agentGone)
 			}
-			if !usesCodexHook {
-				select {
-				case <-ctx.Done():
-					bgCh <- openBG{}
-					return
-				case <-time.After(200 * time.Millisecond):
-				}
+			// Even hook-backed PTYs need a brief post-launch settle: the HTTP
+			// input endpoint can accept a write before the hooked process has
+			// attached stdin, which silently loses that first write.
+			select {
+			case <-ctx.Done():
+				bgCh <- openBG{}
+				return
+			case <-time.After(200 * time.Millisecond):
 			}
 			if promptText != "" && (isResume || opts.NoSubmit || runnerID == "codex-tty" || runnerID == "commandcode-tty") {
 				if codexOpen && !usesCodexHook {
