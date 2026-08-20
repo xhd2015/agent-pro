@@ -12,9 +12,9 @@ import (
 const (
 	bannerWaitTimeout      = 30 * time.Second
 	codexBannerWaitTimeout = 2 * time.Minute
-	// openCodexBannerWaitTimeout is shorter: --open should attach soon, not
-	// sit blank for 2 minutes when inject-ready never arrives.
-	openCodexBannerWaitTimeout = 20 * time.Second
+	// openComposerWaitTimeout: --open inject waits this long for a composer
+	// glyph. MCP chrome does not block (unlike waitForBannerRemoteOpts).
+	openComposerWaitTimeout = 8 * time.Second
 	// acceptCodexTrustNoTrustGrace: if we never see a trust modal, do not burn
 	// the full timeout on empty/loading scrollback (resume reopen hang).
 	acceptCodexTrustNoTrustGrace = 4 * time.Second
@@ -91,6 +91,36 @@ func waitForBannerRemoteOpts(ctx context.Context, listenAddr, sessionID, provide
 		time.Sleep(bannerPollInterval)
 	}
 	return fmt.Errorf("%s TUI banner not detected", provider)
+}
+
+// waitForOpenComposer waits until the Codex composer is visible, including
+// while MCP chrome still says Starting MCP servers. Used only by --open inject.
+// Headless inject still uses waitForBannerRemoteOpts (MCP is not inject-ready).
+func waitForOpenComposer(ctx context.Context, listenAddr, sessionID, provider string, timeout time.Duration, abort func() bool) {
+	if timeout <= 0 {
+		timeout = openComposerWaitTimeout
+	}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		if abort != nil && abort() {
+			return
+		}
+		snapshot, err := bannerSnapshotText(listenAddr, sessionID)
+		if err == nil {
+			scrollback := []byte(snapshot)
+			plain := stripPlain(scrollback)
+			if !codexTrustPromptDetected(scrollback, provider) &&
+				(hasCodexPromptMarker(plain) || strings.Contains(plain, "OpenAI Codex")) {
+				return
+			}
+		}
+		time.Sleep(bannerPollInterval)
+	}
 }
 
 // acceptCodexTrustRemote soft-polls for the directory trust modal and sends Enter.

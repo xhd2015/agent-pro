@@ -35,7 +35,10 @@ Options:
                       (stripped in the child so it does not loop).
                       with --auto-send-or-resume: ignored when the session is live (send)
   --keep-tty          keep TTY session alive after run completes
-  --open              open keep-alive TTY and attach interactively (silent until detach; prints session id after);
+  --open              keep-alive TTY; attach as soon as the PTY is registered
+                      (Codex/Grok bootstrap stays visible; inject and session bind
+                      continue in the background). Silent event stream until detach;
+                      then prints the session id.
                       with --auto-send-or-resume: required shape for create/resume; ignored when live (send only)
   --detach            start keep-alive TTY daemon and exit after registry (+ soft grok bind);
                       prints session-id and terminal-id on stdout; no attach / no stream;

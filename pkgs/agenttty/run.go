@@ -68,6 +68,9 @@ type RunOptions struct {
 	Stderr              io.Writer
 	Emit                func(types.AgentEvent) error
 	OnTerminalSessionID func(string)
+	// OnRunnerSessionID is invoked as soon as a provider session id is bound
+	// (mid-open), so status can report bound before attach returns.
+	OnRunnerSessionID func(string)
 }
 
 // RunHeadless starts a detached ttywatch serve session, injects the prompt, tails
@@ -258,62 +261,13 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 		return resolveOpenDetachRunnerSessionID(ctx, opts, runnerID, provider, configHome, runStart, listenAddr, sessionID), terminalSessionID, nil
 	}
 
-	// --open: soft-wait inject-readiness, inject when ready, then AttachWriter.
+	// --open: attach as soon as the PTY is registered. Trust, prompt inject, and
+	// Codex session bind continue in the background so bootstrap stays visible.
 	// AGENT_RUN_OPEN_ATTACH_INSTANT=1 skips interactive attach (tests).
-	// Abort pre-attach waits when the PTY agent child already exited so resume
-	// reopen does not hang blank for minutes then AttachWriter forever.
 	if opts.Open {
 		agentGone := func() bool {
 			return RegistryAgentExited(opts.Home, runnerID, sessionID)
 		}
-		_ = waitForOpenReady(ctx, listenAddr, sessionID, 3*time.Second)
-		// Codex open: soft-accept directory trust so follow-up send is not blocked.
-		// Short no-trust grace (see acceptCodexTrustRemote) avoids a 45s blank hang.
-		if isCodexProvider(provider.BannerProvider) || runnerID == "codex-tty" {
-			acceptCodexTrustRemote(ctx, listenAddr, sessionID, provider.BannerProvider, 15*time.Second, agentGone)
-		}
-
-		select {
-		case <-ctx.Done():
-			return "", terminalSessionID, ctx.Err()
-		case <-time.After(200 * time.Millisecond):
-		}
-
-		if agentGone() {
-			return "", terminalSessionID, formatOpenAgentExitedError(runnerID, listenAddr, sessionID, "open attach", nil)
-		}
-
-		// Inject policy under --open:
-		// - Grok new session: prompt on argv → do not re-inject.
-		// - codex-tty: always inject after ready (no argv prompt).
-		// - New session + NoSubmit: draft inject without Enter.
-		// - Resume + non-empty follow-up: wait inject-ready then inject if ready; banner
-		//   timeout must not fail open — still attach when agent is alive.
-		// - Empty prompt: no inject.
-		if promptText != "" && (isResume || opts.NoSubmit || runnerID == "codex-tty") {
-			bannerTimeout := time.Duration(0) // default
-			if isCodexProvider(provider.BannerProvider) || runnerID == "codex-tty" {
-				bannerTimeout = openCodexBannerWaitTimeout
-			}
-			readyErr := waitForBannerRemoteOpts(ctx, listenAddr, sessionID, provider.BannerProvider, provider.BannerMarkers, bannerTimeout, agentGone)
-			if readyErr != nil {
-				if ctx.Err() != nil {
-					return "", terminalSessionID, ctx.Err()
-				}
-				if agentGone() {
-					return "", terminalSessionID, formatOpenAgentExitedError(runnerID, listenAddr, sessionID, "inject-ready", readyErr)
-				}
-				// Soft: skip inject on banner timeout; proceed to attach if still alive.
-			} else if err := InjectMessage(listenAddr, sessionID, runnerID, promptText, !opts.NoSubmit); err != nil {
-				return "", terminalSessionID, err
-			}
-		}
-
-		if agentGone() {
-			return "", terminalSessionID, formatOpenAgentExitedError(runnerID, listenAddr, sessionID, "open attach", nil)
-		}
-
-		// Persist dual-write snapshot while keep-alive, then auto-attach.
 		if terminalSessionID != "" && opts.AgentSessionID != "" && result.Entry != nil {
 			_ = WriteTTYJSON(opts.Home, TTYSnapshot{
 				RunnerID:          runnerID,
@@ -326,30 +280,84 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 				Alive:             true,
 			})
 		}
-		// OpenCloseExits (default): attach_mode=open → ptywrap roleWriter so bare
-		// WS disconnect (iTerm red-close) calls stopChild() without detach_keep,
-		// while the initial frame is raw scrollback (attach-like) so Grok mouse /
-		// alt-screen CSIs reach the host. attach_mode=attach (roleAttacher) leaves
-		// ghost __serve__; attach_mode=screen is CUP export for grid tools only.
 		attachMode := "attach"
 		if OpenCloseExits() {
 			attachMode = "open"
 		}
-		// Bind codex runner_session_id before attach returns. Open path used to
-		// always return "" here; without a bound id, AutoSendOrResume falls to
-		// ModeRun after terminal close and opens a second Codex conversation.
-		runnerSID := resolveOpenDetachRunnerSessionID(ctx, opts, runnerID, provider, configHome, runStart, listenAddr, sessionID)
 
-		if _, attachErr := ttywatch.AttachWriter(listenAddr, sessionID, attachMode); attachErr != nil {
+		codexOpen := isCodexProvider(provider.BannerProvider) || runnerID == "codex-tty"
+		if codexOpen {
+			writeOpenBindJSON(opts.Home, opts.AgentSessionID, openBindState{
+				State:     "in_progress",
+				StartedAt: time.Now().UTC().Format(time.RFC3339Nano),
+			})
+		}
+
+		type openBG struct {
+			sid string
+		}
+		bgCh := make(chan openBG, 1)
+		go func() {
+			_ = waitForOpenReady(ctx, listenAddr, sessionID, 3*time.Second)
+			if codexOpen {
+				acceptCodexTrustRemote(ctx, listenAddr, sessionID, provider.BannerProvider, 15*time.Second, agentGone)
+			}
+			select {
+			case <-ctx.Done():
+				bgCh <- openBG{}
+				return
+			case <-time.After(200 * time.Millisecond):
+			}
+			if promptText != "" && (isResume || opts.NoSubmit || runnerID == "codex-tty") {
+				if codexOpen {
+					waitForOpenComposer(ctx, listenAddr, sessionID, provider.BannerProvider, openComposerWaitTimeout, agentGone)
+				} else {
+					_ = waitForBannerRemoteOpts(ctx, listenAddr, sessionID, provider.BannerProvider, provider.BannerMarkers, 0, agentGone)
+				}
+				if err := InjectMessage(listenAddr, sessionID, runnerID, promptText, !opts.NoSubmit); err != nil {
+					fmt.Fprintf(opts.Stderr, "%s: inject: %v\n", runnerID, err)
+				}
+			}
+			sid := resolveOpenDetachRunnerSessionID(ctx, opts, runnerID, provider, configHome, runStart, listenAddr, sessionID)
+			if sid != "" {
+				writeOpenBindJSON(opts.Home, opts.AgentSessionID, openBindState{
+					State:           "ok",
+					StartedAt:       time.Now().UTC().Format(time.RFC3339Nano),
+					FinishedAt:      time.Now().UTC().Format(time.RFC3339Nano),
+					RunnerSessionID: sid,
+				})
+				if opts.OnRunnerSessionID != nil {
+					opts.OnRunnerSessionID(sid)
+				}
+			} else if codexOpen {
+				writeOpenBindJSON(opts.Home, opts.AgentSessionID, openBindState{
+					State:      "failed",
+					FinishedAt: time.Now().UTC().Format(time.RFC3339Nano),
+					Error:      "codex session id not resolved",
+				})
+			}
+			bgCh <- openBG{sid: sid}
+		}()
+
+		_, attachErr := ttywatch.AttachWriter(listenAddr, sessionID, attachMode)
+		var runnerSID string
+		if attachErr != nil {
+			select {
+			case bg := <-bgCh:
+				runnerSID = bg.sid
+			case <-time.After(100 * time.Millisecond):
+			}
 			return runnerSID, terminalSessionID, attachErr
 		}
-		// With OpenCloseExits + !KeepTerminalAlive, window close reaps child and
-		// serve exits. Ctrl-] still sends detach_keep (child kept).
-		// One-shot re-try if still empty (rollout may appear during attach).
-		if strings.TrimSpace(runnerSID) == "" && (isCodexProvider(provider.BannerProvider) || runnerID == "codex-tty") {
+		bg := <-bgCh
+		runnerSID = bg.sid
+		if strings.TrimSpace(runnerSID) == "" && codexOpen {
 			if id := tryDiscoverCodexOnce(opts, configHome, runStart, listenAddr, sessionID); id != "" {
 				runnerSID = id
 				fmt.Fprintf(opts.Stderr, "codex-tty: codex session %s\n", runnerSID)
+				if opts.OnRunnerSessionID != nil {
+					opts.OnRunnerSessionID(id)
+				}
 			}
 		}
 		return runnerSID, terminalSessionID, nil

@@ -89,7 +89,8 @@ cmd/agent-run/tests/run/open/
 │   ├── silence-no-stream/             # no discovery/event noise; no pre-attach id only
 │   ├── prints-id-after-attach/        # after attach returns: stderr runner: <id> once
 │   ├── keep-alive-registry/           # registry file + listen_addr alive after open
-│   └── codex-tty-accepted/            # --open accepted for codex-tty (not non-TTY)
+│   ├── codex-tty-accepted/            # --open accepted for codex-tty (not non-TTY)
+│   └── codex-inject-during-mcp/       # inject while fake TUI still shows Starting MCP servers
 └── attach-without-banner/             # attach-first readiness (no INSTANT on open leaves)
     ├── open/                          # --open production path
     │   ├── no-markers-empty-prompt/   # empty prompt; no banner/OpenReady → exit 0
@@ -123,6 +124,7 @@ Parameter ranking (most → least significant):
 | 7 | `tty-lifecycle/prints-id-after-attach` | After attach returns, stderr has `grok-tty: <id>` exactly once |
 | 8 | `tty-lifecycle/keep-alive-registry` | After open completes, registry entry exists and TCP `listen_addr` is reachable |
 | 9 | `tty-lifecycle/codex-tty-accepted` | `--open` + `codex-tty` not rejected as unknown/non-TTY |
+| 10 | `tty-lifecycle/codex-inject-during-mcp` | `--open` injects while fake TUI still shows Starting MCP servers |
 | 10 | `attach-without-banner/open/no-markers-empty-prompt` | `--open` empty; fake TUI never paints ready markers; **no INSTANT** → exit 0; no banner error |
 | 11 | `attach-without-banner/open/no-markers-with-prompt` | `--open` + prompt; no banner/OpenReady; **no INSTANT** → exit 0; session id; no banner error |
 | 12 | `attach-without-banner/open/no-double-inject` | New-session `--open` prompt on argv only; fake probe sees no PTY re-inject; no banner error |

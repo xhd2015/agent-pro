@@ -12,8 +12,8 @@ import (
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 	"github.com/xhd2015/agent-pro/pkgs/agentui"
-	"github.com/xhd2015/tty-watch/pkgs/ttywatch"
 	"github.com/xhd2015/less-gen/flags"
+	"github.com/xhd2015/tty-watch/pkgs/ttywatch"
 )
 
 const resumeHelp = `
@@ -35,7 +35,8 @@ Options:
   --json              stream NDJSON AgentEvent lines to stdout
   --model MODEL       model name
   --keep-tty          keep TTY session alive after run completes
-  --open              open keep-alive TTY and attach interactively
+  --open              keep-alive TTY; attach as soon as the PTY is registered
+                      (bootstrap stays visible; inject/bind continue in the background)
   --detach            start keep-alive TTY daemon and exit after registry (+ soft grok bind);
                       prints session-id and terminal-id on stdout; no attach / no stream;
                       exclusive with --open and --json; TTY only
