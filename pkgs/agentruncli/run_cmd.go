@@ -34,6 +34,10 @@ Options:
   --new-terminal      open a new iTerm2 window and run this command there
                       (stripped in the child so it does not loop).
                       with --auto-send-or-resume: ignored when the session is live (send)
+  --exec-in-terminal  with --new-terminal: exec the child so the parent
+                      terminal closes when the run exits
+                      (default: off; env AGENT_RUN_EXEC_IN_TERMINAL=1 enables)
+  --no-exec-in-terminal   explicitly disable exec-in-terminal (overrides env)
   --keep-tty          keep TTY session alive after run completes
   --open              keep-alive TTY; attach as soon as the PTY is registered
                       (Codex/Grok bootstrap stays visible; inject and session bind
@@ -106,6 +110,8 @@ func runHeadless(args []string, defaultRunner string) error {
 	var sessionIDFromPrompt bool
 	var autoSendOrResume bool
 	var newTerminal bool
+	var execInTerminalFlag bool
+	var noExecInTerminalFlag bool
 	var agentRunner string
 	var agentRunnerBinary string
 	var agentRunnerConfigHome string
@@ -133,6 +139,8 @@ func runHeadless(args []string, defaultRunner string) error {
 		Bool("--session-id-from-prompt", &sessionIDFromPrompt).
 		Bool("--auto-send-or-resume", &autoSendOrResume).
 		Bool("--new-terminal", &newTerminal).
+		Bool("--exec-in-terminal", &execInTerminalFlag).
+		Bool("--no-exec-in-terminal", &noExecInTerminalFlag).
 		Bool("--keep-tty", &keepTTY).
 		Bool("--open", &openFlag).
 		Bool("--detach", &detachFlag).
@@ -158,6 +166,10 @@ func runHeadless(args []string, defaultRunner string) error {
 		return err
 	}
 	idleEnabled, idleTimeout, err := ParseRunIdle(exitOnIdle, idleTimeoutRaw)
+	if err != nil {
+		return err
+	}
+	execInTerminal, err := resolveExecInTerminalFlags(execInTerminalFlag, noExecInTerminalFlag, execInTerminalEnvEnabled())
 	if err != nil {
 		return err
 	}
@@ -236,6 +248,7 @@ func runHeadless(args []string, defaultRunner string) error {
 			prompt:                        prompt,
 			defaultRunner:                 defaultRunner,
 			newTerminal:                   newTerminal,
+			execInTerminal:                execInTerminal,
 			eventBusURL:                   eventBusURL,
 			eventBusToken:                 eventBusToken,
 			recorded:                      recorded,
@@ -291,7 +304,7 @@ func runHeadless(args []string, defaultRunner string) error {
 			Token:           eventBusToken,
 			WarnWriter:      os.Stderr,
 			AlreadyNotified: &ttyAlreadyNotified,
-		}, sessionID, runner)
+		}, sessionID, runner, execInTerminal)
 	}
 	store, err := openStore()
 	if err != nil {
@@ -566,6 +579,7 @@ type autoSendOrResumeOpts struct {
 	prompt                        string
 	defaultRunner                 string
 	newTerminal                   bool
+	execInTerminal                bool
 	eventBusURL                   string
 	eventBusToken                 string
 	recorded                      flags.Flags
@@ -737,6 +751,7 @@ func openAutoInNewTerminal(opts autoSendOrResumeOpts, meta agentstorage.SessionM
 	// follow-up is intentionally library-built (never includes --new-terminal).
 	_ = opts.recorded
 
+	followUp = withExecPrefix(followUp, opts.execInTerminal)
 	if err := iterm2.OpenConfig(dir, &iterm2.Config{
 		Mode:             iterm2.ModeForceNew,
 		FollowUpCommands: []string{followUp},
