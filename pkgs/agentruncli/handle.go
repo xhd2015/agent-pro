@@ -22,6 +22,7 @@ Commands:
   msg        inspect or cancel queued send messages
   snapshot   print a sanitized snapshot of a live TTY session by id
   watch      stream readonly output from a live TTY session by id
+  logs       print session-scoped runtime errors
   sessions   list stored sessions or print one session's events
   status     show agent-run home or multi-layer session status
   assets     frontend asset status and ensure (download)
@@ -94,6 +95,12 @@ func Handle(args []string) error {
 		return runSnapshot(sub)
 	case "watch":
 		return runWatch(sub)
+	case "logs":
+		store, err := openStore()
+		if err != nil {
+			return err
+		}
+		return RunLogs(sub, store, os.Stdout)
 	case "tty":
 		return runTty(sub)
 	case "pty":

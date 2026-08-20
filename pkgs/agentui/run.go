@@ -401,8 +401,6 @@ func finalizeOpenGrokSession(ctx context.Context, opts RunOptions, runner, sessi
 		updatesPath = abs
 	}
 	_ = opts.Store.UpdateSessionRunnerSessionID(sessionID, id)
-	_, _ = fmt.Fprintf(stderr, "grok-tty: grok session %s\n", id)
-	_, _ = fmt.Fprintf(stderr, "grok-tty: grok updates %s\n", updatesPath)
 	return nil
 }
 

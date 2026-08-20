@@ -71,3 +71,11 @@ func TestReconstructRunRemainder_promptFileOmitsRemain(t *testing.T) {
 		t.Fatalf("missing prompt-file: %#v", got)
 	}
 }
+
+func TestWithResolvedRunnerPreservesRunnerAcrossNewTerminal(t *testing.T) {
+	got := withResolvedRunner([]string{"run", "--open", "--", "hello"}, "codex-tty")
+	want := []string{"run", "--agent-runner", "codex-tty", "--open", "--", "hello"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("child argv = %#v, want %#v", got, want)
+	}
+}

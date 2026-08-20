@@ -25,6 +25,13 @@ func reconstructRunRemainder(recorded flags.Flags, remain []string, promptFile s
 	return out
 }
 
+func withResolvedRunner(childArgs []string, runner string) []string {
+	if len(childArgs) == 0 || strings.TrimSpace(runner) == "" {
+		return childArgs
+	}
+	return append(childArgs[:1], append([]string{"--agent-runner", runner}, childArgs[1:]...)...)
+}
+
 func quoteFollowUpArgv(tokens []string) string {
 	quoted := make([]string, 0, len(tokens))
 	for _, tok := range tokens {
@@ -48,7 +55,12 @@ func openInNewTerminalFromRecorded(dir string, recorded flags.Flags, remain []st
 	if err != nil {
 		return err
 	}
-	tokens, err := agentdriver.MustArgv(resolved, reconstructRunRemainder(recorded, remain, promptFile)...)
+	childArgs := reconstructRunRemainder(recorded, remain, promptFile)
+	// Handle consumes --agent-runner as a global option before this command is
+	// re-execed. Put the resolved runner back into the child argv so --new-terminal
+	// preserves codex-tty rather than silently falling back to grok-tty.
+	childArgs = withResolvedRunner(childArgs, runner)
+	tokens, err := agentdriver.MustArgv(resolved, childArgs...)
 	if err != nil {
 		return err
 	}

@@ -73,6 +73,13 @@ type RunOptions struct {
 	OnRunnerSessionID func(string)
 }
 
+// recordSessionError is intentionally best-effort: runtime diagnostics must
+// never be sent into an attached provider TTY, or turn a secondary log-write
+// failure into a failed agent run.
+func recordSessionError(opts RunOptions, component string, err error) {
+	_ = agentstorage.AppendErrorLog(opts.Home, opts.AgentSessionID, component, err)
+}
+
 // RunHeadless starts a detached ttywatch serve session, injects the prompt, tails
 // agent events, and waits for the child to exit unless KeepTerminalAlive is set.
 // When Open is set, starts keep-alive, injects only if prompt non-empty, auto-attaches,
@@ -315,7 +322,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 					_ = waitForBannerRemoteOpts(ctx, listenAddr, sessionID, provider.BannerProvider, provider.BannerMarkers, 0, agentGone)
 				}
 				if err := InjectMessage(listenAddr, sessionID, runnerID, promptText, !opts.NoSubmit); err != nil {
-					fmt.Fprintf(opts.Stderr, "%s: inject: %v\n", runnerID, err)
+					recordSessionError(opts, "prompt-inject", err)
 				}
 			}
 			sid := resolveOpenDetachRunnerSessionID(ctx, opts, runnerID, provider, configHome, runStart, listenAddr, sessionID)
@@ -354,7 +361,6 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 		if strings.TrimSpace(runnerSID) == "" && codexOpen {
 			if id := tryDiscoverCodexOnce(opts, configHome, runStart, listenAddr, sessionID); id != "" {
 				runnerSID = id
-				fmt.Fprintf(opts.Stderr, "codex-tty: codex session %s\n", runnerSID)
 				if opts.OnRunnerSessionID != nil {
 					opts.OnRunnerSessionID(id)
 				}
@@ -466,7 +472,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 					Text:      "Cannot resolve session id: " + discErr.Error(),
 					Timestamp: time.Now().UnixMilli(),
 				})
-				fmt.Fprintf(opts.Stderr, "grok-tty: grok session discovery failed: %v\n", discErr)
+				recordSessionError(opts, "grok-session-discovery", discErr)
 				return
 			}
 			if absUpdates, absErr := filepath.Abs(updatesPath); absErr == nil {
@@ -524,9 +530,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 					if codexSessionID != "" {
 						path, ok, discErr := FindCodexTranscriptBySessionID(codexHome, codexSessionID)
 						if discErr != nil {
-							if tailCtx.Err() == nil {
-								fmt.Fprintf(opts.Stderr, "codex-tty: codex transcript discovery failed: %v\n", discErr)
-							}
+							recordSessionError(opts, "codex-transcript-discovery", discErr)
 							return
 						}
 						if ok {
@@ -537,9 +541,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 				}
 				id, path, ok, discErr := scanActiveCodexTranscripts(codexHome, opts.Workspace, runStart, promptText)
 				if discErr != nil {
-					if tailCtx.Err() == nil {
-						fmt.Fprintf(opts.Stderr, "codex-tty: codex transcript discovery failed: %v\n", discErr)
-					}
+					recordSessionError(opts, "codex-transcript-scan", discErr)
 					return
 				}
 				if ok {
@@ -556,8 +558,6 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 			if absTranscript, absErr := filepath.Abs(transcriptPath); absErr == nil {
 				transcriptPath = absTranscript
 			}
-			fmt.Fprintf(opts.Stderr, "codex-tty: codex session %s\n", codexSessionID)
-			fmt.Fprintf(opts.Stderr, "codex-tty: codex transcript %s\n", transcriptPath)
 			tailState.Lock()
 			tailState.id = codexSessionID
 			tailState.streamed = true
@@ -612,9 +612,6 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	tailState.Unlock()
 
 	if !streamed && opts.Emit != nil && (runnerID == "codex-tty" || runnerID == "commandcode-tty") {
-		if runnerID == "codex-tty" {
-			fmt.Fprintf(opts.Stderr, "codex-tty: codex transcript not found; falling back to scrollback capture\n")
-		}
 		text := strings.TrimSpace(captured)
 		if text != "" {
 			if emitErr := opts.Emit(types.AgentEvent{
@@ -689,7 +686,6 @@ func resolveOpenDetachRunnerSessionID(ctx context.Context, opts RunOptions, runn
 	if sid == "" {
 		return ""
 	}
-	fmt.Fprintf(opts.Stderr, "codex-tty: codex session %s\n", sid)
 	return sid
 }
 

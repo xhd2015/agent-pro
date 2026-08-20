@@ -276,6 +276,7 @@ func runOpenGrokBind(ctx context.Context, opts RunOptions, runner, sessionID, wo
 			if openGrokHardFailOnUnresolved(opts) {
 				res.err = fmt.Errorf("error: grok session id not resolved for session %s (grokHome=%s discErr=%v sessionsRootEntries=%d)",
 					sessionID, grokHome, discErr, len(entries))
+				_ = agentstorage.AppendErrorLog(opts.Store.Home(), sessionID, "grok-session-discovery", res.err)
 			}
 			return res
 		}
@@ -302,17 +303,24 @@ func runOpenGrokBind(ctx context.Context, opts RunOptions, runner, sessionID, wo
 	return res
 }
 
-// debugOpenBind logs open-bind diagnostics when AGENT_RUN_DEBUG_OPEN_BIND is set.
+// debugOpenBind writes opt-in diagnostic traces to a temp file rather than an
+// attached provider TTY when AGENT_RUN_DEBUG_OPEN_BIND is set.
 func debugOpenBind(format string, args ...any) {
 	if strings.TrimSpace(os.Getenv("AGENT_RUN_DEBUG_OPEN_BIND")) == "" {
 		return
 	}
 	msg := fmt.Sprintf(format, args...)
-	_, _ = fmt.Fprintf(os.Stderr, "agent-run open-bind: %s\n", msg)
+	f, err := os.OpenFile(filepath.Join(os.TempDir(), "agent-run-open-bind-debug.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	_, _ = fmt.Fprintf(f, "%s agent-run open-bind: %s\n", time.Now().UTC().Format(time.RFC3339Nano), msg)
 }
 
-// printOpenGrokBindResult writes post-exit grok session lines after attach.
-// Returns a hard error when require-bind discovery failed.
+// printOpenGrokBindResult returns a hard error when require-bind discovery
+// failed. Successful bind state is durable in meta.json and bind.json; it is
+// deliberately not printed into the terminal that hosted the provider TTY.
 func printOpenGrokBindResult(res openGrokBindResult, stderr io.Writer) error {
 	if res.err != nil {
 		return res.err
@@ -321,10 +329,6 @@ func printOpenGrokBindResult(res openGrokBindResult, stderr io.Writer) error {
 	if id == "" {
 		// Soft unbound: no session lines.
 		return nil
-	}
-	_, _ = fmt.Fprintf(stderr, "grok-tty: grok session %s\n", id)
-	if path := strings.TrimSpace(res.updatesPath); path != "" {
-		_, _ = fmt.Fprintf(stderr, "grok-tty: grok updates %s\n", path)
 	}
 	return nil
 }
