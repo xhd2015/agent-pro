@@ -300,11 +300,8 @@ func Run(ctx context.Context, c Config, opts Options) error {
 	// FAKE_CODEX_MOCK_CONFIG must be on the process env for the child runner
 	// (agentexec.Environ starts from os.Environ). Serialize set+spawn+read so
 	// parallel tests with different MockConfig do not cross-contaminate.
-	var mockConfigRelease func()
-	if opts.MockConfig != "" {
-		mockConfigRelease = lockMockConfigEnv(opts.MockConfig)
-		defer mockConfigRelease()
-	}
+	mockConfigRelease := lockMockConfigEnv(opts.MockConfig)
+	defer mockConfigRelease()
 
 	var opencodeSessionID string
 	if !isNew {
