@@ -335,6 +335,12 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 				if err := InjectMessage(listenAddr, sessionID, runnerID, promptText, !opts.NoSubmit); err != nil {
 					recordSessionError(opts, "prompt-inject", err)
 				}
+				// A real Codex TUI can retain the prompt when its initial Enter is
+				// lost. Open used to return before the non-open retry below was
+				// installed, leaving an unintended draft forever.
+				if shouldRetryCodexSubmit(runnerID, provider.BannerProvider, promptText, opts.NoSubmit) {
+					go retryCodexSubmitRemote(ctx, listenAddr, sessionID, promptText)
+				}
 			}
 			sid := resolveOpenDetachRunnerSessionID(ctx, opts, runnerID, provider, configHome, runStart, listenAddr, sessionID)
 			if sid != "" {
@@ -430,9 +436,8 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 
 	var autoExitCancel context.CancelFunc
 	if isCodexProvider(provider.BannerProvider) || runnerID == "codex-tty" {
-		// NoSubmit must not force Enter via retry submit path.
 		// Retry Enter when prompt may still sit in the composer (inject or argv draft).
-		if promptText != "" && !opts.NoSubmit {
+		if shouldRetryCodexSubmit(runnerID, provider.BannerProvider, promptText, opts.NoSubmit) {
 			go retryCodexSubmitRemote(ctx, listenAddr, sessionID, promptText)
 		}
 		if !opts.KeepTerminalAlive {

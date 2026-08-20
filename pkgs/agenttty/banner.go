@@ -436,6 +436,15 @@ func retryCodexSubmitRemote(ctx context.Context, listenAddr, sessionID, prompt s
 	}
 }
 
+// shouldRetryCodexSubmit reports whether a submitted Codex prompt needs the
+// bounded composer retry. Both --open and non-open launches use this: a real
+// Codex TUI can accept the typed prompt while dropping its first Enter.
+// NoSubmit intentionally leaves a draft in the composer and must never retry.
+func shouldRetryCodexSubmit(runnerID, bannerProvider, prompt string, noSubmit bool) bool {
+	return !noSubmit && strings.TrimSpace(prompt) != "" &&
+		(isCodexProvider(bannerProvider) || runnerID == "codex-tty")
+}
+
 func codexPromptStillInInput(scrollback []byte, promptCompact string) bool {
 	plain := stripPlain(scrollback)
 	if strings.Contains(plain, "•") {
