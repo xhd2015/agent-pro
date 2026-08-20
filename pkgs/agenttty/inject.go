@@ -50,11 +50,13 @@ func InjectMessage(listenAddr, sessionID, runner, text string, submit bool) erro
 	return injectSendRetry(listenAddr, sessionID, text, true)
 }
 
-// injectSendRetry retries briefly when the serve/PTY is not yet injectable.
+// injectSendRetry waits briefly for the serve/PTY input endpoint to become
+// injectable after scrollback is already available. CI under parallel load can
+// expose that gap for longer than the original 400ms retry window.
 // ptywrap maps "session exited" to HTTP 404 → "inject endpoint not found".
 func injectSendRetry(listenAddr, sessionID, message string, suffixCR bool) error {
 	var last error
-	for i := 0; i < 8; i++ {
+	for i := 0; i < 60; i++ {
 		last = ttywatch.SendMessage(listenAddr, sessionID, message, suffixCR)
 		if last == nil {
 			return nil
@@ -80,4 +82,3 @@ func injectSessionGone(err error) bool {
 		strings.Contains(msg, "session exited") ||
 		strings.Contains(msg, "session not found")
 }
-

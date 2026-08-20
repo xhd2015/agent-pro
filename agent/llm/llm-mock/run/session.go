@@ -94,11 +94,10 @@ func mirroredSessionsReady(grokHome, workDir string) bool {
 	if err != nil {
 		return false
 	}
-	if ready, _ := sessionRootHasEventsForEncoding(grokHome, url.PathEscape(abs)); ready {
-		return true
-	}
-	// Grok may only have flushed under the canonical /private/var encoding.
-	ready, _ := sessionRootHasEventsForEncoding(grokHome, grokSessionEncoding(abs))
+	// This retry exists to make the caller-facing (unresolved) encoding ready.
+	// A source-only event is not enough: returning then can race a late
+	// link/copy and leave consumers with a missing events.jsonl at toEnc.
+	ready, _ := sessionRootHasEventsForEncoding(grokHome, url.PathEscape(abs))
 	return ready
 }
 

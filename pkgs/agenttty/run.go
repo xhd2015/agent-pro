@@ -315,7 +315,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 				return
 			case <-time.After(200 * time.Millisecond):
 			}
-			if promptText != "" && (isResume || opts.NoSubmit || runnerID == "codex-tty") {
+			if promptText != "" && (isResume || opts.NoSubmit || runnerID == "codex-tty" || runnerID == "commandcode-tty") {
 				if codexOpen {
 					waitForOpenComposer(ctx, listenAddr, sessionID, provider.BannerProvider, openComposerWaitTimeout, agentGone)
 				} else {
