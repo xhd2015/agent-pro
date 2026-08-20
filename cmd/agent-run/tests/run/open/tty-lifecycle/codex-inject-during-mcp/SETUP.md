@@ -39,7 +39,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	script := filepath.Join(req.TempDir, "fake-codex-mcp-inject.sh")
 	body := fmt.Sprintf(`#!/bin/sh
 printf 'OpenAI Codex\n• Starting MCP servers (0/2): slow_30\n› '
-if read -t 8 line; then
+if read -t 20 line; then
   printf 'STDIN=%%s\n' "$line" > %q
 else
   printf 'STDIN_COUNT=0\n' > %q
