@@ -16,13 +16,13 @@ require (
 	github.com/openai/openai-go/v3 v3.29.0
 	github.com/slack-go/slack v0.27.0
 	github.com/tidwall/jsonc v0.3.3
-	github.com/xhd2015/dot-pkgs/go-pkgs v0.0.128
+	github.com/xhd2015/dot-pkgs/go-pkgs v0.0.140
 	github.com/xhd2015/gitops v0.0.31
 	github.com/xhd2015/less-flags v1.0.2
 	github.com/xhd2015/less-gen v0.0.19
 	github.com/xhd2015/skills v0.0.26
 	github.com/xhd2015/tty-watch v0.0.4
-	github.com/xhd2015/xgo v1.2.0
+	github.com/xhd2015/xgo v1.2.8
 	golang.org/x/term v0.45.0
 	gopkg.in/yaml.v3 v3.0.1
 )
