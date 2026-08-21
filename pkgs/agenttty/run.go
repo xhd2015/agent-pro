@@ -745,10 +745,11 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	tailState.Unlock()
 
 	// Scrollback fallback when no provider transcript streamed. keep-tty grok must
-	// not treat PTY chrome as assistant output; codex/commandcode headless always
-	// set KeepAlive, so fake-TUI hooks still need fallback under keep-alive.
+	// not treat PTY chrome as assistant output; codex/commandcode/grok hooks still
+	// need fallback under keep-alive (serve stays up after child exit).
 	allowScrollbackFallback := !opts.KeepTerminalAlive ||
 		(runnerID == "codex-tty" && strings.TrimSpace(os.Getenv(envCodexTTYCommand)) != "") ||
+		(runnerID == "grok-tty" && strings.TrimSpace(os.Getenv(envGrokTTYCommand)) != "") ||
 		runnerID == "commandcode-tty"
 	if !streamed && opts.Emit != nil && allowScrollbackFallback && (runnerID == "codex-tty" || runnerID == "commandcode-tty" || runnerID == "grok-tty") {
 		if runnerID == "codex-tty" {
@@ -874,7 +875,9 @@ func writeIdlePolicyBeforeServe(opts RunOptions) error {
 }
 
 // grokKeepTTYTurnSettled reports whether keep-tty + sync-owned discovery has
-// either bound a runner_session_id or recorded a resolve error in events.jsonl.
+// finished the turn for wait purposes. Bind alone is not enough: chat-tail /
+// delayed updates can arrive after runner_session_id is written, and settling
+// on bind kills the in-process sync worker too early.
 func grokKeepTTYTurnSettled(home, agentSessionID string) bool {
 	home = strings.TrimSpace(home)
 	agentSessionID = strings.TrimSpace(agentSessionID)
@@ -882,15 +885,6 @@ func grokKeepTTYTurnSettled(home, agentSessionID string) bool {
 		return false
 	}
 	sessionDir := filepath.Join(home, "sessions", agentSessionID)
-	metaPath := filepath.Join(sessionDir, "meta.json")
-	if data, err := os.ReadFile(metaPath); err == nil {
-		var meta struct {
-			RunnerSessionID string `json:"runner_session_id"`
-		}
-		if json.Unmarshal(data, &meta) == nil && strings.TrimSpace(meta.RunnerSessionID) != "" {
-			return true
-		}
-	}
 	eventsPath := filepath.Join(sessionDir, "events.jsonl")
 	data, err := os.ReadFile(eventsPath)
 	if err != nil {

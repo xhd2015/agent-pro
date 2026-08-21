@@ -276,6 +276,11 @@ func probeSessionStatus(store agentstorage.Store, meta agentstorage.SessionMeta)
 		default:
 			report.Runner.Status = "unbound"
 		}
+	} else if report.Status == "running" && report.Process.Status == "alive" {
+		// Open bind worker may not have written bind.json yet when meta first
+		// appears; treat live open as binding so mid-open status is not a silent
+		// unbound (status-binding-while-open).
+		report.Runner.Status = "binding"
 	} else {
 		report.Runner.Status = "unbound"
 	}
