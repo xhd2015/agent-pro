@@ -58,6 +58,8 @@ Options:
                       replaces stored value when set
   --prepend-path DIR  append DIR to stored TTY child PATH prefixes (repeatable; TTY only)
   -e, --env KEY=VALUE append env var for the TTY agent runner child (repeatable; TTY only)
+  --env-file PATH     load KEY=VALUE lines from PATH and append to TTY child env (TTY only;
+                      may combine with -e/--env; CLI -e overrides file keys)
   -h, --help          show help
 `
 
@@ -90,6 +92,7 @@ func runResume(args []string, defaultRunner string) error {
 	var agentRunnerConfigHome string
 	var prependPaths []string
 	var envEntries []string
+	var envFile string
 	var keepTTY bool
 	var openFlag bool
 	var detachFlag bool
@@ -113,6 +116,7 @@ func runResume(args []string, defaultRunner string) error {
 		String("--agent-runner-config-home", &agentRunnerConfigHome).
 		StringSlice("--prepend-path", &prependPaths).
 		StringSlice("-e,--env", &envEntries).
+		String("--env-file", &envFile).
 		Help("-h,--help", resumeHelp).
 		Parse(args)
 	if err != nil {
@@ -133,9 +137,6 @@ func runResume(args []string, defaultRunner string) error {
 		prompt = strings.TrimSpace(strings.Join(remaining[1:], " "))
 	}
 
-	if err := validateEnvFlags(envEntries); err != nil {
-		return err
-	}
 	absPrepend, err := resolvePrependPaths(prependPaths)
 	if err != nil {
 		return err
@@ -144,7 +145,10 @@ func runResume(args []string, defaultRunner string) error {
 	if err != nil {
 		return err
 	}
-	envEntries = normalizeEnvEntries(envEntries)
+	envEntries, err = resolveRunEnv(envFile, envEntries)
+	if err != nil {
+		return err
+	}
 
 	if detachFlag && openFlag {
 		return fmt.Errorf("--detach and --open are mutually exclusive; cannot use both")

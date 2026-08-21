@@ -30,6 +30,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	if !strings.Contains(out, "-e") && !strings.Contains(out, "--env") {
 		t.Fatalf("run --help must document -e and/or --env; stdout:\n%s", out)
 	}
+	assertContains(t, out, "--env-file")
 	assertTrailingNewline(t, resp.Stdout, "run help stdout")
 }
 ```

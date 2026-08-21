@@ -177,6 +177,26 @@ func (s *fileStore) UpdateSessionRunnerSessionID(sessionID, runnerSessionID stri
 	return s.bumpGeneration()
 }
 
+func (s *fileStore) ClearSessionRunnerSessionID(sessionID string) error {
+	sess, err := s.GetSession(sessionID)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(sess.Meta.RunnerSessionID) == "" {
+		return nil
+	}
+	sess.Meta.RunnerSessionID = ""
+	sess.Meta.UpdatedAt = nowRFC3339()
+	data, err := json.Marshal(sess.Meta)
+	if err != nil {
+		return err
+	}
+	if err := s.writeMetaJSON(sessionID, data); err != nil {
+		return err
+	}
+	return s.bumpGeneration()
+}
+
 func (s *fileStore) UpdateSessionTerminalSessionID(sessionID, terminalSessionID string) error {
 	sess, err := s.GetSession(sessionID)
 	if err != nil {

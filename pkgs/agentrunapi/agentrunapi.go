@@ -193,6 +193,21 @@ func AutoSendOrResume(ctx context.Context, opts Opts) error {
 		// fall-throughs and parent openInNewTerminal → child paths.)
 		ReclaimZombieTerminalIDs(opts.Store.Home(), effectiveRunner(opts, meta),
 			meta.TerminalSessionID, meta.SessionID, opts.SessionID)
+		// Precheck: do not launch `grok --resume` when local session data is
+		// gone (orphan bind after a hung ForceNew). Clear and ModeRun fresh.
+		if localGrokRunnerSessionMissing(opts, meta) {
+			staleID := strings.TrimSpace(meta.RunnerSessionID)
+			sid := strings.TrimSpace(meta.SessionID)
+			if sid == "" {
+				sid = opts.SessionID
+			}
+			if clearErr := clearStaleRunnerSessionBind(opts.Store, sid, staleID, opts.Stderr); clearErr != nil {
+				return clearErr
+			}
+			meta.RunnerSessionID = ""
+			found = true
+			break // ModeRun below
+		}
 		var resumeErr error
 		if opts.ResumeSession != nil {
 			resumeErr = opts.ResumeSession(ctx, opts, meta)
@@ -205,6 +220,10 @@ func AutoSendOrResume(ctx context.Context, opts Opts) error {
 		fireOnTTYRestarted(opts, meta, "resume")
 		return nil
 	default: // ModeRun
+	}
+
+	// ModeRun (including recover after missing local grok session data).
+	{
 		// Found session re-open (unbound after exit, or first run): free zombie id.
 		if found {
 			ReclaimZombieTerminalIDs(opts.Store.Home(), effectiveRunner(opts, meta),

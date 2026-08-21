@@ -92,8 +92,17 @@ type FollowUpOpts struct {
 	// Empty production: filepath.Join(os.TempDir(), "agent-run-prompt-spill").
 	PromptSpillDir string
 	// Env each "KEY=VALUE" → -e KEY=VALUE before -- / prompt (optional).
+	// When any entry exceeds EnvFileSpillMinRunes (or EnvFile is set), delivery
+	// uses --env-file instead of inline -e (see BuildFollowUpCommand).
 	Env []string
-	// ExtraArgs are inserted after -e flags and before -- / prompt (e.g. event-bus flags).
+	// EnvFile when non-empty: emit --env-file=<abs>; omit all -e flags.
+	// Caller already spilled; do not re-write the file.
+	EnvFile string
+	// EnvSpillDir when auto-spilling long Env entries: write under this dir (tests inject).
+	// Empty production: filepath.Join(os.TempDir(), "agent-run-env-spill").
+	EnvSpillDir string
+	// ExtraArgs are inserted after -e / --env-file flags and before -- / prompt
+	// (e.g. event-bus flags).
 	ExtraArgs []string
 }
 
@@ -154,12 +163,31 @@ func BuildFollowUpCommand(opts FollowUpOpts) (string, error) {
 	if e := strings.TrimSpace(opts.ModelReasoningEffort); e != "" {
 		remainder = append(remainder, "--model-reasoning-effort="+e)
 	}
-	for _, e := range opts.Env {
-		e = strings.TrimSpace(e)
-		if e == "" {
-			continue
+	// Env delivery priority (before ExtraArgs / prompt):
+	// 1. Explicit EnvFile → --env-file=abs; no -e
+	// 2. Any Env entry > EnvFileSpillMinRunes → spill ALL env + --env-file; no -e
+	// 3. Else inline -e KEY=VALUE for each entry
+	if ef := strings.TrimSpace(opts.EnvFile); ef != "" {
+		abs, err := filepath.Abs(ef)
+		if err != nil {
+			return "", fmt.Errorf("env-file path: %w", err)
 		}
-		remainder = append(remainder, "-e", e)
+		remainder = append(remainder, "--env-file="+abs)
+	} else if path, spilled, err := MaybeSpillEnv(opts.Env, EnvSpillOpts{
+		SpillDir:  opts.EnvSpillDir,
+		SessionID: opts.SessionID,
+	}); err != nil {
+		return "", err
+	} else if spilled {
+		remainder = append(remainder, "--env-file="+path)
+	} else {
+		for _, e := range opts.Env {
+			e = strings.TrimSpace(e)
+			if e == "" {
+				continue
+			}
+			remainder = append(remainder, "-e", e)
+		}
 	}
 	for _, a := range opts.ExtraArgs {
 		if a == "" {

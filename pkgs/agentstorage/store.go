@@ -16,6 +16,10 @@ type Store interface {
 	CreateSession(sessionID string, meta SessionMeta) error
 	UpdateSessionStatus(sessionID, status string) error
 	UpdateSessionRunnerSessionID(sessionID, runnerSessionID string) error
+	// ClearSessionRunnerSessionID removes meta.runner_session_id so the next
+	// AutoSendOrResume can ModeRun instead of ModeResume (orphan/missing
+	// provider sessions). No-op when already unbound.
+	ClearSessionRunnerSessionID(sessionID string) error
 	UpdateSessionTerminalSessionID(sessionID, terminalSessionID string) error
 	// UpdateSessionWorkspace sets meta.workspace (e.g. after Grok session relocate).
 	UpdateSessionWorkspace(sessionID, workspace string) error

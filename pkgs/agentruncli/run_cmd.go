@@ -66,6 +66,8 @@ Options:
                       default: AGENT_RUNNER_CONFIG_HOME env
   --prepend-path DIR  prepend DIR to the TTY agent runner child PATH (repeatable; TTY only)
   -e, --env KEY=VALUE set env var on the TTY agent runner child process (repeatable; TTY only)
+  --env-file PATH     load KEY=VALUE lines from PATH into TTY child env (TTY only;
+                      may combine with -e/--env; CLI -e overrides file keys)
   --color             force color on the TTY agent runner child (unset NO_COLOR; FORCE_COLOR/CLICOLOR; TTY only)
 --exit-on-idle      exit the keep-alive TTY after idle-timeout at a sendable prompt
                       (no-op unless --open, --detach, or --keep-tty actually keep a TTY)
@@ -117,6 +119,7 @@ func runHeadless(args []string, defaultRunner string) error {
 	var agentRunnerConfigHome string
 	var prependPaths []string
 	var envEntries []string
+	var envFile string
 	var colorFlag bool
 	var exitOnIdle bool
 	var idleTimeoutRaw string
@@ -154,6 +157,7 @@ func runHeadless(args []string, defaultRunner string) error {
 		String("--agent-runner-config-home", &agentRunnerConfigHome).
 		StringSlice("--prepend-path", &prependPaths).
 		StringSlice("-e,--env", &envEntries).
+		String("--env-file", &envFile).
 		Bool("--color", &colorFlag).
 		Bool("--exit-on-idle", &exitOnIdle).
 		String("--idle-timeout", &idleTimeoutRaw).
@@ -178,9 +182,6 @@ func runHeadless(args []string, defaultRunner string) error {
 		return err
 	}
 
-	if err := validateEnvFlags(envEntries); err != nil {
-		return err
-	}
 	absPrepend, err := resolvePrependPaths(prependPaths)
 	if err != nil {
 		return err
@@ -189,7 +190,10 @@ func runHeadless(args []string, defaultRunner string) error {
 	if err != nil {
 		return err
 	}
-	envEntries = normalizeEnvEntries(envEntries)
+	envEntries, err = resolveRunEnv(envFile, envEntries)
+	if err != nil {
+		return err
+	}
 
 	// Import external Grok session: P1 validation + P2 create/pre-bind + P3 open/detach.
 	// Note: global `agent-run --agent-runner X run ...` strips the flag in main
