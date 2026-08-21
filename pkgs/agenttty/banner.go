@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	bannerWaitTimeout      = 30 * time.Second
-	codexBannerWaitTimeout = 2 * time.Minute
+	// Hard inject-ready wait before first prompt inject (waitForBannerRemote).
+	bannerWaitTimeout      = 3 * time.Minute
+	codexBannerWaitTimeout = 3 * time.Minute
 	// openComposerWaitTimeout: --open inject waits this long for a composer
 	// glyph. MCP chrome does not block (unlike waitForBannerRemoteOpts).
 	openComposerWaitTimeout = 8 * time.Second
