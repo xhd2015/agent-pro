@@ -64,8 +64,9 @@ func WaitReady(opts WaitReadyOpts) error {
 
 func readyTimeoutErr(timeout time.Duration, sessionID, lastStdout string, lastErr error) error {
 	screen, sendable := ParseTTYStatus(lastStdout)
+	runnerID := ParseRunnerSessionIDFromStatus(lastStdout)
 	return fmt.Errorf(
-		"ready timeout after %s: session %q not banner+sendable (screen=%s sendable=%s last status err=%v)",
-		timeout, sessionID, screen, sendable, lastErr,
+		"ready timeout after %s: session %q not idle/banner+sendable+bound (screen=%s sendable=%s runner_session_id=%q last status err=%v)",
+		timeout, sessionID, screen, sendable, runnerID, lastErr,
 	)
 }

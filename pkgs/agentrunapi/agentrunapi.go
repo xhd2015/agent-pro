@@ -158,13 +158,14 @@ func AutoSendOrResume(ctx context.Context, opts Opts) error {
 		opts.Stderr = os.Stderr
 	}
 
-	// Open-mode codex never binds runner_session_id before attach returns.
-	// After /exit, bind from zombie scrollback footer and/or CODEX_HOME rollout
-	// so Classify can ModeResume. EnsureCodexRunnerBound covers discovery +
-	// live scrollback; zombie path remains gated (exit footer) for footer-only.
+	// Open-mode bind can miss before attach returns. Recover runner_session_id
+	// before Classify so close→follow-up can ModeResume instead of ModeRun:
+	//   - codex: zombie scrollback footer / CODEX_HOME rollout
+	//   - grok: bind.json ok artifact / GROK_HOME DiscoverSession
 	if meta, found, rerr := resolveSession(opts.Store, sessionID); rerr == nil && found {
 		meta = tryBindRunnerSessionFromZombie(opts.Store, meta)
 		_, _ = EnsureCodexRunnerBound(opts.Store, meta, productionCodexBindOpts(opts.Store, meta))
+		_, _ = EnsureGrokRunnerBound(opts.Store, meta, productionGrokBindOpts(opts.Store, meta))
 	}
 
 	// Prefer explicit opts.Probe; nil → LifecycleProbe inside Classify.

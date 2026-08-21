@@ -290,7 +290,21 @@ func runOpenGrokBind(ctx context.Context, opts RunOptions, runner, sessionID, wo
 		}
 	}
 	// Persist runner id ASAP for mid-open status / concurrent probes.
-	_ = opts.Store.UpdateSessionRunnerSessionID(sessionID, id)
+	// Hard-require opens must not soft-succeed unbound when store write fails.
+	if err := opts.Store.UpdateSessionRunnerSessionID(sessionID, id); err != nil {
+		finished := time.Now().UTC().Format(time.RFC3339Nano)
+		_ = writeOpenGrokBindState(opts.Store, runner, sessionID, OpenGrokBindState{
+			State:      "failed",
+			StartedAt:  startedAt,
+			FinishedAt: finished,
+			Error:      "persist runner_session_id: " + err.Error(),
+		})
+		if requireBind || openGrokHardFailOnUnresolved(opts) {
+			res.err = fmt.Errorf("error: persist runner_session_id for session %s: %w", sessionID, err)
+			_ = agentstorage.AppendErrorLog(opts.Store.Home(), sessionID, "grok-session-bind-persist", res.err)
+		}
+		return res
+	}
 	finished := time.Now().UTC().Format(time.RFC3339Nano)
 	_ = writeOpenGrokBindState(opts.Store, runner, sessionID, OpenGrokBindState{
 		State:           "ok",

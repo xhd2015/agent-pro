@@ -19,16 +19,20 @@ import (
 //
 // When Opts.Probe / Classify probe is nil, this function is used (not EmptyProbe).
 //
-// For unbound codex runners, best-effort EnsureCodexRunnerBound runs first so
+// For unbound runners, best-effort Ensure*RunnerBound runs first so
 // pollers/status re-reads pick up runner_session_id without callers inventing
 // bind logic. Bind misses never fail the probe.
 func LifecycleProbe(store agentstorage.Store, meta agentstorage.SessionMeta) (ProbeReport, error) {
 	if store == nil {
 		return ProbeReport{}, nil
 	}
-	// Persist codex runner_session_id when discoverable (scrollback / rollout).
+	// Persist provider runner_session_id when discoverable (codex rollout /
+	// grok bind.json + GROK_HOME discovery).
 	if strings.TrimSpace(meta.RunnerSessionID) == "" && isCodexRunner(meta.Runner) {
 		meta, _ = EnsureCodexRunnerBound(store, meta, productionCodexBindOpts(store, meta))
+	}
+	if strings.TrimSpace(meta.RunnerSessionID) == "" && isGrokRunner(meta.Runner) {
+		meta, _ = EnsureGrokRunnerBound(store, meta, productionGrokBindOpts(store, meta))
 	}
 	layers := probeLifecycleLayers(store, meta)
 	return ProbeReport{

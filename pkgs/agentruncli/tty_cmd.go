@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xhd2015/agent-pro/pkgs/agentrunapi"
 	"github.com/xhd2015/agent-pro/pkgs/agentsend"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 	"github.com/xhd2015/less-gen/flags"
@@ -82,18 +83,19 @@ Options:
 `
 
 type ttyStatusData struct {
-	PID             int    `json:"pid"`
-	Port            string `json:"port"`
-	TTYType         string `json:"tty_type"`
-	SessionID       string `json:"session_id"`
-	SessionFilePath string `json:"session_file_path,omitempty"`
-	StartTime       string `json:"start_time"`
-	TCPReachable    bool   `json:"tcp_reachable"`
-	ScreenStatus    string `json:"screen_status,omitempty"`
-	Sendable        bool   `json:"sendable"`
-	SendableReason  string `json:"sendable_reason,omitempty"`
-	SendableState   string `json:"sendable_state,omitempty"`
-	InputBox        string `json:"input_box"`
+	PID               int    `json:"pid"`
+	Port              string `json:"port"`
+	TTYType           string `json:"tty_type"`
+	SessionID         string `json:"session_id"`
+	SessionFilePath   string `json:"session_file_path,omitempty"`
+	StartTime         string `json:"start_time"`
+	TCPReachable      bool   `json:"tcp_reachable"`
+	ScreenStatus      string `json:"screen_status,omitempty"`
+	Sendable          bool   `json:"sendable"`
+	SendableReason    string `json:"sendable_reason,omitempty"`
+	SendableState     string `json:"sendable_state,omitempty"`
+	InputBox          string `json:"input_box"`
+	RunnerSessionID   string `json:"runner_session_id,omitempty"`
 }
 
 func runTty(args []string) error {
@@ -195,6 +197,20 @@ func runTtyStatus(args []string) error {
 	inputToken := strings.TrimSpace(fmt.Sprint(agenttty.DetectInputBox(scrollbackText)))
 	inputHuman, inputJSON := agenttty.InputBoxReport(inputToken)
 
+	runnerSessionID := ""
+	if sess, getErr := store.GetSession(agentSessionID); getErr == nil && sess != nil {
+		meta := sess.Meta
+		// Late bind recover so wait-ready can observe runner_session_id without
+		// a separate AutoSendOrResume call (parity with LifecycleProbe).
+		if strings.TrimSpace(meta.RunnerSessionID) == "" {
+			meta, _ = agentrunapi.EnsureGrokRunnerBound(store, meta, agentrunapi.GrokRunnerBindOpts{
+				GrokHome: agenttty.GrokHomeForRunner(strings.TrimSpace(meta.AgentRunnerConfigHome)),
+			})
+			meta, _ = agentrunapi.EnsureCodexRunnerBound(store, meta, agentrunapi.CodexRunnerBindOpts{})
+		}
+		runnerSessionID = strings.TrimSpace(meta.RunnerSessionID)
+	}
+
 	data := ttyStatusData{
 		PID:             ttySess.Registry.PID,
 		Port:            ttySess.Registry.ListenAddr,
@@ -208,6 +224,7 @@ func runTtyStatus(args []string) error {
 		SendableReason:  writable.Reason,
 		SendableState:   writable.State,
 		InputBox:        inputJSON,
+		RunnerSessionID: runnerSessionID,
 	}
 
 	if jsonFlag {
@@ -235,6 +252,11 @@ func runTtyStatus(args []string) error {
 		fmt.Printf("sendable: no (%s)\n", data.SendableReason)
 	} else {
 		fmt.Printf("sendable: no\n")
+	}
+	if data.RunnerSessionID != "" {
+		fmt.Printf("runner session id: %s\n", data.RunnerSessionID)
+	} else {
+		fmt.Printf("runner session id: (unbound)\n")
 	}
 	fmt.Println(inputHuman)
 	return nil

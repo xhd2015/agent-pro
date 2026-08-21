@@ -33,8 +33,43 @@ func ParseTTYStatus(stdout string) (screen, sendable string) {
 	return screen, sendable
 }
 
-// IsSessionReady reports whether tty status stdout is banner + sendable yes.
+// IsSessionReady reports whether tty status stdout is idle/banner + sendable yes
+// with a bound runner_session_id when that line is present (parity with
+// agentrunapi.IsSessionReadyFromStatus).
 func IsSessionReady(stdout string) bool {
 	screen, sendable := ParseTTYStatus(stdout)
-	return strings.EqualFold(screen, "banner") && strings.EqualFold(sendable, "yes")
+	if !strings.EqualFold(sendable, "yes") {
+		return false
+	}
+	screenOK := strings.EqualFold(screen, "banner") || strings.EqualFold(screen, "idle")
+	if !screenOK {
+		return false
+	}
+	hasBindLine := false
+	for _, line := range strings.Split(stdout, "\n") {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(line)), "runner session id:") {
+			hasBindLine = true
+			break
+		}
+	}
+	if !hasBindLine {
+		return true
+	}
+	for _, line := range strings.Split(stdout, "\n") {
+		line = strings.TrimSpace(line)
+		lower := strings.ToLower(line)
+		if !strings.HasPrefix(lower, "runner session id:") {
+			continue
+		}
+		i := strings.Index(line, ":")
+		if i < 0 {
+			return false
+		}
+		val := strings.TrimSpace(line[i+1:])
+		if val == "" || strings.EqualFold(val, "(unbound)") || strings.EqualFold(val, "unbound") {
+			return false
+		}
+		return true
+	}
+	return false
 }
