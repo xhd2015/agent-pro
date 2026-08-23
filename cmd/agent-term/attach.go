@@ -74,13 +74,22 @@ func (w *attachWSWriter) writePing() error {
 	return w.conn.WriteControl(websocket.PingMessage, nil, deadline)
 }
 
-// attachSession bridges the local TTY to the daemon session.
-//
-// attach_mode=attach claims roleAttacher so a bare disconnect does not
-// stopChild(). SIGINT / Ctrl-C also send detach_keep and return errDetached
-// so the remote command keeps running.
+// attachSession bridges the local TTY to the daemon session with
+// attach_mode=attach (in-place join; roleAttacher).
 func attachSession(c *ptyclient.Client, sessionID string) error {
-	wsURL, err := attachWebSocketURL(c.BaseURL, sessionID)
+	return attachSessionMode(c, sessionID, "attach")
+}
+
+// attachSessionForRun is used by `agent-term run`. attach_mode=open replays
+// raw scrollback so short-lived commands (e.g. echo RUN_OK; exit) are still
+// visible when attach happens after the child exits. SIGINT still sends
+// detach_keep so the remote session survives client detach.
+func attachSessionForRun(c *ptyclient.Client, sessionID string) error {
+	return attachSessionMode(c, sessionID, "open")
+}
+
+func attachSessionMode(c *ptyclient.Client, sessionID, attachMode string) error {
+	wsURL, err := attachWebSocketURLMode(c.BaseURL, sessionID, attachMode)
 	if err != nil {
 		return err
 	}
@@ -160,8 +169,15 @@ func attachSession(c *ptyclient.Client, sessionID string) error {
 			return nil
 		case <-ticker.C:
 			if sessionExited(c, sessionID) {
+				// Close the socket, then drain the reader so the initial
+				// scrollback/prompt frame is written before run prints the id.
 				_ = writer.close(websocket.CloseNormalClosure)
-				return nil
+				select {
+				case err := <-readerErrCh:
+					return normalizeAttachReadError(err)
+				case <-time.After(2 * time.Second):
+					return nil
+				}
 			}
 		}
 	}
@@ -174,6 +190,10 @@ func detachAndClose(writer *attachWSWriter) error {
 }
 
 func attachWebSocketURL(base, sessionID string) (string, error) {
+	return attachWebSocketURLMode(base, sessionID, "attach")
+}
+
+func attachWebSocketURLMode(base, sessionID, attachMode string) (string, error) {
 	u, err := url.Parse(strings.TrimRight(base, "/"))
 	if err != nil {
 		return "", fmt.Errorf("invalid server url %q: %w", base, err)
@@ -191,8 +211,13 @@ func attachWebSocketURL(base, sessionID string) (string, error) {
 	if strings.TrimSpace(sessionID) != "" {
 		q.Set("session_id", sessionID)
 	}
-	// roleAttacher: input/resize allowed; disconnect does not reap the child.
-	q.Set("attach_mode", "attach")
+	mode := strings.TrimSpace(attachMode)
+	if mode == "" {
+		mode = "attach"
+	}
+	// attach: roleAttacher, in-place prompt only.
+	// open: raw scrollback first frame (needed by run for short-lived output).
+	q.Set("attach_mode", mode)
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }

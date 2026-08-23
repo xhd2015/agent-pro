@@ -135,7 +135,9 @@ func runRun(args []string) error {
 		return err
 	}
 	if isInteractiveTerminal(os.Stdin, os.Stdout) {
-		attachErr := attachSession(c, info.ID)
+		// open mode replays scrollback so create→attach cannot miss short-lived
+		// command output (attaches-pty-output / echo RUN_OK).
+		attachErr := attachSessionForRun(c, info.ID)
 		if errors.Is(attachErr, errDetached) {
 			return attachErr
 		}
