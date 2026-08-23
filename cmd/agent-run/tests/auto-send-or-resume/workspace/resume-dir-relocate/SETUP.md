@@ -105,8 +105,10 @@ func writeJSONFile(t *testing.T, path string, v any) {
 	}
 }
 
-// seedInactiveGrokSession writes summary.json under sessions/<encode(cwd)>/<id>/
-// and ensures the session is inactive (empty active_sessions.json).
+// seedInactiveGrokSession writes summary.json + updates.jsonl under
+// sessions/<encode(cwd)>/<id>/ and ensures the session is inactive
+// (empty active_sessions.json). updates.jsonl satisfies resume_recover's
+// localGrokRunnerSessionMissing precheck for auto→resume leaves.
 // Returns the absolute session directory path.
 func seedInactiveGrokSession(t *testing.T, grokHome, cwd, sessionID string) string {
 	t.Helper()
@@ -128,6 +130,9 @@ func seedInactiveGrokSession(t *testing.T, grokHome, cwd, sessionID string) stri
 		"num_chat_messages": 1,
 	}
 	writeJSONFile(t, filepath.Join(dir, "summary.json"), summary)
+	if err := os.WriteFile(filepath.Join(dir, "updates.jsonl"), []byte("{}\n"), 0644); err != nil {
+		t.Fatalf("write updates.jsonl: %v", err)
+	}
 	// Marker so tests can confirm the directory moved (not only recreated).
 	if err := os.WriteFile(filepath.Join(dir, "fixture-marker.txt"), []byte("relocate-v1\n"), 0644); err != nil {
 		t.Fatalf("write fixture marker: %v", err)

@@ -307,16 +307,17 @@ func seedSessionMeta(t *testing.T, req *Request) {
 	}
 	store := openAgentStore(t, req)
 	meta := agentstorage.SessionMeta{
-		Runner:            req.Runner,
-		SessionID:         req.SessionID,
-		Status:            req.MetaStatus,
-		RunnerSessionID:   req.RunnerSessionID,
-		TerminalSessionID: req.TerminalSessionID,
-		Workspace:         req.Workspace,
-		Model:             req.Model,
-		InitialPrompt:     req.InitialPrompt,
-		CreatedAt:         "2026-07-03T12:00:00Z",
-		UpdatedAt:         "2026-07-03T12:00:00Z",
+		Runner:                req.Runner,
+		SessionID:             req.SessionID,
+		Status:                req.MetaStatus,
+		RunnerSessionID:       req.RunnerSessionID,
+		TerminalSessionID:     req.TerminalSessionID,
+		Workspace:             req.Workspace,
+		Model:                 req.Model,
+		InitialPrompt:         req.InitialPrompt,
+		AgentRunnerConfigHome: strings.TrimSpace(req.GrokHome),
+		CreatedAt:             "2026-07-03T12:00:00Z",
+		UpdatedAt:             "2026-07-03T12:00:00Z",
 	}
 	// Flat layout: sessions/<session_id>/meta.json (runner is meta field only).
 	if err := store.CreateSession(req.SessionID, meta); err != nil {
@@ -512,6 +513,41 @@ func startFakePTYWrapServer(t *testing.T, req *Request) {
 	})
 }
 
+// ensureLocalGrokUpdatesForResume writes a minimal updates.jsonl so
+// localGrokRunnerSessionMissing is false for grok ModeResume leaves.
+// Sets req.GrokHome when empty (parallel-safe; no ambient GROK_HOME env).
+func ensureLocalGrokUpdatesForResume(t *testing.T, req *Request) {
+	t.Helper()
+	runner := strings.ToLower(strings.TrimSpace(req.Runner))
+	if runner == "" {
+		runner = defaultRunner
+	}
+	if !(runner == "grok" || runner == "grok-tty" || strings.HasPrefix(runner, "grok")) {
+		return
+	}
+	id := strings.TrimSpace(req.RunnerSessionID)
+	if id == "" {
+		return
+	}
+	if strings.TrimSpace(req.GrokHome) == "" {
+		if req.TempDir == "" {
+			t.Fatal("ensureLocalGrokUpdatesForResume requires TempDir or GrokHome")
+		}
+		req.GrokHome = filepath.Join(req.TempDir, "grok-home")
+	}
+	dir := filepath.Join(req.GrokHome, "sessions", "fixture-ws", id)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatalf("mkdir grok session for resume fixture: %v", err)
+	}
+	updates := filepath.Join(dir, "updates.jsonl")
+	if _, err := os.Stat(updates); err == nil {
+		return
+	}
+	if err := os.WriteFile(updates, []byte("{}\n"), 0644); err != nil {
+		t.Fatalf("write updates.jsonl: %v", err)
+	}
+}
+
 // seedBoundExitedDeadTerminal seeds meta with runner_session_id and no live registry.
 func seedBoundExitedDeadTerminal(t *testing.T, req *Request) {
 	t.Helper()
@@ -532,6 +568,9 @@ func seedBoundExitedDeadTerminal(t *testing.T, req *Request) {
 	if req.InitialPrompt == "" {
 		req.InitialPrompt = "prior turn"
 	}
+	// Resume precheck needs on-disk updates.jsonl; otherwise AutoSendOrResume
+	// clears the bind and ModeRuns (post resume_recover).
+	ensureLocalGrokUpdatesForResume(t, req)
 	seedSessionMeta(t, req)
 	if req.WriteRegistry {
 		req.RegistryPID = -1

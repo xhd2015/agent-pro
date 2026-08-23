@@ -332,9 +332,9 @@ func debugOpenBind(format string, args ...any) {
 	_, _ = fmt.Fprintf(f, "%s agent-run open-bind: %s\n", time.Now().UTC().Format(time.RFC3339Nano), msg)
 }
 
-// printOpenGrokBindResult returns a hard error when require-bind discovery
-// failed. Successful bind state is durable in meta.json and bind.json; it is
-// deliberately not printed into the terminal that hosted the provider TTY.
+// printOpenGrokBindResult writes post-attach CLI stderr lines after --open/--detach
+// join (not into the provider TTY). Returns a hard error when require-bind
+// discovery failed. Soft unbound prints nothing.
 func printOpenGrokBindResult(res openGrokBindResult, stderr io.Writer) error {
 	if res.err != nil {
 		return res.err
@@ -343,6 +343,13 @@ func printOpenGrokBindResult(res openGrokBindResult, stderr io.Writer) error {
 	if id == "" {
 		// Soft unbound: no session lines.
 		return nil
+	}
+	if stderr == nil {
+		stderr = os.Stderr
+	}
+	_, _ = fmt.Fprintf(stderr, "grok-tty: grok session %s\n", id)
+	if path := strings.TrimSpace(res.updatesPath); path != "" {
+		_, _ = fmt.Fprintf(stderr, "grok-tty: grok updates %s\n", path)
 	}
 	return nil
 }
