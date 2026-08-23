@@ -14,7 +14,6 @@ import (
 	codexcfg "github.com/xhd2015/agent-pro/agent/codex/config"
 	codexsessions "github.com/xhd2015/agent-pro/agent/codex/sessions"
 	codexskills "github.com/xhd2015/agent-pro/agent/codex/skills"
-	grokfork "github.com/xhd2015/agent-pro/agent/grok/fork"
 	groksessions "github.com/xhd2015/agent-pro/agent/grok/sessions"
 	grokview "github.com/xhd2015/agent-pro/agent/grok/view"
 	"github.com/xhd2015/agent-pro/agent/opencode/commands"
@@ -28,7 +27,6 @@ import (
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 	"github.com/xhd2015/agent-pro/run"
 	"github.com/xhd2015/agent-pro/server"
-	lib "github.com/xhd2015/dot-pkgs/go-pkgs/shell/iterm2"
 	"github.com/xhd2015/less-gen/flags"
 )
 
@@ -943,11 +941,12 @@ Commands:
   info   <session-id>   show detailed info for one Grok CLI session
   status <session-id>   show dual-signal liveness (file-active + live PIDs)
   focus  <session-id>   focus the iTerm2 tab that hosts this Grok session
+` + groksessions.ResolveCommandHelpLine + `
   files  <session-id>   list regular files in the session directory
   stats  <session-id>   analyse counts, latency, tools, and tasks for one session
   view   <session-id>   print or web-view session messages (in-memory convert)
   prompts [session-id]  list user prompts (one session or recent multi)
-  fork   <session-id>   fork via grok --resume … --fork-session (no agent-run map)
+` + groksessions.ForkCommandHelpLine + `
   backup <session-id>   backup session tree to a self-describing directory
   bookmark <session-id> pin session into multi-runner bookmark catalog
   bookmarks             list grok bookmarks (alias: agent-pro bookmark list --runner grok)
@@ -1008,22 +1007,6 @@ Headers, timestamps, separators, and footer are dim when color is on.
 Notes:
   - session-id cannot be combined with --recent or --limit
   - sessions with zero user prompts (or zero in-window prompts) are skipped
-`
-
-const grokSessionForkHelp = `
-Usage: agent-pro grok session fork <session-id> [OPTIONS]
-
-Fork a Grok CLI session using the native flag:
-  grok --resume <session-id> --fork-session
-
-Does not use agent-run storage (avoids already-mapped import limits).
-
-Options:
-  -n, --new-terminal   open a new iTerm2 window and run the fork command there
-  --dir DIR            workspace (default: session info.cwd from GROK_HOME)
-  --session-id UUID    optional id for the forked Grok session
-  --dry-run            print plan only; do not launch
-  -h,--help            show help
 `
 
 const grokSessionInfoHelp = `
@@ -1130,6 +1113,8 @@ func handleGrokSession(args []string) error {
 		return handleGrokSessionStatus(args[1:])
 	case "focus":
 		return handleGrokSessionFocus(args[1:])
+	case "resolve":
+		return handleGrokSessionResolve(args[1:])
 	case "files":
 		return handleGrokSessionFiles(args[1:])
 	case "stats":
@@ -1341,107 +1326,13 @@ func handleGrokSessionPrompts(args []string) error {
 	})
 }
 
-// grokSessionOpenInNewTerminal is injectable for tests (default: iTerm ForceNew).
-var grokSessionOpenInNewTerminal = defaultGrokSessionOpenInNewTerminal
-
-func defaultGrokSessionOpenInNewTerminal(dir, followUp string) error {
-	return lib.OpenConfig(dir, &lib.Config{
-		Mode:             lib.ModeForceNew,
-		FollowUpCommands: []string{followUp},
-		SafeInputIgnore:  true,
-	})
-}
-
 func handleGrokSessionFork(args []string) error {
-	var newTerminal bool
-	var dryRun bool
-	var dir string
-	var newSessionID string
-	remaining, err := flags.Bool("-n,--new-terminal", &newTerminal).
-		Bool("--dry-run", &dryRun).
-		String("--dir", &dir).
-		String("--session-id", &newSessionID).
-		Help("-h,--help", grokSessionForkHelp).
-		Parse(args)
-	if err != nil {
-		return err
-	}
-	if len(remaining) != 1 {
-		return fmt.Errorf("expected exactly one session id, got %d arguments", len(remaining))
-	}
-	sessionID := strings.TrimSpace(remaining[0])
-	if sessionID == "" {
-		return fmt.Errorf("session id is required")
-	}
-
-	grokHome := agenttty.GrokHome()
-	info, err := groksessions.Info(grokHome, sessionID)
-	if err != nil {
-		return err
-	}
-
-	cwd := strings.TrimSpace(dir)
-	if cwd == "" {
-		cwd = strings.TrimSpace(info.CWD)
-	}
-	if cwd == "" {
-		return fmt.Errorf("session %s has empty cwd; pass --dir", sessionID)
-	}
-	abs, absErr := filepath.Abs(cwd)
-	if absErr != nil {
-		return fmt.Errorf("workspace dir: %w", absErr)
-	}
-	if real, e := filepath.EvalSymlinks(abs); e == nil {
-		abs = real
-	}
-	st, stErr := os.Stat(abs)
-	if stErr != nil {
-		return fmt.Errorf("workspace dir: %w", stErr)
-	}
-	if !st.IsDir() {
-		return fmt.Errorf("workspace dir: not a directory: %s", abs)
-	}
-	cwd = abs
-
-	launch := grokfork.SessionLaunch{
-		SessionID:    sessionID,
-		NewSessionID: newSessionID,
-		Dir:          cwd,
-		Bin:          "grok",
-		Env:          os.Environ(),
-	}
-	cmdLine := launch.QuotedCommandLine()
-
-	if dryRun {
-		fmt.Println("Would fork grok session")
-		fmt.Printf("  grok id:   %s\n", sessionID)
-		fmt.Printf("  cwd:       %s\n", cwd)
-		fmt.Printf("  command:   %s\n", cmdLine)
-		if newTerminal {
-			fmt.Println("  terminal:  new iTerm2 window")
-		} else {
-			fmt.Println("  terminal:  current")
-		}
-		return nil
-	}
-
-	if newTerminal {
-		// Keep -n opening iTerm with grok --resume --fork-session (not grok-fork --session-id).
-		if err := grokSessionOpenInNewTerminal(cwd, cmdLine); err != nil {
-			return fmt.Errorf("open new terminal: %w", err)
-		}
-		fmt.Printf("Opened new window; forking grok session %s\n", sessionID)
-		return nil
-	}
-
-	if err := grokfork.Fork(&grokfork.Options{
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
-		Env:    os.Environ(),
-	}, sessionID, newSessionID, cwd); err != nil {
-		return fmt.Errorf("grok fork: %w", err)
-	}
-	return nil
+	return groksessions.RunFork(args, &groksessions.ForkOpts{
+		Stdout:   os.Stdout,
+		Stderr:   os.Stderr,
+		GrokHome: agenttty.GrokHome(),
+		Env:      os.Environ(),
+	})
 }
 
 func handleGrokSessionInfo(args []string) error {
@@ -1483,6 +1374,14 @@ func handleGrokSessionInfo(args []string) error {
 
 func handleGrokSessionFocus(args []string) error {
 	return groksessions.RunFocus(args, os.Stdout, agenttty.GrokHome(), nil)
+}
+
+func handleGrokSessionResolve(args []string) error {
+	return groksessions.RunResolve(args, &groksessions.ResolveOpts{
+		Stdout:   os.Stdout,
+		Stderr:   os.Stderr,
+		GrokHome: agenttty.GrokHome(),
+	})
 }
 
 func handleGrokSessionStatus(args []string) error {
