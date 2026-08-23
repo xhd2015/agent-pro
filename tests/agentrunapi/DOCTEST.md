@@ -432,14 +432,24 @@ func runAuto(t *testing.T, d *session.Doctest, req *Request, resp *Response) (*R
 	}
 
 	opts := agentrunapi.Opts{
-		SessionID: req.SessionID,
-		Prompt:    req.Prompt,
-		Open:      req.Open,
-		Detach:    req.Detach,
-		Store:     store,
+		SessionID:    req.SessionID,
+		Prompt:       req.Prompt,
+		Open:         req.Open,
+		Detach:       req.Detach,
+		Store:        store,
+		AgentRunner:  req.Runner,
+		WorkspaceDir: req.Workspace,
 		// P1 unit path: never new-terminal / never agent-run binary.
 		NewTerminal: false,
 		Probe:       selectProbe(req),
+	}
+	// Resume precheck needs on-disk grok updates.jsonl when runner is grok-tty;
+	// otherwise AutoSendOrResume clears the bind and ModeRuns (post resume_recover).
+	// Use RunnerConfigHome (not GROK_HOME env) so parallel doctest leaves stay safe.
+	if home, err := ensureLocalGrokUpdatesForResume(t, req); err != nil {
+		return nil, err
+	} else if home != "" {
+		opts.RunnerConfigHome = home
 	}
 	if req.InstallHooks {
 		opts.RunSession = func(ctx context.Context, o agentrunapi.Opts, meta agentstorage.SessionMeta, found bool) error {
@@ -641,5 +651,32 @@ func makeProbe(req *Request) agentrunapi.ProbeFunc {
 		}
 		return rep, nil
 	}
+}
+
+// ensureLocalGrokUpdatesForResume writes a minimal updates.jsonl so
+// localGrokRunnerSessionMissing is false for grok resume dispatch leaves.
+// Returns the grok home to pass as Opts.RunnerConfigHome (parallel-safe; no env).
+func ensureLocalGrokUpdatesForResume(t *testing.T, req *Request) (grokHome string, err error) {
+	t.Helper()
+	runner := strings.ToLower(strings.TrimSpace(req.Runner))
+	if runner == "" {
+		runner = "grok-tty"
+	}
+	if !(runner == "grok" || runner == "grok-tty" || strings.HasPrefix(runner, "grok")) {
+		return "", nil
+	}
+	id := strings.TrimSpace(req.RunnerSessionID)
+	if id == "" {
+		return "", nil
+	}
+	grokHome = t.TempDir()
+	dir := filepath.Join(grokHome, "sessions", "fixture-ws", id)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "updates.jsonl"), []byte("{}\n"), 0o644); err != nil {
+		return "", err
+	}
+	return grokHome, nil
 }
 ```
