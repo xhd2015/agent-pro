@@ -29,7 +29,7 @@ type AgentRunOpenResult struct {
 	Mode              string // send | resume | run | focus
 	Opened            bool   // true when a new window was (or would be) launched
 	Focused           bool   // true when an existing agent-run host was focused
-	Delivered         bool   // true when the prompt was already delivered (ModeSend)
+	Delivered         bool   // true when the prompt was already delivered
 	Command           string // follow-up command for resume/run window (dry-run / ack)
 	CWD               string
 }
@@ -50,69 +50,73 @@ type agentRunOpenHooks struct {
 	Stderr          io.Writer
 
 	// AgentRunOpen, when set, replaces production lookup+deliver.
-	// Return (nil, nil) for soft miss; error containing "ambiguous" → warning + miss.
+	// Return (nil, nil) for soft miss (not managed).
+	// Return (nil, err) with "ambiguous" → warning + soft miss.
+	// Return (nil, err) otherwise → hard error (managed deliver failed).
+	// Return (hit, nil) on success.
 	AgentRunOpen func(grokSessionID, prompt string) (*AgentRunOpenResult, error)
 }
 
-// preferAgentRunOpen runs the injectable hook or production prefer for --open.
-// Soft miss → ok=false (caller falls back to grok --resume).
-func preferAgentRunOpen(hooks agentRunOpenHooks, grokSessionID, prompt string) (hit *AgentRunOpenResult, warn string, ok bool) {
+// preferAgentRunOpen runs the injectable hook or production prefer.
+// Soft miss: hit==nil && err==nil (caller may fall through to iTerm).
+// Hard fail: err!=nil (managed id; never fall through to bare grok --resume).
+// Success: hit!=nil && err==nil.
+func preferAgentRunOpen(hooks agentRunOpenHooks, grokSessionID, prompt string) (hit *AgentRunOpenResult, warn string, err error) {
 	if hooks.NoAgentRun {
-		return nil, "", false
+		return nil, "", nil
 	}
 	if hooks.AgentRunOpen != nil {
-		res, err := hooks.AgentRunOpen(grokSessionID, prompt)
-		if err != nil {
-			if strings.Contains(err.Error(), "ambiguous") {
-				return nil, "warning: " + err.Error() + "; falling back to grok --resume", false
+		res, herr := hooks.AgentRunOpen(grokSessionID, prompt)
+		if herr != nil {
+			if strings.Contains(herr.Error(), "ambiguous") {
+				return nil, "warning: " + herr.Error() + "; falling back to grok --resume", nil
 			}
-			return nil, "", false
+			return nil, "", fmt.Errorf("agent-run deliver failed: %w", herr)
 		}
 		if res == nil {
-			return nil, "", false
+			return nil, "", nil
 		}
-		return res, "", true
+		return res, "", nil
 	}
 	// Production only when no L2 inject (keeps fakes off real agent-run home).
 	if hooks.SkipProduction {
-		return nil, "", false
+		return nil, "", nil
 	}
 	return tryAgentRunOpen(hooks, grokSessionID, prompt)
 }
 
-func tryAgentRunOpen(hooks agentRunOpenHooks, grokSessionID, prompt string) (hit *AgentRunOpenResult, warn string, ok bool) {
-	home, err := resolveAgentRunHome(hooks.AgentRunHome)
-	if err != nil || home == "" {
-		return nil, "", false
+func tryAgentRunOpen(hooks agentRunOpenHooks, grokSessionID, prompt string) (hit *AgentRunOpenResult, warn string, err error) {
+	home, herr := resolveAgentRunHome(hooks.AgentRunHome)
+	if herr != nil || home == "" {
+		return nil, "", nil
 	}
-	store, err := agentstorage.NewFileStore(home)
-	if err != nil {
-		return nil, "", false
+	store, serr := agentstorage.NewFileStore(home)
+	if serr != nil {
+		return nil, "", nil
 	}
-	meta, err := agentstorage.FindByGrokSessionID(store, grokSessionID)
-	if err != nil {
-		msg := err.Error()
+	meta, ferr := agentstorage.FindByGrokSessionID(store, grokSessionID)
+	if ferr != nil {
+		msg := ferr.Error()
 		if strings.Contains(msg, "ambiguous") {
-			return nil, "warning: " + msg + "; falling back to grok --resume", false
+			return nil, "warning: " + msg + "; falling back to grok --resume", nil
 		}
-		return nil, "", false
+		return nil, "", nil // not managed
 	}
 	arID := strings.TrimSpace(meta.SessionID)
 	if arID == "" {
-		return nil, "", false
+		return nil, "", nil
 	}
 
-	mode, _, found, err := agentrunapi.Classify(store, arID, nil)
-	if err != nil || !found {
-		return nil, "", false
+	mode, _, found, cerr := agentrunapi.Classify(store, arID, nil)
+	if cerr != nil {
+		return nil, "", fmt.Errorf("agent-run deliver failed for %s: classify: %w", arID, cerr)
+	}
+	if !found {
+		return nil, "", fmt.Errorf("agent-run deliver failed for %s: session disappeared after lookup", arID)
 	}
 
 	cwd, cwdErr := resolveOpenCWD(hooks.Info, hooks.Dir)
 	if cwdErr != nil {
-		// Resume/run need cwd; live send/focus can proceed without.
-		if mode != agentrunapi.ModeSend {
-			return nil, "", false
-		}
 		cwd = ""
 	}
 
@@ -126,21 +130,21 @@ func tryAgentRunOpen(hooks agentRunOpenHooks, grokSessionID, prompt string) (hit
 					Mode:              AgentRunOpenModeFocus,
 					Focused:           true,
 					CWD:               cwd,
-				}, "", true
+				}, "", nil
 			}
 			_, ferr := agentrunapi.FocusSession(agentrunapi.FocusOpts{
 				Store:     store,
 				SessionID: arID,
 			})
 			if ferr != nil {
-				return nil, "warning: agent-run session is live but focus failed: " + ferr.Error() + "; falling back to grok --resume", false
+				return nil, "", fmt.Errorf("agent-run deliver failed for %s: focus: %w", arID, ferr)
 			}
 			return &AgentRunOpenResult{
 				AgentRunSessionID: arID,
 				Mode:              AgentRunOpenModeFocus,
 				Focused:           true,
 				CWD:               cwd,
-			}, "", true
+			}, "", nil
 		}
 		if hooks.DryRun {
 			return &AgentRunOpenResult{
@@ -148,42 +152,47 @@ func tryAgentRunOpen(hooks agentRunOpenHooks, grokSessionID, prompt string) (hit
 				Mode:              AgentRunOpenModeSend,
 				Delivered:         true,
 				CWD:               cwd,
-			}, "", true
+			}, "", nil
 		}
 		stderr := hooks.Stderr
 		if stderr == nil {
 			stderr = os.Stderr
 		}
-		err = agentrunapi.AutoSendOrResume(context.Background(), agentrunapi.Opts{
+		if asrErr := agentrunapi.AutoSendOrResume(context.Background(), agentrunapi.Opts{
 			SessionID: arID,
 			Prompt:    prompt,
 			Open:      true,
 			NoSubmit:  hooks.NoSubmit,
 			Store:     store,
-			Stdout:    io.Discard, // enqueue id must not leak onto kck/agent-pro send stdout
+			Stdout:    io.Discard,
 			Stderr:    stderr,
-		})
-		if err != nil {
-			return nil, "", false
+		}); asrErr != nil {
+			return nil, "", fmt.Errorf("agent-run deliver failed for %s: %w", arID, asrErr)
 		}
 		return &AgentRunOpenResult{
 			AgentRunSessionID: arID,
 			Mode:              AgentRunOpenModeSend,
 			Delivered:         true,
 			CWD:               cwd,
-		}, "", true
+		}, "", nil
 
 	case agentrunapi.ModeResume, agentrunapi.ModeRun:
 		modeStr := AgentRunOpenModeResume
 		if mode == agentrunapi.ModeRun {
 			modeStr = AgentRunOpenModeRun
 		}
+		// Exited/unbound: ForceNew with agent-run (never bare grok --resume).
 		if cwd == "" {
-			return nil, "", false
+			if w := strings.TrimSpace(meta.Workspace); w != "" {
+				cwd = w
+			}
+		}
+		if cwd == "" {
+			return nil, "", fmt.Errorf("agent-run deliver failed for %s: empty workspace; pass --dir", arID)
 		}
 		bin, berr := resolveAgentRunBin(hooks.AgentRunBin, hooks.LookPath)
 		if berr != nil {
-			return nil, "", false
+			return nil, "", fmt.Errorf("agent-run deliver failed for %s: %w", arID, berr)
 		}
 		cmdLine := buildAgentRunAutoOpenCommand(bin, arID, cwd, prompt, hooks.NoSubmit)
 		if hooks.DryRun {
@@ -194,14 +203,14 @@ func tryAgentRunOpen(hooks agentRunOpenHooks, grokSessionID, prompt string) (hit
 				Delivered:         strings.TrimSpace(prompt) != "",
 				Command:           cmdLine,
 				CWD:               cwd,
-			}, "", true
+			}, "", nil
 		}
 		openFn := hooks.OpenInNewWindow
 		if openFn == nil {
 			openFn = defaultOpenInNewWindow
 		}
-		if err := openFn(cwd, cmdLine); err != nil {
-			return nil, "", false
+		if oerr := openFn(cwd, cmdLine); oerr != nil {
+			return nil, "", fmt.Errorf("agent-run deliver failed for %s: open window: %w", arID, oerr)
 		}
 		return &AgentRunOpenResult{
 			AgentRunSessionID: arID,
@@ -210,10 +219,10 @@ func tryAgentRunOpen(hooks agentRunOpenHooks, grokSessionID, prompt string) (hit
 			Delivered:         strings.TrimSpace(prompt) != "",
 			Command:           cmdLine,
 			CWD:               cwd,
-		}, "", true
+		}, "", nil
 
 	default:
-		return nil, "", false
+		return nil, "", fmt.Errorf("agent-run deliver failed for %s: unknown mode %q", arID, mode)
 	}
 }
 

@@ -1,6 +1,6 @@
 ## Expected
 
-- Prefer live agent-run send; no grok `--resume` window; no SendText.
+- Prefer live agent-run send even with an iTerm host; no SendText / no open.
 
 ```go
 import (

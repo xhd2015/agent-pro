@@ -33,9 +33,9 @@ No live AppleScript.
 - No live host without `--open` → hard error; SendText not called.
 - `--open` with no host → open resume, wait for host, then send (two stdout lines).
 - `--open` timeout → hard error after wait.
-- `--open` + agent-run-managed live → send via agent-run (no grok --resume / SendText).
-- `--open` + agent-run-managed exited → agent-run resume window (prompt in child).
-- `--open --no-agent-run` forces bare grok --resume even when managed.
+- Agent-run-managed `--session-id` → prefer agent-run first (even with iTerm host; no SendText).
+- Managed exited → in-process agent-run resume (no iTerm window).
+- `--no-agent-run` forces iTerm / bare grok --resume even when managed.
 - Ambiguous agent-run mapping → warning + fall back to grok --resume.
 - `--tab` resolves via `ResolveFromTab` then sends.
 - Flag opts (`--no-submit` / `--focus` / `--no-ctrl-u`) plumb into SendText.
@@ -67,6 +67,7 @@ send/
 │   └── agent-run/
 │       ├── live-send/
 │       ├── resume-send/
+│       ├── deliver-fail/
 │       ├── no-agent-run/
 │       └── ambiguous-warn/
 ├── tab/
@@ -94,8 +95,9 @@ send/
 | `send/no-live/` | Hard error without `--open`. |
 | `open/resume-then-send/` | Open then send; two stdout lines. |
 | `open/timeout/` | Wait expires → timeout error. |
-| `open/agent-run/live-send/` | Prefer live agent-run send; no grok --resume / SendText. |
-| `open/agent-run/resume-send/` | Prefer agent-run resume window; no SendText. |
+| `open/agent-run/live-send/` | Prefer live agent-run even with iTerm host; no SendText. |
+| `open/agent-run/resume-send/` | Prefer agent-run ForceNew resume (not bare grok). |
+| `open/agent-run/deliver-fail/` | Managed deliver fail → hard error; no ForceNew. |
 | `open/agent-run/no-agent-run/` | `--no-agent-run` forces bare grok --resume. |
 | `open/agent-run/ambiguous-warn/` | Ambiguous mapping warns and falls back. |
 | `tab/hit-send/` | `--tab 1` sends to resolved pane. |

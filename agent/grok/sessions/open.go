@@ -208,7 +208,7 @@ func Open(grokHome, sessionID string, opts *OpenOpts) (*OpenResult, error) {
 		stderr = os.Stderr
 	}
 
-	arHit, arWarn, arOK := preferAgentRunOpen(agentRunOpenHooks{
+	arHit, arWarn, arErr := preferAgentRunOpen(agentRunOpenHooks{
 		NoAgentRun:      opts.NoAgentRun,
 		AgentRunHome:    opts.AgentRunHome,
 		DryRun:          opts.DryRun,
@@ -222,7 +222,10 @@ func Open(grokHome, sessionID string, opts *OpenOpts) (*OpenResult, error) {
 		AgentRunOpen:    opts.AgentRunOpen,
 	}, sessionID, "")
 	writeAgentRunOpenWarn(stderr, arWarn)
-	if arOK && arHit != nil {
+	if arErr != nil {
+		return nil, arErr
+	}
+	if arHit != nil {
 		cmd := arHit.Command
 		if arHit.Opened && !opts.DryRun && opts.AgentRunOpen != nil {
 			if cmd == "" {
@@ -233,7 +236,7 @@ func Open(grokHome, sessionID string, opts *OpenOpts) (*OpenResult, error) {
 				openFn = defaultOpenInNewWindow
 			}
 			if err := openFn(arHit.CWD, cmd); err != nil {
-				return nil, fmt.Errorf("open new window: %w", err)
+				return nil, fmt.Errorf("agent-run deliver failed: open window: %w", err)
 			}
 		}
 		if arHit.Focused {

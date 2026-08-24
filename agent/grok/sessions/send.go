@@ -20,8 +20,9 @@ Same write-text path as: kool iterm2 session <iterm-uuid> send …
 By default requires a hosting iTerm tab. With --open, resumes in a new
 window when no host is found, waits for the tab to appear, then sends.
 When the Grok id is bound in agent-run (grok/grok-tty runner_session_id),
---open prefers agent-run auto-send-or-resume instead of bare grok --resume
-(live → send queue; exited → agent-run resume in a new window).
+--session-id prefers agent-run auto-send-or-resume directly (live → send
+queue; exited → resume) with no iTerm discovery or SendText.
+--tab / --tab-index still target iTerm panes explicitly.
 
 Session source (exactly one):
   --session-id ID       Grok session id
@@ -35,7 +36,7 @@ Options:
   --focus               switch to the session's window/tab before writing
   --no-ctrl-u           do not prefix Ctrl-U (default prefixes Ctrl-U)
   --open                if no hosting tab: resume in a new window, then send
-  --no-agent-run        with --open: force bare grok --resume (skip agent-run prefer)
+  --no-agent-run        force iTerm path (skip agent-run prefer for --session-id)
   --dir DIR             workspace for --open resume (default: session cwd)
   --dry-run             resolve only; do not open or call SendText
   --enter               append Enter (\n) to the send sequence
@@ -317,6 +318,57 @@ func resolveSendHost(info *SessionInfo, sessionID, text string, opts *SendOpts) 
 		return sendHostResolution{Candidate: focusCandidateFromTab(opts.TabFrom)}, nil
 	}
 
+	stderr := opts.Stderr
+	if stderr == nil {
+		stderr = os.Stderr
+	}
+
+	// Prefer agent-run BEFORE any iTerm discovery when --session-id is managed.
+	arHit, arWarn, arErr := preferAgentRunOpen(agentRunOpenHooks{
+		NoAgentRun:      opts.NoAgentRun,
+		AgentRunHome:    opts.AgentRunHome,
+		DryRun:          opts.DryRun,
+		NoSubmit:        opts.NoSubmit,
+		Dir:             opts.Dir,
+		Info:            info,
+		SkipProduction:  opts.ListProcs != nil || opts.ListITerm != nil,
+		OpenInNewWindow: opts.OpenInNewWindow,
+		AgentRunBin:     opts.AgentRunBin,
+		LookPath:        opts.LookPath,
+		Stderr:          stderr,
+		AgentRunOpen:    opts.AgentRunOpen,
+	}, sessionID, text)
+	writeAgentRunOpenWarn(stderr, arWarn)
+	if arErr != nil {
+		// Managed deliver failed — never fall through to bare grok --resume.
+		return sendHostResolution{}, arErr
+	}
+	if arHit != nil {
+		cmd := arHit.Command
+		if arHit.Opened && !opts.DryRun && opts.AgentRunOpen != nil {
+			// Injectable prefer returns metadata only; launch here.
+			if cmd == "" {
+				cmd = "agent-run run --session-id " + arHit.AgentRunSessionID + " --auto-send-or-resume --open"
+			}
+			openFn := opts.OpenInNewWindow
+			if openFn == nil {
+				openFn = defaultOpenInNewWindow
+			}
+			if err := openFn(arHit.CWD, cmd); err != nil {
+				return sendHostResolution{}, fmt.Errorf("agent-run deliver failed: open window: %w", err)
+			}
+		}
+		return sendHostResolution{
+			Opened:            arHit.Opened,
+			ViaAgentRun:       true,
+			AgentRunSessionID: arHit.AgentRunSessionID,
+			AgentRunMode:      arHit.Mode,
+			Delivered:         arHit.Delivered,
+			CWD:               arHit.CWD,
+			Command:           cmd,
+		}, nil
+	}
+
 	focusOpts := &FocusOpts{
 		Index:     opts.Index,
 		ListProcs: opts.ListProcs,
@@ -340,53 +392,6 @@ func resolveSendHost(info *SessionInfo, sessionID, text string, opts *SendOpts) 
 
 	if !opts.Open {
 		return sendHostResolution{}, fmt.Errorf("no hosting iTerm tab for session %s", sessionID)
-	}
-
-	stderr := opts.Stderr
-	if stderr == nil {
-		stderr = os.Stderr
-	}
-
-	// Prefer agent-run when this Grok id is managed there.
-	arHit, arWarn, arOK := preferAgentRunOpen(agentRunOpenHooks{
-		NoAgentRun:      opts.NoAgentRun,
-		AgentRunHome:    opts.AgentRunHome,
-		DryRun:          opts.DryRun,
-		NoSubmit:        opts.NoSubmit,
-		Dir:             opts.Dir,
-		Info:            info,
-		SkipProduction:  opts.ListProcs != nil || opts.ListITerm != nil,
-		OpenInNewWindow: opts.OpenInNewWindow,
-		AgentRunBin:     opts.AgentRunBin,
-		LookPath:        opts.LookPath,
-		Stderr:          stderr,
-		AgentRunOpen:    opts.AgentRunOpen,
-	}, sessionID, text)
-	writeAgentRunOpenWarn(stderr, arWarn)
-	if arOK && arHit != nil {
-		cmd := arHit.Command
-		if arHit.Opened && !opts.DryRun && opts.AgentRunOpen != nil {
-			// Injectable prefer returns metadata only; launch here (production already did).
-			if cmd == "" {
-				cmd = "agent-run run --session-id " + arHit.AgentRunSessionID + " --auto-send-or-resume --open"
-			}
-			openFn := opts.OpenInNewWindow
-			if openFn == nil {
-				openFn = defaultOpenInNewWindow
-			}
-			if err := openFn(arHit.CWD, cmd); err != nil {
-				return sendHostResolution{}, fmt.Errorf("open new window: %w", err)
-			}
-		}
-		return sendHostResolution{
-			Opened:            arHit.Opened,
-			ViaAgentRun:       true,
-			AgentRunSessionID: arHit.AgentRunSessionID,
-			AgentRunMode:      arHit.Mode,
-			Delivered:         arHit.Delivered,
-			CWD:               arHit.CWD,
-			Command:           cmd,
-		}, nil
 	}
 
 	cwd, err := resolveOpenCWD(info, opts.Dir)
@@ -545,7 +550,14 @@ func RunSend(args []string, stdout, stderr io.Writer, grokHome string, opts *Sen
 	}
 
 	if parsed.DryRun {
-		if result.ViaAgentRun && result.AgentRunMode == AgentRunOpenModeSend {
+		if result.ViaAgentRun && result.Opened {
+			fmt.Fprintln(stdout, "Would open new iTerm2 window via agent-run")
+			fmt.Fprintf(stdout, "  grok id:       %s\n", sessionID)
+			fmt.Fprintf(stdout, "  agent-run id:  %s\n", result.AgentRunSessionID)
+			fmt.Fprintf(stdout, "  mode:          %s\n", result.AgentRunMode)
+			fmt.Fprintf(stdout, "  cwd:           %s\n", result.CWD)
+			fmt.Fprintf(stdout, "  command:       %s\n", result.Command)
+		} else if result.ViaAgentRun {
 			fmt.Fprintln(stdout, "Would send via agent-run")
 			fmt.Fprintf(stdout, "  grok id:       %s\n", sessionID)
 			fmt.Fprintf(stdout, "  agent-run id:  %s\n", result.AgentRunSessionID)
@@ -553,9 +565,6 @@ func RunSend(args []string, stdout, stderr io.Writer, grokHome string, opts *Sen
 		} else if result.Opened {
 			fmt.Fprintln(stdout, "Would open new iTerm2 window")
 			fmt.Fprintf(stdout, "  grok id:  %s\n", sessionID)
-			if result.ViaAgentRun {
-				fmt.Fprintf(stdout, "  agent-run id: %s\n", result.AgentRunSessionID)
-			}
 			fmt.Fprintf(stdout, "  cwd:      %s\n", result.CWD)
 			fmt.Fprintf(stdout, "  command:  %s\n", result.Command)
 		} else {
