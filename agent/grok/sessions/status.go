@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/xhd2015/agent-pro/pkgs/procresolve"
+	"github.com/xhd2015/dot-pkgs/go-pkgs/pathfmt"
 )
 
 // LivePID is one live process hard-hitting a session via open files.
@@ -27,6 +28,7 @@ type LiveOptions struct {
 // SessionStatus is dual-signal liveness for one Grok session.
 type SessionStatus struct {
 	SessionID  string
+	Path       string // absolute summary.json path from Find (display via TildeHome)
 	FileActive bool
 	PIDs       []LivePID
 	PIDChecked bool
@@ -83,7 +85,8 @@ func LivePIDsForSession(sessionID string, opts *LiveOptions) ([]LivePID, error) 
 // Finds the session first (unknown id → error). When checkPID, scans live PIDs.
 func Status(grokHome, sessionID string, checkPID bool, live *LiveOptions) (*SessionStatus, error) {
 	sessionID = strings.TrimSpace(sessionID)
-	if _, err := Find(grokHome, sessionID); err != nil {
+	session, err := Find(grokHome, sessionID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -94,6 +97,7 @@ func Status(grokHome, sessionID string, checkPID bool, live *LiveOptions) (*Sess
 
 	st := &SessionStatus{
 		SessionID:  sessionID,
+		Path:       session.Path,
 		FileActive: fileActive,
 		PIDChecked: checkPID,
 	}
@@ -149,6 +153,7 @@ func argv0Base(cmd string) string {
 }
 
 // FormatStatusText renders human-readable session status for CLI.
+// Path is display-shortened with pathfmt.TildeHome (not for I/O).
 func FormatStatusText(st *SessionStatus) string {
 	if st == nil {
 		return ""
@@ -160,6 +165,9 @@ func FormatStatusText(st *SessionStatus) string {
 		fileWord = "yes"
 	}
 	fmt.Fprintf(&b, "File: %s\n", fileWord)
+	if p := strings.TrimSpace(st.Path); p != "" {
+		fmt.Fprintf(&b, "Path: %s\n", pathfmt.TildeHome(p))
+	}
 	if !st.PIDChecked {
 		fmt.Fprintf(&b, "PIDs: skipped (--no-pid)\n")
 	} else if len(st.PIDs) == 0 {
@@ -174,6 +182,7 @@ func FormatStatusText(st *SessionStatus) string {
 }
 
 // FormatStatusJSON renders status as a JSON object (no ANSI).
+// path is the absolute summary.json path (no tilde).
 func FormatStatusJSON(st *SessionStatus) (string, error) {
 	if st == nil {
 		return "", fmt.Errorf("nil SessionStatus")
@@ -188,12 +197,14 @@ func FormatStatusJSON(st *SessionStatus) (string, error) {
 		State      string    `json:"state"`
 		FileActive bool      `json:"file_active"`
 		PIDChecked bool      `json:"pid_checked"`
+		Path       string    `json:"path"`
 		PIDs       []pidJSON `json:"pids"`
 	}{
 		SessionID:  st.SessionID,
 		State:      st.State,
 		FileActive: st.FileActive,
 		PIDChecked: st.PIDChecked,
+		Path:       st.Path,
 		PIDs:       make([]pidJSON, 0, len(st.PIDs)),
 	}
 	for _, p := range st.PIDs {

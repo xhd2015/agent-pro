@@ -33,16 +33,16 @@ Dual-signal status: **file-active** (from `active_sessions.json`) plus
 - **`LiveOptions`** — injectable `ListProcs func() []procresolve.Proc` and
   `Lsof func(int) []string`. Tests always inject; production may wire
   `ListLiveProcs` / `LiveLsof` (or `dot-pkgs/go-pkgs/proc`).
-- **`SessionStatus`** — `SessionID`, `FileActive`, `PIDs []LivePID`,
-  `PIDChecked` (false when `checkPID==false` / CLI `--no-pid`), `State`
-  string: `running` | `marked-active` | `inactive`.
+- **`SessionStatus`** — `SessionID`, `Path` (absolute `summary.json` from Find),
+  `FileActive`, `PIDs []LivePID`, `PIDChecked` (false when `checkPID==false` /
+  CLI `--no-pid`), `State` string: `running` | `marked-active` | `inactive`.
 - **Rollup** — if `PIDChecked && len(PIDs)>0` → `running`; else if
   `FileActive` → `marked-active`; else → `inactive`.
 - **Formatters** (CLI text/json + info Active block):
-  - `FormatStatusText(st *SessionStatus) string` — State, File yes/no, PID
-    lines (`pid` + `name`) or none / skipped when not checked.
+  - `FormatStatusText(st *SessionStatus) string` — State, File yes/no,
+    Path (`pathfmt.TildeHome`), PID lines (`pid` + `name`) or none / skipped.
   - `FormatStatusJSON(st *SessionStatus) (string, error)` — no ANSI; fields
-    `session_id`, `state`, `file_active`, `pid_checked`,
+    `session_id`, `state`, `file_active`, `pid_checked`, `path` (absolute),
     `pids` array of `{pid,name,cmd}`.
   - `FormatActiveBlock(st *SessionStatus) string` — dual-signal Active section
     for `session info` (file + pid lines); CLI appends after existing
@@ -85,6 +85,7 @@ LiveOptions
 
 SessionStatus
   SessionID  string
+  Path       string  // absolute summary.json
   FileActive bool
   PIDs       []LivePID
   PIDChecked bool
@@ -144,8 +145,8 @@ Parameter ranking (most → least significant):
 | 5 | `unknown-session` | No session dir / Find fails → error containing `grok session not found` and id |
 | 6 | `multi-pid` | Two grok runners both hard-hit same session → `PIDs` length 2, sorted by PID asc, `Name` = basename |
 | 7 | `skip-non-runners` | Bash + `grok update` hold open session paths; only a real grok runner (if any) counts — here none → empty PIDs, not running from those alone |
-| 8 | `format-text` | Running fixture → `FormatStatusText` has state, file yes, pid+name lines |
-| 9 | `format-json` | Running fixture → JSON fields `session_id`, `state`, `file_active`, `pid_checked`, `pids[{pid,name,cmd}]`; no ANSI |
+| 8 | `format-text` | Running fixture → `FormatStatusText` has state, file yes, Path (summary.json), pid+name lines |
+| 9 | `format-json` | Running fixture → JSON fields including absolute `path`; no ANSI |
 | 10 | `format-active-block` | Running fixture → `FormatActiveBlock` mentions file active and live pid |
 
 ## How to Run

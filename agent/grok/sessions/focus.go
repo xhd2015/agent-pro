@@ -66,6 +66,8 @@ type FocusFake struct {
 	OpenFiles      map[int][]string
 	ITerm          []iterm2.SessionRef
 	Focused        []string
+	ListProcsCalls int
+	LsofCalls      int
 	ListITermCalls int
 }
 
@@ -73,9 +75,11 @@ type FocusFake struct {
 func (f *FocusFake) Opts() *FocusOpts {
 	return &FocusOpts{
 		ListProcs: func() []FocusProc {
+			f.ListProcsCalls++
 			return append([]FocusProc(nil), f.Procs...)
 		},
 		Lsof: func(pid int) []string {
+			f.LsofCalls++
 			if f.OpenFiles == nil {
 				return nil
 			}
@@ -92,19 +96,23 @@ func (f *FocusFake) Opts() *FocusOpts {
 	}
 }
 
-// Focus finds the Grok session, maps live grok PIDs to iTerm tabs via TTY,
-// and focuses one existing tab. It never creates a window, tab, or session.
-func Focus(grokHome, sessionID string, opts *FocusOpts) (*FocusResult, error) {
+// FocusDiscovery is the live-hosting probe result for a known Grok session.
+// Candidates may be empty when there is no live PID, no TTY, or no iTerm match.
+type FocusDiscovery struct {
+	Candidates []FocusCandidate
+	LiveCount  int // live grok PIDs hard-hitting the session (before TTY/iTerm)
+}
+
+// DiscoverFocusHosting maps a known Grok session to iTerm tabs via live PID → TTY.
+// It does not call Find and never focuses. Session existence is the caller's job.
+//
+// Production (ListITerm nil) uses a TTY-targeted iTerm scan (FindSessionsByTTY)
+// instead of dumping every pane. Injected ListITerm keeps the full-list path
+// (tests and ListLive shared inventory).
+func DiscoverFocusHosting(sessionID string, opts *FocusOpts) (*FocusDiscovery, error) {
 	if opts == nil {
 		opts = &FocusOpts{}
 	}
-	if _, err := Find(grokHome, sessionID); err != nil {
-		if isSessionNotFound(err) {
-			return nil, ErrNotFound
-		}
-		return nil, err
-	}
-
 	listProcs := opts.ListProcs
 	if listProcs == nil {
 		listProcs = listLiveFocusProcs
@@ -128,8 +136,9 @@ func Focus(grokHome, sessionID string, opts *FocusOpts) (*FocusResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	out := &FocusDiscovery{LiveCount: len(live)}
 	if len(live) == 0 {
-		return nil, ErrNotFound
+		return out, nil
 	}
 
 	var ttys []string
@@ -144,20 +153,25 @@ func Focus(grokHome, sessionID string, opts *FocusOpts) (*FocusResult, error) {
 		}
 	}
 	if len(ttys) == 0 {
-		return nil, ErrNotFound
+		return out, nil
 	}
 
-	listITerm := opts.ListITerm
-	if listITerm == nil {
-		listITerm = listLiveITermSessions
+	var matched []iterm2.SessionRef
+	if opts.ListITerm != nil {
+		refs, listErr := opts.ListITerm()
+		if listErr != nil {
+			return nil, listErr
+		}
+		matched = uniqueSessionRefs(iterm2.FindByTTY(refs, ttys))
+	} else {
+		refs, findErr := iterm2.FindSessionsByTTY(ttys)
+		if findErr != nil {
+			return nil, findErr
+		}
+		matched = uniqueSessionRefs(refs)
 	}
-	refs, err := listITerm()
-	if err != nil {
-		return nil, err
-	}
-	matched := uniqueSessionRefs(iterm2.FindByTTY(refs, ttys))
 	if len(matched) == 0 {
-		return nil, ErrNotFound
+		return out, nil
 	}
 
 	ttyOwner := map[string]FocusProc{}
@@ -186,8 +200,32 @@ func Focus(grokHome, sessionID string, opts *FocusOpts) (*FocusResult, error) {
 		}
 		candidates = append(candidates, cand)
 	}
+	out.Candidates = candidates
+	return out, nil
+}
 
-	selected, err := selectFocusCandidate(sessionID, candidates, opts.Index)
+// Focus finds the Grok session, maps live grok PIDs to iTerm tabs via TTY,
+// and focuses one existing tab. It never creates a window, tab, or session.
+func Focus(grokHome, sessionID string, opts *FocusOpts) (*FocusResult, error) {
+	if opts == nil {
+		opts = &FocusOpts{}
+	}
+	if _, err := Find(grokHome, sessionID); err != nil {
+		if isSessionNotFound(err) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	disc, err := DiscoverFocusHosting(sessionID, opts)
+	if err != nil {
+		return nil, err
+	}
+	if disc == nil || len(disc.Candidates) == 0 {
+		return nil, ErrNotFound
+	}
+
+	selected, err := selectFocusCandidate(sessionID, disc.Candidates, opts.Index)
 	if err != nil {
 		return nil, err
 	}
@@ -473,4 +511,45 @@ func listLiveITermSessions() ([]iterm2.SessionRef, error) {
 		return nil, fmt.Errorf("list iTerm sessions: %w", err)
 	}
 	return iterm2.ParseSessionListOutput(string(out))
+}
+
+// liveTTYsForSession returns normalized TTYs for live grok PIDs hosting
+// sessionID. ok is false when there is no live host or no usable TTY.
+func liveTTYsForSession(sessionID string, listProcs func() []FocusProc, lsof func(int) []string) ([]string, bool) {
+	if listProcs == nil {
+		listProcs = listLiveFocusProcs
+	}
+	if lsof == nil {
+		lsof = procresolve.LiveLsof
+	}
+	procs := listProcs()
+	live, err := LivePIDsForSession(sessionID, &LiveOptions{
+		ListProcs: func() []procresolve.Proc {
+			out := make([]procresolve.Proc, 0, len(procs))
+			for _, p := range procs {
+				out = append(out, procresolve.Proc{PID: p.PID, PPID: p.PPID, Cmd: p.Cmd})
+			}
+			return out
+		},
+		Lsof: lsof,
+	})
+	if err != nil || len(live) == 0 {
+		return nil, false
+	}
+	seen := map[string]bool{}
+	var ttys []string
+	for _, p := range live {
+		for _, tty := range collectTTYsFromTree(procs, p.PID) {
+			n := iterm2.NormalizeTTY(tty)
+			if n == "" || seen[n] {
+				continue
+			}
+			seen[n] = true
+			ttys = append(ttys, n)
+		}
+	}
+	if len(ttys) == 0 {
+		return nil, false
+	}
+	return ttys, true
 }

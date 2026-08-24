@@ -938,9 +938,14 @@ Usage: agent-pro grok session <command> [ARGS]
 
 Commands:
   list                  alias for: agent-pro grok sessions
+` + groksessions.ListLiveCommandHelpLine + `
   info   <session-id>   show detailed info for one Grok CLI session
   status <session-id>   show dual-signal liveness (file-active + live PIDs)
   focus  <session-id>   focus the iTerm2 tab that hosts this Grok session
+` + groksessions.OpenCommandHelpLine + `
+` + groksessions.SnapshotCommandHelpLine + `
+` + groksessions.MessagesCommandHelpLine + `
+` + groksessions.SendCommandHelpLine + `
 ` + groksessions.ResolveCommandHelpLine + `
   files  <session-id>   list regular files in the session directory
   stats  <session-id>   analyse counts, latency, tools, and tasks for one session
@@ -1025,12 +1030,13 @@ Usage: agent-pro grok session status <session-id> [OPTIONS]
 
 Show dual-signal liveness for one Grok CLI session:
   file-active (active_sessions.json) + live PIDs (open-file hard hits on grok runners).
+Also prints the session summary.json path (~-shortened in text).
 
 State: running | marked-active | inactive
 
 Options:
   --no-pid      skip live PID scan; state from file-active only
-  --json        print SessionStatus as JSON (no ANSI)
+  --json        print SessionStatus as JSON (no ANSI; path is absolute)
   -h,--help     show help
 `
 
@@ -1107,12 +1113,22 @@ func handleGrokSession(args []string) error {
 		// Alias for agent-pro grok sessions (same flags: --here, --dir, --recent,
 		// --active, --main-agent, --sub-agent, --forked, --limit, --grep, --color).
 		return handleGrokSessions(args[1:])
+	case "list-live":
+		return handleGrokSessionListLive(args[1:])
 	case "info":
 		return handleGrokSessionInfo(args[1:])
 	case "status":
 		return handleGrokSessionStatus(args[1:])
 	case "focus":
 		return handleGrokSessionFocus(args[1:])
+	case "open":
+		return handleGrokSessionOpen(args[1:])
+	case "snapshot":
+		return handleGrokSessionSnapshot(args[1:])
+	case "messages":
+		return handleGrokSessionMessages(args[1:])
+	case "send":
+		return handleGrokSessionSend(args[1:])
 	case "resolve":
 		return handleGrokSessionResolve(args[1:])
 	case "files":
@@ -1372,8 +1388,28 @@ func handleGrokSessionInfo(args []string) error {
 	return nil
 }
 
+func handleGrokSessionListLive(args []string) error {
+	return groksessions.RunListLive(args, os.Stdout, os.Stderr, agenttty.GrokHome(), nil)
+}
+
 func handleGrokSessionFocus(args []string) error {
 	return groksessions.RunFocus(args, os.Stdout, agenttty.GrokHome(), nil)
+}
+
+func handleGrokSessionOpen(args []string) error {
+	return groksessions.RunOpen(args, os.Stdout, os.Stderr, agenttty.GrokHome(), nil)
+}
+
+func handleGrokSessionMessages(args []string) error {
+	return groksessions.RunMessages(args, os.Stdout, os.Stderr, agenttty.GrokHome(), nil)
+}
+
+func handleGrokSessionSnapshot(args []string) error {
+	return groksessions.RunSnapshot(args, os.Stdout, os.Stderr, agenttty.GrokHome(), nil)
+}
+
+func handleGrokSessionSend(args []string) error {
+	return groksessions.RunSend(args, os.Stdout, os.Stderr, agenttty.GrokHome(), nil)
 }
 
 func handleGrokSessionResolve(args []string) error {

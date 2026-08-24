@@ -100,49 +100,16 @@ func RunFork(args []string, opts *ForkOpts) error {
 		return err
 	}
 
-	tabSet := tabFlag != nil
-	tabIndexSet := tabIndexFlag != nil
-	if tabSet && tabIndexSet {
-		return fmt.Errorf("--tab and --tab-index cannot be specified together")
-	}
-
-	var sessionID string
-	var tabMeta *TabResolveResult
-	switch {
-	case tabSet || tabIndexSet:
-		if len(remaining) > 0 {
-			return fmt.Errorf("session id cannot be combined with --tab/--tab-index")
-		}
-		var sel TabSelector
-		if tabSet {
-			sel, err = ParseTabFlag(*tabFlag)
-		} else {
-			sel, err = ParseTabIndexFlag(*tabIndexFlag)
-		}
-		if err != nil {
-			return err
-		}
-		tr, err := ResolveFromTab(sel, &TabResolveOpts{
-			ListProcs:        opts.ListFocusProcs,
-			Lsof:             opts.Lsof,
-			ListITerm:        opts.ListITerm,
-			CurrentSessionID: opts.CurrentSessionID,
-			ControllingTTY:   opts.ControllingTTY,
-			AncestorTTYs:     opts.AncestorTTYs,
-		})
-		if err != nil {
-			return err
-		}
-		sessionID = tr.SessionID
-		tabMeta = tr
-	default:
-		if len(remaining) != 1 {
-			return fmt.Errorf("expected session id, or --tab / --tab-index")
-		}
-		sessionID = strings.TrimSpace(remaining[0])
-		if sessionID == "" {
-			return fmt.Errorf("session id is required")
-		}
+	sessionID, tabMeta, err := ResolveSessionSource(remaining, tabFlag, tabIndexFlag, &SessionSourceOpts{
+		ListProcs:        opts.ListFocusProcs,
+		Lsof:             opts.Lsof,
+		ListITerm:        opts.ListITerm,
+		CurrentSessionID: opts.CurrentSessionID,
+		ControllingTTY:   opts.ControllingTTY,
+		AncestorTTYs:     opts.AncestorTTYs,
+	})
+	if err != nil {
+		return err
 	}
 
 	info, err := Info(opts.GrokHome, sessionID)

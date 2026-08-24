@@ -38,5 +38,11 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	}
 	assertContains(t, out, "5001")
 	assertContains(t, out, "grok")
+	if !strings.Contains(out, "Path:") {
+		t.Fatalf("text missing Path line:\n%s", out)
+	}
+	if !strings.Contains(out, "summary.json") {
+		t.Fatalf("Path line missing summary.json:\n%s", out)
+	}
 }
 ```

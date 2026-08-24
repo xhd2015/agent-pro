@@ -34,6 +34,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 		State      string `json:"state"`
 		FileActive bool   `json:"file_active"`
 		PIDChecked bool   `json:"pid_checked"`
+		Path       string `json:"path"`
 		PIDs       []struct {
 			PID  int    `json:"pid"`
 			Name string `json:"name"`
@@ -47,6 +48,12 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	assertEqualString(t, "state", doc.State, "running")
 	assertEqualBool(t, "file_active", doc.FileActive, true)
 	assertEqualBool(t, "pid_checked", doc.PIDChecked, true)
+	if !strings.HasSuffix(doc.Path, "summary.json") {
+		t.Fatalf("path = %q, want …/summary.json", doc.Path)
+	}
+	if strings.HasPrefix(doc.Path, "~") {
+		t.Fatalf("JSON path must be absolute, got %q", doc.Path)
+	}
 	if len(doc.PIDs) != 1 {
 		t.Fatalf("pids len = %d, want 1", len(doc.PIDs))
 	}

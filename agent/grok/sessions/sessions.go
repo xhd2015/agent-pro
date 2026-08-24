@@ -299,6 +299,10 @@ func canonicalPath(p string) (string, error) {
 	return filepath.Clean(abs), nil
 }
 
+// Find locates a session under grokHome/sessions/<place>/<sessionID>/summary.json.
+// It matches the session directory basename to sessionID, parses only that
+// summary, and skips descending into other session dirs (avoids walking large
+// per-session payloads like updates.jsonl).
 func Find(grokHome, sessionID string) (Session, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
@@ -316,18 +320,29 @@ func Find(grokHome, sessionID string) (Session, error) {
 			}
 			return walkErr
 		}
-		if d.IsDir() || d.Name() != "summary.json" {
+		if !d.IsDir() {
+			return nil
+		}
+		// Never walk the sessions root as a "session"; only its children.
+		if path == root {
 			return nil
 		}
 
-		session, ok := parseSummaryFile(path)
-		if !ok {
-			return nil
+		summaryPath := filepath.Join(path, "summary.json")
+		if d.Name() == sessionID {
+			session, ok := parseSummaryFile(summaryPath)
+			if ok && session.ID == sessionID {
+				found = session
+				foundOK = true
+				return filepath.SkipAll
+			}
+			// Dir name matched but summary missing/mismatched: do not descend.
+			return filepath.SkipDir
 		}
-		if session.ID == sessionID {
-			found = session
-			foundOK = true
-			return filepath.SkipAll
+
+		// Other session leaf (has summary.json): skip its payload files.
+		if _, statErr := os.Lstat(summaryPath); statErr == nil {
+			return filepath.SkipDir
 		}
 		return nil
 	})

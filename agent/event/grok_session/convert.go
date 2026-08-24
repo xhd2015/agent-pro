@@ -11,6 +11,8 @@ import (
 type toolCallMeta struct {
 	kind  string
 	title string
+	name  string // preferred display/tool name (_meta x.ai/tool.name or title)
+	input map[string]any
 }
 
 // Converter converts grok session updates to AgentEvents with chunk coalescing.
@@ -18,8 +20,12 @@ type Converter struct {
 	pendingUser      strings.Builder
 	pendingUserTS    int64 // wire ms of first chunk of coalesced user message; 0 if unknown
 	pendingUserTSSet bool  // true once first non-empty user chunk was seen (even if ts unknown)
-	pendingThink     strings.Builder
-	pendingAssistant strings.Builder
+	pendingThink         strings.Builder
+	pendingThinkTS       int64
+	pendingThinkTSSet    bool
+	pendingAssistant     strings.Builder
+	pendingAssistantTS   int64
+	pendingAssistantTSSet bool
 	toolMeta         map[string]toolCallMeta
 	turnIndex        int
 }
@@ -108,6 +114,10 @@ func (c *Converter) processUpdate(upd SessionUpdate) []types.AgentEvent {
 		if text == "" {
 			return out
 		}
+		if !c.pendingThinkTSSet {
+			c.pendingThinkTS = sessionUpdateTimestampMs(upd)
+			c.pendingThinkTSSet = true
+		}
 		c.pendingThink.WriteString(text)
 		return out
 	case "agent_message_chunk":
@@ -120,6 +130,10 @@ func (c *Converter) processUpdate(upd SessionUpdate) []types.AgentEvent {
 		}
 		// Buffer like user/think chunks; flush on tool/turn/Flush so multi-chunk
 		// assistant text coalesces (e.g. "Hello " + "world" -> "Hello world").
+		if !c.pendingAssistantTSSet {
+			c.pendingAssistantTS = sessionUpdateTimestampMs(upd)
+			c.pendingAssistantTSSet = true
+		}
 		c.pendingAssistant.WriteString(text)
 		return out
 	case "tool_call":
@@ -130,15 +144,20 @@ func (c *Converter) processUpdate(upd SessionUpdate) []types.AgentEvent {
 		id := strings.TrimSpace(upd.ToolCallID)
 		kind := strings.TrimSpace(upd.Kind)
 		title := strings.TrimSpace(upd.Title)
+		name := toolDisplayName(upd)
+		input := parseRawInput(upd.RawInput)
+		ts := sessionUpdateTimestampMs(upd)
 		if id != "" {
-			c.toolMeta[id] = toolCallMeta{kind: kind, title: title}
+			c.toolMeta[id] = toolCallMeta{kind: kind, title: title, name: name, input: input}
 		}
-		out = append(out, c.withGrokSession(types.AgentEvent{
+		out = append(out, c.eventWithWireTS(types.AgentEvent{
 			Type:       types.ActionToolCall,
-			Tool:       normalizeToolKind(kind),
-			Text:       title,
+			Tool:       normalizeToolKind(firstNonEmpty(name, kind)),
+			Text:       firstNonEmpty(title, name),
 			ToolCallID: id,
-		}, "pending"))
+			ToolInput:  input,
+			Timestamp:  ts,
+		}, "pending", ts))
 		return out
 	case "tool_call_update":
 		var out []types.AgentEvent
@@ -151,13 +170,17 @@ func (c *Converter) processUpdate(upd SessionUpdate) []types.AgentEvent {
 		if status == "" {
 			status = "completed"
 		}
-		out = append(out, c.withGrokSession(types.AgentEvent{
+		name := firstNonEmpty(meta.name, strings.TrimSpace(upd.Title), meta.title, meta.kind)
+		ts := sessionUpdateTimestampMs(upd)
+		out = append(out, c.eventWithWireTS(types.AgentEvent{
 			Type:       types.ActionToolCall,
-			Tool:       normalizeToolKind(meta.kind),
-			Text:       meta.title,
+			Tool:       normalizeToolKind(name),
+			Text:       firstNonEmpty(meta.title, name),
 			ToolCallID: id,
+			ToolInput:  meta.input,
 			Output:     toolOutput(upd.Content),
-		}, status))
+			Timestamp:  ts,
+		}, status, ts))
 		return out
 	case "turn_completed":
 		var out []types.AgentEvent
@@ -183,18 +206,14 @@ func (c *Converter) flushUser() []types.AgentEvent {
 	ts := c.pendingUserTS
 	c.pendingUserTS = 0
 	c.pendingUserTSSet = false
-	// Historical user messages: use wire timestamp when present; keep 0 when
-	// unknown (do not stamp convert-time Now — callers format zero as [—]).
-	ev := c.withGrokSession(types.AgentEvent{
+	// Historical messages: use wire timestamp when present; keep 0 when unknown
+	// (do not stamp convert-time Now — callers format zero as [—]).
+	return []types.AgentEvent{c.eventWithWireTS(types.AgentEvent{
 		Type:      types.ActionMessage,
 		Role:      "user",
 		Text:      text,
 		Timestamp: ts,
-	}, "")
-	if ts == 0 {
-		ev.Timestamp = 0
-	}
-	return []types.AgentEvent{ev}
+	}, "", ts)}
 }
 
 func (c *Converter) flushThink() []types.AgentEvent {
@@ -203,11 +222,14 @@ func (c *Converter) flushThink() []types.AgentEvent {
 	}
 	text := c.pendingThink.String()
 	c.pendingThink.Reset()
-	return []types.AgentEvent{c.withGrokSession(types.AgentEvent{
+	ts := c.pendingThinkTS
+	c.pendingThinkTS = 0
+	c.pendingThinkTSSet = false
+	return []types.AgentEvent{c.eventWithWireTS(types.AgentEvent{
 		Type:      types.ActionThink,
 		Text:      text,
-		Timestamp: time.Now().UnixMilli(),
-	}, "")}
+		Timestamp: ts,
+	}, "", ts)}
 }
 
 func (c *Converter) flushAssistant() []types.AgentEvent {
@@ -216,12 +238,15 @@ func (c *Converter) flushAssistant() []types.AgentEvent {
 	}
 	text := c.pendingAssistant.String()
 	c.pendingAssistant.Reset()
-	return []types.AgentEvent{c.withGrokSession(types.AgentEvent{
+	ts := c.pendingAssistantTS
+	c.pendingAssistantTS = 0
+	c.pendingAssistantTSSet = false
+	return []types.AgentEvent{c.eventWithWireTS(types.AgentEvent{
 		Type:      types.ActionMessage,
 		Role:      "assistant",
 		Text:      text,
-		Timestamp: time.Now().UnixMilli(),
-	}, "")}
+		Timestamp: ts,
+	}, "", ts)}
 }
 
 func (c *Converter) withGrokSession(ev types.AgentEvent, status string) types.AgentEvent {
@@ -230,9 +255,14 @@ func (c *Converter) withGrokSession(ev types.AgentEvent, status string) types.Ag
 		ext.Status = status
 	}
 	ev.Extensions = &types.EventExtensions{GrokSession: ext}
-	if ev.Timestamp == 0 {
-		ev.Timestamp = time.Now().UnixMilli()
-	}
+	return ev
+}
+
+// eventWithWireTS attaches grok_session extensions and keeps wireTS (0 = unknown).
+// Never stamps convert-time Now — historical dumps must not show wall-clock load time.
+func (c *Converter) eventWithWireTS(ev types.AgentEvent, status string, wireTS int64) types.AgentEvent {
+	ev = c.withGrokSession(ev, status)
+	ev.Timestamp = wireTS
 	return ev
 }
 
@@ -410,4 +440,51 @@ func normalizeToolKind(kind string) string {
 		return "tool"
 	}
 	return strings.ToLower(kind)
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if s := strings.TrimSpace(v); s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+// toolDisplayName prefers _meta["x.ai/tool"].name, then title, then kind.
+func toolDisplayName(upd SessionUpdate) string {
+	if name := metaToolName(upd.Meta); name != "" {
+		return name
+	}
+	if title := strings.TrimSpace(upd.Title); title != "" {
+		return title
+	}
+	return strings.TrimSpace(upd.Kind)
+}
+
+func metaToolName(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var meta map[string]any
+	if err := json.Unmarshal(raw, &meta); err != nil {
+		return ""
+	}
+	tool, _ := meta["x.ai/tool"].(map[string]any)
+	if tool == nil {
+		return ""
+	}
+	name, _ := tool["name"].(string)
+	return strings.TrimSpace(name)
+}
+
+func parseRawInput(raw json.RawMessage) map[string]any {
+	if len(raw) == 0 {
+		return nil
+	}
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil || len(m) == 0 {
+		return nil
+	}
+	return m
 }
