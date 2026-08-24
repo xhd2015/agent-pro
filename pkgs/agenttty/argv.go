@@ -9,6 +9,7 @@ import (
 	codexagent "github.com/xhd2015/agent-pro/agent/cli/codex"
 	grokagent "github.com/xhd2015/agent-pro/agent/cli/grok"
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
+	codexargv "github.com/xhd2015/agent-pro/agent/codex/argv"
 	"github.com/xhd2015/agent-pro/agent/exec"
 )
 
@@ -39,17 +40,15 @@ func BuildGrokCommandArgv(env *exec.Env, settingsPath, agentRunnerBinary, model,
 }
 
 // BuildCodexCommandArgv returns argv for the interactive Codex TUI inside the PTY.
-// Always ensures (no duplicate when already set):
-//   - -c check_for_update_on_startup=false
-//   - --dangerously-bypass-hook-trust (skip "Hooks need review" modal for automation)
+// Delegates flag assembly to agent/codex/argv (Interactive preset).
 func BuildCodexCommandArgv(env *exec.Env, settingsPath, agentRunnerBinary, model, resumeSession string) ([]string, error) {
 	if hook := strings.TrimSpace(os.Getenv(envCodexTTYCommand)); hook != "" {
-		args, err := parseShellWords(hook)
-		if err != nil {
-			return nil, err
-		}
-		args = EnsureCodexConfigFlag(args, "check_for_update_on_startup", "false")
-		return EnsureCodexBoolFlag(args, "--dangerously-bypass-hook-trust"), nil
+		// Hook overlay: update-check + hook-trust only (historical agent-run behavior).
+		return codexargv.Argv(codexargv.Options{
+			CommandOverride:    hook,
+			BypassHookTrust:    true,
+			DisableUpdateCheck: true,
+		})
 	}
 
 	path, userFlags, err := resolveCodexRunnerSpec(env, settingsPath, agentRunnerBinary)
@@ -57,35 +56,17 @@ func BuildCodexCommandArgv(env *exec.Env, settingsPath, agentRunnerBinary, model
 		return nil, err
 	}
 
-	args := append([]string{path}, userFlags...)
-	args = append(args, "--dangerously-bypass-approvals-and-sandbox")
-	if model != "" && !hasFlagPair(args, "--model") {
-		args = append(args, "--model", model)
-	}
-	if resumeSession != "" && !hasCodexResume(args) {
-		args = append(args, "resume", resumeSession)
-	}
-	args = EnsureCodexConfigFlag(args, "check_for_update_on_startup", "false")
-	args = EnsureCodexBoolFlag(args, "--dangerously-bypass-hook-trust")
-	return args, nil
+	opts := codexargv.Interactive()
+	opts.Bin = path
+	opts.UserFlags = userFlags
+	opts.Model = model
+	opts.ResumeSession = resumeSession
+	return codexargv.Argv(opts)
 }
 
 // EnsureCodexConfigFlag ensures argv has paired "-c" "key=value" (preferred form).
-// If key already appears as a -c/--config value (key=… or bare key), do not add
-// another pair. Returns a new or same slice; does not mutate caller's backing
-// when appending (append-safe copy as needed).
 func EnsureCodexConfigFlag(args []string, key, value string) []string {
-	key = strings.TrimSpace(key)
-	if key == "" {
-		return args
-	}
-	if hasCodexConfigKey(args, key) {
-		return args
-	}
-	// Append-safe: copy so append cannot overwrite caller's unused capacity.
-	out := make([]string, len(args), len(args)+2)
-	copy(out, args)
-	return append(out, "-c", key+"="+value)
+	return codexargv.EnsureConfigFlag(args, key, value)
 }
 
 // ApplyCodexReasoningEffort: empty/whitespace effort → return args unchanged;
@@ -99,45 +80,13 @@ func ApplyCodexReasoningEffort(args []string, effort string) []string {
 }
 
 // EnsureCodexBoolFlag ensures argv contains a bare boolean flag token exactly once.
-// If flag is already present (any position), returns args unchanged. Append-safe copy on add.
 func EnsureCodexBoolFlag(args []string, flag string) []string {
-	flag = strings.TrimSpace(flag)
-	if flag == "" {
-		return args
-	}
-	if hasFlagToken(args, flag) {
-		return args
-	}
-	out := make([]string, len(args), len(args)+1)
-	copy(out, args)
-	return append(out, flag)
+	return codexargv.EnsureBoolFlag(args, flag)
 }
 
-// hasFlagToken reports whether args contains an exact token equal to flag
-// (works for trailing boolean flags; unlike hasFlagPair which requires a following arg slot).
-func hasFlagToken(args []string, flag string) bool {
-	for _, a := range args {
-		if a == flag {
-			return true
-		}
-	}
-	return false
-}
-
-// hasCodexConfigKey reports whether args already contain -c/--config for key
-// (either "key=…" or bare "key" as the config value token).
+// hasCodexConfigKey reports whether args already contain -c/--config for key.
 func hasCodexConfigKey(args []string, key string) bool {
-	prefix := key + "="
-	for i := 0; i+1 < len(args); i++ {
-		if args[i] != "-c" && args[i] != "--config" {
-			continue
-		}
-		v := args[i+1]
-		if strings.HasPrefix(v, prefix) || v == key {
-			return true
-		}
-	}
-	return false
+	return codexargv.HasConfigKey(args, key)
 }
 
 func resolveGrokRunnerSpec(env *exec.Env, settingsPath, spec string) (path string, userFlags []string, err error) {
@@ -207,15 +156,6 @@ func lookupRunnerBinary(env *exec.Env, binary string, fallback func() (string, e
 func hasFlagPair(args []string, flag string) bool {
 	for i := 0; i+1 < len(args); i++ {
 		if args[i] == flag {
-			return true
-		}
-	}
-	return false
-}
-
-func hasCodexResume(args []string) bool {
-	for i := 0; i+1 < len(args); i++ {
-		if args[i] == "resume" {
 			return true
 		}
 	}

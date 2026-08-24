@@ -5,7 +5,7 @@
 **Codex version:** `codex-cli 0.143.0` (prompted update to `0.144.0`)  
 **Capture method:** `tty-watch` ephemeral session + raw `InjectInput` (Go)  
 **Argv (production usage fetch):**  
-`codex --dangerously-bypass-approvals-and-sandbox -c mcp_servers={}`
+`codex --dangerously-bypass-approvals-and-sandbox -c check_for_update_on_startup=false --dangerously-bypass-hook-trust -c mcp_servers={} --disable plugins --disable computer_use --disable in_app_updates --disable hooks`
 
 This directory freezes observed TUI snapshots and the key sequence that
 successfully chooses **Skip** and continues into a normal session so `/status`

@@ -12,6 +12,7 @@ import (
 
 	codexagent "github.com/xhd2015/agent-pro/agent/cli/codex"
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
+	codexargv "github.com/xhd2015/agent-pro/agent/codex/argv"
 	"github.com/xhd2015/agent-pro/agent/debuglog"
 	agentexec "github.com/xhd2015/agent-pro/agent/exec"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
@@ -297,11 +298,13 @@ func commandExtraPaths(argv []string) []string {
 }
 
 func buildCodexArgv(env *agentexec.Env, opts Options) ([]string, error) {
+	// Fake TUI hooks: parse only — do not append StatusInspect knobs (python/sh
+	// fakes reject unknown --disable flags).
 	if hook := strings.TrimSpace(opts.Command); hook != "" {
-		return agenttty.ParseShellWords(hook)
+		return codexargv.Argv(codexargv.Options{CommandOverride: hook})
 	}
 	if hook := strings.TrimSpace(os.Getenv(envShowStatusCommand)); hook != "" {
-		return agenttty.ParseShellWords(hook)
+		return codexargv.Argv(codexargv.Options{CommandOverride: hook})
 	}
 
 	path, err := registry.ResolveConfiguredCLIPath(
@@ -314,9 +317,9 @@ func buildCodexArgv(env *agentexec.Env, opts Options) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("codex not found: %w", err)
 	}
-	// Ephemeral /status fetch does not need user-configured MCP servers; skipping
-	// them avoids slow startup and failures from optional servers (e.g. computer-use).
-	return []string{path, "--dangerously-bypass-approvals-and-sandbox", "-c", "mcp_servers={}"}, nil
+	inv := codexargv.StatusInspect()
+	inv.Bin = path
+	return codexargv.Argv(inv)
 }
 
 func deadlineForFetch(ctx context.Context) time.Time {
