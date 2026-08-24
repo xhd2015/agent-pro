@@ -74,6 +74,7 @@ Options:
 --idle-timeout DUR  idle window used with --exit-on-idle (default: 10m)
   --event-bus-url URL publish agent.tty.started after a successful new-terminal open (best-effort)
   --event-bus-token TOKEN  optional Bearer token for event-bus publish
+  -v, --verbose       print concrete agent-run / provider (Codex) launch commands on stderr
   -h, --help          show help
 `
 
@@ -121,6 +122,7 @@ func runHeadless(args []string, defaultRunner string) error {
 	var envEntries []string
 	var envFile string
 	var colorFlag bool
+	var verboseFlag bool
 	var exitOnIdle bool
 	var idleTimeoutRaw string
 	var keepTTY bool
@@ -159,6 +161,7 @@ func runHeadless(args []string, defaultRunner string) error {
 		StringSlice("-e,--env", &envEntries).
 		String("--env-file", &envFile).
 		Bool("--color", &colorFlag).
+		Bool("-v,--verbose", &verboseFlag).
 		Bool("--exit-on-idle", &exitOnIdle).
 		String("--idle-timeout", &idleTimeoutRaw).
 		String("--event-bus-url", &eventBusURL).
@@ -241,6 +244,7 @@ func runHeadless(args []string, defaultRunner string) error {
 			prependPaths:                  absPrepend,
 			envEntries:                    envEntries,
 			color:                         colorFlag,
+			verbose:                       verboseFlag,
 			exitOnIdle:                    idleEnabled,
 			idleTimeout:                   idleTimeout,
 			keepTTY:                       keepTTY,
@@ -332,6 +336,7 @@ func runHeadless(args []string, defaultRunner string) error {
 		PrependPaths:          absPrepend,
 		Env:                   envEntries,
 		Color:                 colorFlag,
+		Verbose:               verboseFlag,
 		ExitOnIdle:            idleEnabled,
 		IdleTimeout:           idleTimeout,
 		JSON:                  jsonFlag,
@@ -572,6 +577,7 @@ type autoSendOrResumeOpts struct {
 	prependPaths                  []string
 	envEntries                    []string
 	color                         bool
+	verbose                       bool
 	exitOnIdle                    bool
 	idleTimeout                   time.Duration
 	keepTTY                       bool
@@ -643,6 +649,7 @@ func runAutoSendOrResume(opts autoSendOrResumeOpts) error {
 		Env:                           opts.envEntries,
 		PrependPaths:                  opts.prependPaths,
 		Color:                         opts.color,
+		Verbose:                       opts.verbose,
 		ExitOnIdle:                    opts.exitOnIdle,
 		IdleTimeout:                   opts.idleTimeout,
 		Store:                         store,
@@ -741,6 +748,7 @@ func openAutoInNewTerminal(opts autoSendOrResumeOpts, meta agentstorage.SessionM
 		Open:                          opts.openFlag,
 		Detach:                        opts.detachFlag,
 		Color:                         opts.color,
+		Verbose:                       opts.verbose,
 		ExitOnIdle:                    opts.exitOnIdle,
 		IdleTimeout:                   opts.idleTimeout,
 		Model:                         opts.model,
@@ -756,6 +764,9 @@ func openAutoInNewTerminal(opts autoSendOrResumeOpts, meta agentstorage.SessionM
 	_ = opts.recorded
 
 	followUp = withExecPrefix(followUp, opts.execInTerminal)
+	if opts.verbose {
+		fmt.Fprintf(os.Stderr, "notice: agent-run: %s\n", followUp)
+	}
 	if err := iterm2.OpenConfig(dir, &iterm2.Config{
 		Mode:             iterm2.ModeForceNew,
 		FollowUpCommands: []string{followUp},
@@ -927,6 +938,7 @@ func autoRunCreate(store agentstorage.Store, sessionID string, opts autoSendOrRe
 		PrependPaths:          opts.prependPaths,
 		Env:                   opts.envEntries,
 		Color:                 opts.color,
+		Verbose:               opts.verbose,
 		ExitOnIdle:            opts.exitOnIdle,
 		IdleTimeout:           opts.idleTimeout,
 		JSON:                  opts.jsonFlag,

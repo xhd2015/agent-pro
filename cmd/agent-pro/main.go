@@ -3409,7 +3409,7 @@ func sortedProjects(m map[string]codexcfg.Project) []projectEntry {
 	sort.Strings(keys)
 	var result []projectEntry
 	for _, k := range keys {
-		result = append(result, projectEntry{Path: k, TrustLevel: m[k].TrustLevel})
+		result = append(result, projectEntry{Path: k, TrustLevel: string(m[k].TrustLevel)})
 	}
 	return result
 }

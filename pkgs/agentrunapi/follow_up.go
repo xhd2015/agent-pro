@@ -73,6 +73,8 @@ type FollowUpOpts struct {
 	Detach                        bool
 	// Color true → emit --color after open/detach flags, before -e / -- / prompt.
 	Color bool
+	// Verbose true → emit -v so the ForceNew child prints concrete provider argv.
+	Verbose bool
 	// ExitOnIdle true → emit --exit-on-idle and --idle-timeout=<compact> after
 	// open/detach/color, before -- / prompt. False → omit both (timeout ignored).
 	ExitOnIdle bool
@@ -148,6 +150,9 @@ func BuildFollowUpCommand(opts FollowUpOpts) (string, error) {
 	}
 	if opts.Color {
 		remainder = append(remainder, "--color")
+	}
+	if opts.Verbose {
+		remainder = append(remainder, "-v")
 	}
 	idleEnabled, idleTimeout, idleErr := NormalizeIdle(opts.ExitOnIdle, opts.IdleTimeout)
 	if idleErr != nil {

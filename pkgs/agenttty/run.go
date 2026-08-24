@@ -47,6 +47,8 @@ type RunOptions struct {
 	// Color forces TTY child color env last (unset NO_COLOR; FORCE_COLOR/CLICOLOR;
 	// TERM fixup when empty/dumb). Not persisted on session meta.
 	Color bool
+	// Verbose prints the concrete provider argv to Stderr as notice: … argv: …
+	Verbose bool
 	// ExitOnIdle / IdleTimeout are launch-time idle-exit flags (not persisted
 	// on session meta). When enabled, RunHeadless writes idle-policy.json
 	// before ttywatch.HeadlessRun.
@@ -146,9 +148,14 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	if err != nil {
 		return "", "", err
 	}
-	// codex-tty: optional model_reasoning_effort after BuildArgv (BuildArgvFunc unchanged).
+	// codex-tty: reasoning effort + trust workspace cwd (skips directory-trust modal).
+	// Sink / seatalk / agent-run all pass Workspace (hub or bot cwd).
 	if runnerID == "codex-tty" {
 		argv = ApplyCodexReasoningEffort(argv, opts.ModelReasoningEffort)
+		argv = ApplyCodexTrustedProject(argv, opts.Workspace)
+	}
+	if opts.Verbose {
+		writeVerboseArgvNotice(opts.Stderr, runnerID, argv)
 	}
 	if opts.Fork {
 		if runnerID != "grok-tty" {

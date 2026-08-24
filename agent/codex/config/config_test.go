@@ -98,10 +98,10 @@ trust_level = "untrusted"
 	if len(cfg.Projects) != 2 {
 		t.Fatalf("len(Projects) = %d, want 2", len(cfg.Projects))
 	}
-	if cfg.Projects["/Users/test/project"].TrustLevel != "trusted" {
+	if cfg.Projects["/Users/test/project"].TrustLevel != TrustTrusted {
 		t.Errorf("trust_level = %q", cfg.Projects["/Users/test/project"].TrustLevel)
 	}
-	if cfg.Projects["/tmp/sandbox"].TrustLevel != "untrusted" {
+	if cfg.Projects["/tmp/sandbox"].TrustLevel != TrustUntrusted {
 		t.Errorf("trust_level = %q", cfg.Projects["/tmp/sandbox"].TrustLevel)
 	}
 }

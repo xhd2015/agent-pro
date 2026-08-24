@@ -32,8 +32,10 @@ type AskOptions struct {
 	AgentMode        bool
 	DisableSubAgents bool
 	SandboxMode      string
-	SessionID        string
-	OnToolCall       ToolCallCallback
+	// ReasoningEffort is optional Codex -c model_reasoning_effort=<level>.
+	ReasoningEffort string
+	SessionID       string
+	OnToolCall      ToolCallCallback
 }
 
 type ModelInfo struct {

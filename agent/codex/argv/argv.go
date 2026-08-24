@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	codexcfg "github.com/xhd2015/agent-pro/agent/codex/config"
 )
 
 // Options configures a Codex process argv.
@@ -28,6 +30,12 @@ type Options struct {
 	// DisableFeatures appends --disable <name> for each entry (deduped).
 	DisableFeatures []string
 
+	// Projects is a typed overlay of config.toml [projects."<path>"].
+	// Emitted as -c projects."<path>".trust_level=<level>. Wins over ExtraConfig
+	// for the same dotted keys.
+	Projects map[string]codexcfg.Project
+
+	// ExtraConfig is an escape hatch for arbitrary -c key=value (dotted paths).
 	ExtraConfig map[string]string
 	ExtraBool   []string
 
@@ -120,13 +128,72 @@ func applyKnobs(args []string, opts Options) []string {
 	if effort := strings.TrimSpace(opts.ReasoningEffort); effort != "" {
 		args = EnsureConfigFlag(args, "model_reasoning_effort", effort)
 	}
+	typedKeys := map[string]struct{}{}
+	args = appendProjectsConfig(args, opts.Projects, typedKeys)
 	for _, key := range sortedKeys(opts.ExtraConfig) {
+		if _, taken := typedKeys[key]; taken {
+			continue // typed Projects (etc.) win on conflict
+		}
 		args = EnsureConfigFlag(args, key, opts.ExtraConfig[key])
 	}
 	for _, flag := range opts.ExtraBool {
 		args = EnsureBoolFlag(args, flag)
 	}
 	return args
+}
+
+// appendProjectsConfig emits -c projects."<path>".trust_level=<level> for each entry.
+func appendProjectsConfig(args []string, projects map[string]codexcfg.Project, typedKeys map[string]struct{}) []string {
+	if len(projects) == 0 {
+		return args
+	}
+	paths := make([]string, 0, len(projects))
+	for p := range projects {
+		if strings.TrimSpace(p) == "" {
+			continue
+		}
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	for _, path := range paths {
+		proj := projects[path]
+		level := strings.TrimSpace(string(proj.TrustLevel))
+		if level == "" {
+			continue
+		}
+		key := projectTrustConfigKey(path)
+		if typedKeys != nil {
+			typedKeys[key] = struct{}{}
+		}
+		args = EnsureConfigFlag(args, key, level)
+	}
+	return args
+}
+
+// projectTrustConfigKey builds the dotted -c key for a project trust_level.
+// Paths are quoted so absolute paths with dots/slashes parse as one map key.
+func projectTrustConfigKey(path string) string {
+	path = strings.TrimSpace(path)
+	escaped := strings.ReplaceAll(path, `\`, `\\`)
+	escaped = strings.ReplaceAll(escaped, `"`, `\"`)
+	return `projects."` + escaped + `".trust_level`
+}
+
+// TrustProject returns a Projects map that marks absPath as trusted.
+func TrustProject(absPath string) map[string]codexcfg.Project {
+	absPath = strings.TrimSpace(absPath)
+	if absPath == "" {
+		return nil
+	}
+	return map[string]codexcfg.Project{
+		absPath: {TrustLevel: codexcfg.TrustTrusted},
+	}
+}
+
+// EnsureTrustedProject appends -c projects."<absPath>".trust_level=trusted when
+// absPath is non-empty. Idempotent for the same key.
+func EnsureTrustedProject(args []string, absPath string) []string {
+	return appendProjectsConfig(args, TrustProject(absPath), nil)
 }
 
 func sortedKeys(m map[string]string) []string {

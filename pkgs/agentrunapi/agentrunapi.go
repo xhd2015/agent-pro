@@ -107,6 +107,8 @@ type Opts struct {
 	// Color forces TTY child color env last (same policy as agent-run run --color).
 	// Not persisted on meta; does not recolor agent-run own stdout/JSON.
 	Color bool
+	// Verbose prints concrete agent-run / provider argv on Stderr.
+	Verbose bool
 	// ExitOnIdle / IdleTimeout are launch-time idle-exit flags (not persisted
 	// on session meta). Same normalize/emit rules as FollowUpOpts.
 	ExitOnIdle  bool

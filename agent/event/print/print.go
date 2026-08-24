@@ -14,7 +14,12 @@ import (
 	_ "github.com/xhd2015/agent-pro/agent/event/traceparse"
 )
 
-const TRUNCATE_LINE_MAX = 1024
+const (
+	TRUNCATE_LINE_MAX = 1024
+	// TruncateToolMaxLines caps formatted tool_call display for terminals.
+	// Assistant / think / user messages are not line-capped.
+	TruncateToolMaxLines = 16
+)
 
 func FormatTraceLine(line string) string {
 	trimmed := strings.TrimSpace(line)
@@ -195,6 +200,7 @@ func isNonDisplayableAgentEvent(t eventtypes.ActionType) bool {
 // FormatAgentEventForStdout formats an AgentEvent for live human stdout streaming.
 // Turn-boundary events (ActionDone, step markers) are suppressed; they still persist
 // to events.jsonl via the emit path before formatting.
+// Tool calls are display-truncated (1024 runes/line, max 16 lines); message/think are not.
 func FormatAgentEventForStdout(event eventtypes.AgentEvent) string {
 	if isNonDisplayableAgentEvent(event.Type) {
 		return ""
@@ -203,34 +209,11 @@ func FormatAgentEventForStdout(event eventtypes.AgentEvent) string {
 }
 
 // FormatAgentEvent formats an AgentEvent into a human-readable string.
+// Tool-call bodies are truncated for terminal friendliness; persisted events are unchanged.
 func FormatAgentEvent(event eventtypes.AgentEvent) string {
 	switch event.Type {
 	case eventtypes.ActionToolCall:
-		icon, label := toolIcon(event.Tool)
-		var parts []string
-		parts = append(parts, fmt.Sprintf("%s %s", icon, label))
-		if event.Text != "" {
-			parts = append(parts, event.Text)
-		}
-		if summary := toolInputSummary(event.Tool, event.ToolInput); summary != "" {
-			parts = append(parts, summary)
-		}
-		output := event.Output
-		if output == "" && event.Mock != nil {
-			output = event.Mock.Output
-		}
-		if output != "" {
-			parts = append(parts, output)
-		}
-		if len(event.Changes) > 0 {
-			for _, c := range event.Changes {
-				parts = append(parts, c.Kind+" "+c.Path)
-			}
-		}
-		if event.ExitCode != nil && *event.ExitCode != 0 {
-			parts = append(parts, "FAILED")
-		}
-		return strings.Join(parts, "\n")
+		return truncateToolDisplay(formatToolCallEvent(event))
 	case eventtypes.ActionMessage:
 		return fmt.Sprintf("💬 %s", event.Text)
 	case eventtypes.ActionThink:
@@ -244,6 +227,53 @@ func FormatAgentEvent(event eventtypes.AgentEvent) string {
 	default:
 		return fmt.Sprintf("[%s] %s", event.Type, event.Text)
 	}
+}
+
+func formatToolCallEvent(event eventtypes.AgentEvent) string {
+	icon, label := toolIcon(event.Tool)
+	var parts []string
+	parts = append(parts, fmt.Sprintf("%s %s", icon, label))
+	if event.Text != "" {
+		parts = append(parts, event.Text)
+	}
+	if summary := toolInputSummary(event.Tool, event.ToolInput); summary != "" {
+		parts = append(parts, summary)
+	}
+	output := event.Output
+	if output == "" && event.Mock != nil {
+		output = event.Mock.Output
+	}
+	if output != "" {
+		parts = append(parts, output)
+	}
+	if len(event.Changes) > 0 {
+		for _, c := range event.Changes {
+			parts = append(parts, c.Kind+" "+c.Path)
+		}
+	}
+	if event.ExitCode != nil && *event.ExitCode != 0 {
+		parts = append(parts, "FAILED")
+	}
+	return strings.Join(parts, "\n")
+}
+
+// truncateToolDisplay caps tool formatting for terminals: each line ≤ 1024 runes
+// (with "..."), and at most TruncateToolMaxLines lines, plus an omitted-lines footer.
+func truncateToolDisplay(s string) string {
+	if s == "" {
+		return s
+	}
+	rawLines := strings.Split(s, "\n")
+	limited := make([]string, 0, TruncateToolMaxLines+1)
+	for i, line := range rawLines {
+		if i >= TruncateToolMaxLines {
+			omitted := len(rawLines) - TruncateToolMaxLines
+			limited = append(limited, fmt.Sprintf("… (+%d lines truncated)", omitted))
+			break
+		}
+		limited = append(limited, truncateLine(line, TRUNCATE_LINE_MAX))
+	}
+	return strings.Join(limited, "\n")
 }
 
 func toolInputSummary(tool string, input map[string]any) string {

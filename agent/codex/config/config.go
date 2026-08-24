@@ -76,8 +76,17 @@ type MCPServer struct {
 	ExperimentalEnvironment string           `toml:"experimental_environment"`
 }
 
+// TrustLevel is the per-project trust gate in config.toml [projects."<path>"].
+type TrustLevel string
+
+const (
+	TrustTrusted   TrustLevel = "trusted"
+	TrustUntrusted TrustLevel = "untrusted"
+)
+
+// Project is one [projects."<abs-path>"] table.
 type Project struct {
-	TrustLevel string `toml:"trust_level"`
+	TrustLevel TrustLevel `toml:"trust_level"`
 }
 
 type Plugin struct {

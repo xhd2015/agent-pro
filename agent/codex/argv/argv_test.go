@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	codexcfg "github.com/xhd2015/agent-pro/agent/codex/config"
 )
 
 func TestStatusInspectArgv(t *testing.T) {
@@ -96,6 +98,89 @@ func TestEnsureIdempotent(t *testing.T) {
 	}
 	if n := countToken(out, "--dangerously-bypass-hook-trust"); n != 1 {
 		t.Fatalf("dup bool flag count=%d", n)
+	}
+}
+
+func TestArgv_ProjectsTrustLevel(t *testing.T) {
+	opts := Interactive()
+	opts.Bin = "/tmp/codex"
+	opts.Projects = TrustProject("/Users/me/hub")
+	got, err := Argv(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantKey := `projects."/Users/me/hub".trust_level`
+	wantVal := "trusted"
+	found := false
+	for i := 0; i+1 < len(got); i++ {
+		if got[i] == "-c" && got[i+1] == wantKey+"="+wantVal {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("missing %s=%s in %#v", wantKey, wantVal, got)
+	}
+}
+
+func TestArgv_ProjectsWinOverExtraConfig(t *testing.T) {
+	path := "/tmp/ws"
+	key := projectTrustConfigKey(path)
+	opts := Options{
+		Bin: "/tmp/codex",
+		Projects: map[string]codexcfg.Project{
+			path: {TrustLevel: codexcfg.TrustTrusted},
+		},
+		ExtraConfig: map[string]string{
+			key: "untrusted",
+		},
+	}
+	got, err := Argv(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var values []string
+	for i := 0; i+1 < len(got); i++ {
+		if got[i] != "-c" {
+			continue
+		}
+		if strings.HasPrefix(got[i+1], key+"=") {
+			values = append(values, strings.TrimPrefix(got[i+1], key+"="))
+		}
+	}
+	if len(values) != 1 || values[0] != "trusted" {
+		t.Fatalf("want single trusted override, got %v in %#v", values, got)
+	}
+}
+
+func TestProjectTrustConfigKeyEscapesQuotes(t *testing.T) {
+	got := projectTrustConfigKey(`/tmp/odd"path`)
+	want := `projects."/tmp/odd\"path".trust_level`
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestTrustProjectEmpty(t *testing.T) {
+	if TrustProject("  ") != nil {
+		t.Fatal("empty path should yield nil map")
+	}
+}
+
+func TestEnsureTrustedProject(t *testing.T) {
+	got := EnsureTrustedProject([]string{"/tmp/codex"}, "/hub")
+	want := []string{"/tmp/codex", "-c", `projects."/hub".trust_level=trusted`}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %#v want %#v", got, want)
+	}
+	// idempotent
+	got2 := EnsureTrustedProject(got, "/hub")
+	if !reflect.DeepEqual(got2, got) {
+		t.Fatalf("idempotent failed: %#v", got2)
+	}
+	got3 := EnsureTrustedProject(got, "  ")
+	if !reflect.DeepEqual(got3, got) {
+		t.Fatalf("empty path should leave argv unchanged: %#v", got3)
 	}
 }
 

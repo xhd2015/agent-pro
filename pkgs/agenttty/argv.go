@@ -2,6 +2,7 @@ package agenttty
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
 	codexargv "github.com/xhd2015/agent-pro/agent/codex/argv"
 	"github.com/xhd2015/agent-pro/agent/exec"
+	"github.com/xhd2015/agent-pro/pkgs/shell"
 )
 
 const envGrokTTYCommand = "AGENT_RUN_GROK_TTY_COMMAND"
@@ -77,6 +79,52 @@ func ApplyCodexReasoningEffort(args []string, effort string) []string {
 		return args
 	}
 	return EnsureCodexConfigFlag(args, "model_reasoning_effort", effort)
+}
+
+// ApplyCodexTrustedProject marks workspace as trusted via
+// -c projects."<abs>".trust_level=trusted so the directory-trust modal is skipped.
+// Empty workspace is a no-op. Relative paths are resolved with filepath.Abs.
+func ApplyCodexTrustedProject(args []string, workspace string) []string {
+	workspace = strings.TrimSpace(workspace)
+	if workspace == "" {
+		return args
+	}
+	abs := workspace
+	if p, err := filepath.Abs(workspace); err == nil {
+		abs = p
+	}
+	return codexargv.EnsureTrustedProject(args, abs)
+}
+
+// FormatArgvLine returns a shell-quoted one-liner for argv.
+func FormatArgvLine(argv []string) string {
+	if len(argv) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(argv))
+	for _, a := range argv {
+		parts = append(parts, shell.ShellQuote(a))
+	}
+	return strings.Join(parts, " ")
+}
+
+// writeVerboseArgvNotice prints notice: codex argv: … (or <runner> argv) to w.
+func writeVerboseArgvNotice(w io.Writer, runnerID string, argv []string) {
+	if w == nil {
+		w = os.Stderr
+	}
+	line := FormatArgvLine(argv)
+	if line == "" {
+		return
+	}
+	label := "argv"
+	r := strings.ToLower(strings.TrimSpace(runnerID))
+	if strings.Contains(r, "codex") {
+		label = "codex argv"
+	} else if r != "" {
+		label = r + " argv"
+	}
+	fmt.Fprintf(w, "notice: %s: %s\n", label, line)
 }
 
 // EnsureCodexBoolFlag ensures argv contains a bare boolean flag token exactly once.

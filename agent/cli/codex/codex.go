@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
+	codexargv "github.com/xhd2015/agent-pro/agent/codex/argv"
 	"github.com/xhd2015/agent-pro/agent/debuglog"
 	"github.com/xhd2015/agent-pro/agent/exec"
 )
@@ -85,19 +86,29 @@ func (a *CodexAgent) Ask(ctx context.Context, question string, opts *registry.As
 	if opts != nil && strings.TrimSpace(opts.SandboxMode) != "" {
 		sandboxMode = strings.TrimSpace(opts.SandboxMode)
 	}
+	ws := strings.TrimSpace(workspace)
+	if abs, err := filepath.Abs(ws); err == nil {
+		ws = abs
+	}
 
 	args := []string{
 		"exec",
 		"--json",
 		"--skip-git-repo-check",
-		"--cd", workspace,
+		"--cd", ws,
 		"--sandbox", sandboxMode,
 	}
 	if opts != nil && opts.Model != "" {
 		args = append(args, "--model", opts.Model)
 	}
+	if opts != nil {
+		if effort := strings.TrimSpace(opts.ReasoningEffort); effort != "" {
+			args = codexargv.EnsureConfigFlag(args, "model_reasoning_effort", effort)
+		}
+	}
+	args = codexargv.EnsureTrustedProject(args, ws)
 
-	fullQuestion := buildPrompt(workspace, question)
+	fullQuestion := buildPrompt(ws, question)
 	if opts != nil && opts.DisableSubAgents {
 		fullQuestion += "\n\n# CRITICAL RULE: DO NOT USE SUB-AGENTS\nYou MUST NOT delegate work to sub-agents or spawn parallel agents. Perform all work directly yourself."
 	}

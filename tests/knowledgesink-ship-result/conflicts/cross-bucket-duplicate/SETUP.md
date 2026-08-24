@@ -1,0 +1,33 @@
+# Scenario
+
+**Feature**: same path listed in add and update is rejected
+
+```go
+import (
+	"encoding/json"
+	"testing"
+
+	"github.com/xhd2015/agent-pro/pkgs/knowledgesink"
+)
+
+func Setup(t *testing.T, d *session.Doctest, req *Request) error {
+	_ = d
+	msg, branch := baseMsgBranch()
+	req.SeedFiles = map[string]string{"a.md": "x\n"}
+	body, err := json.Marshal(knowledgesink.ShipResult{
+		GitCommitMsg:  msg,
+		GitBranchName: branch,
+		GitCommitFiles: knowledgesink.ShipCommitFiles{
+			Add:    []string{"a.md"},
+			Update: []string{"a.md"},
+		},
+	})
+	if err != nil {
+		return err
+	}
+	req.ResultJSON = body
+	req.ExpectOK = false
+	req.ExpectErrSubstr = "both"
+	return nil
+}
+```

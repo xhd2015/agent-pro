@@ -47,6 +47,8 @@ type RunOpts struct {
 	Store                agentstorage.Store
 	Env                  []string
 	Driver               agentdriver.Driver
+	// Verbose prints concrete agent-run / Codex argv on stderr.
+	Verbose bool
 	// ResultFile, when set, is an extra done signal: valid JSON at this path
 	// ends the wait even if the TTY is still busy. RunJSON sets this.
 	ResultFile string
@@ -227,6 +229,7 @@ func launchDetach(ctx context.Context, opts RunOpts, store agentstorage.Store) e
 		Detach:                        true,
 		AllowRelocateResumeSessionDir: true,
 		Color:                         true,
+		Verbose:                       opts.Verbose,
 		Env:                           append([]string(nil), opts.Env...),
 		Driver:                        opts.Driver,
 		Store:                         store,
@@ -243,6 +246,7 @@ func launchOpen(opts RunOpts, store agentstorage.Store) error {
 		AllowRelocateResumeSessionDir: true,
 		Open:                          true,
 		Color:                         true,
+		Verbose:                       opts.Verbose,
 		Model:                         opts.Model,
 		ModelReasoningEffort:          opts.ModelReasoningEffort,
 		Env:                           append([]string(nil), opts.Env...),
@@ -253,6 +257,10 @@ func launchOpen(opts RunOpts, store agentstorage.Store) error {
 	}
 	if home := storeHomeForFollowUp(opts, store); home != "" {
 		cmd = "AGENT_RUN_HOME=" + shell.ShellQuote(home) + " " + cmd
+	}
+	if opts.Verbose {
+		w := os.Stderr
+		fmt.Fprintf(w, "notice: agent-run: %s\n", cmd)
 	}
 	return OpenInNewTerminal(OpenInNewTerminalOpts{
 		WorkspaceDir: opts.WorkspaceDir,

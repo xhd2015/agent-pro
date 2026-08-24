@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	piagent "github.com/xhd2015/agent-pro/agent/cli/pi"
 	agentprovider "github.com/xhd2015/agent-pro/agent/cli/provider"
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
+	codexargv "github.com/xhd2015/agent-pro/agent/codex/argv"
 	"github.com/xhd2015/agent-pro/agent/event/codex_types"
 	eventprint "github.com/xhd2015/agent-pro/agent/event/print"
 	types "github.com/xhd2015/agent-pro/agent/event/types"
@@ -32,7 +34,7 @@ type RunOptions struct {
 	Runner string
 	Model  string
 	// ModelReasoningEffort is optional Codex -c model_reasoning_effort=<level>
-	// (codex-tty only; plumbed to agenttty.RunOptions).
+	// (codex-tty via agenttty; headless codex via streamCodexLike).
 	ModelReasoningEffort string
 	SessionID            string
 	// TerminalSessionID is the TTY registry id. When empty, SessionID is used as
@@ -53,6 +55,8 @@ type RunOptions struct {
 	// Color forces TTY child color env last (not persisted on meta; does not
 	// recolor agent-run own stdout/JSON).
 	Color bool
+	// Verbose prints concrete provider argv on Stderr (agenttty notice: … argv).
+	Verbose bool
 	// ExitOnIdle / IdleTimeout are launch-time idle-exit flags (not persisted
 	// on meta). When enabled, Run writes sessions/<id>/idle-policy.json before
 	// the TTY serve starts.
@@ -251,7 +255,7 @@ func Run(ctx context.Context, opts RunOptions) error {
 		}
 		_ = opts.Store.UpdateSessionRunnerSessionID(sessionID, id)
 	}
-	newRunnerSessionID, newTerminalSessionID, runErr := streamRunner(ctx, runner, opts.Store.Home(), workspace, env, runnerPrompt, opts.Model, opts.ModelReasoningEffort, opts.AgentRunnerBinary, opts.AgentRunnerConfigHome, opts.PrependPaths, opts.Env, opts.Color, opts.ExitOnIdle, opts.IdleTimeout, runnerSessionID, sessionID, ttySessionID, opts.StreamPhases, opts.KeepTerminalAlive, opts.Open, opts.Detach, opts.NoSubmit, opts.Fork, opts.ForkSessionID, ttyGrokSyncOwnsEvents, opts.Driver, persistTerminalSessionID, persistRunnerSessionID, emit, stderr)
+	newRunnerSessionID, newTerminalSessionID, runErr := streamRunner(ctx, runner, opts.Store.Home(), workspace, env, runnerPrompt, opts.Model, opts.ModelReasoningEffort, opts.AgentRunnerBinary, opts.AgentRunnerConfigHome, opts.PrependPaths, opts.Env, opts.Color, opts.Verbose, opts.ExitOnIdle, opts.IdleTimeout, runnerSessionID, sessionID, ttySessionID, opts.StreamPhases, opts.KeepTerminalAlive, opts.Open, opts.Detach, opts.NoSubmit, opts.Fork, opts.ForkSessionID, ttyGrokSyncOwnsEvents, opts.Driver, persistTerminalSessionID, persistRunnerSessionID, emit, stderr)
 	if strings.TrimSpace(newRunnerSessionID) != "" {
 		_ = opts.Store.UpdateSessionRunnerSessionID(sessionID, newRunnerSessionID)
 	}
@@ -488,7 +492,7 @@ func resolveTTYSessionID(opts RunOptions, userSessionID string) string {
 
 // streamRunner runs the selected agent. ttySessionID is the custom terminal
 // registry id (from --session / --session-id-from-prompt); empty keeps session-N.
-func streamRunner(ctx context.Context, runner, home, workspace string, env *agentexec.Env, prompt, model, modelReasoningEffort, agentRunnerBinary, agentRunnerConfigHome string, prependPaths, envEntries []string, color bool, exitOnIdle bool, idleTimeout time.Duration, runnerSessionID, agentSessionID, ttySessionID string, streamPhases, keepTerminalAlive, open, detach, noSubmit, fork bool, forkSessionID string, grokSyncOwnsEvents bool, driver agentdriver.Driver, onTerminalSessionID, onRunnerSessionID func(string), emit func(types.AgentEvent) error, stderr io.Writer) (string, string, error) {
+func streamRunner(ctx context.Context, runner, home, workspace string, env *agentexec.Env, prompt, model, modelReasoningEffort, agentRunnerBinary, agentRunnerConfigHome string, prependPaths, envEntries []string, color, verbose bool, exitOnIdle bool, idleTimeout time.Duration, runnerSessionID, agentSessionID, ttySessionID string, streamPhases, keepTerminalAlive, open, detach, noSubmit, fork bool, forkSessionID string, grokSyncOwnsEvents bool, driver agentdriver.Driver, onTerminalSessionID, onRunnerSessionID func(string), emit func(types.AgentEvent) error, stderr io.Writer) (string, string, error) {
 	if agenttty.IsTTYRunner(runner) {
 		terminalSessionID := ""
 		onID := func(id string) {
@@ -514,6 +518,7 @@ func streamRunner(ctx context.Context, runner, home, workspace string, env *agen
 			PrependPaths:          prependPaths,
 			Env:                   envEntries,
 			Color:                 color,
+			Verbose:               verbose,
 			ExitOnIdle:            exitOnIdle,
 			IdleTimeout:           idleTimeout,
 			Driver:                driver,
@@ -535,7 +540,7 @@ func streamRunner(ctx context.Context, runner, home, workspace string, env *agen
 	}
 	switch registry.AgentRunnerID(runner) {
 	case registry.AgentRunnerFakeCodex, registry.AgentRunnerCodex:
-		err := streamCodexLike(ctx, runner, workspace, env, prompt, model, streamPhases, emit, stderr)
+		err := streamCodexLike(ctx, runner, workspace, env, prompt, model, modelReasoningEffort, streamPhases, verbose, emit, stderr)
 		return "", "", err
 	default:
 		if _, err := agentprovider.Build(registry.AgentRunnerID(runner), "", workspace, env); err != nil {
@@ -636,7 +641,7 @@ func runnerSessionIDFromAgent(agent registry.Agent) string {
 	return ""
 }
 
-func streamCodexLike(ctx context.Context, runner, workspace string, env *agentexec.Env, prompt, model string, streamPhases bool, emit func(types.AgentEvent) error, stderr io.Writer) error {
+func streamCodexLike(ctx context.Context, runner, workspace string, env *agentexec.Env, prompt, model, modelReasoningEffort string, streamPhases, verbose bool, emit func(types.AgentEvent) error, stderr io.Writer) error {
 	built, err := agentprovider.Build(registry.AgentRunnerID(runner), "", workspace, env)
 	if err != nil {
 		return err
@@ -653,11 +658,10 @@ func streamCodexLike(ctx context.Context, runner, workspace string, env *agentex
 		}
 	}
 
-	args := []string{"exec", "--json", "--skip-git-repo-check", "--cd", workspace}
-	if model != "" {
-		args = append(args, "--model", model)
+	args := buildCodexExecArgs(workspace, prompt, model, modelReasoningEffort)
+	if verbose && stderr != nil {
+		fmt.Fprintf(stderr, "notice: %s argv: %s %s\n", runner, agentPath, strings.Join(shellQuoteArgs(args), " "))
 	}
-	args = append(args, prompt)
 
 	cmd := env.CommandContext(ctx, agentPath, args...)
 	cmd.Dir = workspace
@@ -708,4 +712,41 @@ func streamCodexLike(ctx context.Context, runner, workspace string, env *agentex
 		}
 	}
 	return cmd.Wait()
+}
+
+// buildCodexExecArgs builds headless `codex exec` argv (after binary): sandbox,
+// workspace trust, model, and optional model_reasoning_effort.
+func buildCodexExecArgs(workspace, prompt, model, modelReasoningEffort string) []string {
+	ws := strings.TrimSpace(workspace)
+	if abs, err := filepath.Abs(ws); err == nil {
+		ws = abs
+	}
+	args := []string{
+		"exec",
+		"--json",
+		"--skip-git-repo-check",
+		"--cd", ws,
+		"--sandbox", "danger-full-access",
+	}
+	if m := strings.TrimSpace(model); m != "" {
+		args = append(args, "--model", m)
+	}
+	if effort := strings.TrimSpace(modelReasoningEffort); effort != "" {
+		args = codexargv.EnsureConfigFlag(args, "model_reasoning_effort", effort)
+	}
+	args = codexargv.EnsureTrustedProject(args, ws)
+	args = append(args, prompt)
+	return args
+}
+
+func shellQuoteArgs(args []string) []string {
+	out := make([]string, len(args))
+	for i, a := range args {
+		if strings.ContainsAny(a, " \t\n\"'\\") {
+			out[i] = strconv.Quote(a)
+		} else {
+			out[i] = a
+		}
+	}
+	return out
 }

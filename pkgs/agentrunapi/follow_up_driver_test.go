@@ -31,3 +31,22 @@ func TestBuildFollowUp_embeddingDriver(t *testing.T) {
 		t.Fatalf("missing --open: %q", got)
 	}
 }
+
+func TestBuildFollowUp_VerboseEmitsDashV(t *testing.T) {
+	got, err := agentrunapi.BuildFollowUpCommand(agentrunapi.FollowUpOpts{
+		Driver: agentdriver.Driver{
+			Binary: "/abs/spl",
+			Args:   []string{"agent-run"},
+		},
+		SessionID: "s1",
+		Prompt:    "hi",
+		Open:      true,
+		Verbose:   true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, " -v ") && !strings.Contains(got, " -v") {
+		t.Fatalf("missing -v in follow-up: %q", got)
+	}
+}
