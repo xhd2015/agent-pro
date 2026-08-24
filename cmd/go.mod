@@ -5,7 +5,7 @@ go 1.25.10
 require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/slack-go/slack v0.27.0
-	github.com/xhd2015/agent-pro v0.0.144
+	github.com/xhd2015/agent-pro v0.0.154
 	github.com/xhd2015/dot-pkgs/go-pkgs v0.0.147
 	github.com/xhd2015/less-flags v1.0.5
 	github.com/xhd2015/less-gen v0.0.19
