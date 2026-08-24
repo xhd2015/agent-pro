@@ -33,6 +33,10 @@ No live AppleScript.
 - No live host without `--open` → hard error; SendText not called.
 - `--open` with no host → open resume, wait for host, then send (two stdout lines).
 - `--open` timeout → hard error after wait.
+- `--open` + agent-run-managed live → send via agent-run (no grok --resume / SendText).
+- `--open` + agent-run-managed exited → agent-run resume window (prompt in child).
+- `--open --no-agent-run` forces bare grok --resume even when managed.
+- Ambiguous agent-run mapping → warning + fall back to grok --resume.
 - `--tab` resolves via `ResolveFromTab` then sends.
 - Flag opts (`--no-submit` / `--focus` / `--no-ctrl-u`) plumb into SendText.
 - `--dry-run` prints plan; never opens or SendText.
@@ -59,7 +63,12 @@ send/
 │   └── no-live/
 ├── open/
 │   ├── resume-then-send/
-│   └── timeout/
+│   ├── timeout/
+│   └── agent-run/
+│       ├── live-send/
+│       ├── resume-send/
+│       ├── no-agent-run/
+│       └── ambiguous-warn/
 ├── tab/
 │   └── hit-send/
 ├── keys/
@@ -85,6 +94,10 @@ send/
 | `send/no-live/` | Hard error without `--open`. |
 | `open/resume-then-send/` | Open then send; two stdout lines. |
 | `open/timeout/` | Wait expires → timeout error. |
+| `open/agent-run/live-send/` | Prefer live agent-run send; no grok --resume / SendText. |
+| `open/agent-run/resume-send/` | Prefer agent-run resume window; no SendText. |
+| `open/agent-run/no-agent-run/` | `--no-agent-run` forces bare grok --resume. |
+| `open/agent-run/ambiguous-warn/` | Ambiguous mapping warns and falls back. |
 | `tab/hit-send/` | `--tab 1` sends to resolved pane. |
 | `keys/ctrl-c-only/` | `--ctrl-c` → `\x03`; NoCtrlU+NoSubmit. |
 | `keys/up-up-enter/` | two Ups + Enter; key-only opts. |
@@ -124,6 +137,9 @@ type Request struct {
 	AfterOpenHost    bool // AfterOpen adds live host for --open tests
 	OpenWait         time.Duration
 	UseFakeClock     bool
+	NoAgentRun       bool
+	AgentRunByID     map[string]*sessions.AgentRunOpenResult
+	AgentRunErr      error
 }
 
 type Response struct {
@@ -132,6 +148,7 @@ type Response struct {
 	Err            error
 	SendCalls      []sessions.SendCall
 	Opened         []string
+	AgentRunCalls  []string
 	ListITermCalls int
 	SleepCalls     int
 }
@@ -150,6 +167,8 @@ func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 		},
 		CurrentSessionID: req.CurrentSessionID,
 		ControllingTTY:   req.ControllingTTY,
+		AgentRunByID:     req.AgentRunByID,
+		AgentRunErr:      req.AgentRunErr,
 	}
 	if req.AfterOpenHost {
 		sid := req.SessionID
@@ -172,6 +191,7 @@ func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	}
 	var stdout, stderr bytes.Buffer
 	opts := fake.SendOpts()
+	opts.NoAgentRun = req.NoAgentRun
 	if req.OpenWait > 0 {
 		opts.OpenWait = req.OpenWait
 	}
@@ -182,6 +202,7 @@ func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 		Err:            err,
 		SendCalls:      append([]sessions.SendCall(nil), fake.SendCalls...),
 		Opened:         append([]string(nil), fake.Opened...),
+		AgentRunCalls:  append([]string(nil), fake.AgentRunCalls...),
 		ListITermCalls: fake.ListITermCalls,
 		SleepCalls:     fake.SleepCalls,
 	}, nil

@@ -16,6 +16,9 @@ const OpenHelp = `Usage: agent-pro grok session open (<session-id> | --tab SEL |
 
 Focus the iTerm2 tab that already hosts this Grok session when one exists.
 Otherwise open a new iTerm2 window and run: grok --resume <session-id>
+When the Grok id is bound in agent-run (grok/grok-tty runner_session_id),
+prefers agent-run (live → focus; exited → agent-run resume) instead of bare
+grok --resume.
 
 Session source (exactly one):
   <session-id>          explicit Grok session id
@@ -26,6 +29,7 @@ Options:
   --index N             select candidate N when multiple tabs host the same session
                         (positional <session-id> only; not with --tab/--tab-index)
   --dir DIR             workspace for resume (default: session cwd)
+  --no-agent-run        force bare grok --resume (skip agent-run prefer)
   --dry-run             resolve only; do not focus or open a window
   -h,--help             show help
 
@@ -48,6 +52,13 @@ type OpenOpts struct {
 	Dir    string // optional workspace override for resume
 	DryRun bool
 
+	// NoAgentRun skips agent-run prefer (--no-agent-run).
+	NoAgentRun bool
+	// AgentRunHome overrides AGENT_RUN_HOME / ~/.agent-run for production prefer.
+	AgentRunHome string
+	// AgentRunBin overrides LookPath("agent-run") for resume/run window commands.
+	AgentRunBin string
+
 	// TabFrom, when set, short-circuits focus to this already-resolved tab
 	// (used by RunOpen after ResolveFromTab). Resume is skipped.
 	TabFrom *TabResolveResult
@@ -67,15 +78,21 @@ type OpenOpts struct {
 	LookPath        func(file string) (string, error)
 	Env             []string
 
+	// AgentRunOpen replaces production agent-run prefer (tests).
+	AgentRunOpen func(grokSessionID, prompt string) (*AgentRunOpenResult, error)
+
 	Stderr io.Writer // warnings (live-but-no-iTerm); nil → os.Stderr
 }
 
 // OpenResult is the outcome of a successful Open.
 type OpenResult struct {
-	Action    string // OpenActionFocused | OpenActionResumed
-	Candidate FocusCandidate
-	CWD       string
-	Command   string
+	Action            string // OpenActionFocused | OpenActionResumed
+	Candidate         FocusCandidate
+	CWD               string
+	Command           string
+	ViaAgentRun       bool
+	AgentRunSessionID string
+	AgentRunMode      string
 }
 
 // OpenFake is the deterministic injected boundary used by open tests.
@@ -84,12 +101,16 @@ type OpenFake struct {
 	Opened           []string // "dir|followUp" entries
 	CurrentSessionID string
 	ControllingTTY   string
+
+	AgentRunByID  map[string]*AgentRunOpenResult
+	AgentRunErr   error
+	AgentRunCalls []string
 }
 
 // OpenOpts returns OpenOpts wired to this fake.
 func (f *OpenFake) OpenOpts() *OpenOpts {
 	fo := f.FocusFake.Opts()
-	return &OpenOpts{
+	opts := &OpenOpts{
 		ListProcs:  fo.ListProcs,
 		Lsof:       fo.Lsof,
 		ListITerm:  fo.ListITerm,
@@ -105,10 +126,37 @@ func (f *OpenFake) OpenOpts() *OpenOpts {
 			f.Opened = append(f.Opened, dir+"|"+followUp)
 			return nil
 		},
-		GrokBin:  "/usr/local/bin/grok",
-		LookPath: func(string) (string, error) { return "/usr/local/bin/grok", nil },
-		Env:      []string{"PATH=/usr/bin"},
+		GrokBin:     "/usr/local/bin/grok",
+		AgentRunBin: "/usr/local/bin/agent-run",
+		LookPath: func(file string) (string, error) {
+			switch file {
+			case "agent-run":
+				return "/usr/local/bin/agent-run", nil
+			default:
+				return "/usr/local/bin/grok", nil
+			}
+		},
+		Env: []string{"PATH=/usr/bin"},
 	}
+	if f.AgentRunByID != nil || f.AgentRunErr != nil {
+		opts.AgentRunOpen = func(grokSessionID, prompt string) (*AgentRunOpenResult, error) {
+			f.AgentRunCalls = append(f.AgentRunCalls, grokSessionID+"|"+prompt)
+			if f.AgentRunErr != nil {
+				return nil, f.AgentRunErr
+			}
+			hit, ok := f.AgentRunByID[grokSessionID]
+			if !ok || hit == nil {
+				return nil, nil
+			}
+			out := *hit
+			if out.Mode == "" {
+				out.Mode = AgentRunOpenModeFocus
+				out.Focused = true
+			}
+			return &out, nil
+		}
+	}
+	return opts
 }
 
 // Open focuses an existing iTerm host tab for sessionID, or resumes the session
@@ -155,6 +203,58 @@ func Open(grokHome, sessionID string, opts *OpenOpts) (*OpenResult, error) {
 		return focusOpenCandidate(selected, opts)
 	}
 
+	stderr := opts.Stderr
+	if stderr == nil {
+		stderr = os.Stderr
+	}
+
+	arHit, arWarn, arOK := preferAgentRunOpen(agentRunOpenHooks{
+		NoAgentRun:      opts.NoAgentRun,
+		AgentRunHome:    opts.AgentRunHome,
+		DryRun:          opts.DryRun,
+		Dir:             opts.Dir,
+		Info:            info,
+		SkipProduction:  opts.ListProcs != nil || opts.ListITerm != nil,
+		OpenInNewWindow: opts.OpenInNewWindow,
+		AgentRunBin:     opts.AgentRunBin,
+		LookPath:        opts.LookPath,
+		Stderr:          stderr,
+		AgentRunOpen:    opts.AgentRunOpen,
+	}, sessionID, "")
+	writeAgentRunOpenWarn(stderr, arWarn)
+	if arOK && arHit != nil {
+		cmd := arHit.Command
+		if arHit.Opened && !opts.DryRun && opts.AgentRunOpen != nil {
+			if cmd == "" {
+				cmd = "agent-run run --session-id " + arHit.AgentRunSessionID + " --auto-send-or-resume --open"
+			}
+			openFn := opts.OpenInNewWindow
+			if openFn == nil {
+				openFn = defaultOpenInNewWindow
+			}
+			if err := openFn(arHit.CWD, cmd); err != nil {
+				return nil, fmt.Errorf("open new window: %w", err)
+			}
+		}
+		if arHit.Focused {
+			return &OpenResult{
+				Action:            OpenActionFocused,
+				ViaAgentRun:       true,
+				AgentRunSessionID: arHit.AgentRunSessionID,
+				AgentRunMode:      arHit.Mode,
+				CWD:               arHit.CWD,
+			}, nil
+		}
+		return &OpenResult{
+			Action:            OpenActionResumed,
+			ViaAgentRun:       true,
+			AgentRunSessionID: arHit.AgentRunSessionID,
+			AgentRunMode:      arHit.Mode,
+			CWD:               arHit.CWD,
+			Command:           cmd,
+		}, nil
+	}
+
 	cwd, err := resolveOpenCWD(info, opts.Dir)
 	if err != nil {
 		return nil, err
@@ -167,10 +267,6 @@ func Open(grokHome, sessionID string, opts *OpenOpts) (*OpenResult, error) {
 	cmdLine := quotedForkCommandLine(bin, argv)
 
 	if disc != nil && disc.LiveCount > 0 {
-		stderr := opts.Stderr
-		if stderr == nil {
-			stderr = os.Stderr
-		}
 		fmt.Fprintf(stderr, "warning: session has live grok PID(s) but no matching iTerm tab; opening a new window\n")
 	}
 
@@ -262,6 +358,7 @@ func RunOpen(args []string, stdout, stderr io.Writer, grokHome string, opts *Ope
 	runOpts.Index = parsed.Index
 	runOpts.Dir = parsed.Dir
 	runOpts.DryRun = parsed.DryRun
+	runOpts.NoAgentRun = parsed.NoAgentRun
 	if runOpts.Stderr == nil {
 		runOpts.Stderr = stderr
 	}
@@ -291,19 +388,36 @@ func RunOpen(args []string, stdout, stderr io.Writer, grokHome string, opts *Ope
 	switch result.Action {
 	case OpenActionFocused:
 		if parsed.DryRun {
+			if result.ViaAgentRun {
+				fmt.Fprintln(stdout, "Would focus via agent-run")
+				fmt.Fprintf(stdout, "  grok id:       %s\n", sessionID)
+				fmt.Fprintf(stdout, "  agent-run id:  %s\n", result.AgentRunSessionID)
+				return nil
+			}
 			fmt.Fprintf(stdout, "Would focus: window %s, tab %d\n", result.Candidate.WindowID, result.Candidate.TabIndex)
 			return nil
 		}
-		fmt.Fprintf(stdout, "focused: window %s, tab %d\n", result.Candidate.WindowID, result.Candidate.TabIndex)
+		if result.ViaAgentRun {
+			fmt.Fprintf(stdout, "focused: agent-run %s\n", result.AgentRunSessionID)
+		} else {
+			fmt.Fprintf(stdout, "focused: window %s, tab %d\n", result.Candidate.WindowID, result.Candidate.TabIndex)
+		}
 	case OpenActionResumed:
 		if parsed.DryRun {
 			fmt.Fprintln(stdout, "Would open new iTerm2 window")
 			fmt.Fprintf(stdout, "  grok id:  %s\n", sessionID)
+			if result.ViaAgentRun {
+				fmt.Fprintf(stdout, "  agent-run id: %s\n", result.AgentRunSessionID)
+			}
 			fmt.Fprintf(stdout, "  cwd:      %s\n", result.CWD)
 			fmt.Fprintf(stdout, "  command:  %s\n", result.Command)
 			return nil
 		}
-		fmt.Fprintf(stdout, "opened: new window; resuming %s\n", sessionID)
+		if result.ViaAgentRun {
+			fmt.Fprintf(stdout, "opened: new window; agent-run resume %s\n", result.AgentRunSessionID)
+		} else {
+			fmt.Fprintf(stdout, "opened: new window; resuming %s\n", sessionID)
+		}
 	default:
 		return fmt.Errorf("internal: unknown open action %q", result.Action)
 	}
@@ -317,6 +431,7 @@ type openArgs struct {
 	TabIndex   *int
 	Dir        string
 	DryRun     bool
+	NoAgentRun bool
 	Help       bool
 }
 
@@ -330,6 +445,10 @@ func parseOpenArgs(args []string) (openArgs, error) {
 		}
 		if arg == "--dry-run" {
 			out.DryRun = true
+			continue
+		}
+		if arg == "--no-agent-run" {
+			out.NoAgentRun = true
 			continue
 		}
 		if arg == "--index" {

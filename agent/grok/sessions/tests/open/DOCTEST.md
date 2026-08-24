@@ -20,13 +20,15 @@ that tab without resume.
 
 ## Behaviors
 
-- Help documents `<session-id>`, `--tab`, `--tab-index`, `--index`, `--dir`, `--dry-run`.
+- Help documents `<session-id>`, `--tab`, `--tab-index`, `--index`, `--dir`, `--no-agent-run`, `--dry-run`.
 - Parent session help names the open command.
 - Missing session source is a usage error; iTerm / open are not invoked.
 - Unknown Grok session returns `grok session not found` and never focuses/opens.
 - One hosting tab is focused and reported as `focused: window W, tab T`.
 - Several tabs without `--index` list candidates and never focus or resume.
 - No live host (or live but no iTerm match) resumes in a new window.
+- Agent-run-managed live → focus via agent-run; exited → agent-run resume window.
+- `--no-agent-run` forces bare grok --resume even when managed.
 - Live PID with no iTerm match prints a `warning:` on stderr, then resumes.
 - Empty session cwd without `--dir` is fatal.
 - `--dry-run` prints the plan and never focuses or opens.
@@ -56,6 +58,10 @@ open/
 │   ├── no-live-pid/
 │   ├── live-no-iterm/
 │   └── empty-cwd/
+├── agent-run/
+│   ├── focus-live/
+│   ├── resume/
+│   └── no-agent-run/
 ├── dry-run/
 │   ├── focus/
 │   └── resume/
@@ -81,6 +87,9 @@ open/
 | `resume/no-live-pid/` | Known session, no live → OpenInNewWindow with `grok --resume`. |
 | `resume/live-no-iterm/` | Live PID + zero iTerm → warning + resume. |
 | `resume/empty-cwd/` | Empty cwd without `--dir` is fatal; no open. |
+| `agent-run/focus-live/` | Managed live → focused via agent-run; no grok --resume. |
+| `agent-run/resume/` | Managed exited → agent-run resume window. |
+| `agent-run/no-agent-run/` | `--no-agent-run` forces bare grok --resume. |
 | `dry-run/focus/` | Would focus; FocusITerm / OpenInNewWindow not called. |
 | `dry-run/resume/` | Would open plan; OpenInNewWindow not called. |
 | `tab/hit-focus/` | `--tab 2` focuses resolved tab; never resumes. |
@@ -118,6 +127,9 @@ type Request struct {
 	CurrentSessionID string
 	ControllingTTY   string
 	ParentHelp       bool
+	NoAgentRun       bool
+	AgentRunByID     map[string]*sessions.AgentRunOpenResult
+	AgentRunErr      error
 }
 
 type Response struct {
@@ -126,6 +138,7 @@ type Response struct {
 	Err            error
 	Focused        []string
 	Opened         []string
+	AgentRunCalls  []string
 	ListITermCalls int
 }
 
@@ -143,10 +156,13 @@ func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 		},
 		CurrentSessionID: req.CurrentSessionID,
 		ControllingTTY:   req.ControllingTTY,
+		AgentRunByID:     req.AgentRunByID,
+		AgentRunErr:      req.AgentRunErr,
 	}
 	var stdout, stderr bytes.Buffer
 	opts := fake.OpenOpts()
 	opts.Stderr = &stderr
+	opts.NoAgentRun = req.NoAgentRun
 	err := sessions.RunOpen(req.Args, &stdout, &stderr, req.GrokHome, opts)
 	return &Response{
 		Stdout:         stdout.String(),
@@ -154,6 +170,7 @@ func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 		Err:            err,
 		Focused:        fake.Focused,
 		Opened:         fake.Opened,
+		AgentRunCalls:  append([]string(nil), fake.AgentRunCalls...),
 		ListITermCalls: fake.ListITermCalls,
 	}, nil
 }

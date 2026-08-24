@@ -19,6 +19,9 @@ Type text and/or key sequences into the live iTerm2 pane that hosts a Grok sessi
 Same write-text path as: kool iterm2 session <iterm-uuid> send …
 By default requires a hosting iTerm tab. With --open, resumes in a new
 window when no host is found, waits for the tab to appear, then sends.
+When the Grok id is bound in agent-run (grok/grok-tty runner_session_id),
+--open prefers agent-run auto-send-or-resume instead of bare grok --resume
+(live → send queue; exited → agent-run resume in a new window).
 
 Session source (exactly one):
   --session-id ID       Grok session id
@@ -32,6 +35,7 @@ Options:
   --focus               switch to the session's window/tab before writing
   --no-ctrl-u           do not prefix Ctrl-U (default prefixes Ctrl-U)
   --open                if no hosting tab: resume in a new window, then send
+  --no-agent-run        with --open: force bare grok --resume (skip agent-run prefer)
   --dir DIR             workspace for --open resume (default: session cwd)
   --dry-run             resolve only; do not open or call SendText
   --enter               append Enter (\n) to the send sequence
@@ -67,6 +71,13 @@ type SendOpts struct {
 	NoSubmit bool
 	NoCtrlU  bool
 
+	// NoAgentRun skips agent-run prefer on --open (--no-agent-run).
+	NoAgentRun bool
+	// AgentRunHome overrides AGENT_RUN_HOME / ~/.agent-run for production prefer.
+	AgentRunHome string
+	// AgentRunBin overrides LookPath("agent-run") for resume/run window commands.
+	AgentRunBin string
+
 	// OpenWait caps how long --open polls for a hosting tab. Zero → DefaultSendOpenWait.
 	OpenWait time.Duration
 
@@ -90,6 +101,10 @@ type SendOpts struct {
 	LookPath        func(file string) (string, error)
 	Env             []string
 
+	// AgentRunOpen replaces production agent-run prefer+deliver (tests).
+	// Return (nil, nil) soft miss; ambiguous error → warning + fall back.
+	AgentRunOpen func(grokSessionID, prompt string) (*AgentRunOpenResult, error)
+
 	// Sleep / Now inject the --open wait loop (tests). Nil → time.Sleep / time.Now.
 	Sleep func(d time.Duration)
 	Now   func() time.Time
@@ -99,13 +114,16 @@ type SendOpts struct {
 
 // SendResult is the outcome of a successful Send resolve (and optional write).
 type SendResult struct {
-	SessionID      string
-	ITermSessionID string
-	Text           string
-	Opened         bool // true when --open resumed a new window
-	Candidate      FocusCandidate
-	CWD            string
-	Command        string
+	SessionID         string
+	ITermSessionID    string
+	Text              string
+	Opened            bool // true when --open resumed a new window
+	ViaAgentRun       bool
+	AgentRunSessionID string
+	AgentRunMode      string // send | resume | run
+	Candidate         FocusCandidate
+	CWD               string
+	Command           string
 }
 
 // SendFake is the deterministic injected boundary used by send tests.
@@ -114,13 +132,18 @@ type SendFake struct {
 	CurrentSessionID string
 	ControllingTTY   string
 
-	Opened        []string // "dir|followUp"
-	SendCalls     []SendCall
-	SendErr       error
-	AfterOpen     func(*SendFake) // mutate Procs/ITerm after resume (tests)
-	SleepCalls    int
-	Clock         time.Time // advanced by Sleep when non-zero start set via InitClock
-	clockStarted  bool
+	Opened       []string // "dir|followUp"
+	SendCalls    []SendCall
+	SendErr      error
+	AfterOpen    func(*SendFake) // mutate Procs/ITerm after resume (tests)
+	SleepCalls   int
+	Clock        time.Time // advanced by Sleep when non-zero start set via InitClock
+	clockStarted bool
+
+	// AgentRunByID maps grok session id → prefer hit. Missing key = soft miss.
+	AgentRunByID  map[string]*AgentRunOpenResult
+	AgentRunErr   error
+	AgentRunCalls []string
 }
 
 // SendCall records one SendText invocation.
@@ -139,7 +162,7 @@ func (f *SendFake) InitClock(t time.Time) {
 // SendOpts returns SendOpts wired to this fake.
 func (f *SendFake) SendOpts() *SendOpts {
 	fo := f.FocusFake.Opts()
-	return &SendOpts{
+	opts := &SendOpts{
 		ListProcs: fo.ListProcs,
 		Lsof:      fo.Lsof,
 		ListITerm: fo.ListITerm,
@@ -164,9 +187,17 @@ func (f *SendFake) SendOpts() *SendOpts {
 			}
 			return nil
 		},
-		GrokBin:  "/usr/local/bin/grok",
-		LookPath: func(string) (string, error) { return "/usr/local/bin/grok", nil },
-		Env:      []string{"PATH=/usr/bin"},
+		GrokBin:     "/usr/local/bin/grok",
+		AgentRunBin: "/usr/local/bin/agent-run",
+		LookPath: func(file string) (string, error) {
+			switch file {
+			case "agent-run":
+				return "/usr/local/bin/agent-run", nil
+			default:
+				return "/usr/local/bin/grok", nil
+			}
+		},
+		Env: []string{"PATH=/usr/bin"},
 		Sleep: func(d time.Duration) {
 			f.SleepCalls++
 			if f.clockStarted {
@@ -180,6 +211,42 @@ func (f *SendFake) SendOpts() *SendOpts {
 			return time.Now()
 		},
 	}
+	if f.AgentRunByID != nil || f.AgentRunErr != nil {
+		opts.AgentRunOpen = func(grokSessionID, prompt string) (*AgentRunOpenResult, error) {
+			f.AgentRunCalls = append(f.AgentRunCalls, grokSessionID+"|"+prompt)
+			if f.AgentRunErr != nil {
+				return nil, f.AgentRunErr
+			}
+			hit, ok := f.AgentRunByID[grokSessionID]
+			if !ok || hit == nil {
+				return nil, nil
+			}
+			out := *hit
+			if out.Mode == "" {
+				if strings.TrimSpace(prompt) == "" {
+					out.Mode = AgentRunOpenModeFocus
+					out.Focused = true
+				} else {
+					out.Mode = AgentRunOpenModeSend
+					out.Delivered = true
+				}
+			}
+			return &out, nil
+		}
+	}
+	return opts
+}
+
+// sendHostResolution is the resolved host / open path for Send.
+type sendHostResolution struct {
+	Candidate         FocusCandidate
+	Opened            bool
+	ViaAgentRun       bool
+	AgentRunSessionID string
+	AgentRunMode      string
+	Delivered         bool // agent-run already delivered prompt; skip SendText
+	CWD               string
+	Command           string
 }
 
 // Send resolves a live iTerm host for sessionID and types text into it.
@@ -199,23 +266,26 @@ func Send(grokHome, sessionID, text string, opts *SendOpts) (*SendResult, error)
 		return nil, err
 	}
 
-	selected, opened, cwd, cmdLine, err := resolveSendHost(info, sessionID, opts)
+	host, err := resolveSendHost(info, sessionID, text, opts)
 	if err != nil {
 		return nil, err
 	}
 
-	itermID := strings.TrimSpace(selected.SessionID)
+	itermID := strings.TrimSpace(host.Candidate.SessionID)
 	result := &SendResult{
-		SessionID:      sessionID,
-		ITermSessionID: iterm2.SessionUUID(itermID),
-		Text:           text,
-		Opened:         opened,
-		Candidate:      selected,
-		CWD:            cwd,
-		Command:        cmdLine,
+		SessionID:         sessionID,
+		ITermSessionID:    iterm2.SessionUUID(itermID),
+		Text:              text,
+		Opened:            host.Opened,
+		ViaAgentRun:       host.ViaAgentRun,
+		AgentRunSessionID: host.AgentRunSessionID,
+		AgentRunMode:      host.AgentRunMode,
+		Candidate:         host.Candidate,
+		CWD:               host.CWD,
+		Command:           host.Command,
 	}
 
-	if opts.DryRun {
+	if opts.DryRun || host.Delivered {
 		return result, nil
 	}
 
@@ -242,9 +312,9 @@ func Send(grokHome, sessionID, text string, opts *SendOpts) (*SendResult, error)
 	return result, nil
 }
 
-func resolveSendHost(info *SessionInfo, sessionID string, opts *SendOpts) (FocusCandidate, bool, string, string, error) {
+func resolveSendHost(info *SessionInfo, sessionID, text string, opts *SendOpts) (sendHostResolution, error) {
 	if opts.TabFrom != nil {
-		return focusCandidateFromTab(opts.TabFrom), false, "", "", nil
+		return sendHostResolution{Candidate: focusCandidateFromTab(opts.TabFrom)}, nil
 	}
 
 	focusOpts := &FocusOpts{
@@ -255,7 +325,7 @@ func resolveSendHost(info *SessionInfo, sessionID string, opts *SendOpts) (Focus
 	}
 	disc, err := DiscoverFocusHosting(sessionID, focusOpts)
 	if err != nil {
-		return FocusCandidate{}, false, "", "", err
+		return sendHostResolution{}, err
 	}
 	if disc != nil && len(disc.Candidates) > 0 {
 		cand, selErr := selectFocusCandidate(sessionID, disc.Candidates, opts.Index)
@@ -263,36 +333,79 @@ func resolveSendHost(info *SessionInfo, sessionID string, opts *SendOpts) (Focus
 			msg := strings.ReplaceAll(selErr.Error(),
 				"agent-pro grok session focus",
 				"agent-pro grok session send")
-			return FocusCandidate{}, false, "", "", fmt.Errorf("%s", msg)
+			return sendHostResolution{}, fmt.Errorf("%s", msg)
 		}
-		return cand, false, "", "", nil
+		return sendHostResolution{Candidate: cand}, nil
 	}
 
 	if !opts.Open {
-		return FocusCandidate{}, false, "", "", fmt.Errorf("no hosting iTerm tab for session %s", sessionID)
+		return sendHostResolution{}, fmt.Errorf("no hosting iTerm tab for session %s", sessionID)
+	}
+
+	stderr := opts.Stderr
+	if stderr == nil {
+		stderr = os.Stderr
+	}
+
+	// Prefer agent-run when this Grok id is managed there.
+	arHit, arWarn, arOK := preferAgentRunOpen(agentRunOpenHooks{
+		NoAgentRun:      opts.NoAgentRun,
+		AgentRunHome:    opts.AgentRunHome,
+		DryRun:          opts.DryRun,
+		NoSubmit:        opts.NoSubmit,
+		Dir:             opts.Dir,
+		Info:            info,
+		SkipProduction:  opts.ListProcs != nil || opts.ListITerm != nil,
+		OpenInNewWindow: opts.OpenInNewWindow,
+		AgentRunBin:     opts.AgentRunBin,
+		LookPath:        opts.LookPath,
+		Stderr:          stderr,
+		AgentRunOpen:    opts.AgentRunOpen,
+	}, sessionID, text)
+	writeAgentRunOpenWarn(stderr, arWarn)
+	if arOK && arHit != nil {
+		cmd := arHit.Command
+		if arHit.Opened && !opts.DryRun && opts.AgentRunOpen != nil {
+			// Injectable prefer returns metadata only; launch here (production already did).
+			if cmd == "" {
+				cmd = "agent-run run --session-id " + arHit.AgentRunSessionID + " --auto-send-or-resume --open"
+			}
+			openFn := opts.OpenInNewWindow
+			if openFn == nil {
+				openFn = defaultOpenInNewWindow
+			}
+			if err := openFn(arHit.CWD, cmd); err != nil {
+				return sendHostResolution{}, fmt.Errorf("open new window: %w", err)
+			}
+		}
+		return sendHostResolution{
+			Opened:            arHit.Opened,
+			ViaAgentRun:       true,
+			AgentRunSessionID: arHit.AgentRunSessionID,
+			AgentRunMode:      arHit.Mode,
+			Delivered:         arHit.Delivered,
+			CWD:               arHit.CWD,
+			Command:           cmd,
+		}, nil
 	}
 
 	cwd, err := resolveOpenCWD(info, opts.Dir)
 	if err != nil {
-		return FocusCandidate{}, false, "", "", err
+		return sendHostResolution{}, err
 	}
 	bin, err := resolveForkGrokBin(opts.GrokBin, opts.LookPath)
 	if err != nil {
-		return FocusCandidate{}, false, "", "", err
+		return sendHostResolution{}, err
 	}
 	argv := []string{"--resume", sessionID}
 	cmdLine := quotedForkCommandLine(bin, argv)
 
 	if disc != nil && disc.LiveCount > 0 {
-		stderr := opts.Stderr
-		if stderr == nil {
-			stderr = os.Stderr
-		}
 		fmt.Fprintf(stderr, "warning: session has live grok PID(s) but no matching iTerm tab; opening a new window\n")
 	}
 
 	if opts.DryRun {
-		return FocusCandidate{}, true, cwd, cmdLine, nil
+		return sendHostResolution{Opened: true, CWD: cwd, Command: cmdLine}, nil
 	}
 
 	openFn := opts.OpenInNewWindow
@@ -300,14 +413,14 @@ func resolveSendHost(info *SessionInfo, sessionID string, opts *SendOpts) (Focus
 		openFn = defaultOpenInNewWindow
 	}
 	if err := openFn(cwd, cmdLine); err != nil {
-		return FocusCandidate{}, false, "", "", fmt.Errorf("open new window: %w", err)
+		return sendHostResolution{}, fmt.Errorf("open new window: %w", err)
 	}
 
 	cand, err := waitForSendHostingTab(sessionID, opts)
 	if err != nil {
-		return FocusCandidate{}, true, cwd, cmdLine, err
+		return sendHostResolution{Opened: true, CWD: cwd, Command: cmdLine}, err
 	}
-	return cand, true, cwd, cmdLine, nil
+	return sendHostResolution{Candidate: cand, Opened: true, CWD: cwd, Command: cmdLine}, nil
 }
 
 func waitForSendHostingTab(sessionID string, opts *SendOpts) (FocusCandidate, error) {
@@ -393,6 +506,7 @@ func RunSend(args []string, stdout, stderr io.Writer, grokHome string, opts *Sen
 	runOpts.Dir = parsed.Dir
 	runOpts.DryRun = parsed.DryRun
 	runOpts.Open = parsed.Open
+	runOpts.NoAgentRun = parsed.NoAgentRun
 	runOpts.Focus = parsed.Focus
 	runOpts.NoSubmit = parsed.NoSubmit
 	runOpts.NoCtrlU = parsed.NoCtrlU
@@ -431,9 +545,17 @@ func RunSend(args []string, stdout, stderr io.Writer, grokHome string, opts *Sen
 	}
 
 	if parsed.DryRun {
-		if result.Opened {
+		if result.ViaAgentRun && result.AgentRunMode == AgentRunOpenModeSend {
+			fmt.Fprintln(stdout, "Would send via agent-run")
+			fmt.Fprintf(stdout, "  grok id:       %s\n", sessionID)
+			fmt.Fprintf(stdout, "  agent-run id:  %s\n", result.AgentRunSessionID)
+			fmt.Fprintf(stdout, "  mode:          %s\n", result.AgentRunMode)
+		} else if result.Opened {
 			fmt.Fprintln(stdout, "Would open new iTerm2 window")
 			fmt.Fprintf(stdout, "  grok id:  %s\n", sessionID)
+			if result.ViaAgentRun {
+				fmt.Fprintf(stdout, "  agent-run id: %s\n", result.AgentRunSessionID)
+			}
 			fmt.Fprintf(stdout, "  cwd:      %s\n", result.CWD)
 			fmt.Fprintf(stdout, "  command:  %s\n", result.Command)
 		} else {
@@ -446,7 +568,11 @@ func RunSend(args []string, stdout, stderr io.Writer, grokHome string, opts *Sen
 	}
 
 	if result.Opened {
-		fmt.Fprintf(stdout, "opened: new window; resuming %s\n", sessionID)
+		if result.ViaAgentRun {
+			fmt.Fprintf(stdout, "opened: new window; agent-run resume %s\n", result.AgentRunSessionID)
+		} else {
+			fmt.Fprintf(stdout, "opened: new window; resuming %s\n", sessionID)
+		}
 	}
 	fmt.Fprintf(stdout, "sent to session %s\n", sessionID)
 	return nil
@@ -470,19 +596,20 @@ func resolveSendSessionSource(sessionIDFlag *string, tabFlag *string, tabIndexFl
 }
 
 type sendArgs struct {
-	Text      string // positional text; always appended last after Seq
-	Seq       lessflags.Flags
-	SessionID *string
-	Index     *int
-	Tab       *string
-	TabIndex  *int
-	Dir       string
-	DryRun    bool
-	Open      bool
-	Focus     bool
-	NoSubmit  bool
-	NoCtrlU   bool
-	Help      bool
+	Text       string // positional text; always appended last after Seq
+	Seq        lessflags.Flags
+	SessionID  *string
+	Index      *int
+	Tab        *string
+	TabIndex   *int
+	Dir        string
+	DryRun     bool
+	Open       bool
+	NoAgentRun bool
+	Focus      bool
+	NoSubmit   bool
+	NoCtrlU    bool
+	Help       bool
 }
 
 func parseSendArgs(args []string) (sendArgs, error) {
@@ -494,6 +621,7 @@ func parseSendArgs(args []string) (sendArgs, error) {
 		Int("--index", &out.Index).
 		String("--dir", &out.Dir).
 		Bool("--open", &out.Open).
+		Bool("--no-agent-run", &out.NoAgentRun).
 		Bool("--focus", &out.Focus).
 		Bool("--no-submit", &out.NoSubmit).
 		Bool("--no-ctrl-u", &out.NoCtrlU).
