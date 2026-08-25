@@ -677,6 +677,7 @@ func runAutoSendOrResume(opts autoSendOrResumeOpts) error {
 			return resumeExistingSession(store, meta, resumeRunConfig{
 				jsonFlag:                      opts.jsonFlag,
 				model:                         opts.model,
+				modelReasoningEffort:          opts.modelReasoningEffort,
 				agentRunner:                   opts.agentRunner,
 				agentRunnerBinary:             opts.agentRunnerBinary,
 				agentRunnerConfigHome:         opts.agentRunnerConfigHome,

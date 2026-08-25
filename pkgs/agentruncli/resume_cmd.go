@@ -34,6 +34,8 @@ Arguments:
 Options:
   --json              stream NDJSON AgentEvent lines to stdout
   --model MODEL       model name
+  --model-reasoning-effort LEVEL
+                      optional reasoning effort (pass-through; empty/omitted = no default)
   --keep-tty          keep TTY session alive after run completes
   --open              keep-alive TTY; attach as soon as the PTY is registered
                       (bootstrap stays visible; inject/bind continue in the background)
@@ -67,6 +69,7 @@ Options:
 type resumeRunConfig struct {
 	jsonFlag                      bool
 	model                         string
+	modelReasoningEffort          string // CLI pass-through; empty → omit (no invent)
 	agentRunner                   string
 	agentRunnerBinary             string
 	agentRunnerConfigHome         string
@@ -87,6 +90,7 @@ type resumeRunConfig struct {
 func runResume(args []string, defaultRunner string) error {
 	var jsonFlag bool
 	var model string
+	var modelReasoningEffort string
 	var agentRunner string
 	var agentRunnerBinary string
 	var agentRunnerConfigHome string
@@ -103,6 +107,7 @@ func runResume(args []string, defaultRunner string) error {
 	var grokSessionID *string
 	remaining, err := flags.Bool("--json", &jsonFlag).
 		String("--model", &model).
+		String("--model-reasoning-effort", &modelReasoningEffort).
 		Bool("--keep-tty", &keepTTY).
 		Bool("--open", &openFlag).
 		Bool("--detach", &detachFlag).
@@ -175,6 +180,7 @@ func runResume(args []string, defaultRunner string) error {
 	return resumeExistingSession(store, meta, resumeRunConfig{
 		jsonFlag:                      jsonFlag,
 		model:                         model,
+		modelReasoningEffort:          modelReasoningEffort,
 		agentRunner:                   agentRunner,
 		agentRunnerBinary:             agentRunnerBinary,
 		agentRunnerConfigHome:         absConfigHome,
@@ -291,10 +297,7 @@ func resumeExistingSession(store agentstorage.Store, meta agentstorage.SessionMe
 			return err
 		}
 	}
-	model := strings.TrimSpace(cfg.model)
-	if model == "" {
-		model = strings.TrimSpace(meta.Model)
-	}
+	model, modelReasoningEffort := resolveResumeModelAndEffort(cfg, meta)
 
 	// --fork: new agent-run session pre-bound to parent Grok id; launch with --fork-session.
 	if cfg.fork {
@@ -324,6 +327,7 @@ func resumeExistingSession(store agentstorage.Store, meta agentstorage.SessionMe
 			Prompt:                prompt,
 			Runner:                runner,
 			Model:                 model,
+			ModelReasoningEffort:  modelReasoningEffort,
 			SessionID:             newID,
 			AgentRunnerBinary:     cfg.agentRunnerBinary,
 			AgentRunnerConfigHome: configHome,
@@ -357,6 +361,7 @@ func resumeExistingSession(store agentstorage.Store, meta agentstorage.SessionMe
 		Prompt:                prompt,
 		Runner:                runner,
 		Model:                 model,
+		ModelReasoningEffort:  modelReasoningEffort,
 		SessionID:             meta.SessionID,
 		TerminalSessionID:     ttySessionID,
 		PreferAutoTerminal:    preferAuto,
@@ -376,6 +381,18 @@ func resumeExistingSession(store agentstorage.Store, meta agentstorage.SessionMe
 		Stdout:                os.Stdout,
 		Stderr:                os.Stderr,
 	})
+}
+
+// resolveResumeModelAndEffort picks model (CLI > meta) and effort (CLI only;
+// empty → omit; never invents a default). Used by resumeExistingSession so
+// ForceNew children that pass --model-reasoning-effort keep it on reopen.
+func resolveResumeModelAndEffort(cfg resumeRunConfig, meta agentstorage.SessionMeta) (model, effort string) {
+	model = strings.TrimSpace(cfg.model)
+	if model == "" {
+		model = strings.TrimSpace(meta.Model)
+	}
+	effort = strings.TrimSpace(cfg.modelReasoningEffort)
+	return model, effort
 }
 
 // ensureGrokResumeDirMatchesCWD compares resolved --dir to the Grok session's
