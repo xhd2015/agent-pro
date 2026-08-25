@@ -50,10 +50,10 @@ func LatchRunning(sessionDir, marcusSessionID string, pid int, now time.Time) (*
 	m, _ := LoadManifest(sessionDir)
 	if m == nil {
 		m = &Manifest{
-			Version:       1,
+			Version:         1,
 			MarcusSessionID: marcusSessionID,
-			NextSinkIndex: 0,
-			LastSinkIndex: -1,
+			NextSinkIndex:   0,
+			LastSinkIndex:   -1,
 		}
 	}
 	if strings.TrimSpace(m.MarcusSessionID) == "" {

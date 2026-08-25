@@ -78,8 +78,9 @@ func TestValidateShipResult(t *testing.T) {
 	}
 
 	ok := &ShipResult{
-		GitCommitMsg:  "docs(kb): x",
-		GitBranchName: "devuser/2026-03-24-sink-x",
+		HasNewKnowledges: BoolPtr(true),
+		GitCommitMsg:     "docs(kb): x",
+		GitBranchName:    "devuser/2026-03-24-sink-x",
 		GitCommitFiles: ShipCommitFiles{
 			Update: []string{"topics/a.md"},
 		},
@@ -89,8 +90,9 @@ func TestValidateShipResult(t *testing.T) {
 	}
 
 	bad := &ShipResult{
-		GitCommitMsg:  "m",
-		GitBranchName: "devuser/2026-03-24-sink-x",
+		HasNewKnowledges: BoolPtr(true),
+		GitCommitMsg:     "m",
+		GitBranchName:    "devuser/2026-03-24-sink-x",
 		GitCommitFiles: ShipCommitFiles{
 			Add: []string{"../etc/passwd"},
 		},
@@ -100,8 +102,9 @@ func TestValidateShipResult(t *testing.T) {
 	}
 
 	missing := &ShipResult{
-		GitCommitMsg:  "m",
-		GitBranchName: "devuser/2026-03-24-sink-x",
+		HasNewKnowledges: BoolPtr(true),
+		GitCommitMsg:     "m",
+		GitBranchName:    "devuser/2026-03-24-sink-x",
 		GitCommitFiles: ShipCommitFiles{
 			Add: []string{"topics/missing.md"},
 		},
@@ -118,8 +121,9 @@ func TestValidateShipResultAllowsDeletedTrackedFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	sr := &ShipResult{
-		GitCommitMsg:  "docs(kb): drop README",
-		GitBranchName: "tester/2026-03-24-drop-readme",
+		HasNewKnowledges: BoolPtr(true),
+		GitCommitMsg:     "docs(kb): drop README",
+		GitBranchName:    "tester/2026-03-24-drop-readme",
 		GitCommitFiles: ShipCommitFiles{
 			Update: []string{"SINK.md"},
 			Delete: []string{"README.md"},
@@ -136,8 +140,9 @@ func TestValidateShipResultAllowsDeletedTrackedFile(t *testing.T) {
 func TestValidateShipResultRejectsDeleteStillPresent(t *testing.T) {
 	hub, _ := setupHubRemote(t)
 	sr := &ShipResult{
-		GitCommitMsg:  "docs(kb): bad delete",
-		GitBranchName: "tester/2026-03-24-bad-delete",
+		HasNewKnowledges: BoolPtr(true),
+		GitCommitMsg:     "docs(kb): bad delete",
+		GitBranchName:    "tester/2026-03-24-bad-delete",
 		GitCommitFiles: ShipCommitFiles{
 			Delete: []string{"README.md"},
 		},
@@ -150,8 +155,9 @@ func TestValidateShipResultRejectsDeleteStillPresent(t *testing.T) {
 func TestValidateShipResultRejectsMissingUntrackedDelete(t *testing.T) {
 	hub, _ := setupHubRemote(t)
 	sr := &ShipResult{
-		GitCommitMsg:  "docs(kb): invent",
-		GitBranchName: "tester/2026-03-24-invent",
+		HasNewKnowledges: BoolPtr(true),
+		GitCommitMsg:     "docs(kb): invent",
+		GitBranchName:    "tester/2026-03-24-invent",
 		GitCommitFiles: ShipCommitFiles{
 			Delete: []string{"never-existed.md"},
 		},
@@ -167,8 +173,9 @@ func TestValidateShipResultRejectsCrossBucketDuplicate(t *testing.T) {
 		t.Fatal(err)
 	}
 	sr := &ShipResult{
-		GitCommitMsg:  "docs(kb): dup",
-		GitBranchName: "tester/2026-03-24-dup",
+		HasNewKnowledges: BoolPtr(true),
+		GitCommitMsg:     "docs(kb): dup",
+		GitBranchName:    "tester/2026-03-24-dup",
 		GitCommitFiles: ShipCommitFiles{
 			Add:    []string{"a.md"},
 			Update: []string{"a.md"},
@@ -182,11 +189,77 @@ func TestValidateShipResultRejectsCrossBucketDuplicate(t *testing.T) {
 func TestValidateShipResultRejectsEmptyBuckets(t *testing.T) {
 	hub := t.TempDir()
 	sr := &ShipResult{
-		GitCommitMsg:   "docs(kb): empty",
-		GitBranchName:  "tester/2026-03-24-empty",
-		GitCommitFiles: ShipCommitFiles{},
+		HasNewKnowledges: BoolPtr(true),
+		GitCommitMsg:     "docs(kb): empty",
+		GitBranchName:    "tester/2026-03-24-empty",
+		GitCommitFiles:   ShipCommitFiles{},
 	}
-	if err := validateShipResult(sr, hub); err == nil || !strings.Contains(err.Error(), "at least one path") {
+	if err := validateShipResult(sr, hub); err == nil || !strings.Contains(err.Error(), "has_new_knowledges=true requires at least one path") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestValidateShipResultRequiresHasNewKnowledges(t *testing.T) {
+	hub := t.TempDir()
+	sr := &ShipResult{
+		GitCommitMsg:  "docs(kb): x",
+		GitBranchName: "tester/2026-03-24-x",
+		GitCommitFiles: ShipCommitFiles{
+			Update: []string{"a.md"},
+		},
+	}
+	if err := validateShipResult(sr, hub); err == nil || !strings.Contains(err.Error(), "has_new_knowledges is required") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestValidateShipResultSkipNoNew(t *testing.T) {
+	hub := t.TempDir()
+	sr := &ShipResult{
+		HasNewKnowledges: BoolPtr(false),
+		SkipReason:       SkipReasonNoNew,
+	}
+	if err := validateShipResult(sr, hub); err != nil {
+		t.Fatal(err)
+	}
+	if sr.SkipReason != SkipReasonNoNew {
+		t.Fatalf("skip=%q", sr.SkipReason)
+	}
+}
+
+func TestValidateShipResultSkipInconclusive(t *testing.T) {
+	hub := t.TempDir()
+	sr := &ShipResult{
+		HasNewKnowledges: BoolPtr(false),
+		SkipReason:       "Inconclusive",
+	}
+	if err := validateShipResult(sr, hub); err != nil {
+		t.Fatal(err)
+	}
+	if sr.SkipReason != SkipReasonInconclusive {
+		t.Fatalf("skip=%q", sr.SkipReason)
+	}
+}
+
+func TestValidateShipResultSkipRequiresReason(t *testing.T) {
+	hub := t.TempDir()
+	sr := &ShipResult{HasNewKnowledges: BoolPtr(false)}
+	if err := validateShipResult(sr, hub); err == nil || !strings.Contains(err.Error(), "skip_reason") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestValidateShipResultSkipRejectsPaths(t *testing.T) {
+	hub := t.TempDir()
+	if err := os.WriteFile(filepath.Join(hub, "a.md"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sr := &ShipResult{
+		HasNewKnowledges: BoolPtr(false),
+		SkipReason:       SkipReasonNoNew,
+		GitCommitFiles:   ShipCommitFiles{Update: []string{"a.md"}},
+	}
+	if err := validateShipResult(sr, hub); err == nil || !strings.Contains(err.Error(), "must not list") {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -198,8 +271,9 @@ func TestReadValidateShipResult(t *testing.T) {
 	}
 	path := filepath.Join(t.TempDir(), "result.json")
 	body, _ := json.Marshal(ShipResult{
-		GitCommitMsg:  "docs(kb): i",
-		GitBranchName: "u/2026-01-02-slug",
+		HasNewKnowledges: BoolPtr(true),
+		GitCommitMsg:     "docs(kb): i",
+		GitBranchName:    "u/2026-01-02-slug",
 		GitCommitFiles: ShipCommitFiles{
 			Update: []string{"INDEX.md"},
 		},
@@ -253,6 +327,12 @@ func TestAgentPromptCreateMRHasOutput(t *testing.T) {
 		"./SINK.md",
 		"## Output",
 		"/tmp/state/sink-2/result.json",
+		"has_new_knowledges",
+		"skip_reason",
+		"Conclusion gate",
+		"Novelty gate",
+		"inconclusive",
+		"no_new",
 		"git_commit_msg",
 		"git_branch_name",
 		"git_commit_files",

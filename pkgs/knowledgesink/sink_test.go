@@ -140,6 +140,8 @@ func TestAgentPromptContainsSINKAndPrior(t *testing.T) {
 		"./SINK.md",
 		"session_dir: /tmp/sess",
 		"Do NOT write",
+		"Conclusion gate",
+		"Novelty gate",
 		"last_hub_paths",
 		"topics/a.md",
 		"incremental",
@@ -501,8 +503,9 @@ func TestRun_CreateMROpenWaitsOnResultFile(t *testing.T) {
 				return "", err
 			}
 			body, _ := json.Marshal(ShipResult{
-				GitCommitMsg:  "docs(kb): open mr",
-				GitBranchName: "tester/2026-03-24-open-mr",
+				HasNewKnowledges: BoolPtr(true),
+				GitCommitMsg:     "docs(kb): open mr",
+				GitBranchName:    "tester/2026-03-24-open-mr",
 				GitCommitFiles: ShipCommitFiles{
 					Add: []string{"topics-open.md"},
 				},
@@ -522,5 +525,106 @@ func TestRun_CreateMROpenWaitsOnResultFile(t *testing.T) {
 	}
 	if got.ResultFile == "" {
 		t.Fatal("ResultFile empty")
+	}
+}
+
+func TestRun_CreateMRSkipNoNewAdvancesCursor(t *testing.T) {
+	state := t.TempDir()
+	hub, _ := setupHubRemote(t)
+	runnerDir := t.TempDir()
+	t0 := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
+	opts := Opts{
+		StateDir:            state,
+		HubDir:              hub,
+		SessionID:           "marcus-skip-nonew",
+		Mode:                ModeHeadless,
+		CreateMR:            true,
+		AutoMergeMR:         true,
+		// Tip/cursor advance is computed from Grok messages only.
+		ResolveFn:           func(string) (string, string, error) { return "grok-tty", "g1", nil },
+		ResolveSessionDirFn: func(string, string) (string, error) { return runnerDir, nil },
+		MessagesFn: func(string, string, *sessions.MessagesOpts) (*sessions.MessagesResult, error) {
+			return &sessions.MessagesResult{
+				Total: 1,
+				Messages: []sessions.ChatMessage{
+					{Kind: sessions.MessageKindUser, Text: "hi", Timestamp: t0},
+				},
+			}, nil
+		},
+		AgentFn: func(_ context.Context, o agentrunapi.RunOpts, _ string) (string, error) {
+			body, _ := json.Marshal(ShipResult{
+				HasNewKnowledges: BoolPtr(false),
+				SkipReason:       SkipReasonNoNew,
+			})
+			return "", os.WriteFile(o.ResultFile, body, 0o644)
+		},
+		NowFn: func() time.Time { return t0.Add(time.Hour) },
+	}
+	res, err := Run(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.OK || res.MRURL != "" {
+		t.Fatalf("run = %+v", res)
+	}
+	if res.HasNewKnowledges == nil || *res.HasNewKnowledges {
+		t.Fatalf("has_new = %+v", res.HasNewKnowledges)
+	}
+	if res.SkipReason != SkipReasonNoNew {
+		t.Fatalf("skip=%q", res.SkipReason)
+	}
+	if !res.CursorAdvanced {
+		t.Fatal("expected cursor advanced for no_new")
+	}
+	m, err := LoadManifest(SessionDir(state, "marcus-skip-nonew"))
+	if err != nil || m == nil || strings.TrimSpace(m.LastSinkMaxMessageTimestamp) == "" {
+		t.Fatalf("manifest cursor = %+v err=%v", m, err)
+	}
+}
+
+func TestRun_CreateMRSkipInconclusiveKeepsCursor(t *testing.T) {
+	state := t.TempDir()
+	hub, _ := setupHubRemote(t)
+	runnerDir := t.TempDir()
+	t0 := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
+	opts := Opts{
+		StateDir:            state,
+		HubDir:              hub,
+		SessionID:           "marcus-skip-inconclusive",
+		Mode:                ModeHeadless,
+		CreateMR:            true,
+		AutoMergeMR:         true,
+		ResolveFn:           func(string) (string, string, error) { return "codex-tty", "c1", nil },
+		ResolveSessionDirFn: func(string, string) (string, error) { return runnerDir, nil },
+		MessagesFn: func(string, string, *sessions.MessagesOpts) (*sessions.MessagesResult, error) {
+			return &sessions.MessagesResult{
+				Total: 1,
+				Messages: []sessions.ChatMessage{
+					{Kind: sessions.MessageKindUser, Text: "hi", Timestamp: t0},
+				},
+			}, nil
+		},
+		AgentFn: func(_ context.Context, o agentrunapi.RunOpts, _ string) (string, error) {
+			body, _ := json.Marshal(ShipResult{
+				HasNewKnowledges: BoolPtr(false),
+				SkipReason:       SkipReasonInconclusive,
+			})
+			return "", os.WriteFile(o.ResultFile, body, 0o644)
+		},
+		NowFn: func() time.Time { return t0.Add(time.Hour) },
+	}
+	res, err := Run(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.OK {
+		t.Fatalf("run = %+v", res)
+	}
+	if res.CursorAdvanced {
+		t.Fatal("inconclusive must not advance cursor")
+	}
+	m, _ := LoadManifest(SessionDir(state, "marcus-skip-inconclusive"))
+	if m != nil && strings.TrimSpace(m.LastSinkMaxMessageTimestamp) != "" {
+		t.Fatalf("cursor should stay empty, got %q", m.LastSinkMaxMessageTimestamp)
 	}
 }

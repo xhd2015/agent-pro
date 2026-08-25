@@ -27,8 +27,9 @@ func TestShipToMR_AllowsDeletedTrackedFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	ship := &ShipResult{
-		GitCommitMsg:  "docs(kb): drop README keep topic",
-		GitBranchName: "tester/2026-03-24-drop-readme",
+		HasNewKnowledges: BoolPtr(true),
+		GitCommitMsg:     "docs(kb): drop README keep topic",
+		GitBranchName:    "tester/2026-03-24-drop-readme",
 		GitCommitFiles: ShipCommitFiles{
 			Add:    []string{"topics/kept.md"},
 			Delete: []string{"README.md"},
@@ -60,8 +61,9 @@ func TestShipToMR_VerboseNotices(t *testing.T) {
 	}
 	var stderr bytes.Buffer
 	ship := &ShipResult{
-		GitCommitMsg:  "docs(kb): verbose ship",
-		GitBranchName: "tester/2026-03-24-verbose-ship",
+		HasNewKnowledges: BoolPtr(true),
+		GitCommitMsg:     "docs(kb): verbose ship",
+		GitBranchName:    "tester/2026-03-24-verbose-ship",
 		GitCommitFiles: ShipCommitFiles{
 			Add: []string{"topics/v.md"},
 		},
@@ -90,8 +92,9 @@ func TestShipToMR_CreateAndAutoMerge(t *testing.T) {
 
 	opts := Opts{}
 	ship := &ShipResult{
-		GitCommitMsg:  "docs(kb): add topic",
-		GitBranchName: "tester/2026-03-24-add-topic",
+		HasNewKnowledges: BoolPtr(true),
+		GitCommitMsg:     "docs(kb): add topic",
+		GitBranchName:    "tester/2026-03-24-add-topic",
 		GitCommitFiles: ShipCommitFiles{
 			Add: []string{"topics/new.md"},
 		},
@@ -176,8 +179,9 @@ func TestRun_CreateMR_Happy(t *testing.T) {
 				return "", err
 			}
 			body, _ := json.Marshal(ShipResult{
-				GitCommitMsg:  "docs(kb): from agent",
-				GitBranchName: "tester/2026-03-20-from-agent",
+				HasNewKnowledges: BoolPtr(true),
+				GitCommitMsg:     "docs(kb): from agent",
+				GitBranchName:    "tester/2026-03-20-from-agent",
 				GitCommitFiles: ShipCommitFiles{
 					Add: []string{"topics/from-agent.md"},
 				},
@@ -250,8 +254,9 @@ func TestRun_CreateMR_AllowsDirtyHub(t *testing.T) {
 				return "", err
 			}
 			body, _ := json.Marshal(ShipResult{
-				GitCommitMsg:  "docs(kb): shipped despite dirt",
-				GitBranchName: "tester/2026-03-20-shipped-dirt",
+				HasNewKnowledges: BoolPtr(true),
+				GitCommitMsg:     "docs(kb): shipped despite dirt",
+				GitBranchName:    "tester/2026-03-20-shipped-dirt",
 				GitCommitFiles: ShipCommitFiles{
 					Add: []string{"topics/shipped.md"},
 				},

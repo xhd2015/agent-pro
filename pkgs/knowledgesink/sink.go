@@ -126,6 +126,8 @@ type RunResult struct {
 	LastSinkAt       string   `json:"last_sink_at,omitempty"`
 	CursorTimestamp  string   `json:"cursor_timestamp,omitempty"`
 	CursorAdvanced   bool     `json:"cursor_advanced,omitempty"`
+	HasNewKnowledges *bool    `json:"has_new_knowledges,omitempty"`
+	SkipReason       string   `json:"skip_reason,omitempty"`
 	Error            string   `json:"error,omitempty"`
 }
 
@@ -463,6 +465,7 @@ func Run(ctx context.Context, opts Opts) (*RunResult, error) {
 	}
 
 	var shipGit *ShipGitResult
+	var shipResult *ShipResult
 	hubPaths := proposedHub
 	if opts.CreateMR {
 		step++
@@ -472,30 +475,40 @@ func Run(ctx context.Context, opts Opts) (*RunResult, error) {
 		if serr != nil {
 			return fail(serr.Error()), nil
 		}
+		shipResult = ship
 		hubPaths = append([]string(nil), ship.GitCommitFiles.AllPaths()...)
-		verboseNotice(opts, "ship: result ok files=%d branch=%s", len(hubPaths), ship.GitBranchName)
+		verboseNotice(opts, "ship: result ok has_new=%v files=%d branch=%s", ship.HasNew(), len(hubPaths), ship.GitBranchName)
 		progress(opts, step, total, stageValidate, "ok")
 
-		step++
-		progress(opts, step, total, stageShip, "commit+push+MR")
-		var shipErr error
-		shipGit, shipErr = ShipToMR(opts, hubDir, ship, opts.AutoMergeMR)
-		if shipErr != nil {
-			// Partial: branch may have pushed before auto-merge failed.
-			msg := shipErr.Error()
-			if shipGit != nil && shipGit.MRURL != "" {
-				return fail(msg + " (mr: " + shipGit.MRURL + ")"), nil
-			}
-			return fail(msg), nil
-		}
-		progress(opts, step, total, stageShip, "ok")
-		if opts.AutoMergeMR {
+		if ship.HasNew() {
 			step++
-			msg := "ok"
-			if shipGit != nil && shipGit.MergedAt != "" {
-				msg = "ok @" + shipGit.MergedAt
+			progress(opts, step, total, stageShip, "commit+push+MR")
+			var shipErr error
+			shipGit, shipErr = ShipToMR(opts, hubDir, ship, opts.AutoMergeMR)
+			if shipErr != nil {
+				// Partial: branch may have pushed before auto-merge failed.
+				msg := shipErr.Error()
+				if shipGit != nil && shipGit.MRURL != "" {
+					return fail(msg + " (mr: " + shipGit.MRURL + ")"), nil
+				}
+				return fail(msg), nil
 			}
-			progress(opts, step, total, stageMerge, msg)
+			progress(opts, step, total, stageShip, "ok")
+			if opts.AutoMergeMR {
+				step++
+				msg := "ok"
+				if shipGit != nil && shipGit.MergedAt != "" {
+					msg = "ok @" + shipGit.MergedAt
+				}
+				progress(opts, step, total, stageMerge, msg)
+			}
+		} else {
+			step++
+			progress(opts, step, total, stageShip, "skipped ("+ship.SkipReason+")")
+			if opts.AutoMergeMR {
+				step++
+				progress(opts, step, total, stageMerge, "skipped")
+			}
 		}
 	}
 
@@ -521,7 +534,10 @@ func Run(ctx context.Context, opts Opts) (*RunResult, error) {
 	}
 	cursorAdvanced := false
 	if opts.CreateMR {
-		if !tip.IsZero() {
+		// Advance cursor when we shipped, or skipped as no_new (done with this slice).
+		// Do not advance on inconclusive (come back when the session concludes).
+		advanceCursor := shipResult == nil || shipResult.HasNew() || shipResult.SkipReason == SkipReasonNoNew
+		if advanceCursor && !tip.IsZero() {
 			manifest.LastSinkMaxMessageTimestamp = FormatTime(tip)
 			cursorAdvanced = true
 		}
@@ -555,13 +571,29 @@ func Run(ctx context.Context, opts Opts) (*RunResult, error) {
 		CursorTimestamp:  manifest.LastSinkMaxMessageTimestamp,
 		CursorAdvanced:   cursorAdvanced,
 	}
+	if shipResult != nil && shipResult.HasNewKnowledges != nil {
+		out.HasNewKnowledges = BoolPtr(*shipResult.HasNewKnowledges)
+		out.SkipReason = shipResult.SkipReason
+		if !shipResult.HasNew() {
+			switch shipResult.SkipReason {
+			case SkipReasonInconclusive:
+				out.Warning = "no new knowledges (inconclusive)"
+			case SkipReasonNoNew:
+				out.Warning = "no new knowledges (no_new)"
+			default:
+				out.Warning = "no new knowledges"
+			}
+		}
+	}
 	if shipGit != nil {
 		out.Branch = shipGit.Branch
 		out.Commit = shipGit.Commit
 		out.MRURL = shipGit.MRURL
 		out.Merged = shipGit.Merged
 		out.MergedAt = shipGit.MergedAt
-		out.Warning = shipGit.Warning
+		if shipGit.Warning != "" {
+			out.Warning = shipGit.Warning
+		}
 	}
 	return out, nil
 }

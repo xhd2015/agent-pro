@@ -78,12 +78,17 @@ Write your proposal markdown to this absolute path (outside the hub worktree):
 
 Task:
 1. Inspect the primary source (and only the new slice if a since/cursor is given).
-2. Using SINK.md, propose what to add or adjust.
-3. Do not re-propose knowledge that prior sinks already covered unless you are
+2. Conclusion gate: if the session has no clear conclusion / decision / durable
+   takeaway yet, write a short proposal noting that and stop — do not invent
+   hub leaves from incomplete work.
+3. Novelty gate: if nothing durable is new relative to the hub (and prior sinks),
+   say so in the proposal and stop — empty proposals list is correct.
+4. Otherwise, using SINK.md, propose what to add or adjust.
+5. Do not re-propose knowledge that prior sinks already covered unless you are
    proposing a concrete incremental fix (path + what changes + why).
-4. For each proposal: hub-relative target path, short rationale, evidence in the
+6. For each proposal: hub-relative target path, short rationale, evidence in the
    session, and whether it is new | adjust-existing.
-5. Stop. Wait for human approval before any write.
+7. Stop. Wait for human approval before any write.
 `, in.ProposalPath)
 	return strings.TrimSpace(b.String())
 }
@@ -112,19 +117,34 @@ Write a short proposal markdown (audit) to this absolute path (outside the hub):
 
 Task:
 1. Inspect the primary source (and only the new slice if a since/cursor is given).
-2. Using SINK.md, write the hub-relative files that should be sunk (new or adjust).
-3. Do not repeat knowledge that prior sinks already covered unless this is a
-   concrete incremental fix.
-4. Do not run git commands.
+2. Conclusion gate: if the session has no clear conclusion / decision / durable
+   takeaway yet → do NOT write hub files. Write result.json with
+   has_new_knowledges=false and skip_reason="inconclusive", plus a short
+   proposal.md explaining why. Stop.
+3. Novelty gate: if nothing durable is new vs the hub (and prior sinks) → do
+   NOT write hub files. Write result.json with has_new_knowledges=false and
+   skip_reason="no_new", plus a short proposal.md. Stop.
+4. Otherwise, using SINK.md, write the hub-relative files that should be sunk
+   (new or adjust). Do not repeat prior sinks unless this is a concrete
+   incremental fix.
+5. Do not run git commands.
 
 ## Output
 When finished, write JSON to this absolute path (outside the hub):
   %s
 
-Example:
+has_new_knowledges is required (true or false).
+When true, ship fields are required and git_commit_files must list ≥1 path.
+When false, set skip_reason to "inconclusive" or "no_new"; leave commit fields
+empty and do not touch hub files.
+
+Example (new knowledges):
 %s
 
-Branch format: {user}/{YYYY-MM-DD}-{slug}
+Example (skip):
+%s
+
+Branch format (only when has_new_knowledges=true): {user}/{YYYY-MM-DD}-{slug}
   user (from git): %s
   date: %s
 
@@ -132,8 +152,8 @@ git_commit_files is an object (not a string array):
   add:    new hub-relative files you created (must exist on disk)
   update: existing hub-relative files you modified (must exist on disk)
   delete: hub-relative files you removed (absent on disk, still tracked in git)
-Omit empty buckets; at least one path overall is required.
-`, in.ProposalPath, in.ResultJSONPath, ShipResultExample, user, date)
+Omit empty buckets; at least one path overall is required iff has_new_knowledges=true.
+`, in.ProposalPath, in.ResultJSONPath, ShipResultExample, ShipResultSkipExample, user, date)
 	return strings.TrimSpace(b.String())
 }
 

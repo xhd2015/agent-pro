@@ -10,8 +10,15 @@ import (
 	"strings"
 )
 
-// ShipResultExample is the example object for the prompt Output section.
+// Skip reasons when has_new_knowledges is false.
+const (
+	SkipReasonInconclusive = "inconclusive" // no clear conclusion yet — do not advance cursor
+	SkipReasonNoNew        = "no_new"       // nothing new vs hub — advance cursor
+)
+
+// ShipResultExample is the example object for the prompt Output section (new knowledges).
 const ShipResultExample = `{
+  "has_new_knowledges": true,
   "git_commit_msg": "docs(kb): sink session learnings",
   "git_branch_name": "devuser/2026-03-24-short-slug",
   "git_commit_files": {
@@ -21,9 +28,19 @@ const ShipResultExample = `{
   }
 }`
 
+// ShipResultSkipExample is the skip contract (no hub writes).
+const ShipResultSkipExample = `{
+  "has_new_knowledges": false,
+  "skip_reason": "no_new",
+  "git_commit_msg": "",
+  "git_branch_name": "",
+  "git_commit_files": {}
+}`
+
 // ShipCommitFiles is the agent-written hub path set for --create-mr shipping.
 // add/update paths must exist on disk; delete paths must be absent and still
-// tracked in git. Empty buckets may be omitted; at least one path overall.
+// tracked in git. Empty buckets may be omitted; at least one path overall
+// when has_new_knowledges is true.
 type ShipCommitFiles struct {
 	Add    []string `json:"add,omitempty"`
 	Update []string `json:"update,omitempty"`
@@ -64,10 +81,21 @@ func (f ShipCommitFiles) AllPaths() []string {
 
 // ShipResult is the agent-written contract for --create-mr shipping.
 type ShipResult struct {
-	GitCommitMsg   string          `json:"git_commit_msg"`
-	GitBranchName  string          `json:"git_branch_name"`
-	GitCommitFiles ShipCommitFiles `json:"git_commit_files"`
+	// HasNewKnowledges is required. Pointer so missing JSON is distinct from false.
+	HasNewKnowledges *bool           `json:"has_new_knowledges"`
+	SkipReason       string          `json:"skip_reason,omitempty"` // inconclusive|no_new when false
+	GitCommitMsg     string          `json:"git_commit_msg"`
+	GitBranchName    string          `json:"git_branch_name"`
+	GitCommitFiles   ShipCommitFiles `json:"git_commit_files"`
 }
+
+// HasNew reports whether the agent marked new knowledges (false if nil/missing).
+func (sr *ShipResult) HasNew() bool {
+	return sr != nil && sr.HasNewKnowledges != nil && *sr.HasNewKnowledges
+}
+
+// BoolPtr returns a *bool for ShipResult literals in tests and helpers.
+func BoolPtr(v bool) *bool { return &v }
 
 var branchNameRe = regexp.MustCompile(`^[^/\s]+/\d{4}-\d{2}-\d{2}-[a-z0-9][a-z0-9-]*$`)
 
@@ -122,13 +150,35 @@ func validateShipResult(sr *ShipResult, hubDir string) error {
 	if sr == nil {
 		return fmt.Errorf("result.json missing or malformed: empty")
 	}
+	if sr.HasNewKnowledges == nil {
+		return fmt.Errorf("result.json: has_new_knowledges is required (true or false)")
+	}
+
+	if !*sr.HasNewKnowledges {
+		reason := strings.ToLower(strings.TrimSpace(sr.SkipReason))
+		switch reason {
+		case SkipReasonInconclusive, SkipReasonNoNew:
+			sr.SkipReason = reason
+		default:
+			return fmt.Errorf("result.json: skip_reason must be %q or %q when has_new_knowledges=false (got %q)",
+				SkipReasonInconclusive, SkipReasonNoNew, sr.SkipReason)
+		}
+		if len(sr.GitCommitFiles.AllPaths()) > 0 {
+			return fmt.Errorf("result.json: has_new_knowledges=false must not list git_commit_files paths")
+		}
+		sr.GitCommitMsg = strings.TrimSpace(sr.GitCommitMsg)
+		sr.GitBranchName = strings.TrimSpace(sr.GitBranchName)
+		sr.GitCommitFiles = ShipCommitFiles{}
+		return nil
+	}
+
 	msg := strings.TrimSpace(sr.GitCommitMsg)
 	branch := strings.TrimSpace(sr.GitBranchName)
 	if msg == "" {
-		return fmt.Errorf("result.json: git_commit_msg is required")
+		return fmt.Errorf("result.json: git_commit_msg is required when has_new_knowledges=true")
 	}
 	if branch == "" {
-		return fmt.Errorf("result.json: git_branch_name is required")
+		return fmt.Errorf("result.json: git_branch_name is required when has_new_knowledges=true")
 	}
 	if !branchNameRe.MatchString(strings.ToLower(branch)) {
 		if !looseBranchOK(branch) {
@@ -155,9 +205,10 @@ func validateShipResult(sr *ShipResult, hubDir string) error {
 		return err
 	}
 	if len(cleanAdd)+len(cleanUpdate)+len(cleanDelete) == 0 {
-		return fmt.Errorf("result.json: git_commit_files must list at least one path in add, update, or delete")
+		return fmt.Errorf("result.json: has_new_knowledges=true requires at least one path in git_commit_files")
 	}
 
+	sr.SkipReason = ""
 	sr.GitCommitMsg = msg
 	sr.GitBranchName = branch
 	sr.GitCommitFiles = ShipCommitFiles{Add: cleanAdd, Update: cleanUpdate, Delete: cleanDelete}

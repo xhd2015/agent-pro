@@ -57,8 +57,9 @@ func TestRun_ProgressStagesCreateMR(t *testing.T) {
 			}
 			want := resultJSONAbsPath(SessionDir(state, "marcus-progress"), 0)
 			body, _ := json.Marshal(ShipResult{
-				GitCommitMsg:  "docs(kb): progress",
-				GitBranchName: "tester/2026-03-24-progress",
+				HasNewKnowledges: BoolPtr(true),
+				GitCommitMsg:     "docs(kb): progress",
+				GitBranchName:    "tester/2026-03-24-progress",
 				GitCommitFiles: ShipCommitFiles{
 					Add: []string{"topics/p.md"},
 				},
