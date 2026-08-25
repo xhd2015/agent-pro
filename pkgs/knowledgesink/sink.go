@@ -161,9 +161,13 @@ func Status(ctx context.Context, opts Opts) (*StatusResult, error) {
 	total := 0
 	if ok {
 		if opts.SkipSessionDirProbe {
-			// List/auto-pick: runner session id is enough; avoid Codex Find / message load.
+			// List/auto-pick: skip heavy Grok message load; still take Codex tip
+			// (Find+rollout timestamp is cheap) so skip+cursor sinkability is correct.
 			if strings.TrimSpace(runnerSID) != "" {
 				total = 1
+				if isCodexRunner(runner) {
+					tip = tipFromCodex(opts, runnerSID)
+				}
 			}
 		} else if isGrokRunner(runner) || (runner == "" && runnerSID != "") {
 			res, merr := fetchMessages(opts, runnerSID)
@@ -187,8 +191,18 @@ func Status(ctx context.Context, opts Opts) (*StatusResult, error) {
 				total = res.Total
 				tip = NewestMessageTime(res.Messages)
 			}
+		} else if isCodexRunner(runner) {
+			tip = tipFromCodex(opts, runnerSID)
+			if !tip.IsZero() {
+				total = 1
+			} else if _, derr := resolveRunnerSessionDir(opts, runner, runnerSID); derr == nil {
+				total = 1
+			} else {
+				help = derr.Error()
+				ok = false
+			}
 		} else {
-			// Codex (or other): presence of session dir counts as having content.
+			// Other runners: presence of session dir counts as having content.
 			if _, derr := resolveRunnerSessionDir(opts, runner, runnerSID); derr == nil {
 				total = 1
 			} else {
@@ -213,7 +227,8 @@ func Status(ctx context.Context, opts Opts) (*StatusResult, error) {
 }
 
 // Run performs a sink (propose-only by default, or create-mr / dry-run / show-prompt).
-// Propose-only does not advance last_sink_max_message_timestamp; --create-mr does on success.
+// Propose-only does not advance tip cursors. Create-MR advances checked on finish;
+// sunk advances only when knowledges are shipped.
 func Run(ctx context.Context, opts Opts) (*RunResult, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -276,7 +291,7 @@ func Run(ctx context.Context, opts Opts) (*RunResult, error) {
 	hubDir := strings.TrimSpace(opts.HubDir)
 	index := manifest.NextSinkIndex
 	prior := buildPriorContext(stateSessionDir, manifest)
-	since := strings.TrimSpace(manifest.LastSinkMaxMessageTimestamp)
+	since := SunkCursor(manifest)
 	proposalAbs := filepath.Join(RunDir(stateSessionDir, index), "proposal.md")
 	resultAbs := resultJSONAbsPath(stateSessionDir, index)
 
@@ -300,7 +315,7 @@ func Run(ctx context.Context, opts Opts) (*RunResult, error) {
 		}
 	}
 
-	// Optional delta hint + tip for cursor advance (Grok messages only).
+	// Optional delta hint + tip for cursor advance.
 	deltaCount := 0
 	var tip time.Time
 	if isGrokRunner(runner) || runner == "" {
@@ -312,6 +327,8 @@ func Run(ctx context.Context, opts Opts) (*RunResult, error) {
 			deltaCount = len(FilterMessagesAfter(res.Messages, after))
 			tip = NewestMessageTime(res.Messages)
 		}
+	} else if isCodexRunner(runner) {
+		tip = tipFromCodex(opts, runnerSID)
 	}
 
 	if opts.ShowPrompt {
@@ -519,13 +536,7 @@ func Run(ctx context.Context, opts Opts) (*RunResult, error) {
 	manifest.Error = ""
 	manifest.Pid = 0
 	manifest.GrokSessionID = runnerSID
-	// Inconclusive: leave last_sink_at/cursor unchanged so Status stays sinkable
-	// ("come back when the session concludes"). Ship / no_new record history.
-	inconclusive := opts.CreateMR && shipResult != nil && !shipResult.HasNew() &&
-		shipResult.SkipReason == SkipReasonInconclusive
-	if !inconclusive {
-		manifest.LastSinkAt = FormatTime(now)
-	}
+	manifest.LastSinkAt = FormatTime(now)
 	manifest.LastSinkIndex = index
 	if manifest.NextSinkIndex <= index {
 		manifest.NextSinkIndex = index + 1
@@ -540,18 +551,20 @@ func Run(ctx context.Context, opts Opts) (*RunResult, error) {
 	}
 	cursorAdvanced := false
 	if opts.CreateMR {
-		// Advance cursor when we shipped, or skipped as no_new (done with this slice).
-		// Do not advance on inconclusive (come back when the session concludes).
-		// Prefer runner tip; if tip is unknown, fall back to last_sink_at so Status
-		// does not treat a completed sink as never-sunk.
-		advanceCursor := shipResult == nil || shipResult.HasNew() || shipResult.SkipReason == SkipReasonNoNew
-		if advanceCursor {
-			if !tip.IsZero() {
-				manifest.LastSinkMaxMessageTimestamp = FormatTime(tip)
-				cursorAdvanced = true
-			} else if strings.TrimSpace(manifest.LastSinkMaxMessageTimestamp) == "" {
-				manifest.LastSinkMaxMessageTimestamp = manifest.LastSinkAt
-				cursorAdvanced = true
+		// Checked advances on ship and skips so Status stays non-sinkable until
+		// tip moves. Sunk advances only on ship; next Run injects sunk as since.
+		// Tip unknown: seed checked from last_sink_at when checked is still empty.
+		var tipStr string
+		if !tip.IsZero() {
+			tipStr = FormatTime(tip)
+		} else if CheckedCursor(manifest) == "" {
+			tipStr = manifest.LastSinkAt
+		}
+		if tipStr != "" {
+			manifest.LastCheckedMaxMessageTimestamp = tipStr
+			cursorAdvanced = true
+			if shipResult != nil && shipResult.HasNew() {
+				manifest.LastSinkMaxMessageTimestamp = tipStr
 			}
 		}
 		if shipGit != nil {
@@ -581,7 +594,7 @@ func Run(ctx context.Context, opts Opts) (*RunResult, error) {
 		HubDir:           hubDir,
 		HubPaths:         hubPaths,
 		LastSinkAt:       manifest.LastSinkAt,
-		CursorTimestamp:  manifest.LastSinkMaxMessageTimestamp,
+		CursorTimestamp:  CheckedCursor(manifest),
 		CursorAdvanced:   cursorAdvanced,
 	}
 	if shipResult != nil && shipResult.HasNewKnowledges != nil {
@@ -737,6 +750,35 @@ func isGrokRunner(runner string) bool {
 
 func isCodexRunner(runner string) bool {
 	return strings.Contains(strings.ToLower(runner), "codex")
+}
+
+func resolveCodexHome() (string, error) {
+	if v := strings.TrimSpace(os.Getenv("CODEX_HOME")); v != "" {
+		return v, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".codex"), nil
+}
+
+// tipFromCodex returns newest rollout line timestamp for the runner session (zero on miss).
+func tipFromCodex(opts Opts, runnerSessionID string) time.Time {
+	_ = opts
+	runnerSessionID = strings.TrimSpace(runnerSessionID)
+	if runnerSessionID == "" {
+		return time.Time{}
+	}
+	home, err := resolveCodexHome()
+	if err != nil {
+		return time.Time{}
+	}
+	tip, err := codexsessions.TipForSession(home, runnerSessionID)
+	if err != nil {
+		return time.Time{}
+	}
+	return tip
 }
 
 func fetchMessages(opts Opts, grokSessionID string) (*sessions.MessagesResult, error) {

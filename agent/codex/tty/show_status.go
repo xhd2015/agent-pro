@@ -94,7 +94,9 @@ func FetchStatusWithOptions(ctx context.Context, opts Options) (*UsageInfo, erro
 		return nil, err
 	}
 
-	release, err := ttywatch.ReserveCustomSessionID(ttywatch.DefaultRegistryConfig(home), sessionID)
+	// Reclaiming: leftover .claim / zombie keep-alive for the fixed usage id must
+	// not surface as Marcus "already in use"; truly live peers still fail.
+	release, err := ttywatch.ReserveCustomSessionIDReclaiming(ttywatch.DefaultRegistryConfig(home), sessionID)
 	if err != nil {
 		logCodexError("reserve_session", err, map[string]any{"session_id": sessionID})
 		return nil, err

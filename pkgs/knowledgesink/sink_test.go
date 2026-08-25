@@ -72,7 +72,7 @@ func TestTipAfterMax(t *testing.T) {
 	if !TipAfterMax(b, a) {
 		t.Fatal("tip after max must be behind")
 	}
-	// Unknown tip + existing cursor → not after (sunk).
+	// Unknown tip + existing cursor → not after (sunk), so skip stays non-sinkable.
 	if TipAfterMax(time.Time{}, a) {
 		t.Fatal("zero tip with cursor must not claim behind")
 	}
@@ -347,8 +347,8 @@ func TestRun_ProposeOnlyWritesProposalDoesNotAdvanceCursor(t *testing.T) {
 	if err != nil || man == nil {
 		t.Fatalf("manifest: %v %+v", err, man)
 	}
-	if man.LastSinkMaxMessageTimestamp != cursorBefore {
-		t.Fatalf("cursor advanced: %q → %q", cursorBefore, man.LastSinkMaxMessageTimestamp)
+	if SunkCursor(man) != cursorBefore || CheckedCursor(man) != cursorBefore {
+		t.Fatalf("cursors advanced: sunk=%q checked=%q want %q", SunkCursor(man), CheckedCursor(man), cursorBefore)
 	}
 	if man.LastPaths[0] != "sink-0/proposal.md" {
 		t.Fatalf("last_paths = %v", man.LastPaths)
@@ -575,12 +575,12 @@ func TestRun_CreateMRSkipNoNewAdvancesCursor(t *testing.T) {
 	runnerDir := t.TempDir()
 	t0 := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
 	opts := Opts{
-		StateDir:            state,
-		HubDir:              hub,
-		SessionID:           "marcus-skip-nonew",
-		Mode:                ModeHeadless,
-		CreateMR:            true,
-		AutoMergeMR:         true,
+		StateDir:    state,
+		HubDir:      hub,
+		SessionID:   "marcus-skip-nonew",
+		Mode:        ModeHeadless,
+		CreateMR:    true,
+		AutoMergeMR: true,
 		// Tip/cursor advance is computed from Grok messages only.
 		ResolveFn:           func(string) (string, string, error) { return "grok-tty", "g1", nil },
 		ResolveSessionDirFn: func(string, string) (string, error) { return runnerDir, nil },
@@ -615,27 +615,47 @@ func TestRun_CreateMRSkipNoNewAdvancesCursor(t *testing.T) {
 		t.Fatalf("skip=%q", res.SkipReason)
 	}
 	if !res.CursorAdvanced {
-		t.Fatal("expected cursor advanced for no_new")
+		t.Fatal("expected checked cursor advanced for no_new")
 	}
 	m, err := LoadManifest(SessionDir(state, "marcus-skip-nonew"))
-	if err != nil || m == nil || strings.TrimSpace(m.LastSinkMaxMessageTimestamp) == "" {
-		t.Fatalf("manifest cursor = %+v err=%v", m, err)
+	if err != nil || m == nil {
+		t.Fatalf("manifest = %+v err=%v", m, err)
+	}
+	if CheckedCursor(m) == "" {
+		t.Fatalf("checked cursor empty: %+v", m)
+	}
+	if SunkCursor(m) != "" {
+		t.Fatalf("no_new must not advance sunk cursor, got %q", SunkCursor(m))
 	}
 }
 
-func TestRun_CreateMRSkipInconclusiveKeepsCursor(t *testing.T) {
+func TestRun_CreateMRSkipInconclusiveAdvancesCheckedOnly(t *testing.T) {
 	state := t.TempDir()
 	hub, _ := setupHubRemote(t)
 	runnerDir := t.TempDir()
 	t0 := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
+	sunkBefore := FormatTime(t0.Add(-time.Hour))
+	sess := "marcus-skip-inconclusive"
+	if err := WriteManifest(SessionDir(state, sess), &Manifest{
+		Version:                     1,
+		MarcusSessionID:             sess,
+		LastSinkMaxMessageTimestamp: sunkBefore,
+		LastSinkAt:                  sunkBefore,
+		NextSinkIndex:               0,
+		LastSinkIndex:               -1,
+		Status:                      statusIdle,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	opts := Opts{
-		StateDir:            state,
-		HubDir:              hub,
-		SessionID:           "marcus-skip-inconclusive",
-		Mode:                ModeHeadless,
-		CreateMR:            true,
-		AutoMergeMR:         true,
-		ResolveFn:           func(string) (string, string, error) { return "codex-tty", "c1", nil },
+		StateDir:    state,
+		HubDir:      hub,
+		SessionID:   sess,
+		Mode:        ModeHeadless,
+		CreateMR:    true,
+		AutoMergeMR: true,
+		// Tip from Grok messages so checked cursor can advance.
+		ResolveFn:           func(string) (string, string, error) { return "grok-tty", "g1", nil },
 		ResolveSessionDirFn: func(string, string) (string, error) { return runnerDir, nil },
 		MessagesFn: func(string, string, *sessions.MessagesOpts) (*sessions.MessagesResult, error) {
 			return &sessions.MessagesResult{
@@ -661,23 +681,64 @@ func TestRun_CreateMRSkipInconclusiveKeepsCursor(t *testing.T) {
 	if !res.OK {
 		t.Fatalf("run = %+v", res)
 	}
-	if res.CursorAdvanced {
-		t.Fatal("inconclusive must not advance cursor")
+	if !res.CursorAdvanced {
+		t.Fatal("inconclusive must advance checked cursor")
 	}
-	m, _ := LoadManifest(SessionDir(state, "marcus-skip-inconclusive"))
-	if m != nil && strings.TrimSpace(m.LastSinkMaxMessageTimestamp) != "" {
-		t.Fatalf("cursor should stay empty, got %q", m.LastSinkMaxMessageTimestamp)
+	m, _ := LoadManifest(SessionDir(state, sess))
+	if m == nil || CheckedCursor(m) == "" {
+		t.Fatalf("checked should be set, got %+v", m)
 	}
-	if m != nil && strings.TrimSpace(m.LastSinkAt) != "" {
-		t.Fatalf("inconclusive must not set last_sink_at (keep sinkable), got %q", m.LastSinkAt)
+	if SunkCursor(m) != sunkBefore {
+		t.Fatalf("inconclusive must keep sunk cursor %q, got %q", sunkBefore, SunkCursor(m))
 	}
+	// Same tip → not re-sinkable until runner messages move tip.
 	st := BuildStatus(m, t0, 1, true, "")
-	if st == nil || !IsAutoSinkable(st) || st.State != StateReady {
-		t.Fatalf("inconclusive should stay auto-sinkable ready, got %+v", st)
+	if st == nil || IsAutoSinkable(st) || st.State != StateSunk {
+		t.Fatalf("inconclusive+same tip must not be re-sinkable, got %+v", st)
+	}
+	// Newer tip → sinkable again; next Run still injects sunk (not checked).
+	newer := t0.Add(time.Minute)
+	st2 := BuildStatus(m, newer, 2, true, "")
+	if st2 == nil || !IsAutoSinkable(st2) || st2.State != StateBehind {
+		t.Fatalf("newer tip must be sinkable, got %+v", st2)
+	}
+	var sawSince string
+	opts.MessagesFn = func(string, string, *sessions.MessagesOpts) (*sessions.MessagesResult, error) {
+		return &sessions.MessagesResult{
+			Total: 2,
+			Messages: []sessions.ChatMessage{
+				{Kind: sessions.MessageKindUser, Text: "old", Timestamp: t0},
+				{Kind: sessions.MessageKindUser, Text: "new", Timestamp: newer},
+			},
+		}, nil
+	}
+	opts.AgentFn = func(_ context.Context, o agentrunapi.RunOpts, _ string) (string, error) {
+		sawSince = ""
+		if i := strings.Index(o.Prompt, "since:"); i >= 0 {
+			line := o.Prompt[i:]
+			if j := strings.IndexByte(line, '\n'); j >= 0 {
+				sawSince = strings.TrimSpace(strings.TrimPrefix(line[:j], "since:"))
+			}
+		}
+		body, _ := json.Marshal(ShipResult{
+			HasNewKnowledges: BoolPtr(false),
+			SkipReason:       SkipReasonNoNew,
+		})
+		return "", os.WriteFile(o.ResultFile, body, 0o644)
+	}
+	res2, err := Run(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res2.OK {
+		t.Fatalf("second run = %+v", res2)
+	}
+	if sawSince != sunkBefore {
+		t.Fatalf("next run since must be sunk cursor %q, got %q", sunkBefore, sawSince)
 	}
 }
 
-func TestRun_CreateMRZeroTipFallsBackCursorToLastSinkAt(t *testing.T) {
+func TestRun_CreateMRZeroTipFallsBackCheckedToLastSinkAt(t *testing.T) {
 	state := t.TempDir()
 	hub, _ := setupHubRemote(t)
 	runnerDir := t.TempDir()
@@ -714,17 +775,138 @@ func TestRun_CreateMRZeroTipFallsBackCursorToLastSinkAt(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !res.OK || !res.CursorAdvanced {
-		t.Fatalf("want ok+cursor advanced on zero tip, got %+v", res)
+		t.Fatalf("want ok+checked advanced on zero tip, got %+v", res)
 	}
 	m, err := LoadManifest(SessionDir(state, "marcus-zero-tip"))
 	if err != nil || m == nil {
 		t.Fatalf("manifest: %+v err=%v", m, err)
 	}
-	if strings.TrimSpace(m.LastSinkAt) == "" || m.LastSinkMaxMessageTimestamp != m.LastSinkAt {
-		t.Fatalf("cursor should fall back to last_sink_at: at=%q cursor=%q", m.LastSinkAt, m.LastSinkMaxMessageTimestamp)
+	if strings.TrimSpace(m.LastSinkAt) == "" || CheckedCursor(m) != m.LastSinkAt {
+		t.Fatalf("checked should fall back to last_sink_at: at=%q checked=%q", m.LastSinkAt, CheckedCursor(m))
+	}
+	if SunkCursor(m) != "" {
+		t.Fatalf("zero-tip skip must not advance sunk, got %q", SunkCursor(m))
 	}
 	st := BuildStatus(m, time.Time{}, 1, true, "")
 	if st == nil || IsAutoSinkable(st) || st.State != StateSunk {
 		t.Fatalf("after zero-tip finish want sunk, got %+v", st)
+	}
+}
+
+func TestStatusAfterSkipSameTipNotSinkable(t *testing.T) {
+	state := t.TempDir()
+	tip := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
+	sess := "marcus-after-skip"
+	dir := SessionDir(state, sess)
+	if err := WriteManifest(dir, &Manifest{
+		MarcusSessionID:             sess,
+		Status:                      statusIdle,
+		LastSinkMaxMessageTimestamp: FormatTime(tip),
+		LastSinkAt:                  FormatTime(tip),
+		LastSinkIndex:               0,
+		NextSinkIndex:               1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Status(context.Background(), Opts{
+		StateDir:  state,
+		SessionID: sess,
+		ResolveFn: func(string) (string, string, error) {
+			return "grok-tty", "g1", nil
+		},
+		MessagesFn: func(string, string, *sessions.MessagesOpts) (*sessions.MessagesResult, error) {
+			return &sessions.MessagesResult{
+				Total: 1,
+				Messages: []sessions.ChatMessage{
+					{Kind: sessions.MessageKindUser, Text: "hi", Timestamp: tip},
+				},
+			}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Sink == nil || IsAutoSinkable(res.Sink) || res.Sink.State != StateSunk {
+		t.Fatalf("want sunk/not sinkable, got %+v", res.Sink)
+	}
+}
+
+func TestStatusAfterSkipNewerTipSinkable(t *testing.T) {
+	state := t.TempDir()
+	cursor := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
+	newer := cursor.Add(time.Minute)
+	sess := "marcus-after-skip-newer"
+	dir := SessionDir(state, sess)
+	if err := WriteManifest(dir, &Manifest{
+		MarcusSessionID:             sess,
+		Status:                      statusIdle,
+		LastSinkMaxMessageTimestamp: FormatTime(cursor),
+		LastSinkAt:                  FormatTime(cursor),
+		LastSinkIndex:               0,
+		NextSinkIndex:               1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Status(context.Background(), Opts{
+		StateDir:  state,
+		SessionID: sess,
+		ResolveFn: func(string) (string, string, error) {
+			return "grok-tty", "g1", nil
+		},
+		MessagesFn: func(string, string, *sessions.MessagesOpts) (*sessions.MessagesResult, error) {
+			return &sessions.MessagesResult{
+				Total: 2,
+				Messages: []sessions.ChatMessage{
+					{Kind: sessions.MessageKindUser, Text: "old", Timestamp: cursor},
+					{Kind: sessions.MessageKindUser, Text: "new", Timestamp: newer},
+				},
+			}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Sink == nil || !IsAutoSinkable(res.Sink) || res.Sink.State != StateBehind {
+		t.Fatalf("want behind/sinkable, got %+v", res.Sink)
+	}
+}
+
+func TestStatusCodexTipSameNotSinkable(t *testing.T) {
+	state := t.TempDir()
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+	sid := "01a036d2-3e21-7381-a2d9-f7392d0efc29"
+	day := filepath.Join(codexHome, "sessions", "2026", "08", "25")
+	if err := os.MkdirAll(day, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tipStr := "2026-08-25T12:00:00.000Z"
+	rollout := filepath.Join(day, "rollout-2026-08-25T12-00-00-"+sid+".jsonl")
+	if err := os.WriteFile(rollout, []byte(`{"timestamp":"`+tipStr+`","type":"event_msg"}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tip, _ := time.Parse(time.RFC3339Nano, tipStr)
+	sess := "marcus-codex-sunk"
+	if err := WriteManifest(SessionDir(state, sess), &Manifest{
+		MarcusSessionID:             sess,
+		Status:                      statusIdle,
+		LastSinkMaxMessageTimestamp: FormatTime(tip.Local()),
+		LastSinkIndex:               0,
+		NextSinkIndex:               1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Status(context.Background(), Opts{
+		StateDir:  state,
+		SessionID: sess,
+		ResolveFn: func(string) (string, string, error) {
+			return "codex-tty", sid, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Sink == nil || IsAutoSinkable(res.Sink) {
+		t.Fatalf("want not sinkable with same Codex tip, got %+v", res.Sink)
 	}
 }

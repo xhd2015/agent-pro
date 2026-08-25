@@ -31,7 +31,7 @@ type PromptInput struct {
 	Runner           string // grok-tty | codex-tty | …
 	RunnerSessionID  string
 	RunnerSessionDir string // absolute primary source
-	Since            string // last_sink_max_message_timestamp, optional
+	Since            string // sunk cursor (last_sink_max_message_timestamp), optional
 	SinkIndex        int
 	ProposalPath     string // absolute path for proposal.md
 	Prior            PriorSinkContext
@@ -216,7 +216,8 @@ func buildPriorContext(stateSessionDir string, manifest *Manifest) PriorSinkCont
 		return out
 	}
 	has := strings.TrimSpace(manifest.LastSinkAt) != "" ||
-		strings.TrimSpace(manifest.LastSinkMaxMessageTimestamp) != "" ||
+		SunkCursor(manifest) != "" ||
+		CheckedCursor(manifest) != "" ||
 		manifest.LastSinkIndex >= 0 ||
 		len(manifest.LastPaths) > 0 ||
 		len(manifest.LastHubPaths) > 0 ||
@@ -226,7 +227,7 @@ func buildPriorContext(stateSessionDir string, manifest *Manifest) PriorSinkCont
 	}
 	out.HasPrior = true
 	out.LastSinkAt = manifest.LastSinkAt
-	out.LastCursor = manifest.LastSinkMaxMessageTimestamp
+	out.LastCursor = SunkCursor(manifest)
 	out.LastPaths = append([]string(nil), manifest.LastPaths...)
 	out.LastHubPaths = append([]string(nil), manifest.LastHubPaths...)
 	max := manifest.NextSinkIndex

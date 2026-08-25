@@ -12,8 +12,8 @@ import (
 
 // Skip reasons when has_new_knowledges is false.
 const (
-	SkipReasonInconclusive = "inconclusive" // no clear conclusion yet — do not advance cursor
-	SkipReasonNoNew        = "no_new"       // nothing new vs hub — advance cursor
+	SkipReasonInconclusive = "inconclusive" // no clear conclusion yet — advance checked only
+	SkipReasonNoNew        = "no_new"       // nothing new vs hub — advance checked only
 )
 
 // ShipResultExample is the example object for the prompt Output section (new knowledges).

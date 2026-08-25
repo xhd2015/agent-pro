@@ -27,23 +27,51 @@ const (
 
 // Manifest is session-level cursor/status under knowledge-sink/<id>/manifest.json.
 // status (+ last_ping) is the single source of truth for UI and all callers.
+//
+// Two tip watermarks:
+//   - LastSinkMaxMessageTimestamp (sunk): last tip through which content was
+//     shipped; injected as prompt since on the next Run.
+//   - LastCheckedMaxMessageTimestamp (checked): last tip Status/auto-pick
+//     already considered; skips advance this without moving sunk.
+//
+// Empty checked migrates to sunk for older manifests.
 type Manifest struct {
-	Version                     int      `json:"version"`
-	MarcusSessionID             string   `json:"marcus_session_id"`
-	GrokSessionID               string   `json:"grok_session_id,omitempty"`
-	LastSinkAt                  string   `json:"last_sink_at,omitempty"`
-	LastSinkMaxMessageTimestamp string   `json:"last_sink_max_message_timestamp,omitempty"`
-	NextSinkIndex               int      `json:"next_sink_index"`
-	LastSinkIndex               int      `json:"last_sink_index"`
-	Status                      string   `json:"status"`
-	Error                       string   `json:"error,omitempty"`
-	Pid                         int      `json:"pid,omitempty"`       // info only; not used for liveness
-	LastPing                    string   `json:"last_ping,omitempty"` // TimeLayout; heartbeat while running
-	LastPaths                   []string `json:"last_paths,omitempty"`
-	LastHubPaths                []string `json:"last_hub_paths,omitempty"`
-	LastBranch                  string   `json:"last_branch,omitempty"`
-	LastMRURL                   string   `json:"last_mr_url,omitempty"`
-	LastCommit                  string   `json:"last_commit,omitempty"`
+	Version                        int      `json:"version"`
+	MarcusSessionID                string   `json:"marcus_session_id"`
+	GrokSessionID                  string   `json:"grok_session_id,omitempty"`
+	LastSinkAt                     string   `json:"last_sink_at,omitempty"`
+	LastSinkMaxMessageTimestamp    string   `json:"last_sink_max_message_timestamp,omitempty"`    // sunk / since
+	LastCheckedMaxMessageTimestamp string   `json:"last_checked_max_message_timestamp,omitempty"` // sinkability
+	NextSinkIndex                  int      `json:"next_sink_index"`
+	LastSinkIndex                  int      `json:"last_sink_index"`
+	Status                         string   `json:"status"`
+	Error                          string   `json:"error,omitempty"`
+	Pid                            int      `json:"pid,omitempty"`       // info only; not used for liveness
+	LastPing                       string   `json:"last_ping,omitempty"` // TimeLayout; heartbeat while running
+	LastPaths                      []string `json:"last_paths,omitempty"`
+	LastHubPaths                   []string `json:"last_hub_paths,omitempty"`
+	LastBranch                     string   `json:"last_branch,omitempty"`
+	LastMRURL                      string   `json:"last_mr_url,omitempty"`
+	LastCommit                     string   `json:"last_commit,omitempty"`
+}
+
+// SunkCursor is the content watermark (prompt since). Empty if never shipped.
+func SunkCursor(m *Manifest) string {
+	if m == nil {
+		return ""
+	}
+	return strings.TrimSpace(m.LastSinkMaxMessageTimestamp)
+}
+
+// CheckedCursor is the sinkability watermark. Falls back to sunk for old manifests.
+func CheckedCursor(m *Manifest) string {
+	if m == nil {
+		return ""
+	}
+	if v := strings.TrimSpace(m.LastCheckedMaxMessageTimestamp); v != "" {
+		return v
+	}
+	return SunkCursor(m)
 }
 
 func FormatTime(t time.Time) string {
@@ -136,9 +164,9 @@ func WriteManifest(sessionDir string, m *Manifest) error {
 	return os.Rename(tmp, ManifestPath(sessionDir))
 }
 
-// TipAfterMax reports whether tip is strictly after lastSinkMax (new messages).
+// TipAfterMax reports whether tip is strictly after lastMax (new messages).
 // Unknown tip (zero) cannot claim "after cursor": if a cursor exists, treat as
-// not-after (sunk) so Status stays non-sinkable when tip cannot be loaded.
+// not-after so skip+checked-advance stays non-sinkable when Status cannot load tip.
 // Zero tip and zero cursor returns true only as a degenerate case; BuildStatus
 // uses neverSunk before TipAfterMax when both are empty.
 func TipAfterMax(tip, lastSinkMax time.Time) bool {

@@ -204,8 +204,11 @@ func TestRun_CreateMR_Happy(t *testing.T) {
 		t.Fatalf("cursor should advance: %+v", res)
 	}
 	man, _ := LoadManifest(SessionDir(state, "marcus-mr"))
-	if man == nil || man.LastSinkMaxMessageTimestamp == "" {
-		t.Fatalf("manifest cursor: %+v", man)
+	if man == nil || SunkCursor(man) == "" || CheckedCursor(man) == "" {
+		t.Fatalf("ship must advance sunk+checked: %+v", man)
+	}
+	if SunkCursor(man) != CheckedCursor(man) {
+		t.Fatalf("ship cursors should match: sunk=%q checked=%q", SunkCursor(man), CheckedCursor(man))
 	}
 	if man.LastBranch == "" || man.LastCommit == "" {
 		t.Fatalf("manifest ship fields: %+v", man)

@@ -51,6 +51,8 @@ agent/usage/tests/
 ├── SETUP.md                                    # env helpers, fake TUI scripts, isolated TTY_WATCH_HOME
 ├── fetch-grok-mock/                            # Mode=fetch: GROK fake → weekly limit + reset
 ├── fetch-codex-mock/                           # Mode=fetch: CODEX fake → monthly % + credits + reset
+├── fetch-codex-stale-claim/                    # Mode=fetch: leftover reclaimable claim must not block
+│   └── reclaimable-alive-claim/                # plant .codex-status-usage.claim → Fetch should succeed
 └── fetch-codex-lock-lifetime/                  # Mode=lock-during-fetch: registry flock while fetch runs
     ├── SETUP.md                                # Codex + blocking fake TUI + Mode
     ├── free-while-in-progress/                 # concurrent flock / other-id reserve succeed mid-fetch
@@ -62,8 +64,9 @@ Parameter ranking (most → least significant):
 1. **Observation mode** — snapshot fetch vs lock-lifetime probe during long fetch
 2. **Provider** — Grok vs Codex (different tty backends and env hooks)
 3. **Lock probe kind** — free lock / other-id reserve vs same-id “already in use”
-4. **Runner backend** — fake TUI via env command hook (deterministic fixtures)
-5. **Snapshot fields** — provider-specific parsed values in normalized struct
+4. **Stale reclaimable claim** — leftover `.claim` with alive PID before Fetch
+5. **Runner backend** — fake TUI via env command hook (deterministic fixtures)
+6. **Snapshot fields** — provider-specific parsed values in normalized struct
 
 ## Test Index
 
@@ -71,8 +74,9 @@ Parameter ranking (most → least significant):
 |---|------|-------------|
 | 1 | `fetch-grok-mock` | `Fetch(ctx, Grok)` with fake hook returns weekly 1% + July 9 reset |
 | 2 | `fetch-codex-mock` | `Fetch(ctx, Codex)` with fake hook returns 58% usage, credits 6519/11250, reset |
-| 3 | `fetch-codex-lock-lifetime/free-while-in-progress` | Mid long-running Codex fetch, registry `.lock` is free (LOCK_NB + other-id reserve succeed); cleanup after cancel (RED) |
-| 4 | `fetch-codex-lock-lifetime/same-id-still-in-use` | Mid long-running Codex fetch, re-reserve of the same custom id fails with “already in use” (not lock-busy) (RED) |
+| 3 | `fetch-codex-stale-claim/reclaimable-alive-claim` | Pre-planted alive `.codex-status-usage.claim` must not block Fetch (Marcus menu “already in use”; FetchStatus reclaim-once) |
+| 4 | `fetch-codex-lock-lifetime/free-while-in-progress` | Mid long-running Codex fetch, registry `.lock` is free (LOCK_NB + other-id reserve succeed); cleanup after cancel (RED) |
+| 5 | `fetch-codex-lock-lifetime/same-id-still-in-use` | Mid long-running Codex fetch, re-reserve of the same custom id fails with “already in use” (not lock-busy) (RED) |
 
 ## How to Run
 
@@ -81,6 +85,7 @@ doctest vet ./agent/usage/tests
 doctest test ./agent/usage/tests/...
 doctest test -v ./agent/usage/tests/fetch-grok-mock
 doctest test -v ./agent/usage/tests/fetch-codex-mock
+doctest test -v ./agent/usage/tests/fetch-codex-stale-claim/reclaimable-alive-claim
 doctest test -v ./agent/usage/tests/fetch-codex-lock-lifetime/free-while-in-progress
 doctest test -v ./agent/usage/tests/fetch-codex-lock-lifetime/same-id-still-in-use
 ```
@@ -116,6 +121,9 @@ type Request struct {
 	ProbeSessionID string
 	// SameIDProbe when true records a concurrent ReserveCustomSessionID of the fetch session id.
 	SameIDProbe bool
+	// PlantAliveSessionClaim writes registry/.<session>.claim with this process PID before Fetch.
+	// Models a reclaimable leftover hold (Marcus: session id "codex-status-usage" already in use).
+	PlantAliveSessionClaim bool
 }
 
 type Response struct {
@@ -157,6 +165,12 @@ func runFetchSnapshot(t *testing.T, req *Request) (*Response, error) {
 		t.Fatal("req.Provider must be set by leaf Setup")
 	}
 
+	if req.PlantAliveSessionClaim {
+		if err := plantAliveSessionClaim(req); err != nil {
+			return nil, err
+		}
+	}
+
 	timeout := 75 * time.Second
 	if req.TimeoutSeconds != "" {
 		if sec, err := time.ParseDuration(req.TimeoutSeconds + "s"); err == nil {
@@ -171,6 +185,26 @@ func runFetchSnapshot(t *testing.T, req *Request) (*Response, error) {
 		return nil, err
 	}
 	return &Response{Snapshot: snap}, nil
+}
+
+// plantAliveSessionClaim writes the tty-watch provisional claim for the Codex
+// usage session id using this test process PID. pruneStaleSessionID keeps alive
+// claims, so ReserveCustomSessionID fails with "already in use" unless FetchStatus
+// reclaims (headless Run already does; FetchStatus currently does not).
+func plantAliveSessionClaim(req *Request) error {
+	if req.TTYWatchHome == "" {
+		return fmt.Errorf("PlantAliveSessionClaim requires isolated TTYWatchHome")
+	}
+	sid := strings.TrimSpace(req.SessionID)
+	if sid == "" {
+		sid = "codex-status-usage"
+	}
+	dir := filepath.Join(req.TTYWatchHome, "registry")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	claimPath := filepath.Join(dir, "."+sid+".claim")
+	return os.WriteFile(claimPath, []byte(strconv.Itoa(os.Getpid())+"\n"), 0644)
 }
 
 func runLockDuringFetch(t *testing.T, req *Request) (*Response, error) {

@@ -45,12 +45,13 @@ func BuildStatus(manifest *Manifest, tip time.Time, total int, grokOK bool, grok
 			Help:    firstNonEmpty(grokHelp, "Needs a grok or codex agent session (runner Session ID)"),
 		}
 	}
-	// neverSunk = no completed sink and no tip cursor. History without a cursor
-	// (failed tip advance) still counts as sunk for auto-pick / UI; use LastSinkAt
-	// as fallback cursor so tip-after can detect real new work.
+	// neverSunk = no history and no checked/sunk tip. History without a tip
+	// cursor still counts as sunk for auto-pick / UI; use LastSinkAt as fallback
+	// so tip-after can detect real new work. Sinkability uses checked (falls
+	// back to sunk for older manifests).
 	var lastMax time.Time
 	if manifest != nil {
-		if t, err := ParseTime(manifest.LastSinkMaxMessageTimestamp); err == nil {
+		if t, err := ParseTime(CheckedCursor(manifest)); err == nil {
 			lastMax = t
 		} else if HasSinkHistory(manifest) {
 			if t, err := ParseTime(manifest.LastSinkAt); err == nil {
@@ -58,7 +59,7 @@ func BuildStatus(manifest *Manifest, tip time.Time, total int, grokOK bool, grok
 			}
 		}
 	}
-	neverSunk := manifest == nil || (!HasSinkHistory(manifest) && strings.TrimSpace(manifest.LastSinkMaxMessageTimestamp) == "")
+	neverSunk := manifest == nil || (!HasSinkHistory(manifest) && CheckedCursor(manifest) == "")
 	if neverSunk {
 		label := "Sink Knowledge"
 		enabled := total > 0
