@@ -255,6 +255,13 @@ func looseBranchOK(branch string) bool {
 	return branchNameRe.MatchString(strings.ToLower(user + "/" + rest))
 }
 
+// Marcus sink trigger sources (CLI --source / daemon POST source).
+const (
+	SourceAuto  = "auto"
+	SourceUI    = "ui"
+	SourceSlash = "slash"
+)
+
 // SingleLineMRTitle flattens a commit message for merge_request.title push option.
 func SingleLineMRTitle(msg string) string {
 	msg = strings.TrimSpace(msg)
@@ -269,4 +276,29 @@ func SingleLineMRTitle(msg string) string {
 		return "knowledge sink"
 	}
 	return msg
+}
+
+// MRTitlePrefix returns the Marcus trigger tag(s) for an MR title, or "" when
+// source is empty/unknown (bare CLI).
+func MRTitlePrefix(source string) string {
+	switch strings.ToLower(strings.TrimSpace(source)) {
+	case SourceAuto:
+		return "[Auto Sink]"
+	case SourceUI:
+		return "[Auto Sink] [From UI]"
+	case SourceSlash:
+		return "[Auto Sink] [From /sink]"
+	default:
+		return ""
+	}
+}
+
+// FormatMRTitle builds merge_request.title: optional source prefix + agent line.
+func FormatMRTitle(source, commitMsg string) string {
+	base := SingleLineMRTitle(commitMsg)
+	prefix := MRTitlePrefix(source)
+	if prefix == "" {
+		return base
+	}
+	return strings.TrimSpace(prefix + " " + base)
 }

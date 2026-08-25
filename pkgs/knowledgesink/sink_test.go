@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -90,6 +91,32 @@ func TestBuildStatusStates(t *testing.T) {
 	sunk := BuildStatus(m, tip, 3, true, "")
 	if sunk.State != StateSunk || sunk.Enabled || sunk.Label != "Sinked" {
 		t.Fatalf("sunk = %+v", sunk)
+	}
+}
+
+func TestStatusSkipSessionDirProbe(t *testing.T) {
+	state := t.TempDir()
+	dirProbe := 0
+	res, err := Status(context.Background(), Opts{
+		StateDir:  state,
+		SessionID: "marcus-1",
+		ResolveFn: func(string) (string, string, error) {
+			return "codex-tty", "runner-1", nil
+		},
+		ResolveSessionDirFn: func(string, string) (string, error) {
+			dirProbe++
+			return "", fmt.Errorf("should not probe")
+		},
+		SkipSessionDirProbe: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dirProbe != 0 {
+		t.Fatalf("dirProbe=%d", dirProbe)
+	}
+	if res == nil || res.Sink == nil || res.Sink.State != StateReady || !res.Sink.Enabled {
+		t.Fatalf("res=%+v sink=%+v", res, res.Sink)
 	}
 }
 

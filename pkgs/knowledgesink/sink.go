@@ -53,6 +53,13 @@ type Opts struct {
 	// AllowRunning skips the "already sinking" guard. Daemon uses this after it
 	// latches manifest status=running for UI before the worker goroutine starts.
 	AllowRunning bool
+	// Source tags the Marcus trigger for MR title prefixes (auto|ui|slash).
+	// Empty → no prefix (bare CLI).
+	Source string
+	// SkipSessionDirProbe skips Codex/Grok session-file walks when computing
+	// Status. For list/auto-pick, a resolved runner session id counts as
+	// having content (Codex Find was ~0.3–1s per session via full tree scan).
+	SkipSessionDirProbe bool
 
 	// AgentRunner / Model / ModelReasoningEffort are passed to agentrunapi.RunOpts.
 	// Empty AgentRunner → library default (grok-tty); callers that want Marcus/
@@ -86,6 +93,7 @@ type StatusResult struct {
 	SessionDir    string      `json:"session_dir,omitempty"` // knowledge-sink/<id>
 	LastSinkAt    string      `json:"last_sink_at,omitempty"`
 	LastPaths     []string    `json:"last_paths,omitempty"`
+	LastMRURL     string      `json:"last_mr_url,omitempty"`
 	Error         string      `json:"error,omitempty"`
 }
 
@@ -142,11 +150,20 @@ func Status(ctx context.Context, opts Opts) (*StatusResult, error) {
 	}
 	stateSessionDir := SessionDir(opts.StateDir, storageKey(opts, key))
 	manifest, _ := LoadManifest(stateSessionDir)
+	if manifest != nil {
+		_, _ = ReconcileStaleRunning(stateSessionDir, manifest, nowTime(opts))
+		manifest, _ = LoadManifest(stateSessionDir)
+	}
 
 	var tip time.Time
 	total := 0
 	if ok {
-		if isGrokRunner(runner) || (runner == "" && runnerSID != "") {
+		if opts.SkipSessionDirProbe {
+			// List/auto-pick: runner session id is enough; avoid Codex Find / message load.
+			if strings.TrimSpace(runnerSID) != "" {
+				total = 1
+			}
+		} else if isGrokRunner(runner) || (runner == "" && runnerSID != "") {
 			res, merr := fetchMessages(opts, runnerSID)
 			if merr != nil {
 				return &StatusResult{
@@ -188,6 +205,7 @@ func Status(ctx context.Context, opts Opts) (*StatusResult, error) {
 	if manifest != nil {
 		out.LastSinkAt = manifest.LastSinkAt
 		out.LastPaths = append([]string(nil), manifest.LastPaths...)
+		out.LastMRURL = strings.TrimSpace(manifest.LastMRURL)
 	}
 	return out, nil
 }
@@ -368,6 +386,7 @@ func Run(ctx context.Context, opts Opts) (*RunResult, error) {
 	manifest.MarcusSessionID = key
 	manifest.Status = statusRunning
 	manifest.Error = ""
+	manifest.LastPing = FormatTime(now)
 	if err := WriteManifest(stateSessionDir, manifest); err != nil {
 		return &RunResult{OK: false, SessionID: key, Error: err.Error()}, nil
 	}
@@ -395,6 +414,7 @@ func Run(ctx context.Context, opts Opts) (*RunResult, error) {
 	manifest.NextSinkIndex = index + 1
 	manifest.LastSinkIndex = index
 	manifest.GrokSessionID = runnerSID
+	manifest.LastPing = FormatTime(nowTime(opts))
 	_ = WriteManifest(stateSessionDir, manifest)
 
 	prompt := AgentPrompt(promptIn)
@@ -408,7 +428,10 @@ func Run(ctx context.Context, opts Opts) (*RunResult, error) {
 		waitMsg = "wait result.json"
 	}
 	progress(opts, step, total, stageAgent, waitMsg)
+	pingCtx, pingCancel := context.WithCancel(ctx)
+	StartPingLoop(pingCtx, stateSessionDir, 0, opts.NowFn)
 	jsonOut, agentErr := runAgent(ctx, opts, hubDir, prompt, key, resultAbs)
+	pingCancel()
 	if agentErr != nil {
 		return fail("propose agent: " + agentErr.Error()), nil
 	}
@@ -481,6 +504,7 @@ func Run(ctx context.Context, opts Opts) (*RunResult, error) {
 	}
 	manifest.Status = statusIdle
 	manifest.Error = ""
+	manifest.Pid = 0
 	manifest.GrokSessionID = runnerSID
 	manifest.LastSinkAt = FormatTime(now)
 	manifest.LastSinkIndex = index

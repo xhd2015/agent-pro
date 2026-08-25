@@ -157,7 +157,7 @@ func ShipToMR(opts Opts, hubDir string, ship *ShipResult, autoMerge bool) (*Ship
 	// Unrelated dirty files (or agent paths omitted from result.json) may remain;
 	// only the listed paths were added/committed.
 
-	title := SingleLineMRTitle(msg)
+	title := FormatMRTitle(opts.Source, msg)
 	pushArgs := []string{
 		"push", "origin", "HEAD:" + branch,
 		"-o", "merge_request.create",

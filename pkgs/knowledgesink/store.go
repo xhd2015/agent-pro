@@ -19,7 +19,14 @@ const (
 	statusFailed  = "failed"
 )
 
+// Heartbeat while status=running. ~4s interval ⇒ 1m ≈ 14 missed pings.
+const (
+	PingInterval = 4 * time.Second
+	StaleAfter   = time.Minute
+)
+
 // Manifest is session-level cursor/status under knowledge-sink/<id>/manifest.json.
+// status (+ last_ping) is the single source of truth for UI and all callers.
 type Manifest struct {
 	Version                     int      `json:"version"`
 	MarcusSessionID             string   `json:"marcus_session_id"`
@@ -30,6 +37,8 @@ type Manifest struct {
 	LastSinkIndex               int      `json:"last_sink_index"`
 	Status                      string   `json:"status"`
 	Error                       string   `json:"error,omitempty"`
+	Pid                         int      `json:"pid,omitempty"`       // info only; not used for liveness
+	LastPing                    string   `json:"last_ping,omitempty"` // TimeLayout; heartbeat while running
 	LastPaths                   []string `json:"last_paths,omitempty"`
 	LastHubPaths                []string `json:"last_hub_paths,omitempty"`
 	LastBranch                  string   `json:"last_branch,omitempty"`

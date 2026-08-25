@@ -28,20 +28,21 @@ type StatusView struct {
 }
 
 func BuildStatus(manifest *Manifest, tip time.Time, total int, grokOK bool, grokHelp string) *StatusView {
-	if !grokOK {
-		return &StatusView{
-			State:   StateUnavailable,
-			Label:   "Sink Knowledge",
-			Enabled: false,
-			Help:    firstNonEmpty(grokHelp, "Needs a grok or codex agent session (runner Session ID)"),
-		}
-	}
+	// Manifest running is SSOT — show Sinking… even if runner probe fails mid-run.
 	if manifest != nil && strings.EqualFold(manifest.Status, statusRunning) {
 		return &StatusView{
 			State:   StateRunning,
 			Label:   "Sinking…",
 			Enabled: false,
 			Help:    "Knowledge sink is running",
+		}
+	}
+	if !grokOK {
+		return &StatusView{
+			State:   StateUnavailable,
+			Label:   "Sink Knowledge",
+			Enabled: false,
+			Help:    firstNonEmpty(grokHelp, "Needs a grok or codex agent session (runner Session ID)"),
 		}
 	}
 	var lastMax time.Time

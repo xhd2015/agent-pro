@@ -94,6 +94,14 @@ func Find(codexHome string, sessionID string) (string, error) {
 		return "", sessionNotFoundError(sessionID)
 	}
 
+	// Fast path: rollout files are named rollout-*-<sessionID>.jsonl under
+	// sessions/YYYY/MM/DD/. Avoid discoverSessions (full tree open+parse).
+	pattern := filepath.Join(codexHome, "sessions", "*", "*", "*", "rollout-*"+sessionID+".jsonl")
+	if matches, gerr := filepath.Glob(pattern); gerr == nil && len(matches) > 0 {
+		sort.Strings(matches)
+		return matches[len(matches)-1], nil
+	}
+
 	sessions, err := discoverSessions(codexHome)
 	if err != nil {
 		return "", err

@@ -26,6 +26,29 @@ func TestSingleLineMRTitle(t *testing.T) {
 	}
 }
 
+func TestMRTitlePrefixAndFormat(t *testing.T) {
+	cases := []struct {
+		source string
+		msg    string
+		want   string
+	}{
+		{"auto", "docs(kb): learn\nbody", "[Auto Sink] docs(kb): learn"},
+		{"ui", "docs(kb): learn", "[Auto Sink] [From UI] docs(kb): learn"},
+		{"slash", "docs(kb): learn", "[Auto Sink] [From /sink] docs(kb): learn"},
+		{"", "docs(kb): learn", "docs(kb): learn"},
+		{"other", "docs(kb): learn", "docs(kb): learn"},
+		{"ui", "", "[Auto Sink] [From UI] knowledge sink"},
+	}
+	for _, tc := range cases {
+		if got := FormatMRTitle(tc.source, tc.msg); got != tc.want {
+			t.Errorf("source=%q msg=%q: got %q want %q", tc.source, tc.msg, got, tc.want)
+		}
+	}
+	if MRTitlePrefix("UI") != "[Auto Sink] [From UI]" {
+		t.Fatalf("case-insensitive UI prefix failed")
+	}
+}
+
 func TestShipCommitFilesAllPaths(t *testing.T) {
 	f := ShipCommitFiles{
 		Add:    []string{"a.md"},
