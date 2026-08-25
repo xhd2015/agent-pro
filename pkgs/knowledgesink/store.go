@@ -137,9 +137,13 @@ func WriteManifest(sessionDir string, m *Manifest) error {
 }
 
 // TipAfterMax reports whether tip is strictly after lastSinkMax (new messages).
+// Unknown tip (zero) cannot claim "after cursor": if a cursor exists, treat as
+// not-after (sunk) so Status stays non-sinkable when tip cannot be loaded.
+// Zero tip and zero cursor returns true only as a degenerate case; BuildStatus
+// uses neverSunk before TipAfterMax when both are empty.
 func TipAfterMax(tip, lastSinkMax time.Time) bool {
 	if tip.IsZero() {
-		return true
+		return lastSinkMax.IsZero()
 	}
 	if lastSinkMax.IsZero() {
 		return true

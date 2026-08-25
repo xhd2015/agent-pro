@@ -45,13 +45,20 @@ func BuildStatus(manifest *Manifest, tip time.Time, total int, grokOK bool, grok
 			Help:    firstNonEmpty(grokHelp, "Needs a grok or codex agent session (runner Session ID)"),
 		}
 	}
+	// neverSunk = no completed sink and no tip cursor. History without a cursor
+	// (failed tip advance) still counts as sunk for auto-pick / UI; use LastSinkAt
+	// as fallback cursor so tip-after can detect real new work.
 	var lastMax time.Time
 	if manifest != nil {
 		if t, err := ParseTime(manifest.LastSinkMaxMessageTimestamp); err == nil {
 			lastMax = t
+		} else if HasSinkHistory(manifest) {
+			if t, err := ParseTime(manifest.LastSinkAt); err == nil {
+				lastMax = t
+			}
 		}
 	}
-	neverSunk := manifest == nil || strings.TrimSpace(manifest.LastSinkMaxMessageTimestamp) == ""
+	neverSunk := manifest == nil || (!HasSinkHistory(manifest) && strings.TrimSpace(manifest.LastSinkMaxMessageTimestamp) == "")
 	if neverSunk {
 		label := "Sink Knowledge"
 		enabled := total > 0
@@ -69,7 +76,8 @@ func BuildStatus(manifest *Manifest, tip time.Time, total int, grokOK bool, grok
 		}
 		return out
 	}
-	if !TipAfterMax(tip, lastMax) {
+	// History exists but neither cursor nor last_sink_at parsed → do not claim behind.
+	if lastMax.IsZero() || !TipAfterMax(tip, lastMax) {
 		return &StatusView{
 			State:   StateSunk,
 			Label:   "Sinked",

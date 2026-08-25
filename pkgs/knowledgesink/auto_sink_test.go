@@ -99,6 +99,32 @@ func TestPickOldestAutoSinkable_None(t *testing.T) {
 	}
 }
 
+func TestFilterAndSortAutoSinkable_SkipsHistoryWithoutCursor(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
+	sinkAt := now.Add(-2 * time.Hour)
+	sessions := []SessionMeta{
+		{ID: "history-no-cursor", UpdatedAt: now.Add(-24 * time.Hour)},
+		{ID: "true-ready", UpdatedAt: now.Add(-time.Hour)},
+	}
+	status := map[string]*StatusView{
+		"history-no-cursor": BuildStatus(&Manifest{
+			LastSinkAt: FormatTime(sinkAt),
+			Status:     statusIdle,
+		}, time.Time{}, 3, true, ""),
+		"true-ready": BuildStatus(&Manifest{Status: statusIdle}, sinkAt, 3, true, ""),
+	}
+	rows, err := FilterAndSortAutoSinkable(sessions, now, AutoSinkWindow, func(id string) (*StatusView, error) {
+		return status[id], nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].SessionID != "true-ready" || rows[0].Why != "never sunk" {
+		t.Fatalf("want only true-ready/never sunk, got %+v", rows)
+	}
+}
+
 func TestWithinAutoSinkWindow(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC)

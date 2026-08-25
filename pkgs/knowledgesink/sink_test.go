@@ -72,6 +72,13 @@ func TestTipAfterMax(t *testing.T) {
 	if !TipAfterMax(b, a) {
 		t.Fatal("tip after max must be behind")
 	}
+	// Unknown tip + existing cursor → not after (sunk).
+	if TipAfterMax(time.Time{}, a) {
+		t.Fatal("zero tip with cursor must not claim behind")
+	}
+	if !TipAfterMax(time.Time{}, time.Time{}) {
+		t.Fatal("zero tip and zero cursor: never-sunk path uses neverSunk before this")
+	}
 }
 
 func TestBuildStatusStates(t *testing.T) {
@@ -91,6 +98,40 @@ func TestBuildStatusStates(t *testing.T) {
 	sunk := BuildStatus(m, tip, 3, true, "")
 	if sunk.State != StateSunk || sunk.Enabled || sunk.Label != "Sinked" {
 		t.Fatalf("sunk = %+v", sunk)
+	}
+}
+
+func TestBuildStatusHistoryWithoutCursor(t *testing.T) {
+	sinkAt := time.Date(2026, 8, 25, 12, 20, 2, 0, time.FixedZone("CST", 8*3600))
+	m := &Manifest{
+		LastSinkAt: FormatTime(sinkAt),
+		Status:     statusIdle,
+	}
+	// Tip unknown → sunk (not ready/never-sunk); auto-pick must skip.
+	sunk := BuildStatus(m, time.Time{}, 3, true, "")
+	if sunk.State != StateSunk || sunk.Enabled || IsAutoSinkable(sunk) {
+		t.Fatalf("history+no cursor+zero tip: want sunk, got %+v", sunk)
+	}
+	if AutoSinkWhy(sunk) == "never sunk" {
+		t.Fatalf("why must not be never sunk: %q", AutoSinkWhy(sunk))
+	}
+	// Tip before / equal last_sink_at → still sunk.
+	before := BuildStatus(m, sinkAt.Add(-time.Hour), 3, true, "")
+	if before.State != StateSunk || IsAutoSinkable(before) {
+		t.Fatalf("tip before last_sink_at: want sunk, got %+v", before)
+	}
+	// Tip after last_sink_at → behind / sinkable (real new work).
+	behind := BuildStatus(m, sinkAt.Add(time.Hour), 3, true, "")
+	if behind.State != StateBehind || !behind.Enabled || !IsAutoSinkable(behind) {
+		t.Fatalf("tip after last_sink_at: want behind, got %+v", behind)
+	}
+	if AutoSinkWhy(behind) == "never sunk" {
+		t.Fatalf("behind why must not be never sunk: %q", AutoSinkWhy(behind))
+	}
+	// No history and no cursor → still ready / never sunk.
+	fresh := BuildStatus(&Manifest{Status: statusIdle}, sinkAt, 3, true, "")
+	if fresh.State != StateReady || !IsAutoSinkable(fresh) || AutoSinkWhy(fresh) != "never sunk" {
+		t.Fatalf("no history: want ready/never sunk, got %+v why=%q", fresh, AutoSinkWhy(fresh))
 	}
 }
 
@@ -626,5 +667,64 @@ func TestRun_CreateMRSkipInconclusiveKeepsCursor(t *testing.T) {
 	m, _ := LoadManifest(SessionDir(state, "marcus-skip-inconclusive"))
 	if m != nil && strings.TrimSpace(m.LastSinkMaxMessageTimestamp) != "" {
 		t.Fatalf("cursor should stay empty, got %q", m.LastSinkMaxMessageTimestamp)
+	}
+	if m != nil && strings.TrimSpace(m.LastSinkAt) != "" {
+		t.Fatalf("inconclusive must not set last_sink_at (keep sinkable), got %q", m.LastSinkAt)
+	}
+	st := BuildStatus(m, t0, 1, true, "")
+	if st == nil || !IsAutoSinkable(st) || st.State != StateReady {
+		t.Fatalf("inconclusive should stay auto-sinkable ready, got %+v", st)
+	}
+}
+
+func TestRun_CreateMRZeroTipFallsBackCursorToLastSinkAt(t *testing.T) {
+	state := t.TempDir()
+	hub, _ := setupHubRemote(t)
+	runnerDir := t.TempDir()
+	now := time.Date(2026, 8, 25, 14, 0, 0, 0, time.UTC)
+	opts := Opts{
+		StateDir:            state,
+		HubDir:              hub,
+		SessionID:           "marcus-zero-tip",
+		Mode:                ModeHeadless,
+		CreateMR:            true,
+		AutoMergeMR:         true,
+		ResolveFn:           func(string) (string, string, error) { return "grok-tty", "g-zero", nil },
+		ResolveSessionDirFn: func(string, string) (string, error) { return runnerDir, nil },
+		// Messages exist for delta, but timestamps missing → tip stays zero.
+		MessagesFn: func(string, string, *sessions.MessagesOpts) (*sessions.MessagesResult, error) {
+			return &sessions.MessagesResult{
+				Total: 1,
+				Messages: []sessions.ChatMessage{
+					{Kind: sessions.MessageKindUser, Text: "hi"},
+				},
+			}, nil
+		},
+		AgentFn: func(_ context.Context, o agentrunapi.RunOpts, _ string) (string, error) {
+			body, _ := json.Marshal(ShipResult{
+				HasNewKnowledges: BoolPtr(false),
+				SkipReason:       SkipReasonNoNew,
+			})
+			return "", os.WriteFile(o.ResultFile, body, 0o644)
+		},
+		NowFn: func() time.Time { return now },
+	}
+	res, err := Run(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.OK || !res.CursorAdvanced {
+		t.Fatalf("want ok+cursor advanced on zero tip, got %+v", res)
+	}
+	m, err := LoadManifest(SessionDir(state, "marcus-zero-tip"))
+	if err != nil || m == nil {
+		t.Fatalf("manifest: %+v err=%v", m, err)
+	}
+	if strings.TrimSpace(m.LastSinkAt) == "" || m.LastSinkMaxMessageTimestamp != m.LastSinkAt {
+		t.Fatalf("cursor should fall back to last_sink_at: at=%q cursor=%q", m.LastSinkAt, m.LastSinkMaxMessageTimestamp)
+	}
+	st := BuildStatus(m, time.Time{}, 1, true, "")
+	if st == nil || IsAutoSinkable(st) || st.State != StateSunk {
+		t.Fatalf("after zero-tip finish want sunk, got %+v", st)
 	}
 }

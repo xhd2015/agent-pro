@@ -519,7 +519,13 @@ func Run(ctx context.Context, opts Opts) (*RunResult, error) {
 	manifest.Error = ""
 	manifest.Pid = 0
 	manifest.GrokSessionID = runnerSID
-	manifest.LastSinkAt = FormatTime(now)
+	// Inconclusive: leave last_sink_at/cursor unchanged so Status stays sinkable
+	// ("come back when the session concludes"). Ship / no_new record history.
+	inconclusive := opts.CreateMR && shipResult != nil && !shipResult.HasNew() &&
+		shipResult.SkipReason == SkipReasonInconclusive
+	if !inconclusive {
+		manifest.LastSinkAt = FormatTime(now)
+	}
 	manifest.LastSinkIndex = index
 	if manifest.NextSinkIndex <= index {
 		manifest.NextSinkIndex = index + 1
@@ -536,10 +542,17 @@ func Run(ctx context.Context, opts Opts) (*RunResult, error) {
 	if opts.CreateMR {
 		// Advance cursor when we shipped, or skipped as no_new (done with this slice).
 		// Do not advance on inconclusive (come back when the session concludes).
+		// Prefer runner tip; if tip is unknown, fall back to last_sink_at so Status
+		// does not treat a completed sink as never-sunk.
 		advanceCursor := shipResult == nil || shipResult.HasNew() || shipResult.SkipReason == SkipReasonNoNew
-		if advanceCursor && !tip.IsZero() {
-			manifest.LastSinkMaxMessageTimestamp = FormatTime(tip)
-			cursorAdvanced = true
+		if advanceCursor {
+			if !tip.IsZero() {
+				manifest.LastSinkMaxMessageTimestamp = FormatTime(tip)
+				cursorAdvanced = true
+			} else if strings.TrimSpace(manifest.LastSinkMaxMessageTimestamp) == "" {
+				manifest.LastSinkMaxMessageTimestamp = manifest.LastSinkAt
+				cursorAdvanced = true
+			}
 		}
 		if shipGit != nil {
 			manifest.LastBranch = shipGit.Branch
