@@ -117,16 +117,24 @@ Write a short proposal markdown (audit) to this absolute path (outside the hub):
 
 Task:
 1. Inspect the primary source (and only the new slice if a since/cursor is given).
-2. Conclusion gate: if the session has no clear conclusion / decision / durable
-   takeaway yet → do NOT write hub files. Write result.json with
-   has_new_knowledges=false and skip_reason="inconclusive", plus a short
-   proposal.md explaining why. Stop.
-3. Novelty gate: if nothing durable is new vs the hub (and prior sinks) → do
-   NOT write hub files. Write result.json with has_new_knowledges=false and
-   skip_reason="no_new", plus a short proposal.md. Stop.
-4. Otherwise, using SINK.md, write the hub-relative files that should be sunk
-   (new or adjust). Do not repeat prior sinks unless this is a concrete
-   incremental fix.
+2. If the session has no clear conclusion or durable takeaway, do NOT write hub
+   files. Write result.json with has_new_knowledges=false and
+   skip_reason="inconclusive", plus a short proposal.md explaining why. Stop.
+3. Follow SINK.md. Golden rules:
+   - Do not sink an explanation of what current code already does.
+   - Sink only reusable investigation value: a pitfall that can mislead future
+     diagnosis, and the correct path/evidence that navigates to a conclusion.
+   - Prefer updating the existing page or skill that owns that path; do not
+     create a feature-specific leaf for a one-off request or code decision.
+   - Keep code details, dynamic config, and request/ticket facts in their
+     systems of record.
+
+   If no such reusable pitfall or navigation path is new relative to the hub
+   and prior sinks, do NOT write hub files. Write result.json with
+   has_new_knowledges=false and skip_reason="no_new", plus a short proposal.md.
+   Stop.
+4. Otherwise, write the hub-relative files required by SINK.md. Do not repeat
+   prior sinks unless this is a concrete incremental fix.
 5. Do not run git commands.
 
 ## Output
