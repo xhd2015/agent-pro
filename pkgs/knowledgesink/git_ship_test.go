@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -74,15 +75,22 @@ func TestShipToMR_VerboseNotices(t *testing.T) {
 	}
 	got := stderr.String()
 	for _, want := range []string{
-		"notice: ship: stash",
-		"notice: ship: checkout -B",
+		"notice: ship: commit on",
 		"notice: ship: git commit",
-		"notice: ship: git push",
+		"notice: ship: git push origin HEAD:",
 		"notice: ship: auto-merge",
 		"notice: ship: done",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("stderr missing %q:\n%s", want, got)
+		}
+	}
+	for _, ban := range []string{
+		"checkout -B",
+		"ship: stash",
+	} {
+		if strings.Contains(got, ban) {
+			t.Fatalf("stderr should not contain %q:\n%s", ban, got)
 		}
 	}
 }
@@ -312,3 +320,182 @@ func setupHubRemote(t *testing.T) (hub, bare string) {
 	run(hub, "push", "-u", "origin", "master")
 	return hub, bare
 }
+
+func gitHub(t *testing.T, hub string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", hub}, args...)...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %s (%v)", args, out, err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func TestShipToMR_KeepsCurrentBranch(t *testing.T) {
+	hub, _ := setupHubRemote(t)
+	gitHub(t, hub, "checkout", "-B", "marcus-workspace")
+	gitHub(t, hub, "branch", "--set-upstream-to=origin/master", "marcus-workspace")
+
+	if err := os.MkdirAll(filepath.Join(hub, "topics"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hub, "topics", "stay.md"), []byte("stay\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Unrelated dirt must survive.
+	if err := os.WriteFile(filepath.Join(hub, "unrelated.md"), []byte("leave\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ship := &ShipResult{
+		HasNewKnowledges: BoolPtr(true),
+		GitCommitMsg:     "docs(kb): stay on workspace branch",
+		GitBranchName:    "tester/2026-03-24-stay-branch",
+		GitCommitFiles: ShipCommitFiles{
+			Add: []string{"topics/stay.md"},
+		},
+	}
+	res, err := ShipToMR(Opts{}, hub, ship, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Merged {
+		t.Fatalf("expected merged: %+v", res)
+	}
+	if got := gitHub(t, hub, "branch", "--show-current"); got != "marcus-workspace" {
+		t.Fatalf("current branch = %q, want marcus-workspace", got)
+	}
+	if _, err := os.Stat(filepath.Join(hub, "unrelated.md")); err != nil {
+		t.Fatalf("unrelated dirt missing: %v", err)
+	}
+}
+
+func TestShipToMR_RejectsDivergedHEAD(t *testing.T) {
+	hub, _ := setupHubRemote(t)
+	if err := os.WriteFile(filepath.Join(hub, "local-only.md"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitHub(t, hub, "add", "local-only.md")
+	gitHub(t, hub, "commit", "-m", "local ahead of origin")
+
+	if err := os.MkdirAll(filepath.Join(hub, "topics"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hub, "topics", "ship.md"), []byte("s\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ship := &ShipResult{
+		HasNewKnowledges: BoolPtr(true),
+		GitCommitMsg:     "docs(kb): should refuse",
+		GitBranchName:    "tester/2026-03-24-refuse",
+		GitCommitFiles: ShipCommitFiles{
+			Add: []string{"topics/ship.md"},
+		},
+	}
+	_, err := ShipToMR(Opts{}, hub, ship, true)
+	if err == nil || !strings.Contains(err.Error(), "hub HEAD must match") {
+		t.Fatalf("want diverged HEAD error, got %v", err)
+	}
+	if got := gitHub(t, hub, "branch", "--show-current"); got != "master" {
+		t.Fatalf("branch changed to %q", got)
+	}
+}
+
+func TestShipToMR_IgnoresFailingHooks(t *testing.T) {
+	hub, _ := setupHubRemote(t)
+	hooks := t.TempDir()
+	for _, name := range []string{"post-checkout", "post-commit", "pre-push"} {
+		path := filepath.Join(hooks, name)
+		body := "#!/bin/sh\necho hook-fail-" + name + " >&2\nexit 2\n"
+		if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gitHub(t, hub, "config", "core.hooksPath", hooks)
+
+	if err := os.MkdirAll(filepath.Join(hub, "topics"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hub, "topics", "hooks.md"), []byte("h\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ship := &ShipResult{
+		HasNewKnowledges: BoolPtr(true),
+		GitCommitMsg:     "docs(kb): ignore hooks",
+		GitBranchName:    "tester/2026-03-24-ignore-hooks",
+		GitCommitFiles: ShipCommitFiles{
+			Add: []string{"topics/hooks.md"},
+		},
+	}
+	res, err := ShipToMR(Opts{}, hub, ship, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Merged {
+		t.Fatalf("expected merged: %+v", res)
+	}
+}
+
+func TestShipToMR_AutoMergeWithMasterLockedByWorktree(t *testing.T) {
+	hub, bare := setupHubRemote(t)
+	gitHub(t, hub, "checkout", "-B", "marcus-workspace")
+	gitHub(t, hub, "branch", "--set-upstream-to=origin/master", "marcus-workspace")
+
+	// Primary-style worktree holds master (cannot checkout master in hub).
+	other := t.TempDir()
+	cmd := exec.Command("git", "-C", hub, "worktree", "add", other, "master")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("worktree add: %s (%v)", out, err)
+	}
+	t.Cleanup(func() {
+		_ = exec.Command("git", "-C", hub, "worktree", "remove", "--force", other).Run()
+	})
+
+	if err := os.MkdirAll(filepath.Join(hub, "topics"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hub, "topics", "wt.md"), []byte("wt\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ship := &ShipResult{
+		HasNewKnowledges: BoolPtr(true),
+		GitCommitMsg:     "docs(kb): worktree-safe merge",
+		GitBranchName:    "tester/2026-03-24-wt-merge",
+		GitCommitFiles: ShipCommitFiles{
+			Add: []string{"topics/wt.md"},
+		},
+	}
+	res, err := ShipToMR(Opts{}, hub, ship, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Merged {
+		t.Fatalf("expected merged: %+v", res)
+	}
+	if got := gitHub(t, hub, "branch", "--show-current"); got != "marcus-workspace" {
+		t.Fatalf("current branch = %q", got)
+	}
+	master, err := exec.Command("git", "-C", bare, "rev-parse", "master").CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
+	}
+	feature, err := exec.Command("git", "-C", bare, "rev-parse", ship.GitBranchName).CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(string(master)) != strings.TrimSpace(string(feature)) {
+		t.Fatalf("master %s != feature %s", master, feature)
+	}
+}
+
+func TestGitErrMsgDropsSwitchedNoise(t *testing.T) {
+	stderr := "Switched to a new branch 'x'\n\nThis repository is configured for Git LFS but 'git-lfs' was not found on your path.\n"
+	got := gitErrMsg(stderr, fmt.Errorf("exit status 1"))
+	if !strings.Contains(got, "git-lfs") {
+		t.Fatalf("got %q", got)
+	}
+	if strings.Contains(got, "Switched to a new branch") {
+		t.Fatalf("should drop switch noise: %q", got)
+	}
+}
+

@@ -3,6 +3,7 @@ package knowledgesink
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -30,11 +31,7 @@ func gitRun(opts Opts, dir string, args ...string) (string, string, error) {
 func gitOK(opts Opts, dir string, args ...string) error {
 	_, stderr, err := gitRun(opts, dir, args...)
 	if err != nil {
-		msg := strings.TrimSpace(stderr)
-		if msg == "" {
-			msg = err.Error()
-		}
-		return fmt.Errorf("git %s: %s", strings.Join(args, " "), msg)
+		return fmt.Errorf("git %s: %s", strings.Join(args, " "), gitErrMsg(stderr, err))
 	}
 	return nil
 }
@@ -42,13 +39,63 @@ func gitOK(opts Opts, dir string, args ...string) error {
 func gitOut(opts Opts, dir string, args ...string) (string, error) {
 	stdout, stderr, err := gitRun(opts, dir, args...)
 	if err != nil {
-		msg := strings.TrimSpace(stderr)
-		if msg == "" {
-			msg = err.Error()
-		}
-		return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), msg)
+		return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), gitErrMsg(stderr, err))
 	}
 	return strings.TrimSpace(stdout), nil
+}
+
+// gitErrMsg prefers actionable stderr (e.g. missing git-lfs) over success chatter.
+func gitErrMsg(stderr string, err error) string {
+	msg := strings.TrimSpace(stderr)
+	if msg == "" && err != nil {
+		return err.Error()
+	}
+	lines := strings.Split(msg, "\n")
+	var keep []string
+	for _, line := range lines {
+		trim := strings.TrimSpace(line)
+		if trim == "" {
+			continue
+		}
+		// git checkout prints these on stderr even when hooks later fail the command.
+		if strings.HasPrefix(trim, "Switched to a new branch") ||
+			strings.HasPrefix(trim, "Switched to and reset branch") ||
+			strings.HasPrefix(trim, "Already on ") ||
+			strings.HasPrefix(trim, "Reset branch ") {
+			continue
+		}
+		keep = append(keep, trim)
+	}
+	if len(keep) > 0 {
+		return strings.Join(keep, "\n")
+	}
+	if msg != "" {
+		return msg
+	}
+	if err != nil {
+		return err.Error()
+	}
+	return "unknown git error"
+}
+
+// withShipGit disables hooks for automated ship ops (global LFS post-checkout/commit
+// must not fail headless sink when git-lfs is absent from PATH).
+func withShipGit(opts Opts) (Opts, func(), error) {
+	hooksDir, err := os.MkdirTemp("", "knowledgesink-no-hooks-*")
+	if err != nil {
+		return opts, func() {}, fmt.Errorf("mkdir hooks stub: %w", err)
+	}
+	cleanup := func() { _ = os.RemoveAll(hooksDir) }
+	base := opts.GitFn
+	if base == nil {
+		base = defaultGitRunner
+	}
+	ship := opts
+	ship.GitFn = func(dir string, args ...string) (string, string, error) {
+		prefixed := append([]string{"-c", "core.hooksPath=" + hooksDir}, args...)
+		return base(dir, prefixed...)
+	}
+	return ship, cleanup, nil
 }
 
 // HubGitUser returns stripped username from git config user.email in hub.
@@ -90,69 +137,86 @@ type ShipGitResult struct {
 	Warning    string
 }
 
-// ShipToMR stashes agent edits, branches from origin/master, commits, pushes with
-// merge_request push options, optionally ff-merges into origin/master.
+// ShipToMR commits listed paths on the current hub branch (must match origin/<target>),
+// pushes HEAD:<feature> with merge_request options, and optionally ff-pushes to origin/<target>.
+// It does not checkout a feature branch or master in the hub worktree.
 func ShipToMR(opts Opts, hubDir string, ship *ShipResult, autoMerge bool) (*ShipGitResult, error) {
 	if ship == nil {
 		return nil, fmt.Errorf("nil ship result")
 	}
-	if err := gitOK(opts, hubDir, "rev-parse", "--is-inside-work-tree"); err != nil {
+	shipOpts, cleanup, err := withShipGit(opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
+
+	if err := gitOK(shipOpts, hubDir, "rev-parse", "--is-inside-work-tree"); err != nil {
 		return nil, fmt.Errorf("hub is not a git repo")
 	}
 
 	branch := strings.TrimSpace(ship.GitBranchName)
 	msg := strings.TrimSpace(ship.GitCommitMsg)
+	if branch == "" {
+		return nil, fmt.Errorf("git_branch_name empty")
+	}
+	if msg == "" {
+		return nil, fmt.Errorf("git_commit_msg empty")
+	}
+
 	verboseNotice(opts, "ship: resolve origin base")
-	originRef, targetBranch, err := resolveOriginBase(opts, hubDir)
+	originRef, targetBranch, err := resolveOriginBase(shipOpts, hubDir)
 	if err != nil {
 		return nil, err
 	}
-	verboseNotice(opts, "ship: origin=%s target=%s branch=%s", originRef, targetBranch, branch)
+	verboseNotice(opts, "ship: origin=%s target=%s remote_branch=%s", originRef, targetBranch, branch)
 
-	prevBranch, _ := gitOut(opts, hubDir, "rev-parse", "--abbrev-ref", "HEAD")
+	headFull, err := gitOut(shipOpts, hubDir, "rev-parse", "HEAD")
+	if err != nil {
+		return nil, err
+	}
+	originFull, err := gitOut(shipOpts, hubDir, "rev-parse", originRef)
+	if err != nil {
+		return nil, err
+	}
+	if headFull != originFull {
+		headShort, _ := gitOut(shipOpts, hubDir, "rev-parse", "--short", "HEAD")
+		originShort, _ := gitOut(shipOpts, hubDir, "rev-parse", "--short", originRef)
+		if headShort == "" {
+			headShort = headFull
+		}
+		if originShort == "" {
+			originShort = originFull
+		}
+		return nil, fmt.Errorf("ship: hub HEAD must match %s (got %s, %s=%s); refusing to commit on a diverged workspace branch",
+			originRef, headShort, originRef, originShort)
+	}
+
+	curBranch, _ := gitOut(shipOpts, hubDir, "rev-parse", "--abbrev-ref", "HEAD")
+	verboseNotice(opts, "ship: commit on %s (no checkout)", curBranch)
 
 	paths := ship.GitCommitFiles.AllPaths()
 	if len(paths) == 0 {
 		return nil, fmt.Errorf("git_commit_files empty")
 	}
-	verboseNotice(opts, "ship: stash %d path(s): %s", len(paths), strings.Join(paths, ", "))
-	stashArgs := append([]string{"stash", "push", "-u", "-m", "knowledgesink-create-mr", "--"}, paths...)
-	if err := gitOK(opts, hubDir, stashArgs...); err != nil {
-		return nil, fmt.Errorf("stash agent files: %w", err)
-	}
-	stashed := true
-	defer func() {
-		if stashed {
-			_, _, _ = gitRun(opts, hubDir, "stash", "pop")
-		}
-		_ = restoreCheckout(opts, hubDir, prevBranch)
-	}()
-
-	_, _, _ = gitRun(opts, hubDir, "branch", "-D", branch)
-	verboseNotice(opts, "ship: checkout -B %s %s", branch, originRef)
-	if err := gitOK(opts, hubDir, "checkout", "-B", branch, originRef); err != nil {
-		return nil, fmt.Errorf("checkout -B %s %s: %w", branch, originRef, err)
-	}
-	verboseNotice(opts, "ship: stash pop onto %s", branch)
-	if err := gitOK(opts, hubDir, "stash", "pop"); err != nil {
-		return nil, fmt.Errorf("restore agent files onto branch: %w", err)
-	}
-	stashed = false
 
 	addArgs := append([]string{"add", "--"}, paths...)
-	verboseNotice(opts, "ship: git add -- %s", strings.Join(paths, " "))
-	if err := gitOK(opts, hubDir, addArgs...); err != nil {
+	verboseNotice(opts, "ship: git add -- %s", strings.Join(paths, ", "))
+	if err := gitOK(shipOpts, hubDir, addArgs...); err != nil {
 		return nil, err
 	}
 	verboseNotice(opts, "ship: git commit -m %q", msg)
-	if err := gitOK(opts, hubDir, "commit", "-m", msg); err != nil {
+	if err := gitOK(shipOpts, hubDir, "commit", "-m", msg); err != nil {
 		return nil, err
 	}
-	commit, err := gitOut(opts, hubDir, "rev-parse", "--short", "HEAD")
+	commitFull, err := gitOut(shipOpts, hubDir, "rev-parse", "HEAD")
 	if err != nil {
 		return nil, err
 	}
-	verboseNotice(opts, "ship: committed %s on %s", commit, branch)
+	commit, err := gitOut(shipOpts, hubDir, "rev-parse", "--short", "HEAD")
+	if err != nil {
+		return nil, err
+	}
+	verboseNotice(opts, "ship: committed %s on %s", commit, curBranch)
 
 	// Unrelated dirty files (or agent paths omitted from result.json) may remain;
 	// only the listed paths were added/committed.
@@ -165,25 +229,21 @@ func ShipToMR(opts Opts, hubDir string, ship *ShipResult, autoMerge bool) (*Ship
 		"-o", "merge_request.title=" + title,
 	}
 	verboseNotice(opts, "ship: git push origin HEAD:%s (merge_request.create → %s)", branch, targetBranch)
-	stdout, stderr, perr := gitRun(opts, hubDir, pushArgs...)
+	stdout, stderr, perr := gitRun(shipOpts, hubDir, pushArgs...)
 	combined := stdout + "\n" + stderr
 	out := &ShipGitResult{Branch: branch, Commit: commit}
 	if perr != nil {
 		verboseNotice(opts, "ship: MR push options rejected; fallback plain push")
-		stdout2, stderr2, perr2 := gitRun(opts, hubDir, "push", "origin", "HEAD:"+branch)
+		stdout2, stderr2, perr2 := gitRun(shipOpts, hubDir, "push", "origin", "HEAD:"+branch)
 		if perr2 != nil {
-			msg := strings.TrimSpace(stderr2)
-			if msg == "" {
-				msg = perr2.Error()
-			}
-			return nil, fmt.Errorf("git push: %s", msg)
+			return nil, fmt.Errorf("git push: %s", gitErrMsg(stderr2, perr2))
 		}
 		out.Warning = "merge_request push options rejected; pushed branch and emitted create-MR URL only"
-		out.MRURL = extractOrBuildMRURL(opts, hubDir, branch, stdout2+"\n"+stderr2)
+		out.MRURL = extractOrBuildMRURL(shipOpts, hubDir, branch, stdout2+"\n"+stderr2)
 		out.PushOption = false
 	} else {
 		out.PushOption = true
-		out.MRURL = extractOrBuildMRURL(opts, hubDir, branch, combined)
+		out.MRURL = extractOrBuildMRURL(shipOpts, hubDir, branch, combined)
 	}
 	if out.MRURL != "" {
 		verboseNotice(opts, "ship: mr %s", out.MRURL)
@@ -192,11 +252,11 @@ func ShipToMR(opts Opts, hubDir string, ship *ShipResult, autoMerge bool) (*Ship
 	}
 
 	if autoMerge {
-		verboseNotice(opts, "ship: auto-merge ff-only %s → origin/%s", branch, targetBranch)
-		if err := autoMergeToMaster(opts, hubDir, branch, targetBranch); err != nil {
+		verboseNotice(opts, "ship: auto-merge ff-only %s → origin/%s", commit, targetBranch)
+		if err := autoMergeFFPush(shipOpts, hubDir, commitFull, targetBranch); err != nil {
 			return out, fmt.Errorf("auto-merge: %w", err)
 		}
-		tip, _ := gitOut(opts, hubDir, "rev-parse", "--short", "origin/"+targetBranch)
+		tip, _ := gitOut(shipOpts, hubDir, "rev-parse", "--short", "origin/"+targetBranch)
 		out.Merged = true
 		out.MergedAt = tip
 		verboseNotice(opts, "ship: merged origin/%s @ %s", targetBranch, tip)
@@ -205,29 +265,21 @@ func ShipToMR(opts Opts, hubDir string, ship *ShipResult, autoMerge bool) (*Ship
 	return out, nil
 }
 
-func autoMergeToMaster(opts Opts, hubDir, featureBranch, targetBranch string) error {
+// autoMergeFFPush fast-forwards origin/<target> to commitSHA without checking out target locally.
+func autoMergeFFPush(opts Opts, hubDir, commitSHA, targetBranch string) error {
 	if err := gitOK(opts, hubDir, "fetch", "origin", targetBranch); err != nil {
 		return err
 	}
-	if err := gitOK(opts, hubDir, "checkout", "-B", targetBranch, "origin/"+targetBranch); err != nil {
-		return fmt.Errorf("checkout %s: %w", targetBranch, err)
-	}
-	if err := gitOK(opts, hubDir, "merge", "--ff-only", featureBranch); err != nil {
+	originTarget := "origin/" + targetBranch
+	if err := gitOK(opts, hubDir, "merge-base", "--is-ancestor", originTarget, commitSHA); err != nil {
 		return fmt.Errorf("not fast-forward")
 	}
-	if err := gitOK(opts, hubDir, "push", "origin", targetBranch); err != nil {
+	refspec := commitSHA + ":refs/heads/" + targetBranch
+	if err := gitOK(opts, hubDir, "push", "origin", refspec); err != nil {
 		return fmt.Errorf("push origin/%s: %w", targetBranch, err)
 	}
 	_, _ = gitOut(opts, hubDir, "fetch", "origin", targetBranch)
 	return nil
-}
-
-func restoreCheckout(opts Opts, hubDir, branch string) error {
-	branch = strings.TrimSpace(branch)
-	if branch == "" || branch == "HEAD" {
-		return nil
-	}
-	return gitOK(opts, hubDir, "checkout", branch)
 }
 
 func extractOrBuildMRURL(opts Opts, hubDir, branch, pushOutput string) string {

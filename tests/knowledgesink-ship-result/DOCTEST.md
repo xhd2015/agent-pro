@@ -18,7 +18,7 @@ Legacy flat `string[]` is rejected (no compat).
 | **add** | New hub-relative file; must exist on disk after agent |
 | **update** | Modified hub-relative file; must exist on disk |
 | **delete** | Removed hub-relative file; absent on disk AND still tracked in git |
-| **AllPaths** | `add` then `update` then `delete` (ship stash/`git add` pathspecs) |
+| **AllPaths** | `add` then `update` then `delete` (ship `git add` pathspecs) |
 
 **Behaviors (locked)**
 
