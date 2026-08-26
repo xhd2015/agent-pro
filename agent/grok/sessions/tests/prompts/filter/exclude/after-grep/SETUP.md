@@ -28,7 +28,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Op = "single"
 	req.SessionID = idFilterSingle
 	req.GrepSet = true
-	req.Grep = "foo"
+	req.Grep = []string{"foo"}
 	req.ExcludeSet = true
 	req.Exclude = "foobar"
 	end := atFixed(-4 * time.Minute)

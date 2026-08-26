@@ -29,7 +29,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Limit = 10
 	req.PlaceCWDs = []string{absPath(t, cwdA)}
 	req.GrepSet = true
-	req.Grep = "GREP_PLACE_TOKEN"
+	req.Grep = []string{"GREP_PLACE_TOKEN"}
 	writeListSession(t, req.GrokHome, idA1, atFixed(-20*time.Minute), cwdA, "A has GREP_PLACE_TOKEN")
 	// Newer and matching content but wrong place — must drop.
 	writeListSession(t, req.GrokHome, idB1, atFixed(-5*time.Minute), cwdB, "B has GREP_PLACE_TOKEN")

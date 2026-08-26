@@ -16,8 +16,8 @@ import (
 
 func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertSuccess(t, resp)
-	if req.Grep != "localagentxyz" {
-		t.Fatalf("req.Grep = %q, want localagentxyz", req.Grep)
+	if len(req.Grep) != 1 || req.Grep[0] != "localagentxyz" {
+		t.Fatalf("req.Grep = %#v, want [localagentxyz]", req.Grep)
 	}
 	if len(resp.Sessions) != 1 {
 		t.Fatalf("len(sessions) = %d, want 1", len(resp.Sessions))

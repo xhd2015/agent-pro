@@ -21,7 +21,7 @@ writeGrokSession + writeChatHistory(long tool_result) -> ListWithGrep("SNIP_WIN_
 
 ## Steps
 
-1. Set `req.Grep = "SNIP_WIN_NEEDLE"`, `req.Limit = 10`, `req.Color = "never"`.
+1. Set `req.Grep = []string{"SNIP_WIN_NEEDLE"}`, `req.Limit = 10`, `req.Color = "never"`.
 2. Write one session with a short title that does not contain the pattern.
 3. Write `chat_history.jsonl` with a single `tool_result` line whose content is
    `600×'a'` + newlines + `SNIP_WIN_NEEDLE` + newlines + `600×'b'`.
@@ -33,7 +33,7 @@ import (
 )
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
-	req.Grep = "SNIP_WIN_NEEDLE"
+	req.Grep = []string{"SNIP_WIN_NEEDLE"}
 	req.Limit = 10
 	req.Color = "never"
 

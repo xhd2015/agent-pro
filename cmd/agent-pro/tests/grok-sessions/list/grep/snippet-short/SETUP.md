@@ -20,14 +20,14 @@ writeGrokSession(title with token) -> ListWithGrep
 
 ## Steps
 
-1. Set `req.Grep = "GREP_SNIP_SHORT_TOKEN"`, `req.Limit = 10`, `req.Color = "never"`.
+1. Set `req.Grep = []string{"GREP_SNIP_SHORT_TOKEN"}`, `req.Limit = 10`, `req.Color = "never"`.
 2. Write one session whose `generated_title` is a short phrase containing the token.
 
 ```go
 import "testing"
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
-	req.Grep = "GREP_SNIP_SHORT_TOKEN"
+	req.Grep = []string{"GREP_SNIP_SHORT_TOKEN"}
 	req.Limit = 10
 	req.Color = "never"
 

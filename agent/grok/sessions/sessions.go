@@ -94,7 +94,7 @@ type ListOptions struct {
 	RecentSet bool
 	Active    bool
 	Now       time.Time // for recent window; zero → time.Now()
-	Grep      string
+	Grep      []string // --grep (repeatable); AND on same field/line
 	GrepSet   bool
 	MainAgent bool // --main-agent; mutually exclusive with SubAgent
 	SubAgent  bool // --sub-agent
@@ -114,8 +114,9 @@ func ListWithOptions(grokHome string, opts ListOptions) ([]Session, error) {
 	if opts.RecentSet && opts.Recent <= 0 {
 		return nil, fmt.Errorf("invalid recent window: must be positive")
 	}
-	if opts.GrepSet && strings.TrimSpace(opts.Grep) == "" {
-		return nil, fmt.Errorf("grep pattern must not be empty")
+	grepPatterns, err := validateGrepPatterns(opts.GrepSet, opts.Grep)
+	if err != nil {
+		return nil, err
 	}
 
 	limit := opts.Limit
@@ -213,12 +214,11 @@ func ListWithOptions(grokHome string, opts ListOptions) ([]Session, error) {
 		sessions = filtered
 	}
 
-	// 6. grep: presence filter (same search family as ListWithGrep)
+	// 6. grep: presence filter (same search family as ListWithGrep; AND per unit)
 	if opts.GrepSet {
-		pattern := strings.TrimSpace(opts.Grep)
 		var filtered []Session
 		for _, s := range sessions {
-			if len(searchSession(s, pattern)) > 0 {
+			if len(searchSession(s, grepPatterns)) > 0 {
 				filtered = append(filtered, s)
 			}
 		}

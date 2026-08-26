@@ -23,7 +23,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Op = "filter"
 	req.FilterInput = nil
 	req.GrepSet = true
-	req.Grep = ""
+	req.Grep = []string{""}
 	return nil
 }
 ```

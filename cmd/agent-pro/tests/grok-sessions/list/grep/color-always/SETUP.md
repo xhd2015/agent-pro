@@ -21,14 +21,14 @@ ListWithGrep + FormatListTableWithHits(colorMode=always)
 
 ## Steps
 
-1. Set `req.Grep = "GREP_COLOR_TOKEN"`, `req.Limit = 10`, `req.Color = "always"`.
+1. Set `req.Grep = []string{"GREP_COLOR_TOKEN"}`, `req.Limit = 10`, `req.Color = "always"`.
 2. Write one session whose title contains the token.
 
 ```go
 import "testing"
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
-	req.Grep = "GREP_COLOR_TOKEN"
+	req.Grep = []string{"GREP_COLOR_TOKEN"}
 	req.Limit = 10
 	req.Color = "always"
 

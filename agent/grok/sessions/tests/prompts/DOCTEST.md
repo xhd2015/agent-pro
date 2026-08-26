@@ -36,6 +36,7 @@ and per-session head/tail slice, plus compact text formatting for CLI stdout.
   Newest-first by `last_active_at`. Selection + filter pipeline:
   1. recent window (when `RecentSet`)
   2. grep keep (when `GrepSet`) — case-insensitive **literal** on `UserPrompt.Text`
+     (repeatable patterns; **AND** on the same prompt)
   3. exclude drop (when `ExcludeSet`) — same matcher
   4. head **or** tail per-session slice (mutually exclusive)
   Session selection matrix (unchanged):
@@ -67,10 +68,10 @@ and per-session head/tail slice, plus compact text formatting for CLI stdout.
     + Unicode `…` (U+2026) **outside** the N content runes (same form as
     `softTruncateRunes`); invalid N &lt; 1 when set → clear error from Write*
   - With `GrepSet` and **no** MaxBody: full collapsed body; when
-    `ColorMode=always`, bold-red highlight on the **first** include-match
-  - With `GrepSet` **and** MaxBody: window body around first match within
-    **N** runes (reuse window helpers; N replaces hard-coded 200); ellipsis
-    on cut sides; color highlight when always
+    `ColorMode=always`, bold-red highlight on **all** include-match spans
+  - With `GrepSet` **and** MaxBody: window body around first pattern's first
+    match within **N** runes; ellipsis on cut sides; highlight all patterns
+    still visible in the window when always
   - Head clip: print kept lines then `(...M omitted...)` if `OmittedAfter=M>0`
   - Tail clip: print `(...M omitted...)` if `OmittedBefore=M>0` then kept lines
   - Omission marker is dim meta when color on (clips *which* prompts, not body)
@@ -127,20 +128,20 @@ SessionPrompts
 
 ListPromptsOptions
   Now, Recent, RecentSet, Limit, LimitSet, Home   // existing
-  Grep, GrepSet
+  Grep []string, GrepSet   // repeatable; AND on same prompt text
   Exclude, ExcludeSet
   Head, HeadSet      // int; N >= 1 when set
   Tail, TailSet
 
 FilterUserPromptsOptions
-  Grep, GrepSet
+  Grep []string, GrepSet
   Exclude, ExcludeSet
   Head, HeadSet
   Tail, TailSet
 
 FormatPromptsOptions
   Now, Home, Location, Window, Limit, RecentSet, LimitSet, ColorMode  // existing
-  Grep, GrepSet          // highlight (always → bold red); window only when MaxBodySet
+  Grep []string, GrepSet // highlight all patterns; window around first when MaxBodySet
   MaxBodyRunes int       // soft-cap body to N runes + "…" when MaxBodySet
   MaxBodySet   bool      // true if --max-body provided
 
@@ -177,7 +178,7 @@ agent/grok/sessions/tests/prompts/
 │       ├── cap-1/
 │       └── invalid-zero/
 └── filter/                       # grep / exclude / head|tail / format chrome
-    ├── grep/
+    ├── grep/                     # includes multi-and-same-prompt (AND on one Text)
     ├── exclude/
     ├── head-tail/
     │   ├── … existing short-text head/tail …
@@ -329,7 +330,7 @@ type Request struct {
 	Location  *time.Location
 
 	// Text filters + per-session slice (zero-value = no filter / no slice)
-	Grep       string
+	Grep       []string // AND on same prompt text when GrepSet
 	GrepSet    bool
 	Exclude    string
 	ExcludeSet bool

@@ -29,7 +29,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Op = "format-single"
 	req.SessionID = idFilterSingle
 	req.GrepSet = true
-	req.Grep = "MATCH"
+	req.Grep = []string{"MATCH"}
 	req.ColorMode = "always"
 	ts := atFixed(-5 * time.Minute)
 	writePromptSession(t, req.GrokHome, promptSessionOpts{

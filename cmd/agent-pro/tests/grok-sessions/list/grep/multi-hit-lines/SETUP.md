@@ -18,7 +18,7 @@ FormatListTableWithHits -> multiple "  file:line:part: snippet" lines
 
 ## Steps
 
-1. Set `req.Grep = "GREP_MULTI_TOKEN"`, `req.Limit = 10`, `req.Color = "never"`.
+1. Set `req.Grep = []string{"GREP_MULTI_TOKEN"}`, `req.Limit = 10`, `req.Color = "never"`.
 2. Write one session with title + session_summary containing the token.
 3. Write chat history: system (no token), user (token), assistant (token).
 
@@ -26,7 +26,7 @@ FormatListTableWithHits -> multiple "  file:line:part: snippet" lines
 import "testing"
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
-	req.Grep = "GREP_MULTI_TOKEN"
+	req.Grep = []string{"GREP_MULTI_TOKEN"}
 	req.Limit = 10
 	req.Color = "never"
 

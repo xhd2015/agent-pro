@@ -56,7 +56,9 @@ always show a **KIND** column.
 - **`Forked`** — when true, keep forked sessions:
   `session_kind ∈ {fork, subagent_fork}` OR `forked_at` is a non-empty
   non-whitespace string. **ANDs** with role when both set.
-- **`Grep` / `GrepSet`** — content presence filter; empty Grep when set → error.
+- **`Grep` / `GrepSet`** — content presence filter (`[]string`); multiple
+  patterns are **AND on the same field/line** (same family as `ListWithGrep`).
+  Empty Grep when set → error.
 - **`Limit`** — max sessions **after** all filters. `<= 0` → 20; `> 100` → 100.
 - **`Session.Kind`** — display token always populated on list results:
 
@@ -108,7 +110,7 @@ type ListOptions struct {
   RecentSet bool
   Active    bool
   Now       time.Time
-  Grep      string
+  Grep      []string // --grep repeatable; AND on same field/line
   GrepSet   bool
   MainAgent bool // --main-agent
   SubAgent  bool // --sub-agent
@@ -134,11 +136,12 @@ ListWithOptions(grokHome string, opts ListOptions) ([]Session, error)
 --main-agent     → MainAgent=true
 --sub-agent      → SubAgent=true
 --forked         → Forked=true
---grep PATTERN   → GrepSet + Grep
+--grep P         → GrepSet + Grep append (AND on same unit)
 --limit N        → Limit
 ```
 
-Place flags form **OR**; role/forked/recent/active/grep **AND**. Tests inject
+Place flags form **OR**; role/forked/recent/active/grep **AND**. Multiple
+`--grep` patterns must all appear in the same field/line. Tests inject
 opts only — **never** `os.Chdir`, `t.Chdir`, `os.Setenv`, or `t.Setenv`.
 
 ## Version
@@ -184,6 +187,7 @@ agent/grok/sessions/tests/list-filter/
 │   ├── place-and-active/
 │   ├── recent-and-active/
 │   ├── place-and-grep/
+│   ├── multi-grep-and/           # multiple Grep patterns → same-unit AND
 │   ├── recent-and-grep/
 │   ├── place-recent-active/
 │   ├── main-and-forked/          # [NEW] MainAgent ∩ Forked
@@ -288,7 +292,7 @@ type Request struct {
 	Recent    time.Duration
 	RecentSet bool
 	Active    bool
-	Grep      string
+	Grep      []string // AND on same field/line when GrepSet
 	GrepSet   bool
 	MainAgent bool
 	SubAgent  bool

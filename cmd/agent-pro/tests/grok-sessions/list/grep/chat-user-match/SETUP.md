@@ -18,7 +18,7 @@ writeGrokSession + writeChatHistory -> ListWithGrep
 
 ## Steps
 
-1. Set `req.Grep = "GREP_CHAT_USER_TOKEN"`, `req.Limit = 10`, `req.Color = "never"`.
+1. Set `req.Grep = []string{"GREP_CHAT_USER_TOKEN"}`, `req.Limit = 10`, `req.Color = "never"`.
 2. Matching session: title without token; chat line 1 system, line 2 user with token.
 3. Non-matching session: chat user line without token.
 
@@ -26,7 +26,7 @@ writeGrokSession + writeChatHistory -> ListWithGrep
 import "testing"
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
-	req.Grep = "GREP_CHAT_USER_TOKEN"
+	req.Grep = []string{"GREP_CHAT_USER_TOKEN"}
 	req.Limit = 10
 	req.Color = "never"
 

@@ -35,7 +35,7 @@ import (
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	longMatch := strings.Repeat("X", 1100)
-	req.Grep = longMatch
+	req.Grep = []string{longMatch}
 	req.Limit = 10
 	req.Color = "never"
 

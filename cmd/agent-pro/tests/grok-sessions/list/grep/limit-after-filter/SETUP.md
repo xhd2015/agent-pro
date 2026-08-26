@@ -17,7 +17,7 @@ writeGrokSession x5 -> ListWithGrep(limit=2)
 
 ## Steps
 
-1. Set `req.Grep = "GREP_LIMIT_TOKEN"`, `req.Limit = 2`, `req.Color = "never"`.
+1. Set `req.Grep = []string{"GREP_LIMIT_TOKEN"}`, `req.Limit = 2`, `req.Color = "never"`.
 2. Write sessions at T+4 (newest, no match), T+3..T+0 (match, older).
 
 ```go
@@ -28,7 +28,7 @@ import (
 )
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
-	req.Grep = "GREP_LIMIT_TOKEN"
+	req.Grep = []string{"GREP_LIMIT_TOKEN"}
 	req.Limit = 2
 	req.Color = "never"
 

@@ -3,14 +3,14 @@
 **Feature**: `--grep` keeps only prompts whose Text matches (case-insensitive literal)
 
 ```
-# GrepSet + pattern P
-prompts -> keep if findLiteralCI(Text, P)
+# GrepSet + patterns P1, P2, …
+prompts -> keep if Text contains every Pi (AND on same prompt)
   session with zero survivors -> skipped (multi); limit counts survivors only
 ```
 
 ## Preconditions
 
-- GrepSet=true and Grep non-empty for happy paths.
+- GrepSet=true and Grep non-empty `[]string` for happy paths.
 - Does not search title/cwd/assistant.
 
 ## Steps

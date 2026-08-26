@@ -29,7 +29,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.RecentSet = true
 	req.Recent = time.Hour
 	req.GrepSet = true
-	req.Grep = "GREP_RECENT_TOKEN"
+	req.Grep = []string{"GREP_RECENT_TOKEN"}
 	writeListSession(t, req.GrokHome, idA1, atFixed(-10*time.Minute), cwdA, "fresh GREP_RECENT_TOKEN")
 	writeListSession(t, req.GrokHome, idB1, atFixed(-3*time.Hour), cwdA, "stale GREP_RECENT_TOKEN")
 	writeListSession(t, req.GrokHome, idA2, atFixed(-15*time.Minute), cwdA, "fresh no token")

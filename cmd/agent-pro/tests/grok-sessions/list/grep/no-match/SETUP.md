@@ -16,14 +16,14 @@ writeGrokSession x2 -> ListWithGrep(pattern)
 
 ## Steps
 
-1. Set `req.Grep = "GREP_NO_MATCH_TOKEN"`, `req.Limit = 10`, `req.Color = "never"`.
+1. Set `req.Grep = []string{"GREP_NO_MATCH_TOKEN"}`, `req.Limit = 10`, `req.Color = "never"`.
 2. Write two sessions with unrelated titles and chat text.
 
 ```go
 import "testing"
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
-	req.Grep = "GREP_NO_MATCH_TOKEN"
+	req.Grep = []string{"GREP_NO_MATCH_TOKEN"}
 	req.Limit = 10
 	req.Color = "never"
 

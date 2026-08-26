@@ -26,7 +26,8 @@ sessions.Stats(grokHome, sessionID) -> FormatStatsTextOpts(stats, opts)
 - Expected grep types:
   - `MatchHit` with File, Line, Part, Snippet, MatchStart, MatchLen
   - `SessionMatch` embedding Session plus `Hits []MatchHit`
-  - `ListWithGrep(grokHome, limit, pattern) ([]SessionMatch, error)`
+  - `ListWithGrep(grokHome, limit, patterns []string) ([]SessionMatch, error)`
+    (multiple patterns → AND on the same field/line)
   - `FormatListTableWithHits(matches, home, now, colorMode string) string`
     where colorMode is `never` | `always` | `auto`
 - Expected stats types:

@@ -28,7 +28,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Op = "single"
 	req.SessionID = idFilterSingle
 	req.GrepSet = true
-	req.Grep = "error"
+	req.Grep = []string{"error"}
 	end := atFixed(-3 * time.Minute)
 	writePromptSession(t, req.GrokHome, promptSessionOpts{
 		ID:           idFilterSingle,

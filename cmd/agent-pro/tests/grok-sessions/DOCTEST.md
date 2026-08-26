@@ -30,20 +30,23 @@ results as a table. `FormatListTable` shows `num_chat_messages` in an `MSGS`
 column and accepts a fixed `now` clock so relative times (`just now`,
 `5m ago`, `2h ago`) are deterministic in tests.
 
-When a grep pattern is set, only sessions with at least one case-insensitive
-literal hit in `summary.json` (title-ish fields, cwd, model, agent) or
-`chat_history.jsonl` (message text by type/part) are listed. Limit applies
-**after** filtering. Under each matching session row, the formatter prints up
-to five indented hit lines `  <file>:<line>:<part>: <snippet>`, then
-`  ... and N more matches` when remaining hits exist. Each hit **snippet** is
-built from the matched field after whitespace collapse (runs of spaces/tabs/
-newlines → a single ASCII space, with leading/trailing trim): the window is at
-most **1024 runes** (Unicode code points), centered ~50/50 around the first
-literal match, with ASCII `...` (3 runes) on each truncated side; when the
-match itself is ≥1024 runes the snippet is the first 1024 runes of the match
-only. `MatchStart`/`MatchLen` are byte offsets into the final snippet for
-coloring the exact match. Color mode `never`/`always`/`auto` controls ANSI
-styling of hit lines (tests force `never` or `always`).
+When one or more grep patterns are set, only sessions with at least one
+case-insensitive literal hit in `summary.json` (title-ish fields, cwd, model,
+agent) or `chat_history.jsonl` (message text by type/part) are listed. Multiple
+patterns are **AND on the same field/line** (every pattern must appear in that
+unit). Limit applies **after** filtering. Under each matching session row, the
+formatter prints up to five indented hit lines
+`  <file>:<line>:<part>: <snippet>`, then `  ... and N more matches` when
+remaining hits exist. Each hit **snippet** is built from the matched field
+after whitespace collapse (runs of spaces/tabs/newlines → a single ASCII space,
+with leading/trailing trim): the window is at most **1024 runes** (Unicode code
+points), centered ~50/50 around the **first pattern's** first literal match,
+with ASCII `...` (3 runes) on each truncated side; when the match itself is
+≥1024 runes the snippet is the first 1024 runes of the match only.
+`MatchStart`/`MatchLen` are byte offsets into the final snippet for the first
+pattern; color mode highlights **all** patterns in the snippet.
+Color mode `never`/`always`/`auto` controls ANSI styling of hit lines (tests
+force `never` or `always`).
 
 For session detail, `Find` locates a session by exact UUID (no prefix matching),
 `Info` aggregates summary fields, filesystem paths, and token usage from
@@ -140,6 +143,9 @@ operation?
 │       ├── title-match/         pattern only in generated_title → summary.json:1:title
 │       ├── chat-user-match/     pattern only in chat user line; non-match omitted
 │       ├── multi-hit-lines/     summary + chat hits → ordered indented lines
+│       ├── multi-and/           multiple --grep → AND on same field/line
+│       │   ├── same-unit-keep/  both tokens on one line → keep; split other omitted
+│       │   └── split-units-drop/ tokens on different lines only → no sessions
 │       ├── hit-cap-five/        >5 hits → 5 lines + "... and N more matches"
 │       ├── no-match/            pattern matches nothing → "No sessions found"
 │       ├── no-grep-no-hits/     without grep → no indented hit lines (regression)
@@ -248,7 +254,7 @@ type Request struct {
 	SessionID string    // info/stats only; exact UUID
 	Limit     int       // 0 → default 20 for list
 	Now       time.Time // fixed clock for relative times in formatters
-	Grep      string    // empty → no content filter (classic list)
+	Grep      []string  // empty → no content filter (classic list); AND on same unit
 	Color     string    // list grep: "never" | "always" | "auto"; empty → "never" in harness
 	// Stats formatter options (FormatStatsTextOpts):
 	ColorMode string // "never" | "always" | "auto"; empty → "never" (deterministic tests)
@@ -258,7 +264,7 @@ type Request struct {
 
 type Response struct {
 	Sessions []sessions.Session
-	Matches  []sessions.SessionMatch // filled when Grep != ""
+	Matches  []sessions.SessionMatch // filled when len(Grep) > 0
 	Info     *sessions.SessionInfo
 	Stats    *sessions.SessionStats
 	Output   string
@@ -284,7 +290,7 @@ func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 			limit = 20
 		}
 
-		if req.Grep != "" {
+		if len(req.Grep) > 0 {
 			color := req.Color
 			if color == "" {
 				color = "never"

@@ -21,10 +21,8 @@ const (
 	missingTimestampMarker  = "[—]" // em dash U+2014
 	promptTruncateEllipsis  = "…"   // U+2026
 	sessionBlockSeparator   = "────────────────────────────────────────"
-	ansiReset               = "\x1b[0m"
-	ansiDim                 = "\x1b[2m"
-	ansiBold                = "\x1b[1m"
-	ansiRed                 = "\x1b[31m"
+	ansiReset = "\x1b[0m"
+	ansiDim   = "\x1b[2m"
 )
 
 // UserPrompt is one coalesced user message from a session's updates.jsonl.
@@ -54,7 +52,7 @@ type ListPromptsOptions struct {
 	LimitSet  bool
 	Home      string // optional path shorten for formatters
 
-	Grep       string
+	Grep       []string // --grep (repeatable); AND on same prompt text
 	GrepSet    bool
 	Exclude    string
 	ExcludeSet bool
@@ -67,7 +65,7 @@ type ListPromptsOptions struct {
 // FilterUserPromptsOptions is the pure in-memory filter pipeline for one
 // session's prompt slice (no FS). Zero-value = identity (keep all).
 type FilterUserPromptsOptions struct {
-	Grep       string
+	Grep       []string // AND on same prompt text
 	GrepSet    bool
 	Exclude    string
 	ExcludeSet bool
@@ -89,10 +87,11 @@ type FormatPromptsOptions struct {
 	// ColorMode is "auto" | "always" | "never"; empty treated as "never" for
 	// deterministic Format* string helpers (CLI passes "auto" by default).
 	ColorMode string
-	// Grep / GrepSet: when set, bold-red highlights the first match when color
-	// is on. Without MaxBodySet the full collapsed body is kept; with MaxBodySet
-	// the body is windowed around the match within MaxBodyRunes.
-	Grep    string
+	// Grep / GrepSet: when set, bold-red highlights all pattern matches when
+	// color is on. Without MaxBodySet the full collapsed body is kept; with
+	// MaxBodySet the body is windowed around the first pattern's first match
+	// within MaxBodyRunes.
+	Grep    []string
 	GrepSet bool
 	// MaxBodyRunes soft-caps each collapsed body to N content runes + "…"
 	// (ellipsis outside the N budget) when MaxBodySet is true. N must be >= 1.
@@ -152,10 +151,14 @@ func FilterUserPrompts(prompts []UserPrompt, opts FilterUserPromptsOptions) (kep
 	}
 
 	kept = prompts
+	grepPatterns, err := validateGrepPatterns(opts.GrepSet, opts.Grep)
+	if err != nil {
+		return nil, 0, 0, err
+	}
 	if opts.GrepSet {
 		var filtered []UserPrompt
 		for _, p := range kept {
-			if _, _, ok := findLiteralCI(p.Text, opts.Grep); ok {
+			if textContainsAllLiteralCI(p.Text, grepPatterns) {
 				filtered = append(filtered, p)
 			}
 		}
@@ -199,7 +202,7 @@ func validateFilterUserPromptsOptions(opts FilterUserPromptsOptions) error {
 	if opts.TailSet && opts.Tail < 1 {
 		return fmt.Errorf("--tail must be >= 1 (got %d)", opts.Tail)
 	}
-	if opts.GrepSet && opts.Grep == "" {
+	if _, err := validateGrepPatterns(opts.GrepSet, opts.Grep); err != nil {
 		return fmt.Errorf("--grep pattern must not be empty")
 	}
 	if opts.ExcludeSet && opts.Exclude == "" {
@@ -688,22 +691,30 @@ func formatPromptLine(p UserPrompt, loc *time.Location, useColor bool, opts Form
 }
 
 // formatPromptBody collapses whitespace. Default (!MaxBodySet): full body.
-// MaxBodySet: soft-truncate to MaxBodyRunes + "…". With GrepSet: highlight
-// first match; window around match only when MaxBodySet (budget = MaxBodyRunes).
+// MaxBodySet: soft-truncate to MaxBodyRunes + "…". With GrepSet: highlight all
+// patterns; window around first pattern's first match only when MaxBodySet
+// (budget = MaxBodyRunes).
 func formatPromptBody(text string, opts FormatPromptsOptions, useColor bool) string {
 	collapsed := collapseWhitespace(text)
 
-	if opts.GrepSet && opts.Grep != "" {
-		start, length, ok := findLiteralCI(collapsed, opts.Grep)
+	patterns := opts.Grep
+	if opts.GrepSet && len(patterns) > 0 {
+		// Window around first pattern; highlight every pattern present in view.
+		start, length, ok := findLiteralCI(collapsed, patterns[0])
 		if ok {
 			if opts.MaxBodySet {
-				snippet, newStart, newLen := windowPromptBody(collapsed, start, length, opts.MaxBodyRunes)
-				return highlightMatchSpan(snippet, newStart, newLen, useColor)
+				snippet, _, _ := windowPromptBody(collapsed, start, length, opts.MaxBodyRunes)
+				if useColor {
+					return highlightAllLiteralCI(snippet, patterns)
+				}
+				return snippet
 			}
-			// Full body + optional highlight (no window / soft-cap).
-			return highlightMatchSpan(collapsed, start, length, useColor)
+			if useColor {
+				return highlightAllLiteralCI(collapsed, patterns)
+			}
+			return collapsed
 		}
-		// No match: still apply MaxBody soft-cap if set.
+		// No match for first pattern: still apply MaxBody soft-cap if set.
 		if opts.MaxBodySet {
 			return softTruncateRunes(collapsed, opts.MaxBodyRunes)
 		}
@@ -714,15 +725,6 @@ func formatPromptBody(text string, opts FormatPromptsOptions, useColor bool) str
 		return softTruncateRunes(collapsed, opts.MaxBodyRunes)
 	}
 	return collapsed
-}
-
-// highlightMatchSpan wraps [start, start+length) bytes of s in bold-red when
-// useColor is true. start/length are byte offsets into s.
-func highlightMatchSpan(s string, start, length int, useColor bool) string {
-	if !useColor || length <= 0 || start < 0 || start+length > len(s) {
-		return s
-	}
-	return s[:start] + ansiBold + ansiRed + s[start:start+length] + ansiReset + s[start+length:]
 }
 
 // windowPromptBody builds a ≤maxRunes window around a match in collapsed text.

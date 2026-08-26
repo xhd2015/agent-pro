@@ -30,7 +30,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Op = "format-single"
 	req.SessionID = idFilterSingle
 	req.GrepSet = true
-	req.Grep = "MATCH"
+	req.Grep = []string{"MATCH"}
 	req.MaxBodySet = true
 	req.MaxBodyRunes = 40
 	req.ColorMode = "never"

@@ -30,7 +30,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Op = "format-single"
 	req.SessionID = idFilterSingle
 	req.GrepSet = true
-	req.Grep = "MATCH"
+	req.Grep = []string{"MATCH"}
 	req.ColorMode = "always"
 	// Longer than old 200 soft-window so full-body default is observable.
 	raw := strings.Repeat("a", 150) + "MATCH" + strings.Repeat("b", 150)

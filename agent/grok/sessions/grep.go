@@ -34,12 +34,17 @@ type MatchHit struct {
 type SessionMatch struct {
 	Session
 	Hits []MatchHit // full hit list; formatter caps display at 5
+	Grep []string   // patterns used for this search (multi-span highlight)
 }
 
 // ListWithGrep discovers sessions, keeps those with ≥1 case-insensitive
 // literal hit in summary.json or chat_history.jsonl, sorts by last_active_at
 // desc, then applies limit.
-func ListWithGrep(grokHome string, limit int, pattern string) ([]SessionMatch, error) {
+//
+// patterns is AND on the same field/line: a hit requires every pattern as a
+// substring of that unit. Empty/nil patterns → no filter (all sessions, empty
+// hits); CLI rejects empty --grep before calling.
+func ListWithGrep(grokHome string, limit int, patterns []string) ([]SessionMatch, error) {
 	if limit <= 0 {
 		limit = defaultListLimit
 	}
@@ -52,8 +57,11 @@ func ListWithGrep(grokHome string, limit int, pattern string) ([]SessionMatch, e
 		return nil, err
 	}
 
-	pattern = strings.TrimSpace(pattern)
-	if pattern == "" {
+	patterns, err = normalizeGrepPatternsOptional(patterns)
+	if err != nil {
+		return nil, err
+	}
+	if len(patterns) == 0 {
 		// No filter: wrap all sessions with empty hits (CLI rejects empty --grep).
 		matches := make([]SessionMatch, 0, len(sessions))
 		for _, s := range sessions {
@@ -68,11 +76,11 @@ func ListWithGrep(grokHome string, limit int, pattern string) ([]SessionMatch, e
 
 	var matches []SessionMatch
 	for _, s := range sessions {
-		hits := searchSession(s, pattern)
+		hits := searchSession(s, patterns)
 		if len(hits) == 0 {
 			continue
 		}
-		matches = append(matches, SessionMatch{Session: s, Hits: hits})
+		matches = append(matches, SessionMatch{Session: s, Hits: hits, Grep: patterns})
 	}
 
 	sortSessionMatches(matches)
@@ -111,7 +119,7 @@ func FormatListTableWithHits(matches []SessionMatch, home string, now time.Time,
 			show = hits[:maxDisplayedHits]
 		}
 		for _, h := range show {
-			b.WriteString(formatHitLine(h, useColor))
+			b.WriteString(formatHitLine(h, useColor, m.Grep))
 			b.WriteByte('\n')
 		}
 		if len(hits) > maxDisplayedHits {
@@ -144,25 +152,25 @@ func shouldColor(colorMode string) bool {
 	}
 }
 
-func formatHitLine(h MatchHit, useColor bool) string {
+func formatHitLine(h MatchHit, useColor bool, patterns []string) string {
 	if !useColor {
 		return fmt.Sprintf("  %s:%d:%s: %s", h.File, h.Line, h.Part, h.Snippet)
 	}
 
 	const (
-		reset  = "\x1b[0m"
-		mag    = "\x1b[35m"
-		green  = "\x1b[32m"
-		bold   = "\x1b[1m"
-		red    = "\x1b[31m"
+		reset = "\x1b[0m"
+		mag   = "\x1b[35m"
+		green = "\x1b[32m"
 	)
 
 	snippet := h.Snippet
-	if h.MatchLen > 0 && h.MatchStart >= 0 && h.MatchStart+h.MatchLen <= len(snippet) {
+	if len(patterns) > 0 {
+		snippet = highlightAllLiteralCI(snippet, patterns)
+	} else if h.MatchLen > 0 && h.MatchStart >= 0 && h.MatchStart+h.MatchLen <= len(snippet) {
 		before := snippet[:h.MatchStart]
 		match := snippet[h.MatchStart : h.MatchStart+h.MatchLen]
 		after := snippet[h.MatchStart+h.MatchLen:]
-		snippet = before + bold + red + match + reset + after
+		snippet = before + "\x1b[1m\x1b[31m" + match + reset + after
 	}
 
 	return fmt.Sprintf(
@@ -174,15 +182,15 @@ func formatHitLine(h MatchHit, useColor bool) string {
 	)
 }
 
-func searchSession(session Session, pattern string) []MatchHit {
+func searchSession(session Session, patterns []string) []MatchHit {
 	var hits []MatchHit
-	hits = append(hits, searchSummaryFile(session.Path, pattern)...)
+	hits = append(hits, searchSummaryFile(session.Path, patterns)...)
 	chatPath := filepath.Join(filepath.Dir(session.Path), "chat_history.jsonl")
-	hits = append(hits, searchChatHistory(chatPath, pattern)...)
+	hits = append(hits, searchChatHistory(chatPath, patterns)...)
 	return hits
 }
 
-func searchSummaryFile(path, pattern string) []MatchHit {
+func searchSummaryFile(path string, patterns []string) []MatchHit {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil
@@ -214,14 +222,14 @@ func searchSummaryFile(path, pattern string) []MatchHit {
 		if f.text == "" {
 			continue
 		}
-		if h, ok := makeHit("summary.json", 1, f.part, f.text, pattern); ok {
+		if h, ok := makeHit("summary.json", 1, f.part, f.text, patterns); ok {
 			hits = append(hits, h)
 		}
 	}
 	return hits
 }
 
-func searchChatHistory(path, pattern string) []MatchHit {
+func searchChatHistory(path string, patterns []string) []MatchHit {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil
@@ -249,7 +257,7 @@ func searchChatHistory(path, pattern string) []MatchHit {
 		if part == "" {
 			part = "message"
 		}
-		if h, ok := makeHit("chat_history.jsonl", lineNum, part, text, pattern); ok {
+		if h, ok := makeHit("chat_history.jsonl", lineNum, part, text, patterns); ok {
 			hits = append(hits, h)
 		}
 	}
@@ -336,9 +344,13 @@ func extractSummaryText(raw json.RawMessage) string {
 	return ""
 }
 
-func makeHit(file string, line int, part, text, pattern string) (MatchHit, bool) {
+func makeHit(file string, line int, part, text string, patterns []string) (MatchHit, bool) {
 	snippet := collapseWhitespace(text)
-	start, length, ok := findLiteralCI(snippet, pattern)
+	if !textContainsAllLiteralCI(snippet, patterns) {
+		return MatchHit{}, false
+	}
+	// Window around the first pattern's first hit (stable with single --grep).
+	start, length, ok := findLiteralCI(snippet, patterns[0])
 	if !ok {
 		return MatchHit{}, false
 	}
@@ -351,6 +363,115 @@ func makeHit(file string, line int, part, text, pattern string) (MatchHit, bool)
 		MatchStart: start,
 		MatchLen:   length,
 	}, true
+}
+
+// normalizeGrepPatternsOptional trims patterns. Empty input → nil, nil (no filter).
+// Any empty-after-trim entry → error. Does not require GrepSet.
+func normalizeGrepPatternsOptional(patterns []string) ([]string, error) {
+	if len(patterns) == 0 {
+		return nil, nil
+	}
+	return normalizeGrepPatterns(patterns)
+}
+
+// normalizeGrepPatterns trims each pattern and rejects empties. Requires ≥1 pattern.
+func normalizeGrepPatterns(patterns []string) ([]string, error) {
+	if len(patterns) == 0 {
+		return nil, fmt.Errorf("grep pattern must not be empty")
+	}
+	out := make([]string, 0, len(patterns))
+	for _, p := range patterns {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			return nil, fmt.Errorf("grep pattern must not be empty")
+		}
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+// validateGrepPatterns returns normalized patterns when set is true.
+// set && empty/invalid → error. !set → nil, nil.
+func validateGrepPatterns(set bool, patterns []string) ([]string, error) {
+	if !set {
+		return nil, nil
+	}
+	return normalizeGrepPatterns(patterns)
+}
+
+// textContainsAllLiteralCI reports whether s contains every pattern as a
+// case-insensitive literal substring (AND on the same string).
+func textContainsAllLiteralCI(s string, patterns []string) bool {
+	if len(patterns) == 0 {
+		return true
+	}
+	for _, p := range patterns {
+		if _, _, ok := findLiteralCI(s, p); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// highlightAllLiteralCI wraps case-insensitive literal matches of patterns in
+// bold-red SGR. Leftmost-first, non-overlapping; longer span wins on equal start.
+func highlightAllLiteralCI(s string, patterns []string) string {
+	if s == "" || len(patterns) == 0 {
+		return s
+	}
+	var lowerPats []string
+	for _, p := range patterns {
+		if p == "" {
+			continue
+		}
+		lowerPats = append(lowerPats, strings.ToLower(p))
+	}
+	if len(lowerPats) == 0 {
+		return s
+	}
+	return highlightLiteralLine(s, lowerPats)
+}
+
+func highlightLiteralLine(line string, lowerPats []string) string {
+	if line == "" || len(lowerPats) == 0 {
+		return line
+	}
+	lower := strings.ToLower(line)
+	var b strings.Builder
+	i := 0
+	const (
+		boldRed = "\x1b[1m\x1b[31m"
+		reset   = "\x1b[0m"
+	)
+	for i < len(line) {
+		bestStart := -1
+		bestEnd := -1
+		for _, lp := range lowerPats {
+			if lp == "" {
+				continue
+			}
+			rel := strings.Index(lower[i:], lp)
+			if rel < 0 {
+				continue
+			}
+			start := i + rel
+			end := start + len(lp)
+			if bestStart < 0 || start < bestStart || (start == bestStart && end > bestEnd) {
+				bestStart = start
+				bestEnd = end
+			}
+		}
+		if bestStart < 0 {
+			b.WriteString(line[i:])
+			break
+		}
+		b.WriteString(line[i:bestStart])
+		b.WriteString(boldRed)
+		b.WriteString(line[bestStart:bestEnd])
+		b.WriteString(reset)
+		i = bestEnd
+	}
+	return b.String()
 }
 
 // collapseWhitespace replaces runs of Unicode space (spaces/tabs/newlines/etc.)

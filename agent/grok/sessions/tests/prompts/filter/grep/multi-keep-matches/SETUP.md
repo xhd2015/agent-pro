@@ -28,7 +28,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	_ = d
 	req.Op = "list"
 	req.GrepSet = true
-	req.Grep = "keepme"
+	req.Grep = []string{"keepme"}
 	req.RecentSet = false
 	req.LimitSet = true
 	req.Limit = 10

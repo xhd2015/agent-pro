@@ -16,7 +16,7 @@ writeGrokSession(title) + writeChatHistory(user) -> ListWithGrep("localagentxyz"
 
 ## Steps
 
-1. Set `req.Grep = "localagentxyz"` (all lowercase), `req.Limit = 10`, `req.Color = "never"`.
+1. Set `req.Grep = []string{"localagentxyz"}` (all lowercase), `req.Limit = 10`, `req.Color = "never"`.
 2. Write session title `Ship LocalAgentXyz CLI`.
 3. Write chat user line containing `LocalAgentXyz packaging`.
 
@@ -24,7 +24,7 @@ writeGrokSession(title) + writeChatHistory(user) -> ListWithGrep("localagentxyz"
 import "testing"
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
-	req.Grep = "localagentxyz"
+	req.Grep = []string{"localagentxyz"}
 	req.Limit = 10
 	req.Color = "never"
 

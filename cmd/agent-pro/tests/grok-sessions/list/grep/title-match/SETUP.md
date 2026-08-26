@@ -18,7 +18,7 @@ writeGrokSession(title with token) + writeGrokSession(unrelated) -> ListWithGrep
 
 ## Steps
 
-1. Set `req.Grep = "GREP_TITLE_TOKEN"`, `req.Limit = 10`, `req.Color = "never"`.
+1. Set `req.Grep = []string{"GREP_TITLE_TOKEN"}`, `req.Limit = 10`, `req.Color = "never"`.
 2. Write matching session with title containing the token.
 3. Write non-matching session with a different title.
 
@@ -26,7 +26,7 @@ writeGrokSession(title with token) + writeGrokSession(unrelated) -> ListWithGrep
 import "testing"
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
-	req.Grep = "GREP_TITLE_TOKEN"
+	req.Grep = []string{"GREP_TITLE_TOKEN"}
 	req.Limit = 10
 	req.Color = "never"
 

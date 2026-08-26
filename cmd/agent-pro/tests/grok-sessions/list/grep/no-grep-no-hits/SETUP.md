@@ -24,7 +24,7 @@ writeGrokSession + writeChatHistory -> List + FormatListTable
 import "testing"
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
-	req.Grep = ""
+	// Leave req.Grep empty (nil) so Run uses classic List path.
 	req.Limit = 10
 	// Color unused on classic path; leave default.
 

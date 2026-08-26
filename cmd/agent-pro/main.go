@@ -790,7 +790,9 @@ Options:
   --sub-agent    only sub-agent class sessions (mutually exclusive with --main-agent)
   --forked       only forked sessions (kind fork/subagent_fork or forked_at set)
   --limit <n>    max sessions to list after filters (default 20, max 100)
-  --grep <pat>   search session JSON; print indented hit lines under each match
+  --grep P       search session JSON; print indented hit lines under each match
+                 (repeatable; AND: same line/field must contain every P;
+                 case-insensitive literal)
   --color        always use ANSI colors (even when stdout is not a TTY)
   -h,--help      show help
 
@@ -806,7 +808,7 @@ func handleGrokSessions(args []string) error {
 	}
 
 	var limitFlag *int
-	var grepFlag *string
+	var grepFlag []string
 	var colorFlag *bool
 	var hereFlag *bool
 	var dirFlag []string
@@ -816,7 +818,7 @@ func handleGrokSessions(args []string) error {
 	var subAgentFlag *bool
 	var forkedFlag *bool
 	remaining, err := flags.Int("--limit", &limitFlag).
-		String("--grep", &grepFlag).
+		StringSlice("--grep", &grepFlag).
 		Bool("--color", &colorFlag).
 		Bool("--here", &hereFlag).
 		StringSlice("--dir", &dirFlag).
@@ -880,17 +882,28 @@ func handleGrokSessions(args []string) error {
 	hasForked := forkedFlag != nil && *forkedFlag
 	hasNewFilters := hasPlace || hasRecent || hasActive || hasMainAgent || hasSubAgent || hasForked
 
-	// Pure --grep (no place/recent/active/role/forked): keep ListWithGrep hit-line path.
-	if grepFlag != nil && !hasNewFilters {
-		pattern := strings.TrimSpace(*grepFlag)
-		if pattern == "" {
+	grepSet := len(grepFlag) > 0
+	var grepPatterns []string
+	if grepSet {
+		for _, p := range grepFlag {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				return fmt.Errorf("--grep requires a non-empty pattern")
+			}
+			grepPatterns = append(grepPatterns, p)
+		}
+		if len(grepPatterns) == 0 {
 			return fmt.Errorf("--grep requires a non-empty pattern")
 		}
+	}
+
+	// Pure --grep (no place/recent/active/role/forked): keep ListWithGrep hit-line path.
+	if grepSet && !hasNewFilters {
 		colorMode := "auto"
 		if colorFlag != nil && *colorFlag {
 			colorMode = "always"
 		}
-		matches, err := groksessions.ListWithGrep(grokHome, limit, pattern)
+		matches, err := groksessions.ListWithGrep(grokHome, limit, grepPatterns)
 		if err != nil {
 			return fmt.Errorf("list grok sessions: %w", err)
 		}
@@ -915,12 +928,8 @@ func handleGrokSessions(args []string) error {
 		opts.Recent = w
 		opts.RecentSet = true
 	}
-	if grepFlag != nil {
-		pattern := strings.TrimSpace(*grepFlag)
-		if pattern == "" {
-			return fmt.Errorf("--grep requires a non-empty pattern")
-		}
-		opts.Grep = pattern
+	if grepSet {
+		opts.Grep = grepPatterns
 		opts.GrepSet = true
 	}
 
@@ -964,10 +973,10 @@ Run agent-pro grok session <command> --help for command-specific options.
 const grokSessionPromptsHelp = `
 Usage:
   agent-pro grok session prompts <session-id>
-    [--grep P] [--exclude Q] [--head N | --tail N] [--max-body N]
+    [--grep P]... [--exclude Q] [--head N | --tail N] [--max-body N]
     [--color|--no-color]
   agent-pro grok session prompts [--recent <window>] [--limit N]
-    [--grep P] [--exclude Q] [--head N | --tail N] [--max-body N]
+    [--grep P]... [--exclude Q] [--head N | --tail N] [--max-body N]
     [--color|--no-color]
   agent-pro grok sessions prompts …   (alias)
 
@@ -988,7 +997,7 @@ Head and tail are mutually exclusive; N >= 1. Empty --grep/--exclude patterns er
 
 Body length: full collapsed text by default. --max-body N soft-caps each body to
 N runes + … (N >= 1). With --grep, full body + highlight unless --max-body, which
-windows around the first match within N runes.
+windows around the first pattern's first match within N runes.
 
 Multi layout: session header, prompt lines, separator rule between sessions, footer.
 Output streams session-by-session (not buffered until the end).
@@ -996,7 +1005,8 @@ Output streams session-by-session (not buffered until the end).
 Options:
   --recent WINDOW   time window: Nd, Nh, or Nm (e.g. 1d, 2h, 30m)
   --limit N         session limit (see matrix above; must be >= 1)
-  --grep P          keep prompts whose text matches P (case-insensitive literal)
+  --grep P          keep prompts whose text contains P (repeatable; AND on the
+                    same prompt; case-insensitive literal)
   --exclude Q       drop prompts whose text matches Q (case-insensitive literal)
   --head N          first N prompts per session after text filters (N >= 1)
   --tail N          last N prompts per session after text filters (N >= 1)
@@ -1159,7 +1169,7 @@ func handleGrokSession(args []string) error {
 func handleGrokSessionPrompts(args []string) error {
 	var recentFlag *string
 	var limitFlag *int
-	var grepFlag *string
+	var grepFlag []string
 	var excludeFlag *string
 	var headFlag *int
 	var tailFlag *int
@@ -1168,7 +1178,7 @@ func handleGrokSessionPrompts(args []string) error {
 	var noColorFlag bool
 	remaining, err := flags.String("--recent", &recentFlag).
 		Int("--limit", &limitFlag).
-		String("--grep", &grepFlag).
+		StringSlice("--grep", &grepFlag).
 		String("--exclude", &excludeFlag).
 		Int("--head", &headFlag).
 		Int("--tail", &tailFlag).
@@ -1193,7 +1203,7 @@ func handleGrokSessionPrompts(args []string) error {
 
 	recentSet := recentFlag != nil
 	limitSet := limitFlag != nil
-	grepSet := grepFlag != nil
+	grepSet := len(grepFlag) > 0
 	excludeSet := excludeFlag != nil
 	headSet := headFlag != nil
 	tailSet := tailFlag != nil
@@ -1215,10 +1225,16 @@ func handleGrokSessionPrompts(args []string) error {
 		}
 	}
 
-	grep := ""
+	var grep []string
 	if grepSet {
-		grep = *grepFlag
-		if grep == "" {
+		for _, p := range grepFlag {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				return fmt.Errorf("--grep pattern must not be empty")
+			}
+			grep = append(grep, p)
+		}
+		if len(grep) == 0 {
 			return fmt.Errorf("--grep pattern must not be empty")
 		}
 	}

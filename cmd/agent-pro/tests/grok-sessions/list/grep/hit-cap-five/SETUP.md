@@ -17,7 +17,7 @@ writeChatHistory x8 matching lines -> ListWithGrep
 
 ## Steps
 
-1. Set `req.Grep = "GREP_CAP_TOKEN"`, `req.Limit = 10`, `req.Color = "never"`.
+1. Set `req.Grep = []string{"GREP_CAP_TOKEN"}`, `req.Limit = 10`, `req.Color = "never"`.
 2. Write one session with plain title.
 3. Write 8 chat messages each containing the token (user and assistant alternating).
 
@@ -28,7 +28,7 @@ import (
 )
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
-	req.Grep = "GREP_CAP_TOKEN"
+	req.Grep = []string{"GREP_CAP_TOKEN"}
 	req.Limit = 10
 	req.Color = "never"
 
