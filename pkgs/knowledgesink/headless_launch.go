@@ -13,6 +13,7 @@ import (
 	"github.com/xhd2015/agent-pro/pkgs/agentrunapi"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 	"github.com/xhd2015/agent-pro/pkgs/agentui"
+	"github.com/xhd2015/dot-pkgs/go-pkgs/io/lineprefix"
 )
 
 // runHeadlessCLI launches codex/grok (non-TTY) via agentui — no detach/PTY.
@@ -53,6 +54,17 @@ func runHeadlessCLI(ctx context.Context, opts Opts, runOpts agentrunapi.RunOpts,
 	stderr := opts.Stderr
 	if stderr == nil {
 		stderr = os.Stderr
+	}
+
+	// Decorate at the agent handoff — no content guessing.
+	tag := agentLogTag(runOpts.AgentRunner)
+	stderrW := lineprefix.Bracket(stderr, tag)
+	defer stderrW.Flush()
+	stderr = stderrW
+	if opts.Verbose {
+		stdoutW := lineprefix.Bracket(stdout, tag)
+		defer stdoutW.Flush()
+		stdout = stdoutW
 	}
 
 	if from := strings.TrimSpace(runOpts.AgentRunner); opts.Verbose && from != "" {
@@ -115,6 +127,17 @@ func newSinkJSONResultPath() (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// agentLogTag is the Bracket tag for the headless agent child (codex/grok/…).
+// Strips a trailing -tty so prefs runners still label as the CLI family.
+func agentLogTag(runner string) string {
+	r := strings.TrimSpace(runner)
+	r = strings.TrimSuffix(r, "-tty")
+	if r == "" {
+		return "agent"
+	}
+	return r
 }
 
 func appendSinkJSONResultInstructions(prompt, resultPath, schema string) string {
