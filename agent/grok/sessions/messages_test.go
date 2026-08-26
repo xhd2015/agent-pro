@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"encoding/json"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -260,5 +261,165 @@ func TestMessagesIntegration(t *testing.T) {
 	}
 	if !strings.Contains(res2.Text, "showing 2 of") {
 		t.Fatalf("header: %s", res2.Text)
+	}
+}
+
+func TestFilterMessagesByGrepAND(t *testing.T) {
+	t.Parallel()
+	msgs := []ChatMessage{
+		{Kind: MessageKindUser, Text: "alpha only"},
+		{Kind: MessageKindResponse, Text: "alpha and beta here"},
+		{Kind: MessageKindTool, Text: "run_terminal_command: echo hi"},
+		{Kind: MessageKindThinking, Text: "beta alone"},
+	}
+	got := filterMessagesByGrep(msgs, []string{"alpha", "beta"})
+	if len(got) != 1 || got[0].Text != "alpha and beta here" {
+		t.Fatalf("AND filter: %+v", got)
+	}
+	got = filterMessagesByGrep(msgs, []string{"ALPHA"}) // CI
+	if len(got) != 2 {
+		t.Fatalf("CI single: %+v", got)
+	}
+	got = filterMessagesByGrep(msgs, []string{"run_terminal", "echo"})
+	if len(got) != 1 || got[0].Kind != MessageKindTool {
+		t.Fatalf("tool AND: %+v", got)
+	}
+}
+
+func TestValidateMessagesGrepsEmpty(t *testing.T) {
+	t.Parallel()
+	if err := validateMessagesGreps([]string{"ok", ""}); err == nil {
+		t.Fatal("want empty pattern error")
+	}
+}
+
+func TestParseMessagesArgsGrepAndColor(t *testing.T) {
+	t.Parallel()
+	got, err := parseMessagesArgs([]string{"sid", "--grep", "a", "--grep=b", "--color"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Greps) != 2 || got.Greps[0] != "a" || got.Greps[1] != "b" {
+		t.Fatalf("greps=%v", got.Greps)
+	}
+	if got.ColorMode != "always" {
+		t.Fatalf("color=%q", got.ColorMode)
+	}
+	_, err = parseMessagesArgs([]string{"--grep", ""})
+	if err == nil || !strings.Contains(err.Error(), "--grep") {
+		t.Fatalf("empty grep err=%v", err)
+	}
+	_, err = parseMessagesArgs([]string{"--color", "--no-color"})
+	if err == nil || !strings.Contains(err.Error(), "cannot be specified together") {
+		t.Fatalf("conflict err=%v", err)
+	}
+}
+
+func TestMessagesGrepThenLimit(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	sessionID := "019f283a-msg-grep-0001"
+	cwd := "/tmp/msg-grep-proj"
+	absCwd, err := filepath.Abs(cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(home, "sessions", url.PathEscape(absCwd), sessionID)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	summary := map[string]any{
+		"info":              map[string]any{"id": sessionID, "cwd": absCwd},
+		"generated_title":   "grep fixture",
+		"created_at":        "2026-07-01T10:00:00.000Z",
+		"updated_at":        "2026-07-01T11:00:00.000Z",
+		"last_active_at":    "2026-07-01T11:00:00.000Z",
+		"num_messages":      4,
+		"num_chat_messages": 4,
+	}
+	b, _ := json.MarshalIndent(summary, "", "  ")
+	if err := os.WriteFile(filepath.Join(dir, "summary.json"), append(b, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	updates := strings.Join([]string{
+		`{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"hit-0"}}`,
+		`{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"miss"}}`,
+		`{"sessionUpdate":"turn_completed"}`,
+		`{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"hit-1"}}`,
+		`{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"hit-2"}}`,
+		`{"sessionUpdate":"turn_completed"}`,
+	}, "\n") + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "updates.jsonl"), []byte(updates), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Messages(home, sessionID, &MessagesOpts{
+		Limit: 2, LimitSet: true, Greps: []string{"hit"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Total != 3 {
+		t.Fatalf("total=%d want 3 (matched)", res.Total)
+	}
+	if len(res.Messages) != 2 || res.Messages[0].Text != "hit-1" || res.Messages[1].Text != "hit-2" {
+		t.Fatalf("newest 2 hits: %+v", res.Messages)
+	}
+	if strings.ContainsRune(res.Text, '\x1b') {
+		t.Fatalf("Messages.Text must be plain: %q", res.Text)
+	}
+}
+
+func TestWriteChatMessagesHighlights(t *testing.T) {
+	t.Parallel()
+	var buf strings.Builder
+	err := writeChatMessages(&buf, []ChatMessage{
+		{Kind: MessageKindResponse, Text: "fix the Timeout now"},
+	}, 1, time.UTC, true, []string{"fix", "timeout"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "\x1b[1m\x1b[31m") {
+		t.Fatalf("want bold-red highlight:\n%s", out)
+	}
+	if !strings.Contains(out, "\x1b[2m") {
+		t.Fatalf("want dim timestamp:\n%s", out)
+	}
+}
+
+func TestRunMessagesNoMatching(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	sessionID := "019f283a-msg-nomatch-0001"
+	cwd := "/tmp/msg-nomatch-proj"
+	absCwd, err := filepath.Abs(cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(home, "sessions", url.PathEscape(absCwd), sessionID)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	summary := map[string]any{
+		"info":            map[string]any{"id": sessionID, "cwd": absCwd},
+		"generated_title": "nomatch",
+		"created_at":      "2026-07-01T10:00:00.000Z",
+		"updated_at":      "2026-07-01T11:00:00.000Z",
+		"last_active_at":  "2026-07-01T11:00:00.000Z",
+	}
+	b, _ := json.MarshalIndent(summary, "", "  ")
+	_ = os.WriteFile(filepath.Join(dir, "summary.json"), append(b, '\n'), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "updates.jsonl"), []byte(
+		`{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"hello"}}`+"\n"+
+			`{"sessionUpdate":"turn_completed"}`+"\n"), 0o644)
+
+	var stdout strings.Builder
+	err = RunMessages([]string{sessionID, "--grep", "zzznomatch"}, &stdout, io.Discard, home, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout.String(), "(no matching messages)") {
+		t.Fatalf("stdout=%q", stdout.String())
 	}
 }

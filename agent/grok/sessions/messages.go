@@ -35,6 +35,10 @@ Options:
   --limit N             page size (default 32; 0 = all remaining after offset)
   --offset-from-end N   skip N newest messages before applying --limit (default 0)
                         example: --offset-from-end 32  # skip last 32; start next page
+  --grep P              keep messages whose body contains P (repeatable; AND;
+                        case-insensitive literal). Applied before offset/limit.
+  --color               force ANSI color on (even when stdout is not a TTY)
+  --no-color            force ANSI color off
   --json                machine-readable (includes total, offset, limit; no ANSI)
   -h,--help             show help
 `
@@ -45,7 +49,7 @@ const messagesMissingTimestampMarker = "[—]"
 const messagesTimestampLayout = "2006-01-02 15:04:05"
 
 // MessagesCommandHelpLine is the parent `agent-pro grok session` help row.
-const MessagesCommandHelpLine = `  messages …             print recent chat messages (--limit / --offset-from-end)`
+const MessagesCommandHelpLine = `  messages …             print recent chat messages (--limit / --grep / --offset-from-end)`
 
 // DefaultMessagesLimit is the default --limit when omitted.
 const DefaultMessagesLimit = 32
@@ -72,6 +76,14 @@ type MessagesOpts struct {
 	LimitSet      bool // true when --limit was explicitly passed
 	OffsetFromEnd int
 	JSON          bool
+
+	// Greps: repeatable --grep patterns; message kept only if body contains every
+	// pattern (AND). Case-insensitive literal. Empty when unset.
+	Greps []string
+
+	// ColorMode is "auto" | "always" | "never". Empty treated as "auto".
+	// Human stdout only; --json never emits ANSI.
+	ColorMode string
 
 	// Loc formats timestamps. nil → time.Local.
 	Loc *time.Location
@@ -120,8 +132,9 @@ type chatMessageJSON struct {
 	Timestamp string `json:"timestamp,omitempty"` // RFC3339 in Loc; omitted when unknown
 }
 
-// Messages loads coalesced chat messages for sessionID, applies offset/limit,
-// and formats a msgfmt-style text block.
+// Messages loads coalesced chat messages for sessionID, optionally filters by
+// Greps (AND), applies offset/limit on the match set, and formats a plain
+// (no ANSI) msgfmt-style text block.
 func Messages(grokHome, sessionID string, opts *MessagesOpts) (*MessagesResult, error) {
 	if opts == nil {
 		opts = &MessagesOpts{}
@@ -135,6 +148,9 @@ func Messages(grokHome, sessionID string, opts *MessagesOpts) (*MessagesResult, 
 	}
 	if opts.LimitSet && opts.Limit < 0 {
 		return nil, fmt.Errorf("--limit must be >= 0")
+	}
+	if err := validateMessagesGreps(opts.Greps); err != nil {
+		return nil, err
 	}
 
 	info, err := Info(grokHome, sessionID)
@@ -152,19 +168,24 @@ func Messages(grokHome, sessionID string, opts *MessagesOpts) (*MessagesResult, 
 		limit = DefaultMessagesLimit
 	}
 
-	page := pageMessagesFromEnd(all, opts.OffsetFromEnd, limit)
+	filtered := all
+	if len(opts.Greps) > 0 {
+		filtered = filterMessagesByGrep(all, opts.Greps)
+	}
+
+	page := pageMessagesFromEnd(filtered, opts.OffsetFromEnd, limit)
 	loc := opts.Loc
 	if loc == nil {
 		loc = time.Local
 	}
 	text := ""
 	if len(page) > 0 {
-		text = formatChatMessagesText(page, len(all), loc)
+		text = formatChatMessagesText(page, len(filtered), loc)
 	}
 
 	return &MessagesResult{
 		SessionID:     sessionID,
-		Total:         len(all),
+		Total:         len(filtered),
 		OffsetFromEnd: opts.OffsetFromEnd,
 		Limit:         limit,
 		Messages:      page,
@@ -201,6 +222,8 @@ func RunMessages(args []string, stdout, stderr io.Writer, grokHome string, opts 
 	runOpts.LimitSet = parsed.LimitSet
 	runOpts.OffsetFromEnd = parsed.OffsetFromEnd
 	runOpts.JSON = parsed.JSON
+	runOpts.Greps = parsed.Greps
+	runOpts.ColorMode = parsed.ColorMode
 
 	sessionID, _, err := ResolveSessionSource(parsed.Positional, parsed.Tab, parsed.TabIndex, &SessionSourceOpts{
 		ListProcs:        runOpts.ListProcs,
@@ -219,11 +242,12 @@ func RunMessages(args []string, stdout, stderr io.Writer, grokHome string, opts 
 		return err
 	}
 
+	loc := runOpts.Loc
+	if loc == nil {
+		loc = time.Local
+	}
+
 	if parsed.JSON {
-		loc := runOpts.Loc
-		if loc == nil {
-			loc = time.Local
-		}
 		var buf bytes.Buffer
 		enc := json.NewEncoder(&buf)
 		enc.SetEscapeHTML(false)
@@ -241,15 +265,15 @@ func RunMessages(args []string, stdout, stderr io.Writer, grokHome string, opts 
 	}
 
 	if len(result.Messages) == 0 {
-		_, err = io.WriteString(stdout, "(no messages)\n")
+		empty := "(no messages)\n"
+		if len(runOpts.Greps) > 0 {
+			empty = "(no matching messages)\n"
+		}
+		_, err = io.WriteString(stdout, empty)
 		return err
 	}
-	body := result.Text
-	if body != "" && !strings.HasSuffix(body, "\n") {
-		body += "\n"
-	}
-	_, err = io.WriteString(stdout, body)
-	return err
+	useColor := shouldColor(runOpts.ColorMode)
+	return writeChatMessages(stdout, result.Messages, result.Total, loc, useColor, runOpts.Greps)
 }
 
 type messagesArgs struct {
@@ -260,11 +284,14 @@ type messagesArgs struct {
 	LimitSet      bool
 	OffsetFromEnd int
 	JSON          bool
+	Greps         []string
+	ColorMode     string // "auto" | "always" | "never"
 	Help          bool
 }
 
 func parseMessagesArgs(args []string) (messagesArgs, error) {
 	var out messagesArgs
+	var colorFlag, noColorFlag bool
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "-h" || arg == "--help" {
@@ -273,6 +300,22 @@ func parseMessagesArgs(args []string) (messagesArgs, error) {
 		}
 		if arg == "--json" {
 			out.JSON = true
+			continue
+		}
+		if arg == "--color" {
+			colorFlag = true
+			continue
+		}
+		if arg == "--no-color" {
+			noColorFlag = true
+			continue
+		}
+		if arg == "--grep" || strings.HasPrefix(arg, "--grep=") {
+			raw, _, err := takeFlagValue(arg, "--grep", args, &i)
+			if err != nil {
+				return out, err
+			}
+			out.Greps = append(out.Greps, raw)
 			continue
 		}
 		if arg == "--limit" || strings.HasPrefix(arg, "--limit=") {
@@ -334,7 +377,54 @@ func parseMessagesArgs(args []string) (messagesArgs, error) {
 		}
 		out.Positional = append(out.Positional, arg)
 	}
+	if colorFlag && noColorFlag {
+		return out, fmt.Errorf("--color and --no-color cannot be specified together")
+	}
+	switch {
+	case colorFlag:
+		out.ColorMode = "always"
+	case noColorFlag:
+		out.ColorMode = "never"
+	default:
+		out.ColorMode = "auto"
+	}
+	if err := validateMessagesGreps(out.Greps); err != nil {
+		return out, err
+	}
 	return out, nil
+}
+
+func validateMessagesGreps(greps []string) error {
+	for _, g := range greps {
+		if g == "" {
+			return fmt.Errorf("--grep pattern must not be empty")
+		}
+	}
+	return nil
+}
+
+// filterMessagesByGrep keeps messages whose Text contains every pattern (AND),
+// case-insensitive literal.
+func filterMessagesByGrep(msgs []ChatMessage, greps []string) []ChatMessage {
+	if len(greps) == 0 {
+		return msgs
+	}
+	out := make([]ChatMessage, 0, len(msgs))
+	for _, m := range msgs {
+		if messageMatchesGreps(m, greps) {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+func messageMatchesGreps(m ChatMessage, greps []string) bool {
+	for _, g := range greps {
+		if _, _, ok := findLiteralCI(m.Text, g); !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func takeFlagValue(arg, name string, args []string, i *int) (string, bool, error) {
@@ -545,19 +635,40 @@ func formatChatMessagesText(page []ChatMessage, sourceCount int, loc *time.Locat
 	if len(page) == 0 {
 		return ""
 	}
+	var b strings.Builder
+	_ = writeChatMessages(&b, page, sourceCount, loc, false, nil)
+	return b.String()
+}
+
+// writeChatMessages streams the header then each message line to w.
+func writeChatMessages(w io.Writer, page []ChatMessage, sourceCount int, loc *time.Location, useColor bool, greps []string) error {
+	if len(page) == 0 {
+		return nil
+	}
 	if loc == nil {
 		loc = time.Local
 	}
-	var b strings.Builder
-	b.WriteString(messagesHeader(len(page), sourceCount))
-	b.WriteByte('\n')
-	for _, m := range page {
-		b.WriteString(formatMessageTimestamp(m.Timestamp, loc))
-		b.WriteByte(' ')
-		b.WriteString(fmt.Sprintf("[%s] : %s", kindSender(m.Kind), m.Text))
-		b.WriteByte('\n')
+	if _, err := fmt.Fprintln(w, messagesHeader(len(page), sourceCount)); err != nil {
+		return err
 	}
-	return b.String()
+	for _, m := range page {
+		if _, err := fmt.Fprintln(w, formatChatMessageLine(m, loc, useColor, greps)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func formatChatMessageLine(m ChatMessage, loc *time.Location, useColor bool, greps []string) string {
+	ts := formatMessageTimestamp(m.Timestamp, loc)
+	if useColor {
+		ts = dimMeta(ts, true)
+	}
+	body := m.Text
+	if useColor && len(greps) > 0 {
+		body = highlightAllLiteralCI(body, greps)
+	}
+	return ts + " " + fmt.Sprintf("[%s] : %s", kindSender(m.Kind), body)
 }
 
 func messagesHeader(shown, source int) string {
