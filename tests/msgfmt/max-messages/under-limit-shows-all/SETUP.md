@@ -4,7 +4,7 @@
 
 ```
 3 messages, MaxMessages=5
-  -> showing 3 of 3; all three bodies present
+  -> showing all 3 of 3; all three bodies present
 ```
 
 ## Preconditions

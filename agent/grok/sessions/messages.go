@@ -180,7 +180,7 @@ func Messages(grokHome, sessionID string, opts *MessagesOpts) (*MessagesResult, 
 	}
 	text := ""
 	if len(page) > 0 {
-		text = formatChatMessagesText(page, len(filtered), loc)
+		text = formatChatMessagesText(page, len(filtered), opts.OffsetFromEnd, loc)
 	}
 
 	return &MessagesResult{
@@ -273,7 +273,7 @@ func RunMessages(args []string, stdout, stderr io.Writer, grokHome string, opts 
 		return err
 	}
 	useColor := shouldColor(runOpts.ColorMode)
-	return writeChatMessages(stdout, result.Messages, result.Total, loc, useColor, runOpts.Greps)
+	return writeChatMessages(stdout, result.Messages, result.Total, result.OffsetFromEnd, loc, useColor, runOpts.Greps)
 }
 
 type messagesArgs struct {
@@ -631,24 +631,24 @@ func pageMessagesFromEnd(all []ChatMessage, offset, limit int) []ChatMessage {
 	return out
 }
 
-func formatChatMessagesText(page []ChatMessage, sourceCount int, loc *time.Location) string {
+func formatChatMessagesText(page []ChatMessage, sourceCount, offsetFromEnd int, loc *time.Location) string {
 	if len(page) == 0 {
 		return ""
 	}
 	var b strings.Builder
-	_ = writeChatMessages(&b, page, sourceCount, loc, false, nil)
+	_ = writeChatMessages(&b, page, sourceCount, offsetFromEnd, loc, false, nil)
 	return b.String()
 }
 
 // writeChatMessages streams the header then each message line to w.
-func writeChatMessages(w io.Writer, page []ChatMessage, sourceCount int, loc *time.Location, useColor bool, greps []string) error {
+func writeChatMessages(w io.Writer, page []ChatMessage, sourceCount, offsetFromEnd int, loc *time.Location, useColor bool, greps []string) error {
 	if len(page) == 0 {
 		return nil
 	}
 	if loc == nil {
 		loc = time.Local
 	}
-	if _, err := fmt.Fprintln(w, messagesHeader(len(page), sourceCount)); err != nil {
+	if _, err := fmt.Fprintln(w, messagesHeader(len(page), sourceCount, offsetFromEnd)); err != nil {
 		return err
 	}
 	for _, m := range page {
@@ -671,11 +671,22 @@ func formatChatMessageLine(m ChatMessage, loc *time.Location, useColor bool, gre
 	return ts + " " + fmt.Sprintf("[%s] : %s", kindSender(m.Kind), body)
 }
 
-func messagesHeader(shown, source int) string {
+// messagesHeader labels a page taken from the end of the transcript.
+// offset 0 + full → "showing all K of N"; offset 0 + partial → "showing last K of N";
+// offset > 0 → "showing lo-hi(K) of N" with 1-based oldest→newest indices.
+func messagesHeader(shown, source, offsetFromEnd int) string {
 	if source == 1 && shown == 1 {
 		return "Chat history (1 message):"
 	}
-	return fmt.Sprintf("Chat history (showing %d of %d):", shown, source)
+	if offsetFromEnd <= 0 {
+		if shown == source {
+			return fmt.Sprintf("Chat history (showing all %d of %d):", shown, source)
+		}
+		return fmt.Sprintf("Chat history (showing last %d of %d):", shown, source)
+	}
+	hi := source - offsetFromEnd
+	lo := hi - shown + 1
+	return fmt.Sprintf("Chat history (showing %d-%d(%d) of %d):", lo, hi, shown, source)
 }
 
 func formatMessageTimestamp(ts time.Time, loc *time.Location) string {

@@ -91,7 +91,8 @@ func FormatDetailed(msgs []Message, opts Options) Result
 6. **Header labels**:
    - empty output: no header
    - `SourceCount == 1 && Shown == 1`: `Chat history (1 message):`
-   - otherwise: `Chat history (showing K of N):` with `K=Shown`, `N=SourceCount`
+   - `Shown == SourceCount` (multi): `Chat history (showing all K of N):`
+   - otherwise (partial suffix): `Chat history (showing last K of N):`
 7. **Block newline** — non-empty `Text` is header + `\n` + lines each ending in
    `\n` (trailing newline after the last message line).
 8. **`Format` ≡ `FormatDetailed(...).Text`**.
@@ -108,7 +109,7 @@ func FormatDetailed(msgs []Message, opts Options) Result
 
 ## Version
 
-0.0.2
+0.0.4
 
 ## Decision Tree
 
@@ -171,8 +172,8 @@ Parameter ranking (most → least significant):
 | 8 | `body-cap/over-default-max` | 1001+ runes → body ≤1000 with trailing `…` |
 | 9 | `body-cap/custom-max` | `MaxPerMessageRunes=5`, long body → 4 runes + `…` |
 | 10 | `body-cap/unicode-counts-runes` | multi-byte runes counted as runes, not bytes |
-| 11 | `max-messages/under-limit-shows-all` | 3 msgs, MaxMessages=5 → all 3; showing 3 of 3 |
-| 12 | `max-messages/keeps-latest-with-label` | 10 msgs, MaxMessages=3 → last 3; showing 3 of 10 |
+| 11 | `max-messages/under-limit-shows-all` | 3 msgs, MaxMessages=5 → all 3; showing all 3 of 3 |
+| 12 | `max-messages/keeps-latest-with-label` | 10 msgs, MaxMessages=3 → last 3; showing last 3 of 10 |
 | 13 | `total-budget/under-budget-shows-all` | budget large → no drops |
 | 14 | `total-budget/drops-oldest-first` | tight budget drops oldest; last body remains |
 | 15 | `total-budget/keeps-last-when-tight` | budget < one full block still keeps last message |

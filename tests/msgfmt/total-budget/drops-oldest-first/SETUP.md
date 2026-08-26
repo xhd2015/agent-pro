@@ -21,7 +21,7 @@ TotalBudgetRunes small enough that all three cannot fit
 Locked budget: set to the exact rune count of:
 
 ```text
-Chat history (showing 2 of 3):
+Chat history (showing last 2 of 3):
 MID_UNIQUE
 NEW_UNIQUE
 ```
@@ -50,9 +50,9 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 		msg("", "", "NEW_UNIQUE"),
 	}
 	// Budget = exact size of the post-drop block (2 newest of 3).
-	// Implementer must recompute header after drops: "showing 2 of 3".
+	// Implementer must recompute header after drops: "showing last 2 of 3".
 	twoOfThree := "" +
-		"Chat history (showing 2 of 3):\n" +
+		"Chat history (showing last 2 of 3):\n" +
 		"MID_UNIQUE\n" +
 		"NEW_UNIQUE\n"
 	req.Opts = msgfmt.Options{TotalBudgetRunes: utf8.RuneCountInString(twoOfThree)}

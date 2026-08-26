@@ -161,12 +161,15 @@ func formatLine(m Message) string {
 }
 
 // headerFor returns the singular header only when source and shown are both 1;
-// otherwise the multi form "showing K of N".
+// full multi → "showing all K of N"; partial (suffix) → "showing last K of N".
 func headerFor(sourceCount, shown int) string {
 	if sourceCount == 1 && shown == 1 {
 		return "Chat history (1 message):"
 	}
-	return fmt.Sprintf("Chat history (showing %d of %d):", shown, sourceCount)
+	if shown == sourceCount {
+		return fmt.Sprintf("Chat history (showing all %d of %d):", shown, sourceCount)
+	}
+	return fmt.Sprintf("Chat history (showing last %d of %d):", shown, sourceCount)
 }
 
 // buildBlock assembles header + message lines, each line ending with '\n'.

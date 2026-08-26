@@ -4,7 +4,7 @@
 
 ```
 3 short msgs, TotalBudgetRunes=10_000
-  -> showing 3 of 3; all bodies present
+  -> showing all 3 of 3; all bodies present
 ```
 
 ## Preconditions

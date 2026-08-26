@@ -3,7 +3,7 @@
 Exact text:
 
 ```text
-Chat history (showing 3 of 3):
+Chat history (showing all 3 of 3):
 alpha
 beta
 gamma
@@ -24,7 +24,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	assertNoError(t, err)
 	assertResp(t, resp)
 	want := "" +
-		"Chat history (showing 3 of 3):\n" +
+		"Chat history (showing all 3 of 3):\n" +
 		"alpha\n" +
 		"beta\n" +
 		"gamma\n"

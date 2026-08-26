@@ -1,7 +1,7 @@
 ## Expected
 
 - `resp.Text == resp.Detail.Text` (primary contract).
-- Non-empty output with multi header `showing 3 of 4`.
+- Non-empty output with multi header `showing last 3 of 4`.
 - At least one truncated body (`BodiesTruncated >= 1`).
 
 ## Errors
@@ -20,7 +20,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	if resp.Text == "" {
 		t.Fatal("expected non-empty formatted text")
 	}
-	assertContains(t, resp.Text, "Chat history (showing 3 of 4):")
+	assertContains(t, resp.Text, "Chat history (showing last 3 of 4):")
 	if resp.Detail.BodiesTruncated < 1 {
 		t.Fatalf("BodiesTruncated=%d, want >= 1", resp.Detail.BodiesTruncated)
 	}

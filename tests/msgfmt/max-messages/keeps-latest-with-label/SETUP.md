@@ -5,7 +5,7 @@
 ```
 10 messages (m01..m10), MaxMessages=3
   -> only m08,m09,m10
-  -> header Chat history (showing 3 of 10):
+  -> header Chat history (showing last 3 of 10):
 ```
 
 ## Preconditions

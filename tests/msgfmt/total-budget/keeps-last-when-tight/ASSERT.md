@@ -7,7 +7,7 @@
 - Exact text (last-only block; budget may be exceeded):
 
 ```text
-Chat history (showing 1 of 2):
+Chat history (showing last 1 of 2):
 message_id=m2 : TRIGGER_LAST
 ```
 
@@ -24,7 +24,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	assertNoError(t, err)
 	assertResp(t, resp)
 	want := "" +
-		"Chat history (showing 1 of 2):\n" +
+		"Chat history (showing last 1 of 2):\n" +
 		"message_id=m2 : TRIGGER_LAST\n"
 	assertEqualString(t, "Text", resp.Text, want)
 	assertContains(t, resp.Text, "TRIGGER_LAST")

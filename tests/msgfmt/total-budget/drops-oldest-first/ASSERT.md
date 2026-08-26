@@ -3,7 +3,7 @@
 Exact text:
 
 ```text
-Chat history (showing 2 of 3):
+Chat history (showing last 2 of 3):
 MID_UNIQUE
 NEW_UNIQUE
 ```
@@ -27,7 +27,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	assertNoError(t, err)
 	assertResp(t, resp)
 	want := "" +
-		"Chat history (showing 2 of 3):\n" +
+		"Chat history (showing last 2 of 3):\n" +
 		"MID_UNIQUE\n" +
 		"NEW_UNIQUE\n"
 	assertEqualString(t, "Text", resp.Text, want)

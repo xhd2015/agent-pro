@@ -5,14 +5,14 @@
 ```
 oldest → newest slice, MaxMessages=K
   -> last K messages only
-  -> header Chat history (showing K of N): when N!=1 or K!=N singular rule
+  -> header showing all K of N when K==N; showing last K of N when K<N
 ```
 
 ## Preconditions
 
 - Input order oldest → newest; trim drops from the **oldest** side.
 - `MaxMessages=0` means no count cap (not exercised in this branch).
-- Multi-message / partial show uses `Chat history (showing K of N):`.
+- Full multi uses `showing all K of N`; partial suffix uses `showing last K of N`.
 
 ## Steps
 

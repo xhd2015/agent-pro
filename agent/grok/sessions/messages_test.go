@@ -165,8 +165,8 @@ func TestFormatChatMessagesTextHeader(t *testing.T) {
 		{Kind: MessageKindUser, Text: "hi", Timestamp: ts},
 		{Kind: MessageKindResponse, Text: "yo"}, // missing → [—]
 	}
-	text := formatChatMessagesText(page, 40, loc)
-	if !strings.HasPrefix(text, "Chat history (showing 2 of 40):\n") {
+	text := formatChatMessagesText(page, 40, 0, loc)
+	if !strings.HasPrefix(text, "Chat history (showing last 2 of 40):\n") {
 		t.Fatalf("header:\n%s", text)
 	}
 	if !strings.Contains(text, "[2026-07-31 18:17:51] [user] : hi\n") {
@@ -259,8 +259,28 @@ func TestMessagesIntegration(t *testing.T) {
 	if res2.Messages[0].Text != "think1" || res2.Messages[1].Text != "a1" {
 		t.Fatalf("second page: %+v", res2.Messages)
 	}
-	if !strings.Contains(res2.Text, "showing 2 of") {
+	// total=7, offset=2, shown=2 → hi=5, lo=4
+	if !strings.Contains(res2.Text, "showing 4-5(2) of 7") {
 		t.Fatalf("header: %s", res2.Text)
+	}
+}
+
+func TestMessagesHeaderForms(t *testing.T) {
+	t.Parallel()
+	if got := messagesHeader(32, 300, 0); got != "Chat history (showing last 32 of 300):" {
+		t.Fatalf("offset0 partial: %q", got)
+	}
+	if got := messagesHeader(40, 40, 0); got != "Chat history (showing all 40 of 40):" {
+		t.Fatalf("offset0 full: %q", got)
+	}
+	if got := messagesHeader(32, 300, 32); got != "Chat history (showing 237-268(32) of 300):" {
+		t.Fatalf("offset32: %q", got)
+	}
+	if got := messagesHeader(10, 50, 40); got != "Chat history (showing 1-10(10) of 50):" {
+		t.Fatalf("short older page: %q", got)
+	}
+	if got := messagesHeader(1, 1, 0); got != "Chat history (1 message):" {
+		t.Fatalf("singular: %q", got)
 	}
 }
 
@@ -375,7 +395,7 @@ func TestWriteChatMessagesHighlights(t *testing.T) {
 	var buf strings.Builder
 	err := writeChatMessages(&buf, []ChatMessage{
 		{Kind: MessageKindResponse, Text: "fix the Timeout now"},
-	}, 1, time.UTC, true, []string{"fix", "timeout"})
+	}, 1, 0, time.UTC, true, []string{"fix", "timeout"})
 	if err != nil {
 		t.Fatal(err)
 	}

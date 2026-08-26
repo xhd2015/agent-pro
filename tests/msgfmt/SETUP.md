@@ -29,7 +29,7 @@ msgs []Message + Options
 ## Context
 
 - Truncation marker is Unicode ellipsis `…` (U+2026), one rune.
-- Multi-message header always uses `Chat history (showing K of N):`.
+- Multi-message header: full → `showing all K of N`; partial suffix → `showing last K of N`.
 - Singular header only when exactly one source message is shown:
   `Chat history (1 message):`.
 - Helpers below are shared by all leaves.
