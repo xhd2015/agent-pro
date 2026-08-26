@@ -13,8 +13,10 @@ import (
 	"time"
 
 	codexagent "github.com/xhd2015/agent-pro/agent/cli/codex"
+	commandcodeagent "github.com/xhd2015/agent-pro/agent/cli/commandcode"
 	crushagent "github.com/xhd2015/agent-pro/agent/cli/crush"
 	grokagent "github.com/xhd2015/agent-pro/agent/cli/grok"
+	opencodeagent "github.com/xhd2015/agent-pro/agent/cli/opencode"
 	piagent "github.com/xhd2015/agent-pro/agent/cli/pi"
 	agentprovider "github.com/xhd2015/agent-pro/agent/cli/provider"
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
@@ -636,6 +638,12 @@ func runnerSessionIDFromAgent(agent registry.Agent) string {
 	case *piagent.PiAgent:
 		return strings.TrimSpace(a.LastSessionID)
 	case *crushagent.CrushAgent:
+		return strings.TrimSpace(a.LastSessionID)
+	case *codexagent.CodexAgent:
+		return strings.TrimSpace(a.LastSessionID)
+	case *opencodeagent.OpencodeAgent:
+		return strings.TrimSpace(a.LastSessionID)
+	case *commandcodeagent.CommandcodeAgent:
 		return strings.TrimSpace(a.LastSessionID)
 	}
 	return ""

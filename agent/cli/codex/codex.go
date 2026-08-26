@@ -17,10 +17,11 @@ import (
 )
 
 type CodexAgent struct {
-	AgentPath    string
-	SettingsPath string
-	Workspace    string
-	Env          *exec.Env
+	AgentPath     string
+	SettingsPath  string
+	Workspace     string
+	Env           *exec.Env
+	LastSessionID string
 }
 
 func FindAgentPath(env *exec.Env) (string, error) {
@@ -91,13 +92,16 @@ func (a *CodexAgent) Ask(ctx context.Context, question string, opts *registry.As
 		ws = abs
 	}
 
-	args := []string{
-		"exec",
+	args := []string{"exec"}
+	if opts != nil && strings.TrimSpace(opts.SessionID) != "" {
+		args = append(args, "resume", strings.TrimSpace(opts.SessionID))
+	}
+	args = append(args,
 		"--json",
 		"--skip-git-repo-check",
 		"--cd", ws,
 		"--sandbox", sandboxMode,
-	}
+	)
 	if opts != nil && opts.Model != "" {
 		args = append(args, "--model", opts.Model)
 	}
@@ -155,6 +159,9 @@ func (a *CodexAgent) Ask(ctx context.Context, question string, opts *registry.As
 		if err := json.Unmarshal([]byte(line), &event); err != nil {
 			continue
 		}
+		if threadID := event.extractThreadID(); threadID != "" {
+			a.LastSessionID = threadID
+		}
 
 		if streamErr := event.extractStreamError(); streamErr != nil {
 			latestStreamError = streamErr.FinalMessage
@@ -176,7 +183,9 @@ func (a *CodexAgent) Ask(ctx context.Context, question string, opts *registry.As
 
 		if text := event.extractAssistantText(); text != "" {
 			fullAnswer.WriteString(text)
-			onDelta(text)
+			if onDelta != nil {
+				onDelta(text)
+			}
 		}
 	}
 	if scanErr := scanner.Err(); scanErr != nil {
@@ -301,11 +310,19 @@ func upsertEnv(env []string, key string, value string) []string {
 }
 
 type codexEvent struct {
-	Type    string     `json:"type"`
-	Item    *codexItem `json:"item,omitempty"`
-	Delta   string     `json:"delta,omitempty"`
-	Text    string     `json:"text,omitempty"`
-	Message string     `json:"message,omitempty"`
+	Type     string     `json:"type"`
+	ThreadID string     `json:"thread_id,omitempty"`
+	Item     *codexItem `json:"item,omitempty"`
+	Delta    string     `json:"delta,omitempty"`
+	Text     string     `json:"text,omitempty"`
+	Message  string     `json:"message,omitempty"`
+}
+
+func (e codexEvent) extractThreadID() string {
+	if e.Type == "thread.started" {
+		return strings.TrimSpace(e.ThreadID)
+	}
+	return strings.TrimSpace(e.ThreadID)
 }
 
 type codexItem struct {

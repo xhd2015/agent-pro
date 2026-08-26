@@ -16,10 +16,11 @@ const (
 	AgentRunnerFakeCodex AgentRunnerID = "fake-codex"
 	AgentRunnerCrush     AgentRunnerID = "crush"
 	AgentRunnerPi        AgentRunnerID = "pi"
-	AgentRunnerGrok      AgentRunnerID = "grok"
-	AgentRunnerGrokTTY   AgentRunnerID = "grok-tty"
-	AgentRunnerCodexTTY  AgentRunnerID = "codex-tty"
-	AgentRunnerClaude    AgentRunnerID = "claude"
+	AgentRunnerGrok         AgentRunnerID = "grok"
+	AgentRunnerGrokTTY      AgentRunnerID = "grok-tty"
+	AgentRunnerCodexTTY     AgentRunnerID = "codex-tty"
+	AgentRunnerClaude       AgentRunnerID = "claude"
+	AgentRunnerCommandcode  AgentRunnerID = "commandcode"
 )
 
 const (
@@ -31,6 +32,7 @@ const (
 	PiCLIPathSettingKey              = "pi_cli_path"
 	GrokCLIPathSettingKey            = "grok_cli_path"
 	ClaudeCLIPathSettingKey          = "claude_cli_path"
+	CommandcodeCLIPathSettingKey     = "commandcode_cli_path"
 	CodexAPIKeySettingKey            = "codex_api_key"
 	AgentRunnerIDSettingKey          = "agent_runner_id"
 	KBDefaultAgentRunnerIDSettingKey = "kb_default_agent_runner_id"
@@ -51,6 +53,7 @@ type Settings struct {
 	PiCLIPath              string            `json:"pi_cli_path,omitempty"`
 	GrokCLIPath            string            `json:"grok_cli_path,omitempty"`
 	ClaudeCLIPath          string            `json:"claude_cli_path,omitempty"`
+	CommandcodeCLIPath     string            `json:"commandcode_cli_path,omitempty"`
 	CodexAPIKey            string            `json:"codex_api_key,omitempty"`
 	DisableSubAgents       bool              `json:"disable_sub_agents,omitempty"`
 	ModelsByAgentRunner    map[string]string `json:"models_by_agent_runner,omitempty"`
@@ -63,8 +66,9 @@ const (
 	EnvFakeCodexCLIPath = "AGENT_RUNNER_FAKE_CODEX_PATH"
 	EnvCrushCLIPath     = "AGENT_RUNNER_CRUSH_PATH"
 	EnvPiCLIPath        = "AGENT_RUNNER_PI_PATH"
-	EnvGrokCLIPath      = "AGENT_RUNNER_GROK_PATH"
-	EnvClaudeCLIPath    = "AGENT_RUNNER_CLAUDE_PATH"
+	EnvGrokCLIPath        = "AGENT_RUNNER_GROK_PATH"
+	EnvClaudeCLIPath      = "AGENT_RUNNER_CLAUDE_PATH"
+	EnvCommandcodeCLIPath = "AGENT_RUNNER_COMMANDCODE_PATH"
 )
 
 func LoadEnvCLIPath(envKey string) string {
@@ -110,6 +114,8 @@ func LoadConfiguredStringSetting(settingsPath string, settingKey string) string 
 		return strings.TrimSpace(settings.GrokCLIPath)
 	case ClaudeCLIPathSettingKey:
 		return strings.TrimSpace(settings.ClaudeCLIPath)
+	case CommandcodeCLIPathSettingKey:
+		return strings.TrimSpace(settings.CommandcodeCLIPath)
 	case CodexAPIKeySettingKey:
 		return strings.TrimSpace(settings.CodexAPIKey)
 	case AgentRunnerIDSettingKey:

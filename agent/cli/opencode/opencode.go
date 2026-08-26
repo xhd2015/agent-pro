@@ -14,10 +14,11 @@ import (
 )
 
 type OpencodeAgent struct {
-	AgentPath    string
-	SettingsPath string
-	Workspace    string
-	Env          *exec.Env
+	AgentPath     string
+	SettingsPath  string
+	Workspace     string
+	Env           *exec.Env
+	LastSessionID string
 }
 
 func FindAgentPath(env *exec.Env) (string, error) {
@@ -98,6 +99,9 @@ func (a *OpencodeAgent) Ask(ctx context.Context, question string, opts *registry
 		if err := json.Unmarshal([]byte(line), &event); err != nil {
 			continue
 		}
+		if sid := strings.TrimSpace(event.SessionID); sid != "" {
+			a.LastSessionID = sid
+		}
 
 		switch event.Type {
 		case "text":
@@ -105,7 +109,9 @@ func (a *OpencodeAgent) Ask(ctx context.Context, question string, opts *registry
 				text := strings.TrimSpace(event.Part.Text)
 				if text != "" {
 					fullAnswer.WriteString(text)
-					onDelta(text)
+					if onDelta != nil {
+						onDelta(text)
+					}
 				}
 			}
 		case "tool_use":

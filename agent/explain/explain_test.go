@@ -3,6 +3,8 @@ package explain
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -315,5 +317,97 @@ func TestRunExplain_InvalidRunner(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unsupported agent runner") {
 		t.Fatalf("expected 'unsupported agent runner', got %q", err.Error())
+	}
+}
+
+func TestExplainHelpListsSupportedRunners(t *testing.T) {
+	t.Parallel()
+	for _, runner := range []string{"opencode", "codex", "grok", "commandcode"} {
+		if !strings.Contains(explainHelp, runner) {
+			t.Fatalf("help missing runner %q:\n%s", runner, explainHelp)
+		}
+	}
+	if !strings.Contains(explainHelp, "--agent-runner") {
+		t.Fatalf("help missing --agent-runner:\n%s", explainHelp)
+	}
+}
+
+func TestEncodeDecodeRunnerMeta(t *testing.T) {
+	t.Parallel()
+
+	opencodeMeta := encodeRunnerMeta("opencode", "oc-1")
+	id, err := decodeRunnerSessionID("opencode", opencodeMeta)
+	if err != nil {
+		t.Fatalf("decode opencode: %v", err)
+	}
+	if id != "oc-1" {
+		t.Fatalf("opencode session = %q, want oc-1", id)
+	}
+
+	codexMeta := encodeRunnerMeta("codex", "thr-1")
+	id, err = decodeRunnerSessionID("codex", codexMeta)
+	if err != nil {
+		t.Fatalf("decode codex: %v", err)
+	}
+	if id != "thr-1" {
+		t.Fatalf("codex session = %q, want thr-1", id)
+	}
+
+	// Backward-compat: accept session_id for codex too.
+	id, err = decodeRunnerSessionID("codex", mustMarshalJSON(map[string]string{"session_id": "thr-alt"}))
+	if err != nil {
+		t.Fatalf("decode codex session_id: %v", err)
+	}
+	if id != "thr-alt" {
+		t.Fatalf("codex alt session = %q, want thr-alt", id)
+	}
+}
+
+func TestRunExplain_SupportedRunnersStoreAgentRunner(t *testing.T) {
+	runners := []string{"opencode", "codex", "grok", "commandcode"}
+	for _, wantRunner := range runners {
+		t.Run(wantRunner, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			t.Setenv(debugConfigHomeEnv, "") // ensure default HOME-based layout
+
+			mock := &mockRunner{
+				startOutputs: []mockRunOutput{{sessionID: "sess-" + wantRunner, output: "ok"}},
+			}
+			args := []string{"hello-" + wantRunner}
+			if wantRunner != "opencode" {
+				args = []string{"--agent-runner", wantRunner, "hello-" + wantRunner}
+			}
+			if err := RunExplainWithRunner(args, mock); err != nil {
+				t.Fatalf("RunExplainWithRunner: %v", err)
+			}
+
+			base := filepath.Join(home, defaultSessionsBaseDir, "sessions")
+			entries, err := os.ReadDir(base)
+			if err != nil {
+				t.Fatalf("readdir sessions: %v", err)
+			}
+			if len(entries) != 1 {
+				t.Fatalf("session dirs = %d, want 1", len(entries))
+			}
+			data, err := readSession(filepath.Join(base, entries[0].Name()))
+			if err != nil {
+				t.Fatalf("readSession: %v", err)
+			}
+			if data.AgentRunner != wantRunner {
+				t.Fatalf("AgentRunner = %q, want %q", data.AgentRunner, wantRunner)
+			}
+			meta, ok := data.AgentRunnersMeta[wantRunner]
+			if !ok || len(meta) == 0 {
+				t.Fatalf("missing meta for %s", wantRunner)
+			}
+			gotID, err := decodeRunnerSessionID(wantRunner, meta)
+			if err != nil {
+				t.Fatalf("decode meta: %v", err)
+			}
+			if gotID != "sess-"+wantRunner {
+				t.Fatalf("session id = %q, want sess-%s", gotID, wantRunner)
+			}
+		})
 	}
 }

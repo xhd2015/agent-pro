@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	codexagent "github.com/xhd2015/agent-pro/agent/cli/codex"
 	claudeagent "github.com/xhd2015/agent-pro/agent/cli/claude"
+	codexagent "github.com/xhd2015/agent-pro/agent/cli/codex"
+	commandcodeagent "github.com/xhd2015/agent-pro/agent/cli/commandcode"
 	crushagent "github.com/xhd2015/agent-pro/agent/cli/crush"
 	cursoragent "github.com/xhd2015/agent-pro/agent/cli/cursor"
 	grokagent "github.com/xhd2015/agent-pro/agent/cli/grok"
@@ -152,6 +153,23 @@ func Build(runnerID registry.AgentRunnerID, settingsPath, workspace string, env 
 			Name: "Claude",
 			Agent: &claudeagent.ClaudeAgent{
 				AgentPath:    claudePath,
+				SettingsPath: settingsPath,
+				Workspace:    workspace,
+				Env:          env,
+			},
+		}, nil
+	case registry.AgentRunnerCommandcode:
+		commandcodePath, err := registry.ResolveConfiguredCLIPath(settingsPath, registry.CommandcodeCLIPathSettingKey, registry.EnvCommandcodeCLIPath, "", func() (string, error) {
+			return commandcodeagent.FindAgentPath(env)
+		})
+		if err != nil {
+			return registry.AgentRunner{}, fmt.Errorf("commandcode not found: %w (install cmd/commandcode or add it to PATH)", err)
+		}
+		return registry.AgentRunner{
+			ID:   registry.AgentRunnerCommandcode,
+			Name: "Command Code",
+			Agent: &commandcodeagent.CommandcodeAgent{
+				AgentPath:    commandcodePath,
 				SettingsPath: settingsPath,
 				Workspace:    workspace,
 				Env:          env,

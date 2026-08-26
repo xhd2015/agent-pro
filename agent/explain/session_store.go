@@ -42,14 +42,11 @@ const (
 var nonAlphanum = regexp.MustCompile(`[^a-zA-Z0-9]+`)
 
 func sessionsDir() (string, error) {
-	if debugHome := os.Getenv(debugConfigHomeEnv); debugHome != "" {
-		return filepath.Join(debugHome, "sessions"), nil
-	}
-	home, err := os.UserHomeDir()
+	root, err := explainRoot()
 	if err != nil {
-		return "", fmt.Errorf("get home dir: %w", err)
+		return "", err
 	}
-	return filepath.Join(home, defaultSessionsBaseDir, "sessions"), nil
+	return filepath.Join(root, "sessions"), nil
 }
 
 func slugFromPrompt(prompt string) string {
