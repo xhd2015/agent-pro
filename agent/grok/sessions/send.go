@@ -533,6 +533,7 @@ func RunSend(args []string, stdout, stderr io.Writer, grokHome string, opts *Sen
 		CurrentSessionID: runOpts.CurrentSessionID,
 		ControllingTTY:   runOpts.ControllingTTY,
 		AncestorTTYs:     runOpts.AncestorTTYs,
+		GrokHome:         grokHome,
 	})
 	if err != nil {
 		return err

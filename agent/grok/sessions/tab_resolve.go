@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -46,6 +47,12 @@ type TabResolveResult struct {
 	ITermSession string
 }
 
+// TabSessionMeta is summary fields used to disambiguate multiple hits on one tab.
+type TabSessionMeta struct {
+	RawKind  string // session_kind
+	ParentID string // parent_session_id
+}
+
 // TabResolveOpts injects probes for ResolveFromTab. Nil hooks use production.
 type TabResolveOpts struct {
 	ListProcs        func() []FocusProc
@@ -54,6 +61,12 @@ type TabResolveOpts struct {
 	CurrentSessionID func() string
 	ControllingTTY   func() string
 	AncestorTTYs     func() []string
+
+	// GrokHome enables Find-based meta lookup when OpenPath summary is missing.
+	GrokHome string
+	// SessionMeta overrides summary lookup (tests). Nil → OpenPath summary.json,
+	// then Find(GrokHome) when GrokHome is set.
+	SessionMeta func(sessionID string) (TabSessionMeta, bool)
 }
 
 // ParseTabFlag parses --tab values: 1-based N, or next|right|left.
@@ -152,6 +165,16 @@ func ResolveFromTab(sel TabSelector, opts *TabResolveOpts) (*TabResolveResult, e
 		return nil, fmt.Errorf("no grok session on tab %d (tty %s)", row.Index, displayTabTTYs(ttys))
 	}
 	if len(hits) > 1 {
+		hits = preferMainOverChildSubagents(hits, func(sid string) (TabSessionMeta, bool) {
+			for _, h := range hits {
+				if strings.EqualFold(h.SessionID, sid) {
+					return lookupTabSessionMeta(opts, h)
+				}
+			}
+			return TabSessionMeta{}, false
+		})
+	}
+	if len(hits) > 1 {
 		return nil, formatMultiGrokTabError(row.Index, hits)
 	}
 
@@ -214,6 +237,7 @@ type tabGrokHit struct {
 	RunnerPID int
 	Source    string
 	TTY       string
+	OpenPath  string // first open-file path that yielded SessionID (summary sibling)
 }
 
 func selectWindowTab(st iterm2.WindowStatus, sel TabSelector) (iterm2.TabStatusRow, int, error) {
@@ -335,6 +359,7 @@ func grokSessionsOnTTYs(ttys []string, procs []FocusProc, lsof func(int) []strin
 				RunnerPID: p.PID,
 				Source:    "open-files",
 				TTY:       matchedTTY,
+				OpenPath:  f,
 			}
 			order = append(order, sid)
 		}
@@ -344,6 +369,64 @@ func grokSessionsOnTTYs(ttys []string, procs []FocusProc, lsof func(int) []strin
 		out = append(out, bySID[sid])
 	}
 	return out, nil
+}
+
+// preferMainOverChildSubagents drops subagent-class hits whose parent_session_id
+// is also in the hit set. Unrelated multi-main sets are unchanged. If filtering
+// would remove every hit, the original list is returned.
+func preferMainOverChildSubagents(hits []tabGrokHit, meta func(sessionID string) (TabSessionMeta, bool)) []tabGrokHit {
+	if len(hits) <= 1 || meta == nil {
+		return hits
+	}
+	ids := make(map[string]bool, len(hits))
+	for _, h := range hits {
+		ids[strings.ToLower(strings.TrimSpace(h.SessionID))] = true
+	}
+	kept := make([]tabGrokHit, 0, len(hits))
+	for _, h := range hits {
+		m, ok := meta(h.SessionID)
+		if !ok {
+			kept = append(kept, h)
+			continue
+		}
+		s := Session{rawSessionKind: m.RawKind, parentSessionID: m.ParentID}
+		if !isSubAgentClass(s) {
+			kept = append(kept, h)
+			continue
+		}
+		parent := strings.ToLower(strings.TrimSpace(m.ParentID))
+		if parent != "" && ids[parent] {
+			continue
+		}
+		kept = append(kept, h)
+	}
+	if len(kept) == 0 {
+		return hits
+	}
+	return kept
+}
+
+func lookupTabSessionMeta(opts *TabResolveOpts, hit tabGrokHit) (TabSessionMeta, bool) {
+	if opts != nil && opts.SessionMeta != nil {
+		return opts.SessionMeta(hit.SessionID)
+	}
+	if path := strings.TrimSpace(hit.OpenPath); path != "" {
+		sumPath := filepath.Join(filepath.Dir(path), "summary.json")
+		if s, ok := parseSummaryFile(sumPath); ok {
+			return TabSessionMeta{RawKind: s.rawSessionKind, ParentID: s.parentSessionID}, true
+		}
+	}
+	home := ""
+	if opts != nil {
+		home = strings.TrimSpace(opts.GrokHome)
+	}
+	if home != "" {
+		s, err := Find(home, hit.SessionID)
+		if err == nil {
+			return TabSessionMeta{RawKind: s.rawSessionKind, ParentID: s.parentSessionID}, true
+		}
+	}
+	return TabSessionMeta{}, false
 }
 
 func displayTabTTYs(ttys []string) string {

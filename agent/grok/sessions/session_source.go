@@ -15,6 +15,8 @@ type SessionSourceOpts struct {
 	CurrentSessionID func() string
 	ControllingTTY   func() string
 	AncestorTTYs     func() []string
+	GrokHome         string
+	SessionMeta      func(sessionID string) (TabSessionMeta, bool)
 }
 
 // ResolveSessionSource picks exactly one of: positional session id, --tab, or
@@ -51,6 +53,8 @@ func ResolveSessionSource(positional []string, tabFlag *string, tabIndexFlag *in
 			CurrentSessionID: opts.CurrentSessionID,
 			ControllingTTY:   opts.ControllingTTY,
 			AncestorTTYs:     opts.AncestorTTYs,
+			GrokHome:         opts.GrokHome,
+			SessionMeta:      opts.SessionMeta,
 		})
 		if err != nil {
 			return "", nil, err

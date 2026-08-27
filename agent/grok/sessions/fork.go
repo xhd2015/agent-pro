@@ -107,6 +107,7 @@ func RunFork(args []string, opts *ForkOpts) error {
 		CurrentSessionID: opts.CurrentSessionID,
 		ControllingTTY:   opts.ControllingTTY,
 		AncestorTTYs:     opts.AncestorTTYs,
+		GrokHome:         opts.GrokHome,
 	})
 	if err != nil {
 		return err

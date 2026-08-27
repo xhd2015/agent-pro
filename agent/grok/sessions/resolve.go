@@ -31,6 +31,8 @@ Exactly one session source: ancestor walk (default / --pid), or --tab, or
 --tab-index. --pid cannot combine with --tab/--tab-index.
 Relative next/left/right do not wrap; edges error.
 Tab discovery matches: kool iterm2 window status.
+When a parent and its child subagent share a tab, the parent id is returned;
+unrelated multiple grok sessions on the same tab still refuse.
 `
 
 // ResolveCommandHelpLine is the parent `agent-pro grok session` help row.
@@ -51,6 +53,7 @@ type ResolveOpts struct {
 	CurrentSessionID func() string
 	ControllingTTY   func() string
 	AncestorTTYs     func() []string
+	SessionMeta      func(sessionID string) (TabSessionMeta, bool)
 }
 
 // ResolveDetails is the machine-readable / verbose detail set for a hit.
@@ -135,6 +138,8 @@ func RunResolve(args []string, opts *ResolveOpts) error {
 			CurrentSessionID: opts.CurrentSessionID,
 			ControllingTTY:   opts.ControllingTTY,
 			AncestorTTYs:     opts.AncestorTTYs,
+			GrokHome:         opts.GrokHome,
+			SessionMeta:      opts.SessionMeta,
 		}
 		tr, err := ResolveFromTab(sel, tabOpts)
 		if err != nil {

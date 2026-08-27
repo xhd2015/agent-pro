@@ -157,6 +157,15 @@ func seedTabMultiGrok(req *Request) {
 	req.OpenFiles[pidTabGrok3] = []string{grokSessionPath(fixtureNearSessionID)}
 }
 
+// seedTabParentSubagent is multi-grok on tab 2 where the second id is a
+// subagent of the first; resolve should prefer the parent.
+func seedTabParentSubagent(req *Request) {
+	seedTabMultiGrok(req)
+	req.SessionMeta = map[string]sessions.TabSessionMeta{
+		fixtureNearSessionID: {RawKind: "subagent", ParentID: fixtureTabSessionID},
+	}
+}
+
 // seedTabWrappedGrok models agent-run: shell on tab TTY, grok child on a
 // different PTY (or ??). Tab match uses the inverse of focus's TTY tree walk.
 func seedTabWrappedGrok(req *Request) {

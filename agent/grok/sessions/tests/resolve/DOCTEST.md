@@ -30,7 +30,8 @@ Harness calls `sessions.RunResolve` (library), not a built `agent-pro` binary.
 - `-v`: bare id on stdout; detail fields on stderr.
 - `--json`: indented JSON of detail fields; no bare-id line; `-v` meta skipped.
 - Ancestor misses hard-fail: `no ancestor grok`, `session not resolved`, `pid not found`.
-- Tab misses hard-fail: not in iTerm, edge/oob, no grok on tab, multiple grok.
+- Tab misses hard-fail: not in iTerm, edge/oob, no grok on tab, multiple
+  unrelated grok. Parent + child subagent on the same tab resolves to parent.
 - `--tab` and `--tab-index` mutually exclusive; `--pid` exclusive with tab flags.
 - Extra positional args → error.
 - Help: parent lists resolve; `resolve -h` prints ResolveHelp including tab flags.
@@ -94,6 +95,7 @@ resolve/
     │   ├── next/
     │   ├── left/
     │   ├── wrapped-pty/
+    │   ├── parent-subagent/
     │   └── dry-run/
     ├── miss/
     │   ├── no-grok/
@@ -133,9 +135,10 @@ Parameter ranking (most → least significant):
 | `tab/hit/next/` | `--tab next` from first → second. |
 | `tab/hit/left/` | `--tab left` from second → first. |
 | `tab/hit/wrapped-pty/` | Grok on other PTY; match via ancestor shell TTY on tab. |
+| `tab/hit/parent-subagent/` | Parent + child subagent on tab → parent id. |
 | `tab/hit/dry-run/` | Tab dry-run plan includes mode/window/tab/tty. |
 | `tab/miss/no-grok/` | Target tab has no grok → error. |
-| `tab/miss/multi-grok/` | Two grok sessions on tab → refuse. |
+| `tab/miss/multi-grok/` | Two unrelated grok sessions on tab → refuse. |
 | `tab/miss/next-at-last/` | `--tab next` on last tab → edge error. |
 | `tab/miss/left-at-first/` | `--tab left` on first tab → edge error. |
 | `tab/flags/tab-and-tab-index/` | Mutual exclusion error. |
@@ -172,6 +175,7 @@ type Request struct {
 	GrokHome         string
 	TempDir          string
 	ParentHelp       bool
+	SessionMeta      map[string]sessions.TabSessionMeta
 }
 
 type FixtureProc struct {
@@ -204,7 +208,7 @@ func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 	}
 	focusSnap := append([]sessions.FocusProc(nil), req.FocusProcs...)
 	itermSnap := append([]iterm2.SessionRef(nil), req.ITerm...)
-	err := sessions.RunResolve(req.Args, &sessions.ResolveOpts{
+	resolveOpts := &sessions.ResolveOpts{
 		Stdout: &stdout,
 		Stderr: &stderr,
 		PID:    req.PID,
@@ -224,7 +228,15 @@ func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 		CurrentSessionID: func() string { return req.CurrentSessionID },
 		ControllingTTY:   func() string { return req.ControllingTTY },
 		AncestorTTYs:     func() []string { return nil },
-	})
+	}
+	if req.SessionMeta != nil {
+		meta := req.SessionMeta
+		resolveOpts.SessionMeta = func(sessionID string) (sessions.TabSessionMeta, bool) {
+			m, ok := meta[sessionID]
+			return m, ok
+		}
+	}
+	err := sessions.RunResolve(req.Args, resolveOpts)
 	return &Response{Stdout: stdout.String(), Stderr: stderr.String(), Err: err}, nil
 }
 ```

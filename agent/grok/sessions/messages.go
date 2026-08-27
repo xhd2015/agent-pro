@@ -232,6 +232,7 @@ func RunMessages(args []string, stdout, stderr io.Writer, grokHome string, opts 
 		CurrentSessionID: runOpts.CurrentSessionID,
 		ControllingTTY:   runOpts.ControllingTTY,
 		AncestorTTYs:     runOpts.AncestorTTYs,
+		GrokHome:         grokHome,
 	})
 	if err != nil {
 		return err
