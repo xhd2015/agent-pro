@@ -11,7 +11,7 @@ import (
 type toolCallMeta struct {
 	kind  string
 	title string
-	name  string // preferred display/tool name (_meta x.ai/tool.name or title)
+	name  string // preferred tool category (_meta x.ai/tool.name, else kind, else title)
 	input map[string]any
 }
 
@@ -170,7 +170,7 @@ func (c *Converter) processUpdate(upd SessionUpdate) []types.AgentEvent {
 		if status == "" {
 			status = "completed"
 		}
-		name := firstNonEmpty(meta.name, strings.TrimSpace(upd.Title), meta.title, meta.kind)
+		name := firstNonEmpty(meta.kind, meta.name, strings.TrimSpace(upd.Title), meta.title)
 		ts := sessionUpdateTimestampMs(upd)
 		out = append(out, c.eventWithWireTS(types.AgentEvent{
 			Type:       types.ActionToolCall,
@@ -451,15 +451,17 @@ func firstNonEmpty(vals ...string) string {
 	return ""
 }
 
-// toolDisplayName prefers _meta["x.ai/tool"].name, then title, then kind.
+// toolDisplayName prefers _meta["x.ai/tool"].name, then kind, then title.
+// Kind is the ACP tool category (execute/read/…) used for icons; title is often
+// the command or path and stays on AgentEvent.Text.
 func toolDisplayName(upd SessionUpdate) string {
 	if name := metaToolName(upd.Meta); name != "" {
 		return name
 	}
-	if title := strings.TrimSpace(upd.Title); title != "" {
-		return title
+	if kind := strings.TrimSpace(upd.Kind); kind != "" {
+		return kind
 	}
-	return strings.TrimSpace(upd.Kind)
+	return strings.TrimSpace(upd.Title)
 }
 
 func metaToolName(raw json.RawMessage) string {
