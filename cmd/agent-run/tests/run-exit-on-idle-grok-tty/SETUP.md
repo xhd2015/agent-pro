@@ -56,7 +56,8 @@ const (
 	defaultIdleTimeout = 2 * time.Second
 	defaultGrace       = 5 * time.Second
 	classifySettle     = 2 * time.Second
-	exitObserve        = defaultIdleTimeout + defaultGrace + 4*time.Second
+	// Probe Cap (~1s×3) + schedule gaps + grace; leave slack for SnapshotText.
+	exitObserve = defaultIdleTimeout + defaultGrace + 8*time.Second
 	idlePrompt         = "reply with exactly: pong"
 )
 

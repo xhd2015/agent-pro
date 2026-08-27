@@ -20,7 +20,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Steps = []TickStep{
 		idleAt(0),
 		idleAt(nine),
-		sampleAt(nine, occupiedSample()),
+		occupiedAt(nine),
 		idleAt(nine + nine),
 	}
 	return nil

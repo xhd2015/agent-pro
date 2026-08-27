@@ -1,8 +1,9 @@
 # agent-run `run` — `--exit-on-idle` on live Codex TUI (`llm-mock-run-codex`)
 
 Coverage backfill: a detach keep-alive **codex-tty** session with
-`--exit-on-idle` must let the serve watchdog decide composer occupancy via
-the **space probe**, not via `DetectInputBox` / `tty status input_box`.
+`--exit-on-idle` must let the serve watchdog decide idleness via
+runner-agnostic resting-snapshot change + **space probe**
+(`pkgs/tty/detection`), not via `DetectInputBox` / screen classifiers.
 
 Uses real **`llm-mock-run-codex`** + sibling **`llm-mock`** + PATH **`codex`**.
 No stand-in `codex` script, no `LLM_MOCK_RUN_CODEX_COMMAND` /
@@ -16,7 +17,7 @@ No stand-in `codex` script, no `LLM_MOCK_RUN_CODEX_COMMAND` /
 # DSN (Domain Specific Notion)
 
 A detach keep-alive **codex-tty** session with `--exit-on-idle` must let the
-serve watchdog decide composer occupancy via the **space probe**.
+serve watchdog use resting-snapshot stability + universal space-probe occupy.
 
 **Participants**
 
@@ -26,8 +27,8 @@ serve watchdog decide composer occupancy via the **space probe**.
   mock Responses API (`reply with exactly: pong` → `pong`).
 - **PATH `codex`** — live TUI (skip if missing). Isolated
   `AGENT_RUN_HOME` / `CODEX_HOME` / `LLM_MOCK_CODEX_HOME`.
-- **Idle watchdog** — samples at 0 / 5s / 10s. Occupancy is the space probe
-  (`probeCodexOccupancy`), not `tty status input_box`.
+- **Idle watchdog** — `pkgs/tty/detection/idle` samples at 0 / 5s / 10s.
+  Occupancy is space → exactly-+1-space compare → DEL (not `tty status input_box`).
 - **Composer occupancy** — placeholder/empty → three idle samples → SoftExit
   `/exit` → not live. Real no-submit draft → occupied → hits reset → stays live.
 

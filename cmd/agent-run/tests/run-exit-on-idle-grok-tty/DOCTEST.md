@@ -27,8 +27,8 @@ to `tty status` and the serve idle watchdog must `/exit` after the timeout.
   `│ ❯ … │`, `always-approve`, `Shift+Tab:mode`) and holds the PTY.
 - **`agent-run tty status --json`** — `screen_status`, `input_box`,
   `sendable`, `tcp_reachable`.
-- **Idle watchdog** — `SampleIsIdle` requires sendable + `screen==idle` +
-  `input_box==empty` + empty queue; then timeout + 5s grace.
+- **Idle watchdog** — `pkgs/tty/detection/idle` requires unchanged resting snap +
+  space-probe empty + empty queue across 3 checks; then timeout + 5s grace.
 
 **Behaviors**
 

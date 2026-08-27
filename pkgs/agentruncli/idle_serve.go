@@ -4,31 +4,13 @@ import (
 	"context"
 	"os"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/xhd2015/agent-pro/pkgs/agentsend"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
+	"github.com/xhd2015/agent-pro/pkgs/tty/detection/idle"
+	"github.com/xhd2015/agent-pro/pkgs/tty/detection/occupied"
 	"github.com/xhd2015/tty-watch/pkgs/ttywatch"
 )
-
-// sleepCtx sleeps d or returns false if ctx is done. d<=0 is a no-op.
-func sleepCtx(ctx context.Context, d time.Duration) bool {
-	if ctx.Err() != nil {
-		return false
-	}
-	if d <= 0 {
-		return true
-	}
-	t := time.NewTimer(d)
-	defer t.Stop()
-	select {
-	case <-ctx.Done():
-		return false
-	case <-t.C:
-		return true
-	}
-}
 
 func serveIdleHome(serveHome string) string {
 	if home := strings.TrimSpace(os.Getenv("AGENT_RUN_HOME")); home != "" {
@@ -39,6 +21,7 @@ func serveIdleHome(serveHome string) string {
 
 // startServeIdleWatchdog arms the keep-alive idle-exit loop when idle-policy.json
 // says exit_on_idle. SoftExit injects /exit; Shutdown cancels the serve ctx.
+// Detection is runner-agnostic: resting snapshot unchanged + occupy space probe.
 func startServeIdleWatchdog(ctx context.Context, cancel context.CancelFunc, sessionID, listenAddr, serveHome, registrySubdir string) {
 	home := serveIdleHome(serveHome)
 	sessionID = strings.TrimSpace(sessionID)
@@ -50,35 +33,44 @@ func startServeIdleWatchdog(ctx context.Context, cancel context.CancelFunc, sess
 		return
 	}
 	provider, _ := providerForRegistrySubdir(registrySubdir)
-	var logSize idleLogSizeCache
-	var latest struct {
-		sync.RWMutex
-		sample IdleSample
-		have   bool
+	runner := strings.TrimSpace(provider.ID)
+
+	inject := func(text string) error {
+		if runner == "" {
+			return errIdleNoRunner
+		}
+		return agenttty.InjectMessage(listenAddr, sessionID, runner, text, false)
 	}
-	w := NewIdleWatchdog(found, p, IdleWatchdog{
-		Sample: func() IdleSample {
-			// SnapshotText may wait up to ten seconds for a just-started PTY.
-			// Keep watchdog timing independent of that observer latency: consume
-			// the most recent completed observation and refresh it in the
-			// background for the next tick.
-			latest.RLock()
-			sample, have := latest.sample, latest.have
-			latest.RUnlock()
-			if !have {
-				sample = IdleSample{Screen: "unknown", InputBox: "unknown"}
+	syncSnap := func() (string, error) {
+		return ttywatch.SnapshotText(listenAddr, sessionID)
+	}
+
+	w := idle.New(found, idle.Policy{ExitOnIdle: p.ExitOnIdle, IdleTimeout: p.IdleTimeout}, idle.Watchdog{
+		Snapshot: syncSnap,
+		ProbeOccupied: func() occupied.Status {
+			return occupied.Probe(occupied.IO{
+				Snapshot: syncSnap,
+				Inject:   inject,
+			})
+		},
+		Inject: inject,
+		Ready: func(snapshot string) bool {
+			if provider.CheckWritable == nil {
+				return true
 			}
-			go func() {
-				next := sampleServeIdle(listenAddr, sessionID, home, provider)
-				latest.Lock()
-				latest.sample, latest.have = next, true
-				latest.Unlock()
-			}()
-			logSize.fill(&sample, home, sessionID)
-			return sample
+			return provider.CheckWritable([]byte(snapshot)).Ready
+		},
+		QueueLen: func() int {
+			if runner == "" {
+				return 0
+			}
+			n, err := agentsend.QueueLen(home, runner, sessionID)
+			if err != nil {
+				return 0
+			}
+			return n
 		},
 		SoftExit: func() {
-			runner := strings.TrimSpace(provider.ID)
 			if runner == "" {
 				return
 			}
@@ -95,107 +87,11 @@ func startServeIdleWatchdog(ctx context.Context, cancel context.CancelFunc, sess
 			}
 		},
 	})
-	go runIdleWatchLoop(ctx, w)
+	go idle.RunLoop(ctx, w)
 }
 
-func runIdleWatchLoop(ctx context.Context, w *IdleWatchdog) {
-	if w == nil {
-		return
-	}
-	for ctx.Err() == nil {
-		first, gap := IdleWatchSchedule(w.Timeout)
-		if !sleepCtx(ctx, first) {
-			return
-		}
-		w.Tick()
-		if w.idleHits == 0 {
-			continue
-		}
-		if !sleepCtx(ctx, gap) {
-			return
-		}
-		w.Tick()
-		if w.idleHits == 0 {
-			continue
-		}
-		if !sleepCtx(ctx, gap) {
-			return
-		}
-		w.Tick()
-		if !w.softDone {
-			continue
-		}
-		if !sleepCtx(ctx, w.Grace) {
-			return
-		}
-		w.forceShutdown()
-		return
-	}
-}
+type idleRunnerError string
 
-func sampleServeIdle(listenAddr, sessionID, home string, provider agenttty.Provider) IdleSample {
-	sample := IdleSample{
-		Screen:   "unknown",
-		InputBox: "unknown",
-	}
-	text, err := ttywatch.SnapshotText(listenAddr, sessionID)
-	if err != nil {
-		return sample
-	}
-	scrollback := []byte(text)
-	if provider.CheckWritable != nil {
-		sample.Sendable = provider.CheckWritable(scrollback).Ready
-	}
-	if provider.DetectScreenStatus != nil {
-		if screen := strings.TrimSpace(provider.DetectScreenStatus(scrollback)); screen != "" {
-			sample.Screen = screen
-		}
-	}
-	if provider.ID == "codex-tty" && sample.Sendable && sample.Screen == "idle" {
-		sample.InputBox = probeCodexOccupancy(listenAddr, sessionID, provider.ID, text)
-	} else {
-		sample.InputBox = agenttty.DetectInputBox(text).String()
-	}
-	if n, qerr := agentsend.QueueLen(home, provider.ID, sessionID); qerr == nil {
-		sample.QueueLen = n
-	}
-	return sample
-}
+func (e idleRunnerError) Error() string { return string(e) }
 
-const (
-	codexOccupancyProbeCap  = 5 * time.Second
-	codexOccupancyPollEvery = 200 * time.Millisecond
-)
-
-// probeCodexOccupancy types a space and watches the last-› remainder.
-// Placeholder collapses to empty/whitespace; a real draft stays nonempty.
-// Always undoes with one DEL. Only called when sendable+screen idle.
-func probeCodexOccupancy(listenAddr, sessionID, runner, text string) string {
-	before := agenttty.LastComposerRemainder(text)
-	if strings.TrimSpace(before) == "" {
-		return agenttty.InputBoxEmpty.String()
-	}
-	if err := agenttty.InjectMessage(listenAddr, sessionID, runner, " ", false); err != nil {
-		return agenttty.DetectInputBox(text).String()
-	}
-	defer func() {
-		_ = agenttty.InjectMessage(listenAddr, sessionID, runner, "\x7f", false)
-	}()
-	deadline := time.Now().Add(codexOccupancyProbeCap)
-	for {
-		snap, err := ttywatch.SnapshotText(listenAddr, sessionID)
-		if err == nil {
-			after := agenttty.LastComposerRemainder(snap)
-			if after != before {
-				if strings.TrimSpace(after) == "" {
-					return agenttty.InputBoxEmpty.String()
-				}
-				return agenttty.InputBoxOccupied.String()
-			}
-		}
-		if !time.Now().Before(deadline) {
-			return agenttty.InputBoxOccupied.String()
-		}
-		time.Sleep(codexOccupancyPollEvery)
-	}
-}
+const errIdleNoRunner = idleRunnerError("idle: empty runner id")

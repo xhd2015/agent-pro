@@ -24,7 +24,8 @@ func detectGrokScreenStatus(scrollback []byte) string {
 func detectCodexScreenStatus(scrollback []byte) string {
 	// Align tty status / idle watchdog with checkCodexWritable. Live Codex
 	// never prints CODEX_TTY_BANNER, so the generic stub detector would
-	// leave a finished ›/» prompt at "banner" and SampleIsIdle never arms.
+	// leave a finished ›/» prompt at "banner" (status display only; exit-on-idle
+	// uses pkgs/tty/detection resting-snapshot + occupy probe).
 	st := checkCodexWritable(scrollback)
 	if st.Ready {
 		return "idle"

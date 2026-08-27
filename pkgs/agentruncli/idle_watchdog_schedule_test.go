@@ -5,6 +5,9 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/xhd2015/agent-pro/pkgs/tty/detection/idle"
+	"github.com/xhd2015/agent-pro/pkgs/tty/detection/occupied"
 )
 
 func TestIdleWatchSchedule_shortTimeoutStartsImmediately(t *testing.T) {
@@ -36,18 +39,19 @@ func TestIdleWatchSchedule_zeroTimeout(t *testing.T) {
 
 func TestRunIdleWatchLoop_threeIdleSamplesThenShutdown(t *testing.T) {
 	var soft, shut atomic.Int32
-	w := NewIdleWatchdog(true, IdlePolicy{ExitOnIdle: true, IdleTimeout: 10 * time.Millisecond}, IdleWatchdog{
+	w := idle.New(true, idle.Policy{ExitOnIdle: true, IdleTimeout: 10 * time.Millisecond}, idle.Watchdog{
 		Timeout: 10 * time.Millisecond,
 		Grace:   time.Millisecond,
-		Sample: func() IdleSample {
-			return IdleSample{Sendable: true, Screen: "idle", InputBox: "empty"}
+		Snapshot: func() (string, error) {
+			return "stable chrome", nil
 		},
-		SoftExit: func() { soft.Add(1) },
-		Shutdown: func() { shut.Add(1) },
+		ProbeOccupied: func() occupied.Status { return occupied.Empty },
+		SoftExit:      func() { soft.Add(1) },
+		Shutdown:      func() { shut.Add(1) },
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	runIdleWatchLoop(ctx, w)
+	idle.RunLoop(ctx, w)
 	if soft.Load() != 1 {
 		t.Fatalf("SoftExit=%d want 1", soft.Load())
 	}
@@ -56,36 +60,43 @@ func TestRunIdleWatchLoop_threeIdleSamplesThenShutdown(t *testing.T) {
 	}
 }
 
-func TestIdleWatchdog_jsonlGrowthResetsIdleHits(t *testing.T) {
+func TestIdleWatchdog_snapshotChangeResetsIdleHits(t *testing.T) {
 	var soft int
-	sample := IdleSample{Sendable: true, Screen: "idle", InputBox: "empty", LogFound: true, LogBytes: 10}
-	w := NewIdleWatchdog(true, IdlePolicy{ExitOnIdle: true}, IdleWatchdog{
-		Timeout:  10 * time.Millisecond,
-		Grace:    time.Second,
-		Sample:   func() IdleSample { return sample },
-		SoftExit: func() { soft++ },
+	snap := "v1"
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	now := t0
+	w := idle.New(true, idle.Policy{ExitOnIdle: true}, idle.Watchdog{
+		Timeout:       10 * time.Millisecond,
+		Grace:         time.Second,
+		Now:           func() time.Time { return now },
+		Snapshot:      func() (string, error) { return snap, nil },
+		ProbeOccupied: func() occupied.Status { return occupied.Empty },
+		SoftExit:      func() { soft++ },
 	})
-	w.Tick()
-	sample.LogBytes = 20
-	w.Tick()
-	sample.LogBytes = 30
-	w.Tick()
-	if soft != 0 {
-		t.Fatalf("SoftExit=%d want 0 when jsonl grows", soft)
+	w.Tick() // baseline + hit1
+	now = t0.Add(5 * time.Millisecond)
+	w.Tick() // hit 2
+	snap = "v2"
+	w.Tick() // change → reset
+	if w.IdleHits() != 0 {
+		t.Fatalf("IdleHits=%d want 0 after change", w.IdleHits())
 	}
-	sample.LogBytes = 30
-	w.Tick()
-	w.Tick()
-	w.Tick()
+	snap = "v2"
+	now = t0.Add(10 * time.Millisecond)
+	w.Tick() // hit1
+	now = t0.Add(15 * time.Millisecond)
+	w.Tick() // hit2
+	now = t0.Add(25 * time.Millisecond)
+	w.Tick() // hit3 + Timeout since idleSince → SoftExit
 	if soft != 1 {
-		t.Fatalf("SoftExit=%d want 1 after stable size", soft)
+		t.Fatalf("SoftExit=%d want 1 after stable empty", soft)
 	}
 }
 
 func TestSleepCtx_canceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if sleepCtx(ctx, time.Second) {
-		t.Fatal("sleepCtx on canceled ctx should be false")
+	if idle.SleepCtx(ctx, time.Second) {
+		t.Fatal("SleepCtx on canceled ctx should be false")
 	}
 }

@@ -1,36 +1,31 @@
 # Scenario
 
-**Feature**: session idle-policy file + fake-clock watchdog Tick
+**Feature**: session idle-policy file + fake-clock idle.Watchdog Tick
 
 ```
 WriteIdlePolicy / ReadIdlePolicy -> sessions/<id>/idle-policy.json
-SampleIsIdle(sample) -> idle only when sendable + screen idle + empty box + queue 0
-NewIdleWatchdog + Tick(Now, Sample) -> SoftExit once, then Shutdown after grace
+idle.Watchdog Tick(Snapshot + ProbeOccupied) -> SoftExit once, then Shutdown after grace
 ```
 
 ## Preconditions
 
 - Nested root: `d.DOCTEST_ROOT` is `tests/agentruncli/idle-watchdog` (does not
   inherit parent `tests/agentruncli` Setup/Run).
-- Package `github.com/xhd2015/agent-pro/pkgs/agentruncli` exports
-  `IdlePolicy`, `IdlePolicyPath`, `WriteIdlePolicy`, `ReadIdlePolicy`,
-  `IdleSample`, `SampleIsIdle`, `IdleWatchdog`, `NewIdleWatchdog` (RED until
-  implementer).
-- Home is a per-leaf dir under `d.DOCTEST_CASE` (parallel-safe; no `t.Setenv`
-  / `AGENT_RUN_HOME` / `Chdir` / process stdio).
+- Detection uses `pkgs/tty/detection/idle` (changed + occupied).
+- Home is a per-leaf dir under `d.DOCTEST_CASE` (parallel-safe).
 - No real serve / iTerm / grok. Fake time only.
 
 ## Steps
 
-1. Root seeds Home, SessionID, default idle sample fields, fake timeout 10s.
+1. Root seeds Home, SessionID, fake timeout 10s.
 2. Grouping sets `Op`.
-3. Leaf sets write/raw file, predicate override, or Tick steps.
-4. `Run` dispatches; leaf Assert checks file / Idle / hook counts.
+3. Leaf sets write/raw file or Tick steps.
+4. `Run` dispatches; leaf Assert checks file / hook counts.
 
 ## Context
 
 - Path: `filepath.Join(home, "sessions", sessionID, "idle-policy.json")`.
-- Default sample: sendable, screen `idle`, box `empty`, queue 0.
+- Default resting snapshot `"stable chrome"` + occupy `empty`.
 - Fake timeout 10s, default grace 5s (product fills Grace==0).
 - Compact policy duration: `10m` (not `10m0s`).
 
@@ -40,7 +35,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xhd2015/agent-pro/pkgs/agentruncli"
+	"github.com/xhd2015/agent-pro/pkgs/tty/detection/occupied"
 	"github.com/xhd2015/doctest/session"
 )
 
@@ -52,27 +47,10 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	if req.SessionID == "" {
 		req.SessionID = "sess-idle-wd"
 	}
-	if req.Screen == "" {
-		req.Screen = "idle"
-	}
-	if req.InputBox == "" {
-		req.InputBox = "empty"
-	}
 	if req.WatchdogTimeout == 0 {
 		req.WatchdogTimeout = defaultFakeTimeout
 	}
-	// Default sample is sendable; not-sendable leaf overrides after this.
-	req.Sendable = true
 	return nil
-}
-
-func defaultIdleSample() agentruncli.IdleSample {
-	return agentruncli.IdleSample{
-		Sendable: true,
-		Screen:   "idle",
-		InputBox: "empty",
-		QueueLen: 0,
-	}
 }
 
 func wantPolicyPath(home, sessionID string) string {
@@ -94,11 +72,15 @@ func assertNoAPIError(t *testing.T, resp *Response) {
 }
 
 func idleAt(at time.Duration) TickStep {
-	return TickStep{At: at, Sample: defaultIdleSample()}
+	return TickStep{At: at, Snapshot: defaultSnap, Occupy: occupied.Empty}
 }
 
-func sampleAt(at time.Duration, s agentruncli.IdleSample) TickStep {
-	return TickStep{At: at, Sample: s}
+func occupiedAt(at time.Duration) TickStep {
+	return TickStep{At: at, Snapshot: defaultSnap, Occupy: occupied.Occupied}
+}
+
+func changedAt(at time.Duration, snap string) TickStep {
+	return TickStep{At: at, Snapshot: snap, Occupy: occupied.Empty}
 }
 
 func assertHookAt(t *testing.T, name string, got []time.Duration, want time.Duration) {

@@ -1,17 +1,17 @@
 # Scenario
 
-**Feature**: clock starts at first idle (slow boot cannot trip timeout)
+**Feature**: occupied/busy samples do not count; SoftExit after three later empties
 
 ```
-busy @0, idle @8s, idle @10s -> SoftExit=0
-idle @18s -> SoftExit=1
+occupied @0, occupied @5s
+idle @8s, idle @10s, idle @18s -> SoftExit=1 at 18s
 idle @23s -> Shutdown=1
 ```
 
 ## Steps
 
-1. Busy at t=0 (clock not started).
-2. First idle at 8s; timeout 10s → exit at 18s, shutdown at 23s.
+1. Occupied probes hold (no idle hits) through early ticks.
+2. First empty at 8s; third empty at 18s → SoftExit; +grace → Shutdown.
 
 ```go
 import (
@@ -24,7 +24,8 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	_ = d
 	firstIdle := 8 * time.Second
 	req.Steps = []TickStep{
-		sampleAt(0, busySample()),
+		occupiedAt(0),
+		occupiedAt(5 * time.Second),
 		idleAt(firstIdle),
 		idleAt(defaultFakeTimeout),
 		idleAt(firstIdle + defaultFakeTimeout),
