@@ -49,31 +49,51 @@ func longestUUID(s string) string {
 
 // Grok: …/.grok/sessions/…/<uuid>/…
 func parseGrokSessionPath(path string) (string, bool) {
+	dir, sid, ok := GrokSessionDirFromPath(path)
+	_ = dir
+	return sid, ok
+}
+
+// GrokSessionDirFromPath returns the session directory (path through the uuid
+// segment) and session id for a Grok open-file hard hit.
+// Example: …/.grok/sessions/%2Ftmp%2Fproj/<uuid>/events.jsonl
+// → dir=…/.grok/sessions/%2Ftmp%2Fproj/<uuid>, sid=<uuid>.
+func GrokSessionDirFromPath(path string) (sessionDir, sessionID string, ok bool) {
+	if path == "" {
+		return "", "", false
+	}
+	slashPath := filepath.ToSlash(path)
 	const marker = "/.grok/sessions/"
-	idx := strings.Index(path, marker)
+	idx := strings.Index(slashPath, marker)
 	if idx < 0 {
-		if strings.HasPrefix(path, ".grok/sessions/") {
-			path = "/" + path
-			idx = strings.Index(path, marker)
+		if strings.HasPrefix(slashPath, ".grok/sessions/") {
+			slashPath = "/" + slashPath
+			idx = strings.Index(slashPath, marker)
 		}
 		if idx < 0 {
-			return "", false
+			return "", "", false
 		}
 	}
-	rest := path[idx+len(marker):]
-	// Prefer a full path segment that is the session id.
-	for _, seg := range strings.Split(rest, "/") {
+	prefix := slashPath[:idx+len(marker)] // …/.grok/sessions/
+	rest := slashPath[idx+len(marker):]
+	parts := strings.Split(rest, "/")
+	built := make([]string, 0, len(parts))
+	for _, seg := range parts {
 		if seg == "" {
 			continue
 		}
+		built = append(built, seg)
 		if m := longestUUID(seg); m != "" && len(m) == len(seg) {
-			return strings.ToLower(m), true
+			sid := strings.ToLower(m)
+			dir := prefix + strings.Join(built, "/")
+			return filepath.FromSlash(dir), sid, true
 		}
 	}
 	if m := longestUUID(rest); m != "" {
-		return strings.ToLower(m), true
+		// Fallback: uuid embedded in a non-segment (rare); cannot recover dir.
+		return "", strings.ToLower(m), true
 	}
-	return "", false
+	return "", "", false
 }
 
 // Codex: …/.codex/sessions/…/rollout-…-<uuid>[.jsonl]

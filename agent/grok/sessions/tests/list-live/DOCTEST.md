@@ -23,14 +23,14 @@ L2 only — injectable `ListLiveFake` (procs / open files / iTerm / pane idle).
 - `--json` envelope with `sessions` + `summary.count`.
 - `--limit N` caps rows.
 - Multi-host: `ListProcs` / `Lsof` / `ListITerm` each run once per invocation (shared probes).
-- Pane idle without cwd → WORKSPACE from one-shot GrokHome index (not per-sid Find).
-- Production path: one ListITerm AppleScript (skip Capture); TITLE+WORKSPACE from selective disk meta index.
+- Pane idle without cwd → WORKSPACE/TITLE from summary.json beside the lsof hard-hit session dir.
+- Production path: one TTY-targeted FindSessionsByTTY AppleScript (skip full dump + Capture); one bulk `lsof` for grok PIDs; no WalkDir meta index.
 - Columns: SESSION_ID, ITERM, TITLE, WORKSPACE (no SENDABLE).
 - CaptureInventory (when set) still feeds hosting+pane from one load for enrich tests.
 
 ## Version
 
-0.0.6
+0.0.7
 
 ## Decision Tree
 
@@ -65,7 +65,7 @@ list-live/
 | `json/` | JSON has session_id + title; no sendable. |
 | `limit/` | `--limit 1` with two hosts → one row. |
 | `probe-budget/` | Two hosts → 1× ListProcs, 1× Lsof per PID, 1× ListITerm. |
-| `cwd-from-disk/` | Empty pane cwd → TITLE + WORKSPACE from GrokHome summary. |
+| `cwd-from-disk/` | Empty pane cwd → TITLE + WORKSPACE from path-derived summary.json. |
 | `one-iterm-inventory/` | Unified CaptureInventory runs once for hosting+pane. |
 
 ## How to Run

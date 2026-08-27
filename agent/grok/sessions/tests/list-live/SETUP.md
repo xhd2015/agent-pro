@@ -4,9 +4,9 @@
 
 ```
 sessions.RunListLive(args, stdout, stderr, grokHome, fake.ListLiveOpts())
-  -> withSharedListLiveProbes (prefetch ListITerm ∥ lsof discover)
-  -> DiscoverFocusHosting (shared ps/lsof/iTerm)
-  -> paneByTTY / indexMetaForSessions(live sids → title+cwd) -> table/JSON
+  -> withSharedListLiveProbes (prefetch ListITerm ∥ bulk/cached lsof)
+  -> discoverLiveGrokSessions (sid + summary.json beside hard-hit dir)
+  -> DiscoverFocusHosting (shared ps/lsof/iTerm) -> table/JSON
 ```
 
 ## Preconditions
@@ -84,7 +84,7 @@ func addLiveGrokHost(req *Request, pid int, ttyBare, sessionID, windowID string,
 	}
 }
 
-func writeListLiveSession(t *testing.T, grokHome, sessionID, cwd, title string) {
+func writeListLiveSession(t *testing.T, grokHome, sessionID, cwd, title string) string {
 	t.Helper()
 	absCwd, err := filepath.Abs(cwd)
 	if err != nil {
@@ -113,6 +113,13 @@ func writeListLiveSession(t *testing.T, grokHome, sessionID, cwd, title string) 
 	if err := os.WriteFile(filepath.Join(dir, "summary.json"), append(data, '\n'), 0o644); err != nil {
 		t.Fatalf("write summary: %v", err)
 	}
+	return dir
+}
+
+// pointOpenFileAtSession sets the PID open-files hard hit to events.jsonl under
+// the real session dir (path-derived summary resolution).
+func pointOpenFileAtSession(req *Request, pid int, sessionDir string) {
+	req.OpenFiles[pid] = []string{filepath.Join(sessionDir, "events.jsonl")}
 }
 
 func assertNoHarnessErr(t *testing.T, err error) {

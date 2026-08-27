@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -52,16 +51,16 @@ type ListLiveOpts struct {
 	Lsof      func(int) []string
 	ListITerm func() ([]iterm2.SessionRef, error)
 
-	// PaneByTTY supplies optional pane cwd for WORKSPACE (nil → disk index).
+	// PaneByTTY supplies optional pane cwd for WORKSPACE (nil → path-derived summary).
 	PaneByTTY func() (map[string]LivePaneInfo, error)
 
 	// CaptureInventory, when both ListITerm and PaneByTTY are nil, runs once
 	// and feeds hosting refs + pane cwd. Nil → fast path: one ListITerm
-	// AppleScript and empty panes (title/cwd from FindSession/disk).
+	// AppleScript and empty panes (title/cwd from open-file summary / FindSession).
 	CaptureInventory func() (panes map[string]LivePaneInfo, refs []iterm2.SessionRef, err error)
 
-	// FindSession resolves workspace when pane cwd is empty.
-	// Title always comes from the selective GrokHome meta index when GrokHome is set.
+	// FindSession resolves workspace when pane cwd and path-derived summary cwd are empty.
+	// Title/cwd normally come from summary.json beside the lsof hard-hit session dir.
 	FindSession func(sessionID string) (cwd string, ok bool)
 	GrokHome    string
 }
@@ -112,8 +111,8 @@ func (f *ListLiveFake) ListLiveOpts() *ListLiveOpts {
 //
 // External probes (ps / lsof / iTerm session list) run once per ListLive call
 // and are reused across sid discovery and every DiscoverFocusHosting join.
-// ListITerm is prefetched in parallel with sid discovery. Disk title/cwd
-// indexes only the live sids (not a full discoverSessions parse).
+// ListITerm is prefetched in parallel with sid discovery. TITLE/WORKSPACE come
+// from summary.json beside the lsof hard-hit session dir (no WalkDir index).
 func ListLive(opts *ListLiveOpts) ([]LiveHostingRow, error) {
 	if opts == nil {
 		opts = &ListLiveOpts{}
@@ -130,30 +129,12 @@ func ListLive(opts *ListLiveOpts) ([]LiveHostingRow, error) {
 		go func() { _, _ = opts.ListITerm() }()
 	}
 
-	sids, err := discoverLiveGrokSessionIDs(opts)
+	sids, metaIndex, err := discoverLiveGrokSessions(opts)
 	if err != nil {
 		return nil, err
 	}
 
 	paneByTTY, _ := loadPaneByTTY(opts)
-
-	// Selective title+cwd index for live sids, overlapped with hosting joins.
-	var (
-		metaIndex map[string]liveSessionMeta
-		metaReady chan struct{}
-	)
-	if strings.TrimSpace(opts.GrokHome) != "" && len(sids) > 0 {
-		home := opts.GrokHome
-		want := make(map[string]struct{}, len(sids))
-		for _, sid := range sids {
-			want[sid] = struct{}{}
-		}
-		metaReady = make(chan struct{})
-		go func() {
-			metaIndex = indexMetaForSessions(home, want)
-			close(metaReady)
-		}()
-	}
 
 	rows := make([]LiveHostingRow, 0, len(sids))
 	for _, sid := range sids {
@@ -175,25 +156,20 @@ func ListLive(opts *ListLiveOpts) ([]LiveHostingRow, error) {
 		if info, ok := paneByTTY[tty]; ok {
 			row.Workspace = strings.TrimSpace(info.Cwd)
 		}
+		if meta, ok := metaIndex[sid]; ok {
+			if row.Title == "" {
+				row.Title = strings.TrimSpace(meta.Title)
+			}
+			if row.Workspace == "" {
+				row.Workspace = strings.TrimSpace(meta.Cwd)
+			}
+		}
 		if row.Workspace == "" && opts.FindSession != nil {
 			if cwd, ok := opts.FindSession(sid); ok {
 				row.Workspace = cwd
 			}
 		}
 		rows = append(rows, row)
-	}
-
-	if metaReady != nil {
-		<-metaReady
-		for i := range rows {
-			meta := metaIndex[rows[i].SessionID]
-			if rows[i].Title == "" {
-				rows[i].Title = strings.TrimSpace(meta.Title)
-			}
-			if rows[i].Workspace == "" {
-				rows[i].Workspace = strings.TrimSpace(meta.Cwd)
-			}
-		}
 	}
 
 	sort.Slice(rows, func(i, j int) bool {
@@ -208,51 +184,6 @@ func ListLive(opts *ListLiveOpts) ([]LiveHostingRow, error) {
 type liveSessionMeta struct {
 	Title string
 	Cwd   string
-}
-
-// indexMetaForSessions walks GrokHome once, parsing summary.json only for ids
-// in want (uuid dir names). Unneeded session dirs are SkipDir without ReadFile.
-func indexMetaForSessions(grokHome string, want map[string]struct{}) map[string]liveSessionMeta {
-	out := map[string]liveSessionMeta{}
-	if len(want) == 0 {
-		return out
-	}
-	root := filepath.Join(grokHome, "sessions")
-	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			if os.IsNotExist(walkErr) {
-				return nil
-			}
-			return walkErr
-		}
-		if !d.IsDir() {
-			return nil
-		}
-		if path == root {
-			return nil
-		}
-		name := d.Name()
-		sumPath := filepath.Join(path, "summary.json")
-		if _, needed := want[name]; needed {
-			if st, err := os.Stat(sumPath); err == nil && !st.IsDir() {
-				if session, ok := parseSummaryFile(sumPath); ok {
-					out[session.ID] = liveSessionMeta{
-						Title: strings.TrimSpace(session.Title),
-						Cwd:   strings.TrimSpace(session.CWD),
-					}
-				}
-				if len(out) >= len(want) {
-					return filepath.SkipAll
-				}
-				return filepath.SkipDir
-			}
-		}
-		if st, err := os.Stat(sumPath); err == nil && !st.IsDir() {
-			return filepath.SkipDir
-		}
-		return nil
-	})
-	return out
 }
 
 // RunListLive implements `agent-pro grok session list-live`.
@@ -366,10 +297,23 @@ func withSharedListLiveProbes(opts *ListLiveOpts) *ListLiveOpts {
 	}
 
 	lsof := opts.Lsof
-	if lsof == nil {
+	productionLsof := lsof == nil
+	if productionLsof {
 		lsof = procresolve.LiveLsof
 	}
 	lsofCache := map[int][]string{}
+	if productionLsof {
+		// One bulk lsof for all grok runners; seed the per-pid cache.
+		var pids []int
+		for _, p := range procs {
+			if procresolve.IsGrokRunner(p.Cmd) {
+				pids = append(pids, p.PID)
+			}
+		}
+		for pid, paths := range procresolve.LiveLsofMany(pids) {
+			lsofCache[pid] = paths
+		}
+	}
 	out.Lsof = func(pid int) []string {
 		if paths, ok := lsofCache[pid]; ok {
 			return paths
@@ -384,9 +328,12 @@ func withSharedListLiveProbes(opts *ListLiveOpts) *ListLiveOpts {
 			bindUnifiedITermInventory(&out, opts.CaptureInventory)
 			return &out
 		}
-		// Fast production path: skip itermsnapshot.Capture (second AppleScript +
-		// process enrich). Hosting from ListITerm only; title/cwd from disk.
-		bindMemoListITerm(&out, listLiveITermSessions)
+		// Fast production path: skip full-window session dump + Capture enrich.
+		// One TTY-targeted AppleScript for grok-host TTYs; title/cwd from open-file summary.
+		ttys := grokHostingTTYs(procs)
+		bindMemoListITerm(&out, func() ([]iterm2.SessionRef, error) {
+			return iterm2.FindSessionsByTTY(ttys)
+		})
 		out.PaneByTTY = func() (map[string]LivePaneInfo, error) {
 			return map[string]LivePaneInfo{}, nil
 		}
@@ -395,11 +342,34 @@ func withSharedListLiveProbes(opts *ListLiveOpts) *ListLiveOpts {
 
 	listITerm := opts.ListITerm
 	if listITerm == nil {
-		listITerm = listLiveITermSessions
+		ttys := grokHostingTTYs(procs)
+		listITerm = func() ([]iterm2.SessionRef, error) {
+			return iterm2.FindSessionsByTTY(ttys)
+		}
 	}
 	bindMemoListITerm(&out, listITerm)
 
 	return &out
+}
+
+// grokHostingTTYs returns normalized TTYs for live grok runners (including
+// ancestor/descendant TTYs), used for one FindSessionsByTTY inventory.
+func grokHostingTTYs(procs []FocusProc) []string {
+	seen := map[string]bool{}
+	var ttys []string
+	for _, p := range procs {
+		if !procresolve.IsGrokRunner(p.Cmd) {
+			continue
+		}
+		for _, tty := range collectTTYsFromTree(procs, p.PID) {
+			if tty == "" || seen[tty] {
+				continue
+			}
+			seen[tty] = true
+			ttys = append(ttys, tty)
+		}
+	}
+	return ttys
 }
 
 func bindMemoListITerm(out *ListLiveOpts, listITerm func() ([]iterm2.SessionRef, error)) {
@@ -485,7 +455,10 @@ func sessionRefsFromSnapshot(snap *snapshot.Snapshot) []iterm2.SessionRef {
 	return out
 }
 
-func discoverLiveGrokSessionIDs(opts *ListLiveOpts) ([]string, error) {
+// discoverLiveGrokSessions finds live Grok sids via open-file hard hits and
+// loads TITLE/CWD from summary.json beside each hit (remapped into GrokHome
+// when set). No WalkDir over the sessions tree.
+func discoverLiveGrokSessions(opts *ListLiveOpts) ([]string, map[string]liveSessionMeta, error) {
 	listProcs := opts.ListProcs
 	if listProcs == nil {
 		listProcs = listLiveFocusProcs
@@ -496,6 +469,7 @@ func discoverLiveGrokSessionIDs(opts *ListLiveOpts) ([]string, error) {
 	}
 
 	seen := map[string]struct{}{}
+	meta := map[string]liveSessionMeta{}
 	var ids []string
 	for _, p := range listProcs() {
 		if !procresolve.IsGrokRunner(p.Cmd) {
@@ -510,15 +484,54 @@ func discoverLiveGrokSessionIDs(opts *ListLiveOpts) ([]string, error) {
 			if sid == "" {
 				continue
 			}
-			if _, exists := seen[sid]; exists {
-				continue
+			if _, exists := seen[sid]; !exists {
+				seen[sid] = struct{}{}
+				ids = append(ids, sid)
 			}
-			seen[sid] = struct{}{}
-			ids = append(ids, sid)
+			if _, has := meta[sid]; !has {
+				if m, ok := metaFromOpenPath(path, opts.GrokHome); ok {
+					meta[sid] = m
+				}
+			}
 		}
 	}
 	sort.Strings(ids)
-	return ids, nil
+	return ids, meta, nil
+}
+
+// metaFromOpenPath reads summary.json for the session dir implied by an open-file
+// path. When grokHome is set, remaps …/.grok/sessions/<rel> → grokHome/sessions/<rel>
+// so injected fixtures (fixture paths + temp GrokHome) still resolve.
+func metaFromOpenPath(openPath, grokHome string) (liveSessionMeta, bool) {
+	sessionDir, _, ok := procresolve.GrokSessionDirFromPath(openPath)
+	if !ok || strings.TrimSpace(sessionDir) == "" {
+		return liveSessionMeta{}, false
+	}
+	sessionDir = remapGrokSessionDir(sessionDir, grokHome)
+	sumPath := filepath.Join(sessionDir, "summary.json")
+	session, ok := parseSummaryFile(sumPath)
+	if !ok {
+		return liveSessionMeta{}, false
+	}
+	return liveSessionMeta{
+		Title: strings.TrimSpace(session.Title),
+		Cwd:   strings.TrimSpace(session.CWD),
+	}, true
+}
+
+func remapGrokSessionDir(sessionDir, grokHome string) string {
+	grokHome = strings.TrimSpace(grokHome)
+	if grokHome == "" {
+		return sessionDir
+	}
+	slash := filepath.ToSlash(sessionDir)
+	const marker = "/.grok/sessions/"
+	idx := strings.Index(slash, marker)
+	if idx < 0 {
+		return sessionDir
+	}
+	rel := slash[idx+len(marker):]
+	return filepath.Join(grokHome, "sessions", filepath.FromSlash(rel))
 }
 
 func loadPaneByTTY(opts *ListLiveOpts) (map[string]LivePaneInfo, error) {
