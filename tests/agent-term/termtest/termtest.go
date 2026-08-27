@@ -729,8 +729,11 @@ func waitHTTPReady(url string, timeout time.Duration) error {
 	for time.Now().Before(deadline) {
 		resp, err := http.Get(url)
 		if err == nil {
+			code := resp.StatusCode
 			resp.Body.Close()
-			if resp.StatusCode >= 200 && resp.StatusCode < 500 {
+			// Only 2xx means the intended server is up. Treating 404 as ready
+			// caused serves-xterm-page to assert against a wrong listener.
+			if code >= 200 && code < 300 {
 				return nil
 			}
 		}
