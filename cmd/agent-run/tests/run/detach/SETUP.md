@@ -109,6 +109,19 @@ const (
 
 var fakePTYWrapUpgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
 
+// modernGrokIdleScrollback is section-judge idle chrome (Worked for + boxed ❯).
+// Legacy "Grok ›" is no longer CheckWritable-ready after status_above_composer.
+func modernGrokIdleScrollback() string {
+	return "" +
+		"GROK_TTY_BANNER\n" +
+		" ⎇ master worktree ~/.wrk/… 1K / 10K\n" +
+		"    Worked for 1.0s                                        stop  [hooks: 1]\n" +
+		" ╭--------------------------------------------------------------------------╮\n" +
+		" │ ❯                                                                        │\n" +
+		" ╰----------------------------------------- Grok 4.5 (high) · always-approve -╯\n" +
+		" Shift+Tab:mode  │  Ctrl+.:shortcuts\n"
+}
+
 func sessionCacheDir(d *session.Doctest) string {
 	return filepath.Join(os.TempDir(), "agent-run-run-detach-doctest-"+d.DOCTEST_SESSION_ID)
 }
@@ -442,7 +455,7 @@ func startFakePTYWrapServer(t *testing.T, req *Request) {
 		defer conn.Close()
 		scrollback := req.FakePTYWrapScrollback
 		if scrollback == "" {
-			scrollback = "GROK_TTY_BANNER\nGrok › \n"
+			scrollback = modernGrokIdleScrollback()
 		}
 		if err := conn.WriteMessage(websocket.TextMessage, []byte(scrollback)); err != nil {
 			return
@@ -522,7 +535,7 @@ func seedLiveBoundNotExited(t *testing.T, req *Request) {
 	req.WriteRegistry = true
 	req.RegistryPID = 0
 	if req.FakePTYWrapScrollback == "" {
-		req.FakePTYWrapScrollback = "GROK_TTY_BANNER\nGrok › \n"
+		req.FakePTYWrapScrollback = modernGrokIdleScrollback()
 	}
 	startFakePTYWrapServer(t, req)
 	seedSessionMeta(t, req)
