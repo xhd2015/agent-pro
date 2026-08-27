@@ -15,6 +15,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	msg, branch := baseMsgBranch()
 	req.SeedFiles = map[string]string{"INDEX.md": "# index\n"}
 	body, err := json.Marshal(knowledgesink.ShipResult{
+		HasNewKnowledges: boolPtr(true),
 		GitCommitMsg:  msg,
 		GitBranchName: branch,
 		GitCommitFiles: knowledgesink.ShipCommitFiles{

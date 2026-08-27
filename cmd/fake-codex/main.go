@@ -38,6 +38,7 @@ Options:
   --cd <dir>                      working directory (ignored, for compatibility)
   --sandbox <mode>                sandbox mode (ignored, for compatibility)
   --model <model>                 model name (ignored, for compatibility)
+  -c,--config <key=value>         config override (ignored; may repeat, matches real codex)
   --script <path>                 JSON script with exact events to emit
   --mock-config <path>            JSON mock config with events, hooks, and exit behavior
   --skip-git-repo-check           skip git check (ignored, for compatibility)
@@ -88,10 +89,12 @@ func handleExec(args []string) error {
 	var skipGitFlag *bool
 	var seedFlag *int64
 	var delayFlag *int
+	var configFlags []string // ignored; real codex passes repeated -c key=value
 
 	remaining, err := flags.String("--cd", &dirFlag).
 		String("--sandbox", &sandboxFlag).
 		String("--model", &modelFlag).
+		StringSlice("-c,--config", &configFlags).
 		String("--script", &scriptFlag).
 		String("--mock-config", &mockConfigFlag).
 		Bool("--json", &jsonFlag).
@@ -103,6 +106,7 @@ func handleExec(args []string) error {
 	if err != nil {
 		return err
 	}
+	_ = configFlags
 
 	prompt := strings.Join(remaining, " ")
 	if prompt == "" {

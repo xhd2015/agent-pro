@@ -332,7 +332,8 @@ func TestAgentPromptCreateMRHasOutput(t *testing.T) {
 		"Golden rules",
 		"Do not sink an explanation of what current code already does.",
 		"reusable investigation value",
-		"pitfall that can mislead future diagnosis",
+		// Prompt wraps mid-phrase; match contiguous fragments only.
+		"pitfall that can mislead future",
 		"correct path/evidence",
 		"feature-specific leaf",
 		"inconclusive",

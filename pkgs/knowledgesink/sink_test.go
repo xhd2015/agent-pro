@@ -46,7 +46,8 @@ func TestResolveRunnerSessionDirUsesGrokHome(t *testing.T) {
 }
 
 func TestFormatParseTime(t *testing.T) {
-	now := time.Date(2026, 3, 20, 20, 15, 3, 0, time.FixedZone("CST", 8*3600))
+	// FormatTime renders in time.Local; pin the wall clock to Local so CI (UTC) matches.
+	now := time.Date(2026, 3, 20, 20, 15, 3, 0, time.Local)
 	s := FormatTime(now)
 	if !strings.Contains(s, "2026-03-20 20:15:03") {
 		t.Fatalf("format = %q", s)

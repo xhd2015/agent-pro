@@ -14,6 +14,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	_ = d
 	msg, branch := baseMsgBranch()
 	body, err := json.Marshal(knowledgesink.ShipResult{
+		HasNewKnowledges: boolPtr(true),
 		GitCommitMsg:   msg,
 		GitBranchName:  branch,
 		GitCommitFiles: knowledgesink.ShipCommitFiles{},

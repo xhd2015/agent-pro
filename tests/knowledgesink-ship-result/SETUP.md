@@ -81,4 +81,6 @@ func assertErrContains(t *testing.T, req *Request, resp *Response, err error) {
 func baseMsgBranch() (msg, branch string) {
 	return "docs(kb): test", "tester/2026-03-24-ship-test"
 }
+
+func boolPtr(v bool) *bool { return &v }
 ```

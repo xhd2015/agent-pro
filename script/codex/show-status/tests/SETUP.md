@@ -100,9 +100,11 @@ func fakeTUINoStatus() string {
 	return `sh -c 'printf "Codex › "; read -r cmd; while true; do sleep 1; done'`
 }
 
-// fakeTUIMalformed prints prompt then garbage without parseable status fields.
+// fakeTUIMalformed prints prompt then garbage without parseable status fields,
+// then exits so waitForStatusSnapshot finalizes via last snapshot → parse error
+// (keep-alive would otherwise sit until the full CLI timeout).
 func fakeTUIMalformed() string {
-	return `sh -c 'printf "Codex › "; read -r cmd; printf "not status data\n› "` + keepAliveAfterPrint + `'`
+	return `sh -c 'printf "Codex › "; read -r cmd; printf "not status data\n› "; exit 0'`
 }
 
 // assertSuccessExit checks exit 0 and empty stderr for success leaves.
