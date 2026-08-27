@@ -128,10 +128,19 @@ func buildOnce(t *testing.T, d *session.Doctest) (agentRun string, err error) {
 				return fmt.Errorf("ensure %s stub: %w", rel, err)
 			}
 		}
-		build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-C", "cmd", "-o", agentRun, "./agent-run")
+		// Build to a temp path then rename so parallel leaves never exec/read a
+		// partially written shared binary (Linux ETXTBSY).
+		tmpOut := agentRun + ".building"
+		_ = os.Remove(tmpOut)
+		build := exec.Command(runtime.GOROOT()+"/bin/go", "build", "-C", "cmd", "-o", tmpOut, "./agent-run")
 		build.Dir = repoRoot
 		if out, err := build.CombinedOutput(); err != nil {
+			_ = os.Remove(tmpOut)
 			return fmt.Errorf("build agent-run: %w\n%s", err, string(out))
+		}
+		if err := os.Rename(tmpOut, agentRun); err != nil {
+			_ = os.Remove(tmpOut)
+			return fmt.Errorf("install built agent-run: %w", err)
 		}
 		return os.WriteFile(ready, []byte("ok"), 0644)
 	})
@@ -213,7 +222,34 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(dst, in, 0755)
+	return installExecutable(dst, in)
+}
+
+// installExecutable writes data via a sibling temp file + rename so Linux never
+// sees an in-place truncate of a path that another goroutine may exec.
+func installExecutable(dst string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return err
+	}
+	tmp := dst + ".tmp." + strconv.Itoa(os.Getpid())
+	if err := os.WriteFile(tmp, data, 0755); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, dst); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+func isTextFileBusy(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, syscall.ETXTBSY) {
+		return true
+	}
+	return strings.Contains(err.Error(), "text file busy")
 }
 
 func withoutEnvKey(env []string, key string) []string {
@@ -418,8 +454,19 @@ func spawnChildServeAt(t *testing.T, req *Request, bin, sessionID string) (pid i
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("spawn child serve: %v", err)
+	var startErr error
+	for attempt := 0; attempt < 20; attempt++ {
+		startErr = cmd.Start()
+		if startErr == nil || !isTextFileBusy(startErr) {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+		cmd = exec.Command(bin, token, sid, "sleep", strconv.Itoa(hold))
+		cmd.Dir = req.TempDir
+		cmd.Env = append(os.Environ(), req.Env...)
+	}
+	if startErr != nil {
+		t.Fatalf("spawn child serve: %v", startErr)
 	}
 	pid = cmd.Process.Pid
 	t.Cleanup(func() {
@@ -453,13 +500,26 @@ func execCmd(t *testing.T, command string, args []string, dir string, env []stri
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, command, args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), env...)
+
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
+	var err error
+	// Parallel leaves can race Linux ETXTBSY while a shared/cache binary is
+	// replaced; retry briefly — the CLI itself is otherwise instant.
+	for attempt := 0; attempt < 20; attempt++ {
+		stdout.Reset()
+		stderr.Reset()
+		cmd := exec.CommandContext(ctx, command, args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), env...)
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err = cmd.Run()
+		if err == nil || !isTextFileBusy(err) || ctx.Err() != nil {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+
 	resp := &Response{
 		Stdout: stdout.String(),
 		Stderr: stderr.String(),
