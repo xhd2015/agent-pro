@@ -8,7 +8,6 @@ import (
 	"github.com/xhd2015/agent-pro/pkgs/agentsend"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 	"github.com/xhd2015/agent-pro/pkgs/tty/detection/idle"
-	"github.com/xhd2015/agent-pro/pkgs/tty/detection/occupied"
 	"github.com/xhd2015/tty-watch/pkgs/ttywatch"
 )
 
@@ -47,13 +46,7 @@ func startServeIdleWatchdog(ctx context.Context, cancel context.CancelFunc, sess
 
 	w := idle.New(found, idle.Policy{ExitOnIdle: p.ExitOnIdle, IdleTimeout: p.IdleTimeout}, idle.Watchdog{
 		Snapshot: syncSnap,
-		ProbeOccupied: func() occupied.Status {
-			return occupied.Probe(occupied.IO{
-				Snapshot: syncSnap,
-				Inject:   inject,
-			})
-		},
-		Inject: inject,
+		Inject:   inject,
 		Ready: func(snapshot string) bool {
 			if provider.CheckWritable == nil {
 				return true

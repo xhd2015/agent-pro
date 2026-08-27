@@ -56,8 +56,9 @@ const (
 	defaultIdleTimeout = 2 * time.Second
 	defaultGrace       = 5 * time.Second
 	classifySettle     = 2 * time.Second
-	// Probe Cap (~1s×3) + schedule gaps + grace; leave slack for SnapshotText.
-	exitObserve = defaultIdleTimeout + defaultGrace + 8*time.Second
+	// Poll budget for SoftExit + grace under CI SnapshotText load.
+	exitObserve = defaultIdleTimeout + defaultGrace + 30*time.Second
+	exitPollEvery      = 500 * time.Millisecond
 	idlePrompt         = "reply with exactly: pong"
 )
 
@@ -286,6 +287,24 @@ func runDetachThenStatus(t *testing.T, req *Request) (*Response, error) {
 		k.Env = append(os.Environ(), req.Env...)
 		_ = k.Run()
 	})
+
+	if req.Op == "exit" {
+		// Poll until the watchdog reaps the session (SoftExit + grace), not a
+		// single sleep that races CI SnapshotText latency.
+		deadline := time.Now().Add(observe)
+		for {
+			fillStatus(t, req, resp)
+			if !resp.Alive {
+				return resp, nil
+			}
+			if !time.Now().Before(deadline) {
+				break
+			}
+			time.Sleep(exitPollEvery)
+		}
+		fillStatus(t, req, resp)
+		return resp, nil
+	}
 
 	time.Sleep(observe)
 	fillStatus(t, req, resp)

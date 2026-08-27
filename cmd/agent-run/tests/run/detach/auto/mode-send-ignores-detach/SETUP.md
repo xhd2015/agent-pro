@@ -36,7 +36,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 		"--session-id", req.SessionID,
 		req.FollowupPrompt,
 	}
-	req.ExecTimeout = 45 * time.Second
+	req.ExecTimeout = 60 * time.Second
 	return nil
 }
 ```

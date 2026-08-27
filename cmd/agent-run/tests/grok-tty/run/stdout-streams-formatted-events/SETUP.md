@@ -37,7 +37,7 @@ func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	)
 	appendGrokHomeEnv(req)
 
-	req.GrokTTYCommand = fakeTUIHoldSeconds(2)
+	req.GrokTTYCommand = fakeTUIHoldSeconds(6)
 	appendGrokTTYEnv(req)
 	req.Args = append(req.Args, formattedUserText)
 	return nil

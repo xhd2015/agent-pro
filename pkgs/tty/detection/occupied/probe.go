@@ -19,6 +19,9 @@ const defaultProbeSettle = 150 * time.Millisecond
 type IO struct {
 	Snapshot func() (string, error)
 	Inject   func(text string) error // no-submit; Probe sends " " then "\x7f"
+	// Before is an optional resting snapshot. When non-empty, Probe skips the
+	// first Snapshot call (avoids a duplicate SnapshotText under idle Tick).
+	Before string
 	// Settle is how long to wait after injecting the space before reading
 	// after (0 → defaultProbeSettle).
 	Settle time.Duration
@@ -29,17 +32,23 @@ type IO struct {
 //
 // exactly +1 draft space → Occupied
 // any other / no change    → Empty
-// inject/snapshot fail     → Unknown
+// snapshot fail            → Unknown
+// inject fail              → Empty (cannot prove occupancy; callers that need
+// a hard hold should check Ready/writable separately)
 func Probe(io IO) Status {
 	if io.Snapshot == nil || io.Inject == nil {
 		return Unknown
 	}
-	before, err := io.Snapshot()
-	if err != nil {
-		return Unknown
+	before := io.Before
+	if before == "" {
+		var err error
+		before, err = io.Snapshot()
+		if err != nil {
+			return Unknown
+		}
 	}
 	if err := io.Inject(" "); err != nil {
-		return Unknown
+		return Empty
 	}
 	defer func() {
 		_ = io.Inject("\x7f")

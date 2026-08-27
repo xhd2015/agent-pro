@@ -68,13 +68,32 @@ func TestProbe_placeholderCollapseIsEmpty(t *testing.T) {
 	}
 }
 
-func TestProbe_injectFailIsUnknown(t *testing.T) {
+func TestProbe_injectFailIsEmpty(t *testing.T) {
 	io := IO{
 		Snapshot: func() (string, error) { return "x", nil },
 		Inject:   func(string) error { return errors.New("boom") },
 	}
-	if got := Probe(io); got != Unknown {
-		t.Fatalf("Probe=%q want unknown", got)
+	if got := Probe(io); got != Empty {
+		t.Fatalf("Probe=%q want empty (inject fail cannot prove occupied)", got)
+	}
+}
+
+func TestProbe_beforeSkipsFirstSnapshot(t *testing.T) {
+	snaps := 0
+	io := IO{
+		Before: "draft",
+		Snapshot: func() (string, error) {
+			snaps++
+			return "draft ", nil
+		},
+		Inject: func(string) error { return nil },
+		Settle: time.Millisecond,
+	}
+	if got := Probe(io); got != Occupied {
+		t.Fatalf("Probe=%q want occupied", got)
+	}
+	if snaps != 1 {
+		t.Fatalf("Snapshot calls=%d want 1 (after only)", snaps)
 	}
 }
 

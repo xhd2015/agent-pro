@@ -17,11 +17,12 @@ const DefaultGrace = 5 * time.Second
 //  1. capture resting snapshot
 //  2. if changed vs last resting → reset hits (start over)
 //  3. if not Ready (when set) → reset hits (do not probe yet)
-//  4. else probe occupy (space / compare / DEL)
-//  5. re-baseline resting snap after probe (inject must not poison "changed")
-//  6. if occupied or unknown → reset hits
+//  4. else probe occupy (space / compare / DEL), reusing resting snap as before
+//  5. one post-probe re-baseline (inject must not poison "changed")
+//  6. if occupied → reset hits; Unknown after Ready is treated as empty
 //  7. if QueueLen > 0 → reset hits
 //  8. else count an idle hit; SoftExit after SamplesPerCycle consecutive hits
+//     and continuous idle ≥ Timeout
 type Watchdog struct {
 	Timeout time.Duration
 	Grace   time.Duration // 0 → DefaultGrace
@@ -30,7 +31,7 @@ type Watchdog struct {
 	// Snapshot returns the resting TTY snapshot text.
 	Snapshot func() (string, error)
 	// ProbeOccupied runs the space probe. When nil, Tick calls occupied.Probe
-	// with Snapshot + Inject.
+	// with the resting snap as Before + Snapshot + Inject.
 	ProbeOccupied func() occupied.Status
 	// Inject is used when ProbeOccupied is nil (no-submit " " / DEL).
 	Inject func(text string) error
@@ -42,6 +43,7 @@ type Watchdog struct {
 
 	SoftExit func()
 	Shutdown func()
+
 	armed     bool
 	idleHits  int
 	idleSince time.Time
@@ -111,13 +113,15 @@ func (w *Watchdog) Tick() {
 		return
 	}
 
-	status := w.probe()
-	// Re-baseline after probe so space/DEL scrollback side effects are not
-	// mistaken for session activity on the next Tick.
+	status := w.probe(snap)
+	// One re-baseline after probe so space/DEL side effects are not mistaken
+	// for session activity on the next Tick.
 	if after, aerr := w.snapshotNow(); aerr == nil {
 		w.tracker.Set(after)
 	}
-	if status == occupied.Occupied || status == occupied.Unknown {
+	// After Ready, Unknown (e.g. mid-probe snapshot glitch) must not block exit.
+	// Only a confirmed Occupied draft holds the session.
+	if status == occupied.Occupied {
 		w.resetHits()
 		return
 	}
@@ -135,9 +139,8 @@ func (w *Watchdog) Tick() {
 	// SoftExit only after N consecutive idle checks AND continuous idle for
 	// Timeout (matches "unchanged and not occupied for N").
 	if !w.softDone && w.idleHits >= SamplesPerCycle && now.Sub(w.idleSince) >= w.Timeout {
-		// Final occupy check before SoftExit so a draft injected during the
-		// last gap can still hold the session.
-		if st := w.probe(); st == occupied.Occupied || st == occupied.Unknown {
+		// Final occupy check: only a confirmed draft holds SoftExit.
+		if st := w.probe(snap); st == occupied.Occupied {
 			if after, aerr := w.snapshotNow(); aerr == nil {
 				w.tracker.Set(after)
 			}
@@ -184,7 +187,7 @@ func (w *Watchdog) snapshotNow() (string, error) {
 	return w.Snapshot()
 }
 
-func (w *Watchdog) probe() occupied.Status {
+func (w *Watchdog) probe(resting string) occupied.Status {
 	if w.ProbeOccupied != nil {
 		return w.ProbeOccupied()
 	}
@@ -192,6 +195,7 @@ func (w *Watchdog) probe() occupied.Status {
 		return occupied.Unknown
 	}
 	return occupied.Probe(occupied.IO{
+		Before:   resting,
 		Snapshot: w.Snapshot,
 		Inject:   w.Inject,
 	})

@@ -69,14 +69,28 @@ func TestWatchdog_occupiedResets(t *testing.T) {
 	}
 }
 
-func TestWatchdog_unknownResets(t *testing.T) {
+func TestWatchdog_unknownAfterReadyCountsIdle(t *testing.T) {
+	// After Ready, Unknown must not block exit (treat as empty).
+	var soft int
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	now := t0
 	w := New(true, Policy{ExitOnIdle: true}, Watchdog{
+		Timeout:       10 * time.Millisecond,
+		Now:           func() time.Time { return now },
 		Snapshot:      func() (string, error) { return "stable", nil },
 		ProbeOccupied: func() occupied.Status { return occupied.Unknown },
+		SoftExit:      func() { soft++ },
 	})
 	w.Tick()
-	if w.IdleHits() != 0 {
-		t.Fatalf("hits=%d want 0 on unknown", w.IdleHits())
+	if w.IdleHits() != 1 {
+		t.Fatalf("hits=%d want 1 when Unknown after Ready", w.IdleHits())
+	}
+	now = t0.Add(5 * time.Millisecond)
+	w.Tick()
+	now = t0.Add(15 * time.Millisecond)
+	w.Tick()
+	if soft != 1 {
+		t.Fatalf("SoftExit=%d want 1", soft)
 	}
 }
 
@@ -96,7 +110,11 @@ func TestWatchdog_finalOccupyCheckHoldsSoftExit(t *testing.T) {
 	var soft int
 	n := 0
 	statuses := []occupied.Status{occupied.Empty, occupied.Empty, occupied.Empty, occupied.Occupied}
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	now := t0
 	w := New(true, Policy{ExitOnIdle: true}, Watchdog{
+		Timeout: 10 * time.Millisecond,
+		Now:     func() time.Time { return now },
 		Snapshot: func() (string, error) { return "stable", nil },
 		ProbeOccupied: func() occupied.Status {
 			st := statuses[n]
@@ -107,9 +125,11 @@ func TestWatchdog_finalOccupyCheckHoldsSoftExit(t *testing.T) {
 		},
 		SoftExit: func() { soft++ },
 	})
-	w.Tick() // hit1, probe empty
-	w.Tick() // hit2, probe empty
-	w.Tick() // hit3, final probe occupied → no SoftExit
+	w.Tick() // hit1
+	now = t0.Add(5 * time.Millisecond)
+	w.Tick() // hit2
+	now = t0.Add(15 * time.Millisecond)
+	w.Tick() // hit3 + final probe occupied → no SoftExit
 	if soft != 0 {
 		t.Fatalf("SoftExit=%d want 0 when final occupy is occupied", soft)
 	}
