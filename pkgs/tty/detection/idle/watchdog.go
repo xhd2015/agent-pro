@@ -14,11 +14,13 @@ const DefaultGrace = 5 * time.Second
 // Watchdog is the injectable keep-alive idle-exit state machine.
 //
 // Each Tick:
-//  1. capture resting snapshot
-//  2. if changed vs last resting → reset hits (start over)
+//  1. capture resting snapshot (pre-space baseline for this tick)
+//  2. if changed vs last resting baseline → reset hits (start over)
 //  3. if not Ready (when set) → reset hits (do not probe yet)
 //  4. else probe occupy (space / compare / DEL), reusing resting snap as before
-//  5. one post-probe re-baseline (inject must not poison "changed")
+//  5. keep resting baseline as the pre-space snap (DEL restores; do not
+//     Set(post-probe) — ephemeral placeholder collapse/restore must not look
+//     like session activity on the next Tick)
 //  6. if occupied → reset hits; Unknown after Ready is treated as empty
 //  7. if QueueLen > 0 → reset hits
 //  8. else count an idle hit; SoftExit after SamplesPerCycle consecutive hits
@@ -114,11 +116,11 @@ func (w *Watchdog) Tick() {
 	}
 
 	status := w.probe(snap)
-	// One re-baseline after probe so space/DEL side effects are not mistaken
-	// for session activity on the next Tick.
-	if after, aerr := w.snapshotNow(); aerr == nil {
-		w.tracker.Set(after)
-	}
+	// Resting baseline stays the pre-space snap (Note already stored it).
+	// Do not Set(post-probe): Codex idle hints collapse during the space probe
+	// and redraw between ticks; locking baseline to the collapsed frame makes
+	// the restored hint look like activity and forever resets idle hits.
+	w.tracker.Set(snap)
 	// After Ready, Unknown (e.g. mid-probe snapshot glitch) must not block exit.
 	// Only a confirmed Occupied draft holds the session.
 	if status == occupied.Occupied {
@@ -141,15 +143,11 @@ func (w *Watchdog) Tick() {
 	if !w.softDone && w.idleHits >= SamplesPerCycle && now.Sub(w.idleSince) >= w.Timeout {
 		// Final occupy check: only a confirmed draft holds SoftExit.
 		if st := w.probe(snap); st == occupied.Occupied {
-			if after, aerr := w.snapshotNow(); aerr == nil {
-				w.tracker.Set(after)
-			}
+			w.tracker.Set(snap)
 			w.resetHits()
 			return
 		}
-		if after, aerr := w.snapshotNow(); aerr == nil {
-			w.tracker.Set(after)
-		}
+		w.tracker.Set(snap)
 		w.softDone = true
 		w.exitAt = now
 		if w.SoftExit != nil {

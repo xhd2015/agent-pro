@@ -25,6 +25,8 @@ const (
 // DetectInputBox classifies live composer occupancy from snapshot text.
 // It uses the last ›/» (Codex) or ❯ (Grok). Empty text or no glyph is unknown.
 // Codex treats " medium · " on the glyph line as empty; Grok ignores that glue.
+// Codex idle hints without footer glue are not string-matched here (copy may
+// change); idle-exit occupancy uses the space probe instead.
 func DetectInputBox(text string) InputBoxStatus {
 	if text == "" {
 		return InputBoxUnknown

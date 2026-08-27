@@ -1,6 +1,7 @@
 package idle
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -150,30 +151,56 @@ func TestWatchdog_notReadyHolds(t *testing.T) {
 	}
 }
 
-func TestWatchdog_probeSideEffectDoesNotReset(t *testing.T) {
-	// Simulate occupy probe mutating the resting snap between ticks; after
-	// re-baseline the next identical post-probe snap must still count as idle.
+func TestWatchdog_preSpaceBaselineIgnoresPostProbeFlicker(t *testing.T) {
+	// Live Codex: space probe collapses "Ask Codex to do anything" to bare ›
+	// (DEL does not restore the hint). Codex redraws the hint before the next
+	// Tick. Resting compare must keep the pre-space baseline so that restore
+	// does not look like session activity.
 	var soft int
-	n := 0
-	snaps := []string{"stable", "stable+probe", "stable+probe", "stable+probe", "stable+probe"}
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	now := t0
+	const resting = "› Ask Codex to do anything\n  gpt-5.6-luna xhigh · ~/ws\n"
+	const collapsed = "›\n  gpt-5.6-luna xhigh · ~/ws\n"
+	var mu sync.Mutex
+	text := resting
 	w := New(true, Policy{ExitOnIdle: true}, Watchdog{
+		Timeout: 10 * time.Millisecond,
+		Now:     func() time.Time { return now },
 		Snapshot: func() (string, error) {
-			s := snaps[n]
-			if n < len(snaps)-1 {
-				n++
-			}
-			return s, nil
+			mu.Lock()
+			defer mu.Unlock()
+			return text, nil
 		},
-		ProbeOccupied: func() occupied.Status { return occupied.Empty },
-		SoftExit:      func() { soft++ },
+		Inject: func(s string) error {
+			mu.Lock()
+			defer mu.Unlock()
+			switch s {
+			case " ":
+				text = collapsed
+			case "\x7f":
+				// Live Codex: DEL leaves bare ›; hint returns later.
+				text = collapsed
+			}
+			return nil
+		},
+		SoftExit: func() { soft++ },
 	})
-	// Tick1: baseline "stable", probe, re-baseline "stable+probe", hit1
-	w.Tick()
-	// Tick2/3: resting "stable+probe" unchanged vs re-baseline → hits 2,3
-	w.Tick()
-	w.Tick()
+	w.Tick() // hit1; baseline = resting (not collapsed)
+	mu.Lock()
+	text = resting // Codex redraws placeholder between ticks
+	mu.Unlock()
+	now = t0.Add(5 * time.Millisecond)
+	w.Tick() // resting vs resting → hit2
+	mu.Lock()
+	text = resting
+	mu.Unlock()
+	now = t0.Add(15 * time.Millisecond)
+	w.Tick() // hit3 + SoftExit
 	if soft != 1 {
-		t.Fatalf("SoftExit=%d want 1 (probe residue must not poison changed)", soft)
+		t.Fatalf("SoftExit=%d want 1 (placeholder restore must not reset)", soft)
+	}
+	if w.IdleHits() < 3 {
+		t.Fatalf("hits=%d want >=3", w.IdleHits())
 	}
 }
 
