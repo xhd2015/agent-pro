@@ -855,12 +855,21 @@ func buildSlackMsg(t *testing.T, d *session.Doctest) (string, error) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 			defer cancel()
-			cmd := exec.CommandContext(ctx, runtime.GOROOT()+"/bin/go", "build", "-C", "cmd", "-o", bin, "./slack-msg")
+			// Build to a temp path then rename so parallel leaves never exec a
+			// partially written binary (Linux ETXTBSY under repo-l2 load).
+			tmpBin := bin + ".building"
+			_ = os.Remove(tmpBin)
+			cmd := exec.CommandContext(ctx, runtime.GOROOT()+"/bin/go", "build", "-C", "cmd", "-o", tmpBin, "./slack-msg")
 			cmd.Dir = repoRoot
 			var stderr bytes.Buffer
 			cmd.Stderr = &stderr
 			if err := cmd.Run(); err != nil {
+				_ = os.Remove(tmpBin)
 				return fmt.Errorf("go build -C cmd ./slack-msg: %w\n%s", err, stderr.String())
+			}
+			if err := os.Rename(tmpBin, bin); err != nil {
+				_ = os.Remove(tmpBin)
+				return fmt.Errorf("install slack-msg binary: %w", err)
 			}
 			if err := os.WriteFile(ready, []byte("ok"), 0o644); err != nil {
 				return err
@@ -1640,6 +1649,35 @@ func waitForAgentLog(path string, wantMin int, timeout time.Duration) ([]string,
 	return lines, fmt.Errorf("timeout waiting for agent log %s (got %d, want %d)", path, len(lines), wantMin)
 }
 
+// safeBuffer is a bytes.Buffer usable concurrently from pipe copy + readiness polls.
+type safeBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *safeBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *safeBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
+func waitForStdoutContains(buf *safeBuffer, needle string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if strings.Contains(buf.String(), needle) {
+			return nil
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	return fmt.Errorf("timeout waiting for %q in listen stdout", needle)
+}
+
 func waitForPosts(posts *[]CapturedPost, wantMin int, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -1944,14 +1982,32 @@ func runDaemon(t *testing.T, d *session.Doctest, req *Request) (*Response, error
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
-	var stdoutBuf, stderrBuf bytes.Buffer
+	var stdoutBuf, stderrBuf safeBuffer
 	done := make(chan struct{})
 	go func() {
-		io.Copy(&stdoutBuf, stdoutPipe)
-		io.Copy(&stderrBuf, stderrPipe)
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() { defer wg.Done(); _, _ = io.Copy(&stdoutBuf, stdoutPipe) }()
+		go func() { defer wg.Done(); _, _ = io.Copy(&stderrBuf, stderrPipe) }()
+		wg.Wait()
 		close(done)
 	}()
-	time.Sleep(500 * time.Millisecond)
+	// Wait for startup banner (auth done) before inject. Fixed 500ms slept under
+	// full repo-l2 parallel load and left agent.log empty (got 0).
+	bannerWait := timeout
+	if bannerWait > 5*time.Second {
+		bannerWait = 5 * time.Second
+	}
+	if bannerWait < 2*time.Second {
+		bannerWait = 2 * time.Second
+	}
+	if err := waitForStdoutContains(&stdoutBuf, "Using config from:", bannerWait); err != nil {
+		_ = cmd.Process.Kill()
+		<-done
+		return nil, fmt.Errorf("%w\nstdout:\n%s\nstderr:\n%s", err, stdoutBuf.String(), stderrBuf.String())
+	}
+	// Socket Mode WS connects after the banner; brief settle under CI load.
+	time.Sleep(250 * time.Millisecond)
 	for i, ev := range req.InjectEvents {
 		if err := injectEvent(sts, ev); err != nil {
 			_ = cmd.Process.Kill()
