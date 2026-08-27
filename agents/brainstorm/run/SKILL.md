@@ -27,9 +27,9 @@ Pick the **first** matching mode:
 
 | Mode | When | Must tell the user |
 |------|------|--------------------|
-| Feature | new capability | data models / storage; test scenarios; how to test |
+| Feature | new capability | core mechanism; data models / storage; test scenarios; how to test |
 | Issue | existing behavior wrong (`fix`, symptom, screenshot, "stays / still / broken") | **First sentence = one-line root cause.** Then the same plan fields as a feature |
-| Pure doc | markdown / comments / skill text only | structural edit; no tests |
+| Pure doc | markdown / comments / skill text only | before → after edit map; no tests |
 | + CLI | designing a command, flag, help, or terminal UX | also **CLI output examples** below |
 | + Output layers | plan changes a produced contract | layer list, underlying → caller (see **Output-change layers**) |
 
@@ -43,23 +43,26 @@ the trigger is gone.
 
 Read-only investigation is required. Lead the reply with one sentence that
 states that root cause, then short evidence (path + why that surface), then
-the plan.
+the plan (same fields as Feature, including **core mechanism** of the fix —
+not a repeat of the root cause).
 
 ## If this is a feature request
 
 Explicitly tell the user:
 
-1. **Data models and storage layout** — what is stored, where, and what is ephemeral
-2. **Test scenarios** and expected output
-3. **How to test** — prefer rerunnable tests
+1. **Core mechanism** — short: the path/control flow the change uses (what
+   runs, what it touches, why that delivers the fix/capability)
+2. **Data models and storage layout** — what is stored, where, and what is ephemeral
+3. **Test scenarios** and expected output
+4. **How to test** — prefer rerunnable tests
 
 Always consider adding tests to verify correctness. If the user approved the
 plan, add running tests to the todo list when you later implement.
 
 ## If this is a pure doc change
 
-No test needed. Analyse the document, propose the structural edit, and explain
-it in detail.
+No test needed. Analyse the document and propose the structural edit as a
+**before → after** map of concrete sites (table or paired bullets).
 
 # Output-change layers
 
@@ -102,6 +105,9 @@ $ mytool sessions list
 
 Every brainstorm reply — feature, issue, pure doc, or CLI — **MUST** end with a
 decisions section. Use a **context-relevant title** (not a fixed phrase).
+
+Number every user-confirmable item **`1.` `2.` `3.` …** — never `A.` `B.` or
+bullets alone for confirmable choices.
 
 Each open decision: one most sound default (bold or clearly marked); one-line
 **why** (project conventions, smallest reversible risk, existing patterns —
