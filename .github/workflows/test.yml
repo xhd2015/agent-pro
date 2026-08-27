@@ -42,31 +42,57 @@ jobs:
             paths: ./cmd/agent-run/tests/...
           # agent-run e2e: auto-shard top-level dirs under cmd/agent-run/tests
           # (script/ci/doctest-shard-paths.sh) so new packages are never skipped.
-          - name: agent-run-e2e (0/5)
-            label: e2e
-            shard_root: cmd/agent-run/tests
-            shard: 0
-            shards: 5
-          - name: agent-run-e2e (1/5)
+          # Shard index is 1-based (1..N).
+          - name: agent-run-e2e (1/10)
             label: e2e
             shard_root: cmd/agent-run/tests
             shard: 1
-            shards: 5
-          - name: agent-run-e2e (2/5)
+            shards: 10
+          - name: agent-run-e2e (2/10)
             label: e2e
             shard_root: cmd/agent-run/tests
             shard: 2
-            shards: 5
-          - name: agent-run-e2e (3/5)
+            shards: 10
+          - name: agent-run-e2e (3/10)
             label: e2e
             shard_root: cmd/agent-run/tests
             shard: 3
-            shards: 5
-          - name: agent-run-e2e (4/5)
+            shards: 10
+          - name: agent-run-e2e (4/10)
             label: e2e
             shard_root: cmd/agent-run/tests
             shard: 4
-            shards: 5
+            shards: 10
+          - name: agent-run-e2e (5/10)
+            label: e2e
+            shard_root: cmd/agent-run/tests
+            shard: 5
+            shards: 10
+          - name: agent-run-e2e (6/10)
+            label: e2e
+            shard_root: cmd/agent-run/tests
+            shard: 6
+            shards: 10
+          - name: agent-run-e2e (7/10)
+            label: e2e
+            shard_root: cmd/agent-run/tests
+            shard: 7
+            shards: 10
+          - name: agent-run-e2e (8/10)
+            label: e2e
+            shard_root: cmd/agent-run/tests
+            shard: 8
+            shards: 10
+          - name: agent-run-e2e (9/10)
+            label: e2e
+            shard_root: cmd/agent-run/tests
+            shard: 9
+            shards: 10
+          - name: agent-run-e2e (10/10)
+            label: e2e
+            shard_root: cmd/agent-run/tests
+            shard: 10
+            shards: 10
           - name: pkgs-l2
             label: "!e2e"
             paths: ./pkgs/...

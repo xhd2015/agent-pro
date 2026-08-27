@@ -7,7 +7,8 @@
 # Prints space-separated paths like:
 #   ./cmd/agent-run/tests/foo/... ./cmd/agent-run/tests/bar/...
 #
-# Sharding: sort child directory names, keep index i where i % N == I.
+# Sharding: sort child directory names, keep index i where
+# (i % N) + 1 == I. Shard I is 1-based in 1..N.
 # New packages under ROOT are included automatically.
 #
 # Exit 0 with empty stdout if this shard has no dirs (CI should skip doctest).
@@ -19,7 +20,7 @@ shard=""
 shards=""
 
 usage() {
-  echo "usage: $0 --root DIR --shard I --shards N" >&2
+  echo "usage: $0 --root DIR --shard I --shards N   (I is 1-based, 1..N)" >&2
   exit 2
 }
 
@@ -50,12 +51,12 @@ done
 if [[ -z "$root" || -z "$shard" || -z "$shards" ]]; then
   usage
 fi
-if ! [[ "$shard" =~ ^[0-9]+$ && "$shards" =~ ^[0-9]+$ && "$shards" -gt 0 ]]; then
-  echo "shard and shards must be non-negative integers; shards > 0" >&2
+if ! [[ "$shard" =~ ^[0-9]+$ && "$shards" =~ ^[0-9]+$ && "$shards" -gt 0 && "$shard" -gt 0 ]]; then
+  echo "shard and shards must be positive integers; shard in 1..shards" >&2
   exit 2
 fi
-if [[ "$shard" -ge "$shards" ]]; then
-  echo "shard ($shard) must be < shards ($shards)" >&2
+if [[ "$shard" -gt "$shards" ]]; then
+  echo "shard ($shard) must be <= shards ($shards)" >&2
   exit 2
 fi
 
@@ -76,7 +77,7 @@ mapfile -t dirs < <(
 
 paths=()
 for i in "${!dirs[@]}"; do
-  if (( i % shards == shard )); then
+  if (( (i % shards) + 1 == shard )); then
     paths+=("./${root}/${dirs[$i]}/...")
   fi
 done
