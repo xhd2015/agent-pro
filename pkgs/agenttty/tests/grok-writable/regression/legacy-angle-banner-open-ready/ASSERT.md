@@ -1,11 +1,11 @@
 ## Expected
 
 - Fixture contains legacy `Grok ›` (or `Grok` + `›`) prompt chrome.
-- Writable: `ready=true`, `state=idle`.
+- Writable is **not** idle via section parse: `ready=false`, `state=unknown`
+  (legacy `Grok ›` / `response:` paths removed; only boxed composer sections idle).
 - `banner_detected_legacy=true`.
-- `open_ready=true`.
-- Screen class may be `idle` (preferred) or another non-empty class; if Classify returns a
-  class, it must not be `empty` or `modal`.
+- `open_ready=true` (compat open wait still accepts legacy banner markers).
+- Screen class is not `empty` or `modal` (typically `unknown`).
 
 ## Exit Code
 
@@ -40,7 +40,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 		t.Fatalf("fixture must contain legacy Grok › chrome, got %q", s)
 	}
 
-	assertWritable(t, "legacy angle", resp.Status, true, "idle", "")
+	assertWritable(t, "legacy angle", resp.Status, false, "unknown", "could not detect input prompt in terminal output")
 
 	gotLegacy := agenttty.BannerDetected(text, "grok", grokLegacyBannerMarkers)
 	gotOpen := agenttty.OpenReady(text)

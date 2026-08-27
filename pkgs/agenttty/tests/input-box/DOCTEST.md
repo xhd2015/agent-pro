@@ -70,6 +70,7 @@ pkgs/agenttty/tests/input-box/
 ├── grok/                                     # last live glyph is ❯ (conservative)
 │   ├── empty-padding/
 │   ├── boxed-empty/                          # │ ❯ … │ right border is chrome
+│   ├── build-anything-placeholder/           # idle placeholder Build anything → empty
 │   ├── occupied-text/
 │   └── footer-glue-ignored/                  # medium · on ❯ line still occupied
 ├── sendable-independent/                     # occupancy ≠ sendable

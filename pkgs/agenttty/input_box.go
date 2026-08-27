@@ -37,7 +37,8 @@ func DetectInputBox(text string) InputBoxStatus {
 	line := lineAt(plain, idx)
 	remainder := remainderAfterGlyph(plain, idx, glyph)
 	if family == "grok" {
-		if grokRemainderUserText(remainder) == "" {
+		user := grokRemainderUserText(remainder)
+		if user == "" || isGrokComposerPlaceholder(user) {
 			return InputBoxEmpty
 		}
 		return InputBoxOccupied
@@ -93,6 +94,16 @@ func grokRemainderUserText(remainder string) string {
 	s := strings.TrimSpace(remainder)
 	s = strings.TrimRightFunc(s, grokComposerChromeRune)
 	return strings.TrimSpace(s)
+}
+
+// isGrokComposerPlaceholder reports idle chrome hints shown when the box is empty.
+func isGrokComposerPlaceholder(user string) bool {
+	switch strings.ToLower(strings.TrimSpace(user)) {
+	case "build anything", "add a follow-up":
+		return true
+	default:
+		return false
+	}
 }
 
 func grokComposerChromeRune(r rune) bool {

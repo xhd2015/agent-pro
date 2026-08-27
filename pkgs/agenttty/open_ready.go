@@ -42,26 +42,11 @@ func ClassifyGrokScreen(scrollback []byte) string {
 	}
 
 	if hasModernGrokChrome(plain, lower) {
-		if grokBusyInPromptRegion(plain) || modernBusyInScreen(plain, lower) {
-			return "busy"
-		}
-		return "idle"
-	}
-
-	// Legacy Grok › / response-style chrome.
-	if strings.Contains(plain, "Grok ›") || strings.Contains(plain, "Grok \u203a") ||
-		(strings.Contains(lower, "grok") && strings.Contains(plain, "›")) ||
-		strings.Contains(plain, "Grok >") {
-		if grokBusyInPromptRegion(plain) {
-			return "busy"
-		}
-		return "idle"
-	}
-
-	// Generic prompt with busy / idle signals (historical fixtures).
-	if hasPromptMarker(plain) {
-		if grokBusyInPromptRegion(plain) {
-			return "busy"
+		if busy, ok := judgeGrokFrameBusy(ParseGrokFrame(plain)); ok {
+			if busy {
+				return "busy"
+			}
+			return "idle"
 		}
 		return "idle"
 	}
@@ -99,17 +84,4 @@ func hasModernGrokChrome(plain, lower string) bool {
 		strings.Contains(plain, "always-approve")
 }
 
-// modernBusyInScreen detects modern busy chrome (Thinking… / Tasks) near the
-// prompt region without relying on full-scrollback "tasks" false positives.
-func modernBusyInScreen(plain, lower string) bool {
-	region := strings.ToLower(grokPromptRegion(plain))
-	if strings.Contains(region, "thinking") {
-		return true
-	}
-	// Tasks panel often sits above the input box while the agent is working.
-	if strings.Contains(region, "tasks") && strings.Contains(region, "thinking") {
-		return true
-	}
-	// Fallback: spinner-style "Thinking…" anywhere with modern chrome present.
-	return strings.Contains(lower, "thinking…") || strings.Contains(lower, "thinking...")
-}
+

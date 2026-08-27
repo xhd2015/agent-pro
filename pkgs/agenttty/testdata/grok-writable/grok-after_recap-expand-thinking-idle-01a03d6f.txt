@@ -1,0 +1,32 @@
+ ~/seatalk-local-bot                                                                                                                                 202K / 300K
+    ◆ Thought for 5.3s
+ ❙  ◆ Run Reply ship complete summary on SeaTalk
+    ◆ Thought for 0.0s
+
+    Shipped to test/id                                                                                                                                 6:48 PM
+
+    ┌--------┬-----------┬-------------------------------------------------------------------------------------------------------------┐
+    │ Role   │ Tag       │ Contents                                                                                                     │
+    ├--------┼-----------┼--------------------------------------------------------------------------------------------------------------┤
+    │ worker │ v1.1.113  │ Bounded blame (StartLine/EndLine) + NoUpdate                                                                 │
+    ├--------┼-----------┼--------------------------------------------------------------------------------------------------------------┤
+    │ server │ v1.0.1035 │ FilterForGoList (strips xgo flags before go list) + /api/coverage/incrementalUncovered + pin worker@v1.1.113 │
+    └--------┴----------┴--------------------------------------------------------------------------------------------------------------┘
+
+    Dual deploy --wait: ok. Boot-smoke passed.
+
+    Also kicked soft refresh (async) for credit-pricing reports 151303, 150782, 151324 so Casement Quality can clear the -trap-stdlib poison afterthey finish.
+
+    Not shipped: frontend (no local dirty; branch marcus/2026-08-26-fix-report-progress-state already on remote), shared (clean). Say if you wantthat frontend branch deployed.
+
+    Worked for 14m52s                                                                                                                         stop  [hooks: 2]
+
+ ┃  ◆ Recap
+ ┃
+ ┃  We shipped the `-trap-stdlib` fix and related work: server `v1.0.1035` (`FilterForGoList` + `incrementalUncovered`) and worker `v1.1.113` (ranged
+ ┃  blame), dual-deployed to test/id, then soft-refreshed credit-pricing reports 151303/150782/151324.                                                          █
+                                                                                                                                                                █
+ ╭-------------------------------------------------------------------------------------------------------------------------------------------------------------╮
+ │ ❯ Build anything                                                                                                                                            │
+ ╰------------------------------------------------------------------------------------------------------------------------- Grok 4.5 (high) · always-approve -╯╯
+ Ctrl+e:expand thinking  │  Space:prompt  │  Ctrl+.:shortcuts

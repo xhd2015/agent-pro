@@ -1,16 +1,17 @@
 # Scenario
 
-**Feature**: legacy `Grok ›` banner frames remain open-ready (backward compatibility)
+**Feature**: legacy `Grok ›` remains open-ready via banner markers; writable is section-only
 
 ```
 snapshot: "Grok › prompt" + "Response: hi"
-  -> CheckWritable: ready=true, state=idle
+  -> CheckWritable: ready=false, state=unknown (no boxed composer section)
   -> BannerDetected(legacy) = true
   -> OpenReady = true
 ```
 
 Fake TUI and historical fixtures use `Grok ›` / `GROK_TTY_BANNER`. Open-ready must keep these
-paths green when implementer switches `waitForBannerRemote` to `OpenReady`.
+paths green for `waitForBannerRemote` / `OpenReady`. Writable idle no longer treats bare `Grok ›`
+as a prompt.
 
 ## Preconditions
 
@@ -22,7 +23,7 @@ paths green when implementer switches `waitForBannerRemote` to `OpenReady`.
 
 ## Context
 
-- L1: documents that legacy markers still count as open-ready (compat, not a regression of markers).
+- L1: documents that legacy markers still count as open-ready (compat), while writable is section-based only.
 
 ```go
 import (

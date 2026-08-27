@@ -12,6 +12,7 @@ load single regression fixture
 
 - Regression fixtures live in shared `pkgs/agenttty/testdata/grok-writable/`.
 - `git-working-tree-idle-prompt` expects post-fix behavior (`ready=true`); RED on current code.
+- `recap-expand-thinking-idle` expects post-turn idle; RED while `expand thinking` matches busy.
 - Modern open-ready leaves (M1–M3) and enriched modal/empty/legacy leaves call exported
   open-ready APIs from Assert (RED until implementer).
 

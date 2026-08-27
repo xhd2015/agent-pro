@@ -1,0 +1,21 @@
+ ~/ws                                                                                          4.7K / 256K
+
+     ❯ list files with ls -la                                        6:33 AM
+
+
+
+
+
+
+
+
+
+    ⠼ Waiting for response… 0.4s                            0.4s ⇣4.68k [stop]
+
+  Tight on space? Try /compact-mode
+
+  ╭--------------------------------------------------------------------------╮
+  │ ❯                                                                        │
+  ╰-------------------------------------------- Mock Model · always-approve -╯
+
+  Shift+Tab:mode  │  Esc:cancel  │  Ctrl+.:shortcuts

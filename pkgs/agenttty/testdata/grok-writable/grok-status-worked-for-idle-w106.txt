@@ -1,0 +1,22 @@
+ ~/ws                                                                                          5.4K / 256K
+
+
+     ❯ list files with ls -la                                        6:33 AM
+
+
+     ◆ user_prompt_submit  [hooks: 1]
+
+     Done listing; CAPTURE_DONE printed.                             6:33 AM
+
+     Worked for 5.7s                                        stop  [hooks: 1]
+
+
+
+
+
+
+  ╭--------------------------------------------------------------------------╮
+  │ ❯                                                                        │
+  ╰-------------------------------------------- Mock Model · always-approve -╯
+
+  Shift+Tab:mode  │  Ctrl+.:shortcuts

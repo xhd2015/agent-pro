@@ -1,6 +1,6 @@
 ## Expected
 
-- `Run` returns one `FixtureResult` per `expectations.jsonl` row (currently 23 fixtures, including 3 modern open-ready frames).
+- `Run` returns one `FixtureResult` per `expectations.jsonl` row (currently 33 fixtures (includes w106 + live wide status chrome + command-still-running / running-tool harvest).
 - Every result matches `ready`, `state`, and `reason` (when manifest specifies `reason`).
 - Optional manifest fields (`banner_detected_legacy`, `open_ready`, `screen_class`) are **ignored** by this leaf (F1 writable-only gate).
 - No fixture file is missing from disk.

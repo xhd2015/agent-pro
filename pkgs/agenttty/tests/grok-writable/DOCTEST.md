@@ -34,9 +34,21 @@ snapshot text fixtures under `pkgs/agenttty/testdata/grok-writable/`.
 
 - Empty snapshot → writable `state=unknown`, `reason=no terminal output`; `open_ready=false`,
   `screen_class=empty`; legacy banner false.
-- Fast-path ready: `response:` or `submitted:` → writable `state=idle`, `ready=true`.
-- Prompt visible without busy signals in **prompt region** → writable `state=idle`, `ready=true`.
-- `thinking` / active-agent patterns in prompt tail → writable `state=busy`, `ready=false`.
+- Section judge (`ParseGrokFrame` + `judgeGrokFrameBusy`): status/running/live-thinking → busy;
+  `WorkedFor`+bare `stop` or boxed composer without busy sections → idle.
+- Legacy `Grok ›` / `response:` / prompt-region substrings are **not** writable idle signals.
+- Stateful frame parse (Header → ActivityStrip? → Body → WorkedFor? → Recap? →
+  RunningIndicator? → StatusAboveComposer? → Tip? → Composer → HelpFooter) is the
+  sole writable busy/idle path when decisive.
+  Tip covers chrome like `Tight on space? Try /compact-mode` (above the input box).
+  Boxed `│ ❯` / `╭` opens Composer; transcript `❯ prompt` stays in Body.
+- Busy/idle when decisive:
+  - StatusAboveComposer (Waiting / Responding / Thinking… / tool spinner) → busy
+  - RunningIndicator → busy
+  - live `Thinking…` / `thinking about` in ActivityStrip/Body before settled WorkedFor → busy
+  - `Worked for <dur> … stop` with no busy status/running → idle
+  - boxed Composer with no busy sections → idle
+- HelpFooter chrome (e.g. `Ctrl+e:expand thinking`) is not a busy signal.
 - Full-scrollback substring `working` matching `git working tree status` while prompt idle
   is a **false positive** (session-18 bug); correct behavior is `ready=true`.
 - Banner without prompt (`GROK_TTY_BANNER`) → writable `state=loading`; still open-ready via legacy.
@@ -49,7 +61,8 @@ snapshot text fixtures under `pkgs/agenttty/testdata/grok-writable/`.
 - Project-directory confirmation modal (`Run Grok Build in a project directory?`,
   `Enter:submit`, radio options) → writable `ready=false`, **not** `idle`; legacy banner
   **true** (FP on `"grok build"`); **`open_ready=false`**, `screen_class=modal`.
-- Legacy `Grok ›` / `GROK_TTY_BANNER` frames → legacy banner true; `open_ready=true`.
+- Legacy `Grok ›` / `GROK_TTY_BANNER` frames → legacy banner true; `open_ready=true`;
+  writable `unknown` (section-only; no boxed composer).
 
 ## Version
 
@@ -73,7 +86,8 @@ pkgs/agenttty/tests/grok-writable/
 │   ├── modern-starting-session-chrome/      # M1: modern starting open-ready (option A writable)
 │   ├── modern-busy-thinking-tasks/          # M2: modern busy open-ready, not sendable
 │   ├── modern-idle-input-post-turn/         # M3: modern idle open-ready + sendable
-│   └── legacy-angle-banner-open-ready/      # L1: Grok › legacy banner still open-ready
+│   ├── legacy-angle-banner-open-ready/      # L1: Grok › legacy banner still open-ready
+│   └── recap-expand-thinking-idle/          # F6: expand thinking footer false-busy + Build anything placeholder
 └── probe-export/
     ├── SETUP.md
     └── capture-dir-round-trip/              # F5: -export-fixtures from mini capture
@@ -99,7 +113,7 @@ Parameter ranking (most → least significant):
 | 6 | `regression/modern-starting-session-chrome` | Modern starting chrome: option A idle/ready; open_ready true; class starting (M1, RED on OpenReady API) |
 | 7 | `regression/modern-busy-thinking-tasks` | Modern busy chrome: writable busy; open_ready true; class busy (M2, RED) |
 | 8 | `regression/modern-idle-input-post-turn` | Modern idle post-turn: ready idle; open_ready true; class idle (M3, RED) |
-| 9 | `regression/legacy-angle-banner-open-ready` | Legacy `Grok ›` → banner_legacy true; open_ready true (L1, compat) |
+| 9 | `regression/legacy-angle-banner-open-ready` | Legacy `Grok ›` → banner_legacy true; open_ready true; writable unknown (L1) |
 | 10 | `probe-export/capture-dir-round-trip` | Probe `-export-fixtures` from mini capture produces parseable manifest (F5) |
 
 ## How to Run

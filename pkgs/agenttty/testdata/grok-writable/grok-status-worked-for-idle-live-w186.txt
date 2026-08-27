@@ -1,0 +1,23 @@
+    ├───────────────────────────────────────────────────────┼──────────┼─────────┤                                                                                                        
+    │ 10.91.161.59 / .181.76 / .224.46                      │ 0        │ yes     │                                                                                                        
+    └───────────────────────────────────────────────────────┴──────────┴─────────┘                                                                                                        
+                                                                                                                                                                                          
+    • ring_size=10 · sum=53 · min=0 · max=27 · skew≈5.1                                                                                                                                   
+    • Hot spot: .167.201 holds about half the fleet’s in-flight jobs                                                                                                                      
+                                                                                                                                                                                          
+    Mem admit (worker capacity)                                                                                                                                                           
+                                                                                                                                                                                          
+    • All 10 reachable, may_oom_count=0, max_pct=29.8% (also on .167.201, ~4.8 GiB / 16 GiB)                                                                                              
+    • No cgroup danger zone despite the inflight skew                                                                                                                                     
+                                                                                                                                                                                          
+    Worked for 34s                                                                                                                                                     stop  [hooks: 2]   
+                                                                                                                                                                                          
+ ┃  ◆ Recap                                                                                                                                                                               
+ ┃                                                                                                                                                                                        
+ ┃  We shipped live worker mem capacity observe: server `GET /api/info/workerCapacity` fans out to workers, `spl codelens worker capacity` prints aligned cgroup/%/may_oom, dual-         
+ ┃  deployed test/id (`v1.1.111`/`v1.0.1031`), and last pressure check showed skew with calm mem.                                                                                         
+                                                                                                                                                                                         █
+ ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮ 
+ │ ❯                                                                                                                                                                                    │ 
+ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── Grok 4.5 (high) · always-approve ─╯ 
+ Shift+Tab:mode  │  Ctrl+.:shortcuts

@@ -1,23 +1,33 @@
-{"file":"grok-after_git-idle-false-positive-session18-synth.txt","ready":true,"source":"session-18-synth","state":"idle","tags":["regression","session-18","false-positive","idle"]}
-{"file":"grok-after_git-idle-prompt-8a04c6de.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_git","idle"]}
-{"file":"grok-after_hello-idle-prompt-37ff685b.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_hello","idle"]}
-{"file":"grok-after_hello-idle-prompt-540b9e73.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_hello","idle"]}
-{"file":"grok-after_ls-idle-prompt-0abef368.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_ls","idle"]}
-{"file":"grok-after_ls-idle-prompt-0dc4eca4.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_ls","idle"]}
-{"file":"grok-after_ls-idle-prompt-3c646df9.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_ls","idle"]}
-{"file":"grok-after_ls-idle-prompt-6fc33fa4.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_ls","idle"]}
-{"file":"grok-after_ls-idle-prompt-a3646cc8.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_ls","idle"]}
-{"file":"grok-after_ls-idle-prompt-b5943e39.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_ls","idle"]}
-{"file":"grok-after_ls-idle-prompt-c40753a0.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_ls","idle"]}
-{"file":"grok-after_ls-idle-prompt-d00a92d2.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_ls","idle"]}
-{"file":"grok-after_ls-idle-prompt-d7b44d57.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_ls","idle"]}
-{"file":"grok-after_ls-idle-prompt-f82b4286.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_ls","idle"]}
-{"file":"grok-after_recap-idle-prompt-e1f51a36.txt","ready":true,"source":"seed","state":"idle","tags":["probe","after_recap","idle"]}
-{"file":"grok-boot-unknown-empty-e3b0c442.txt","ready":false,"reason":"no terminal output","source":"probe","state":"unknown","tags":["boot","empty","unknown"]}
-{"file":"grok-regression-busy-thinking-prompt-tail.txt","ready":false,"reason":"agent still responding","source":"writable_test","state":"busy","tags":["regression","busy","thinking"]}
-{"file":"grok-regression-idle-heavy-prompt-post-turn.txt","ready":true,"source":"writable_test","state":"idle","tags":["regression","idle","heavy-prompt"]}
-{"file":"grok-regression-idle-legacy-angle-response.txt","ready":true,"source":"writable_test","state":"idle","tags":["regression","idle","legacy"]}
-{"file":"grok-workspace-project-directory-confirm.txt","ready":false,"reason":"could not detect input prompt in terminal output","source":"smoke-/tmp-project-directory-confirm","state":"unknown","tags":["modal","workspace-confirm","regression"],"banner_detected_legacy":true,"open_ready":false,"screen_class":"modal"}
-{"file":"grok-modern-starting-session-chrome.txt","ready":true,"state":"idle","tags":["modern","starting","seatalk","open-ready"],"source":"script/debug/grok-screen-snapshots/02-early-tui-chrome-or-input.txt","banner_detected_legacy":false,"open_ready":true,"screen_class":"starting"}
-{"file":"grok-modern-busy-thinking-tasks.txt","ready":false,"state":"busy","reason":"agent still responding","tags":["modern","busy","seatalk","open-ready"],"source":"script/debug/grok-screen-snapshots/03-busy-working.txt","banner_detected_legacy":false,"open_ready":true,"screen_class":"busy"}
-{"file":"grok-modern-idle-input-post-turn.txt","ready":true,"state":"idle","tags":["modern","idle","seatalk","open-ready"],"source":"script/debug/grok-screen-snapshots/04-idle-input-ready.txt","banner_detected_legacy":false,"open_ready":true,"screen_class":"idle"}
+{"file": "grok-after_git-idle-false-positive-session18-synth.txt", "ready": true, "source": "session-18-synth", "state": "idle", "tags": ["regression", "session-18", "false-positive", "idle"]}
+{"file": "grok-after_git-idle-prompt-8a04c6de.txt", "ready": true, "source": "seed", "state": "idle", "tags": ["probe", "after_git", "idle"]}
+{"file": "grok-after_hello-idle-prompt-37ff685b.txt", "ready": true, "source": "seed", "state": "idle", "tags": ["probe", "after_hello", "idle"]}
+{"file": "grok-after_hello-idle-prompt-540b9e73.txt", "ready": true, "source": "seed", "state": "idle", "tags": ["probe", "after_hello", "idle"]}
+{"file": "grok-after_ls-idle-prompt-0abef368.txt", "ready": true, "source": "seed", "state": "idle", "tags": ["probe", "after_ls", "idle"]}
+{"file": "grok-after_ls-idle-prompt-0dc4eca4.txt", "ready": true, "source": "seed", "state": "idle", "tags": ["probe", "after_ls", "idle"]}
+{"file": "grok-after_ls-idle-prompt-3c646df9.txt", "ready": true, "source": "seed", "state": "idle", "tags": ["probe", "after_ls", "idle"]}
+{"file": "grok-after_ls-idle-prompt-6fc33fa4.txt", "ready": true, "source": "seed", "state": "idle", "tags": ["probe", "after_ls", "idle"]}
+{"file": "grok-after_ls-idle-prompt-a3646cc8.txt", "ready": true, "source": "seed", "state": "idle", "tags": ["probe", "after_ls", "idle"]}
+{"file": "grok-after_ls-idle-prompt-b5943e39.txt", "ready": true, "source": "seed", "state": "idle", "tags": ["probe", "after_ls", "idle"]}
+{"file": "grok-after_ls-idle-prompt-c40753a0.txt", "ready": true, "source": "seed", "state": "idle", "tags": ["probe", "after_ls", "idle"]}
+{"file": "grok-after_ls-idle-prompt-d00a92d2.txt", "ready": true, "source": "seed", "state": "idle", "tags": ["probe", "after_ls", "idle"]}
+{"file": "grok-after_ls-idle-prompt-d7b44d57.txt", "ready": true, "source": "seed", "state": "idle", "tags": ["probe", "after_ls", "idle"]}
+{"file": "grok-after_ls-idle-prompt-f82b4286.txt", "ready": true, "source": "seed", "state": "idle", "tags": ["probe", "after_ls", "idle"]}
+{"file": "grok-after_recap-idle-prompt-e1f51a36.txt", "ready": true, "source": "seed", "state": "idle", "tags": ["probe", "after_recap", "idle"]}
+{"file": "grok-boot-unknown-empty-e3b0c442.txt", "ready": false, "reason": "no terminal output", "source": "probe", "state": "unknown", "tags": ["boot", "empty", "unknown"]}
+{"file": "grok-regression-busy-thinking-prompt-tail.txt", "ready": false, "reason": "agent still responding", "source": "writable_test", "state": "busy", "tags": ["regression", "busy", "thinking"]}
+{"file": "grok-regression-idle-heavy-prompt-post-turn.txt", "ready": true, "source": "writable_test", "state": "idle", "tags": ["regression", "idle", "heavy-prompt"]}
+{"file": "grok-regression-idle-legacy-angle-response.txt", "ready": false, "source": "writable_test", "state": "unknown", "tags": ["regression", "idle", "legacy", "section-only"], "reason": "could not detect input prompt in terminal output"}
+{"file": "grok-workspace-project-directory-confirm.txt", "ready": false, "reason": "could not detect input prompt in terminal output", "source": "smoke-/tmp-project-directory-confirm", "state": "unknown", "tags": ["modal", "workspace-confirm", "regression"], "banner_detected_legacy": true, "open_ready": false, "screen_class": "modal"}
+{"file": "grok-modern-starting-session-chrome.txt", "ready": true, "state": "idle", "tags": ["modern", "starting", "seatalk", "open-ready"], "source": "script/debug/grok-screen-snapshots/02-early-tui-chrome-or-input.txt", "banner_detected_legacy": false, "open_ready": true, "screen_class": "starting"}
+{"file": "grok-modern-busy-thinking-tasks.txt", "ready": false, "state": "busy", "reason": "agent still responding", "tags": ["modern", "busy", "seatalk", "open-ready"], "source": "script/debug/grok-screen-snapshots/03-busy-working.txt", "banner_detected_legacy": false, "open_ready": true, "screen_class": "busy"}
+{"file": "grok-modern-idle-input-post-turn.txt", "ready": true, "state": "idle", "tags": ["modern", "idle", "seatalk", "open-ready"], "source": "script/debug/grok-screen-snapshots/04-idle-input-ready.txt", "banner_detected_legacy": false, "open_ready": true, "screen_class": "idle"}
+{"file": "grok-after_recap-expand-thinking-idle-01a03d6f.txt", "ready": true, "state": "idle", "tags": ["regression", "idle", "recap", "expand-thinking", "placeholder", "false-busy"], "source": "kck grok snapshot 01a03d6f-c449-7bd0-9305-d41474fd1940", "banner_detected_legacy": false, "open_ready": true, "screen_class": "idle"}
+{"file": "grok-status-waiting-for-response-busy-w106.txt", "ready": false, "state": "busy", "reason": "agent still responding", "tags": ["regression", "busy", "status-above-composer", "waiting", "bracket-stop", "captured", "w106", "small-screen"], "source": "llm-mock-run-grok+tty-watch snapshot experiment-solution-grok-status-fixtures-3135/poll-02", "screen_class": "busy"}
+{"file": "grok-status-responding-busy-w106.txt", "ready": false, "state": "busy", "reason": "agent still responding", "tags": ["regression", "busy", "status-above-composer", "responding", "bracket-stop", "captured", "w106", "small-screen"], "source": "llm-mock-run-grok+tty-watch snapshot experiment-solution-grok-status-fixtures-3135/poll-04", "screen_class": "busy"}
+{"file": "grok-status-worked-for-idle-w106.txt", "ready": true, "state": "idle", "tags": ["regression", "idle", "worked-for", "bare-stop", "captured", "w106", "small-screen"], "source": "llm-mock-run-grok+tty-watch snapshot experiment-solution-grok-status-fixtures-3135/poll-05", "screen_class": "idle"}
+{"file": "grok-status-waiting-for-response-busy-live-w185.txt", "ready": false, "state": "busy", "tags": ["regression", "captured", "live-kck", "wide-screen", "w185"], "source": "kck grok snapshot 01a02283-4533-79f0-aaf7-40529723d826", "reason": "agent still responding", "screen_class": "busy"}
+{"file": "grok-status-thinking-busy-live-w188.txt", "ready": false, "state": "busy", "tags": ["regression", "captured", "live-kck", "wide-screen", "w188"], "source": "kck grok snapshot 01a040d9-cd0c-7301-be61-1b3d885464d9", "reason": "agent still responding", "screen_class": "busy"}
+{"file": "grok-status-worked-for-idle-live-w186.txt", "ready": true, "state": "idle", "tags": ["regression", "captured", "live-kck", "wide-screen", "w186"], "source": "kck grok snapshot 01a02dcc-698a-7380-a62e-b7adf6982edf", "screen_class": "idle"}
+{"file": "grok-status-command-still-running-busy-live-w160.txt", "ready": false, "state": "busy", "reason": "agent still responding", "tags": ["regression", "captured", "live-kck", "wide-screen", "w160", "command-still-running", "running-indicator"], "source": "kck grok snapshot 01a03dad-5474-7471-9a56-081ab68f1908", "screen_class": "busy"}
+{"file": "grok-status-waiting-for-response-busy-live-w167.txt", "ready": false, "state": "busy", "reason": "agent still responding", "tags": ["regression", "captured", "live-kck", "wide-screen", "w167", "waiting", "bracket-stop", "expand-thinking", "status-above-composer"], "source": "kck grok snapshot 01a040e2-39b9-7520-b155-4bf5887dd647 (agent-run)", "screen_class": "busy"}
+{"file": "grok-status-running-tool-busy-live-w187.txt", "ready": false, "state": "busy", "reason": "agent still responding", "tags": ["regression", "captured", "live-kck", "wide-screen", "w187", "running-tool", "send-to-bg", "status-above-composer"], "source": "kck grok snapshot 01a040fb-7ef7-7a91-a79f-9d1c3b43cb0a", "screen_class": "busy"}

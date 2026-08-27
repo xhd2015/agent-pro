@@ -54,6 +54,7 @@ const (
 	fixtureModernBusy                      = "grok-modern-busy-thinking-tasks.txt"
 	fixtureModernIdle                      = "grok-modern-idle-input-post-turn.txt"
 	fixtureLegacyAngleResponse             = "grok-regression-idle-legacy-angle-response.txt"
+	fixtureRecapExpandThinkingIdle         = "grok-after_recap-expand-thinking-idle-01a03d6f.txt"
 )
 
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {

@@ -28,6 +28,8 @@ pkgs/agenttty/testdata/grok-writable/
 
 F1 `all-expectations-match` asserts only `ready`/`state`/`reason`. Optional open-ready fields
 document desired open-lifecycle behavior and are enforced by regression leaves.
+Writable idle/busy for modern chrome is section-based (`ParseGrokFrame` /
+`judgeGrokFrameBusy`); legacy `Grok ›` / prompt-region substrings are not used.
 
 Naming convention (probe export):
 
@@ -102,3 +104,22 @@ go test ./pkgs/agenttty/ -run TestCheckGrokWritable -v
   - `grok-modern-busy-thinking-tasks.txt` ← `03-busy-working.txt`
   - `grok-modern-idle-input-post-turn.txt` ← `04-idle-input-ready.txt`
   Writable option A recorded as-is; open-ready true for starting/busy/idle (implementer)
+- **Post-turn Recap + `Ctrl+e:expand thinking` footer** —
+  `grok-after_recap-expand-thinking-idle-01a03d6f.txt` (`kck grok snapshot`
+  `01a03d6f-…`; `Worked for` + Recap + placeholder `Build anything`). Desired
+  `ready=true`/`idle`.
+- **Status chrome fixtures (captured)**:
+  - Small (`w106`, llm-mock-run-grok + tty-watch):
+    - `grok-status-waiting-for-response-busy-w106.txt`
+    - `grok-status-responding-busy-w106.txt`
+    - `grok-status-worked-for-idle-w106.txt`
+  - Wide live (`kck grok snapshot`, ~w160–w188 vs baseline w175):
+    - `grok-status-waiting-for-response-busy-live-w185.txt`
+    - `grok-status-waiting-for-response-busy-live-w167.txt` (expand-thinking box above Waiting + `[stop]`)
+    - `grok-status-thinking-busy-live-w188.txt`
+    - `grok-status-worked-for-idle-live-w186.txt`
+    - `grok-status-command-still-running-busy-live-w160.txt` (`◎ N command still running · send a message to interrupt`)
+    - `grok-status-running-tool-busy-live-w187.txt` (spinner + tool title + `Ctrl+b:send to bg`; live tool-run chrome)
+  Desired: waiting/thinking/responding/running-tool → `status_above_composer` → busy; command-still-running → `running_indicator` → busy;
+  worked-for → idle (bare `stop`). StatusAboveComposer beats an earlier WorkedFor in the same frame.
+  Literal `Running command` chrome still not seen in this harvest; tool-run spinner is the live equivalent captured.

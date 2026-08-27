@@ -1,0 +1,9 @@
+ ┃                                                                                                                                                                                         █
+ ┃  Now update grokSessionsOnTTYs to store OpenPath, and add the helper functions at the end of the file.                                                                                  █
+                                                                                                                                                                                           █
+                                                                                                                                                                                            
+   ⠸ Thinking… 9.7s                                                                                                                                                      3m15s ⇣147k [stop] 
+ ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮ 
+ │ ❯ Build anything                                                                                                                                                                       │ 
+ ╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── Grok 4.5 (high) · always-approve ─╯ 
+ →:expand  │  Enter:open  │  Ctrl+e:expand thinking  │  Esc:cancel  │  Ctrl+.:shortcuts

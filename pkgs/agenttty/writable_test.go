@@ -1,6 +1,9 @@
 package agenttty
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 func TestDetectGrokScreenStatus_modernIdleBoxedComposer(t *testing.T) {
 	scrollback := []byte("" +
@@ -52,11 +55,12 @@ func TestCheckGrokWritable_realTUIHeavyPrompt(t *testing.T) {
 	}
 }
 
-func TestCheckGrokWritable_legacySingleAnglePrompt(t *testing.T) {
+func TestCheckGrokWritable_legacySingleAnglePromptUnknown(t *testing.T) {
+	// Legacy Grok › chrome is no longer a writable idle signal; section parse only.
 	scrollback := []byte("Grok › prompt\nResponse: hi")
 	st := checkGrokWritable(scrollback)
-	if !st.Ready {
-		t.Fatalf("expected ready for legacy › prompt, got state=%q reason=%q", st.State, st.Reason)
+	if st.Ready || st.State != "unknown" {
+		t.Fatalf("legacy › chrome want unknown/not-ready, got ready=%v state=%q reason=%q", st.Ready, st.State, st.Reason)
 	}
 }
 
@@ -87,6 +91,25 @@ func TestCheckGrokWritable_busyWhenThinking(t *testing.T) {
 	}
 	if st.State != "busy" {
 		t.Fatalf("expected busy state, got %q", st.State)
+	}
+}
+
+func TestCheckGrokWritable_recapExpandThinkingIdle(t *testing.T) {
+	// Crime scene 01a03d6f: post-turn Recap + Ctrl+e:expand thinking footer must be idle.
+	scrollback, err := os.ReadFile("testdata/grok-writable/grok-after_recap-expand-thinking-idle-01a03d6f.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := checkGrokWritable(scrollback)
+	if !st.Ready || st.State != "idle" {
+		t.Fatalf("desired idle after Recap + expand thinking footer; got ready=%v state=%q reason=%q",
+			st.Ready, st.State, st.Reason)
+	}
+	if got := detectGrokScreenStatus(scrollback); got != "idle" {
+		t.Fatalf("detectGrokScreenStatus=%q want idle", got)
+	}
+	if DetectInputBox(string(scrollback)) != InputBoxEmpty {
+		t.Fatalf("DetectInputBox=%q want empty (Build anything is placeholder)", DetectInputBox(string(scrollback)))
 	}
 }
 
