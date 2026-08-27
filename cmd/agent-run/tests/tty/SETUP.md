@@ -150,7 +150,17 @@ func startFakePTYWrapServer(t *testing.T, req *Request) {
 
 		scrollback := req.FakePTYWrapScrollback
 		if scrollback == "" {
-			scrollback = "GROK_TTY_BANNER\nGrok > prompt text\nResponse: hello world\n"
+			// Modern boxed composer (section judge). Legacy "Grok ›"/">" is not writable-idle.
+			scrollback = "" +
+				"GROK_TTY_BANNER\n" +
+				"prompt text\n" +
+				"Response: hello world\n" +
+				" ⎇ master worktree ~/.wrk/… 1K / 10K\n" +
+				"    Worked for 1.0s                                        stop  [hooks: 1]\n" +
+				" ╭--------------------------------------------------------------------------╮\n" +
+				" │ ❯                                                                        │\n" +
+				" ╰----------------------------------------- Grok 4.5 (high) · always-approve -╯\n" +
+				" Shift+Tab:mode  │  Ctrl+.:shortcuts\n"
 		}
 
 		if err := conn.WriteMessage(websocket.TextMessage, []byte(scrollback)); err != nil {

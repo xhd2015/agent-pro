@@ -17,7 +17,17 @@ import (
 	"github.com/xhd2015/doctest/session"
 )
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
-	req.FakePTYWrapScrollback = "GROK_TTY_BANNER\r\nGrok › run ls\r\nResponse: file1 file2\r\nGrok › \r\n"
+	// Modern boxed composer (section judge). Legacy "Grok ›" is no longer writable-idle.
+	req.FakePTYWrapScrollback = "" +
+		"GROK_TTY_BANNER\r\n" +
+		"run ls\r\n" +
+		"Response: file1 file2\r\n" +
+		" ⎇ master worktree ~/.wrk/… 1K / 10K\r\n" +
+		"    Worked for 1.0s                                        stop  [hooks: 1]\r\n" +
+		" ╭--------------------------------------------------------------------------╮\r\n" +
+		" │ ❯                                                                        │\r\n" +
+		" ╰----------------------------------------- Grok 4.5 (high) · always-approve -╯\r\n" +
+		" Shift+Tab:mode  │  Ctrl+.:shortcuts\r\n"
 	req.Args = []string{"tty", "status", req.RegistrySessionID}
 	return nil
 }

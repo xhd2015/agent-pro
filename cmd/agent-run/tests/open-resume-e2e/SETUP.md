@@ -110,6 +110,19 @@ func sessionCacheDir(d *session.Doctest) string {
 	return filepath.Join(os.TempDir(), "open-resume-e2e-doctest-"+d.DOCTEST_SESSION_ID)
 }
 
+// modernGrokIdleScrollback is section-judge idle chrome (Worked for + boxed ❯).
+// Legacy "Grok ›" is no longer CheckWritable-ready after status_above_composer.
+func modernGrokIdleScrollback() string {
+	return "" +
+		"GROK_TTY_BANNER\n" +
+		" ⎇ master worktree ~/.wrk/… 1K / 10K\n" +
+		"    Worked for 1.0s                                        stop  [hooks: 1]\n" +
+		" ╭--------------------------------------------------------------------------╮\n" +
+		" │ ❯                                                                        │\n" +
+		" ╰----------------------------------------- Grok 4.5 (high) · always-approve -╯\n" +
+		" Shift+Tab:mode  │  Ctrl+.:shortcuts\n"
+}
+
 func withFileLock(t *testing.T, lockPath string, fn func() error) error {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(lockPath), 0755); err != nil {
@@ -316,10 +329,10 @@ func writeFakeGrokSessionDir(t *testing.T, grokHome, workspace, sessionUUID, pro
 // python3 to treat \r and \n as line terminators.
 //
 // Protocol:
-//   - On start: banner + Paris on PTY + seed updates.jsonl (first turn).
-//   - On /exit: print grok --resume footer + [Terminal exited], exit 0.
-//   - On hello: print HELLO_RESUME_MARKER (resume --open followup).
-//   - Other lines: re-print Paris (idempotent first-turn inject).
+//   - On start: Paris + modern idle chrome (Worked for + boxed ❯) + seed updates.jsonl.
+//   - On /exit: clear screen, print grok --resume footer + [Terminal exited], exit 0.
+//   - On hello: print HELLO_RESUME_MARKER then idle chrome (resume --open followup).
+//   - Other lines: re-print Paris + idle chrome (idempotent first-turn inject).
 func multiTurnOpenResumeHook(sessionUUID, parisText, helloMarker string) string {
 	// Python is more reliable for PTY inject line endings than bash read.
 	return fmt.Sprintf(`python3 -u -c '
@@ -329,6 +342,11 @@ from datetime import datetime, timezone
 uuid = %q
 paris = %q
 hello_marker = %q
+idle_chrome = %q
+
+def paint_idle():
+    sys.stdout.write(idle_chrome)
+    sys.stdout.flush()
 
 def enc_cwd(wd):
     p = os.path.abspath(wd)
@@ -369,11 +387,9 @@ def read_line():
             continue
         buf.append(ch)
 
-# First turn: show Paris immediately so snapshot/bind are deterministic.
-sys.stdout.write("GROK_TTY_BANNER\n")
+# First turn: show Paris + idle chrome so snapshot/bind/sendable are deterministic.
 sys.stdout.write(paris + "\n")
-sys.stdout.write("Grok \u203a ")
-sys.stdout.flush()
+paint_idle()
 seed_session("one word of France capital", paris)
 
 while True:
@@ -386,22 +402,22 @@ while True:
         continue
     low = line.lower()
     if line == "/exit" or low == "exit" or low.endswith("/exit") or "/exit" in low:
-        # Clear prior "Grok ›" idle markers so status sendable/exited heuristics
-        # see a zombie exit footer (not historical prompt → sendable:yes).
+        # Clear prior idle chrome so status sendable/exited heuristics
+        # see a zombie exit footer (not historical Worked for / ❯ → sendable:yes).
         sys.stdout.write("\033[2J\033[H")
         sys.stdout.write("Resume this session with:\n  grok --resume %%s\n[Terminal exited]\n" %% uuid)
         sys.stdout.flush()
         sys.exit(0)
     if "hello" in low:
         seed_session(line, hello_marker)
-        sys.stdout.write(hello_marker + "\nGrok \u203a ")
-        sys.stdout.flush()
+        sys.stdout.write(hello_marker + "\n")
+        paint_idle()
         continue
     # Re-assert Paris for open prompt inject / retries.
     seed_session(line, paris)
-    sys.stdout.write(paris + "\nGrok \u203a ")
-    sys.stdout.flush()
-'`, sessionUUID, parisText, helloMarker)
+    sys.stdout.write(paris + "\n")
+    paint_idle()
+'`, sessionUUID, parisText, helloMarker, modernGrokIdleScrollback())
 }
 
 func configureMockGrokEnv(t *testing.T, req *Request) {

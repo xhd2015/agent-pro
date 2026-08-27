@@ -108,6 +108,19 @@ const (
 
 var fakePTYWrapUpgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
 
+// modernGrokIdleScrollback is section-judge idle chrome (Worked for + boxed ❯).
+// Legacy "Grok ›" is no longer CheckWritable-ready after status_above_composer.
+func modernGrokIdleScrollback() string {
+	return "" +
+		"GROK_TTY_BANNER\n" +
+		" ⎇ master worktree ~/.wrk/… 1K / 10K\n" +
+		"    Worked for 1.0s                                        stop  [hooks: 1]\n" +
+		" ╭--------------------------------------------------------------------------╮\n" +
+		" │ ❯                                                                        │\n" +
+		" ╰----------------------------------------- Grok 4.5 (high) · always-approve -╯\n" +
+		" Shift+Tab:mode  │  Ctrl+.:shortcuts\n"
+}
+
 func sessionCacheDir(d *session.Doctest) string {
 	return filepath.Join(os.TempDir(), "agent-run-auto-send-or-resume-doctest-"+d.DOCTEST_SESSION_ID)
 }
@@ -482,7 +495,7 @@ func startFakePTYWrapServer(t *testing.T, req *Request) {
 		defer conn.Close()
 		scrollback := req.FakePTYWrapScrollback
 		if scrollback == "" {
-			scrollback = "GROK_TTY_BANNER\nGrok › \n"
+			scrollback = modernGrokIdleScrollback()
 		}
 		if err := conn.WriteMessage(websocket.TextMessage, []byte(scrollback)); err != nil {
 			return
@@ -601,7 +614,7 @@ func seedLiveBoundNotExited(t *testing.T, req *Request) {
 	req.WriteRegistry = true
 	req.RegistryPID = 0
 	if req.FakePTYWrapScrollback == "" {
-		req.FakePTYWrapScrollback = "GROK_TTY_BANNER\nGrok › \n"
+		req.FakePTYWrapScrollback = modernGrokIdleScrollback()
 	}
 	startFakePTYWrapServer(t, req)
 	seedSessionMeta(t, req)
@@ -616,18 +629,19 @@ func writeArgvRecordingRunner(t *testing.T, dir, name, probePath string) string 
 	// (`--resume` on argv), so those still wait on stdin.
 	script := fmt.Sprintf(`#!/bin/sh
 echo "ARGV_RECORD=$*" > %q
-printf "GROK_TTY_BANNER\nGrok › "
+printf %%s %q
 case " $* " in
 *" --resume "*)
 	read -r line || true
 	echo "Response: ${line:-done}"
 	;;
 *)
-	printf "\nResponse: done\n› "
+	printf "\nResponse: done\n"
+	printf %%s %q
 	;;
 esac
 exit 0
-`, probePath)
+`, probePath, modernGrokIdleScrollback(), modernGrokIdleScrollback())
 	if err := os.WriteFile(path, []byte(script), 0755); err != nil {
 		t.Fatalf("write argv runner: %v", err)
 	}
@@ -641,18 +655,19 @@ func writeArgvAndCwdRecordingRunner(t *testing.T, dir, name, argvProbe, cwdProbe
 	script := fmt.Sprintf(`#!/bin/sh
 pwd > %q
 echo "ARGV_RECORD=$*" > %q
-printf "GROK_TTY_BANNER\nGrok › "
+printf %%s %q
 case " $* " in
 *" --resume "*)
 	read -r line || true
 	echo "Response: ${line:-done}"
 	;;
 *)
-	printf "\nResponse: done\n› "
+	printf "\nResponse: done\n"
+	printf %%s %q
 	;;
 esac
 exit 0
-`, cwdProbe, argvProbe)
+`, cwdProbe, argvProbe, modernGrokIdleScrollback(), modernGrokIdleScrollback())
 	if err := os.WriteFile(path, []byte(script), 0755); err != nil {
 		t.Fatalf("write argv+cwd runner: %v", err)
 	}
@@ -693,7 +708,7 @@ func installArgvCwdRunner(t *testing.T, req *Request) {
 }
 
 func fakeTUIRespondHi() string {
-	return `sh -c 'printf "GROK_TTY_BANNER\nGrok › "; read line; echo "Response: $line"'`
+	return fmt.Sprintf(`sh -c 'printf %%s %q; read line; echo "Response: $line"'`, modernGrokIdleScrollback())
 }
 
 func execCmdWithBase(t *testing.T, command string, args []string, dir string, fullEnv []string, timeout time.Duration) (*Response, error) {
