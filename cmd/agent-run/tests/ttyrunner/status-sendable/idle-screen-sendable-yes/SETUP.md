@@ -18,7 +18,15 @@ import (
 func Setup(t *testing.T, d *session.Doctest, req *Request) error {
 	req.Action = "idle-screen-sendable-yes"
 	req.RegistryDir = "grok-tty-registry"
-	req.FakePTYWrapScrollback = "GROK_TTY_BANNER\nGrok › prompt\nResponse: done\n› "
+	// Modern boxed composer (section judge). Legacy "Grok ›" / "Response:" is no longer writable-idle.
+	req.FakePTYWrapScrollback = "" +
+		"GROK_TTY_BANNER\n" +
+		" ⎇ master worktree ~/.wrk/… 1K / 10K\n" +
+		"    Worked for 1.0s                                        stop  [hooks: 1]\n" +
+		" ╭--------------------------------------------------------------------------╮\n" +
+		" │ ❯                                                                        │\n" +
+		" ╰----------------------------------------- Grok 4.5 (high) · always-approve -╯\n" +
+		" Shift+Tab:mode  │  Ctrl+.:shortcuts\n"
 	return nil
 }
 ```

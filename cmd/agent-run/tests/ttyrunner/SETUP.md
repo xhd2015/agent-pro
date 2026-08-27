@@ -191,7 +191,15 @@ func startFakePTYWrapServer(t *testing.T, req *Request) int {
 		defer conn.Close()
 		scrollback := req.FakePTYWrapScrollback
 		if scrollback == "" {
-			scrollback = "GROK_TTY_BANNER\nGrok › prompt\nResponse: hello\n› "
+			// Default modern idle chrome for grok-tty CheckWritable (section judge).
+			scrollback = "" +
+				"GROK_TTY_BANNER\n" +
+				" ⎇ master worktree ~/.wrk/… 1K / 10K\n" +
+				"    Worked for 1.0s                                        stop  [hooks: 1]\n" +
+				" ╭--------------------------------------------------------------------------╮\n" +
+				" │ ❯                                                                        │\n" +
+				" ╰----------------------------------------- Grok 4.5 (high) · always-approve -╯\n" +
+				" Shift+Tab:mode  │  Ctrl+.:shortcuts\n"
 		}
 		_ = conn.WriteMessage(websocket.TextMessage, []byte(scrollback))
 		for {
