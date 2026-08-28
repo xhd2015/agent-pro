@@ -26,6 +26,12 @@ func IsGrokRunner(runner string) bool {
 	return r == "grok" || r == "grok-tty"
 }
 
+// IsCodexRunner reports whether runner is exactly trimmed "codex" or "codex-tty".
+func IsCodexRunner(runner string) bool {
+	r := strings.TrimSpace(runner)
+	return r == "codex" || r == "codex-tty"
+}
+
 // ListByRunnerSessionID returns all session metas whose trimmed runner_session_id
 // equals trimmed id. When runners is non-empty, meta.runner must be one of those
 // exact trimmed names. Empty/whitespace id returns errEmptyGrokSessionID.
@@ -56,17 +62,27 @@ func ListByRunnerSessionID(store Store, id string, runners ...string) ([]Session
 // FindByGrokSessionID finds the unique grok/grok-tty session for runner_session_id.
 // Cardinality: 0 → not found; 1 → that meta; 2+ → ambiguous (session ids ascending).
 func FindByGrokSessionID(store Store, id string) (SessionMeta, error) {
+	return findByRunnerSessionID(store, id, "grok", []string{"grok", "grok-tty"})
+}
+
+// FindByCodexSessionID finds the unique codex/codex-tty session for runner_session_id.
+// Cardinality: 0 → not found; 1 → that meta; 2+ → ambiguous (session ids ascending).
+func FindByCodexSessionID(store Store, id string) (SessionMeta, error) {
+	return findByRunnerSessionID(store, id, "codex", []string{"codex", "codex-tty"})
+}
+
+func findByRunnerSessionID(store Store, id, label string, runners []string) (SessionMeta, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return SessionMeta{}, fmt.Errorf("%s", errEmptyGrokSessionID)
 	}
-	matches, err := ListByRunnerSessionID(store, id, "grok", "grok-tty")
+	matches, err := ListByRunnerSessionID(store, id, runners...)
 	if err != nil {
 		return SessionMeta{}, err
 	}
 	switch len(matches) {
 	case 0:
-		return SessionMeta{}, fmt.Errorf("session not found: no grok session with runner_session_id %s", id)
+		return SessionMeta{}, fmt.Errorf("session not found: no %s session with runner_session_id %s", label, id)
 	case 1:
 		return matches[0], nil
 	default:
@@ -75,7 +91,7 @@ func FindByGrokSessionID(store Store, id string) (SessionMeta, error) {
 			ids = append(ids, m.SessionID)
 		}
 		sort.Strings(ids)
-		return SessionMeta{}, fmt.Errorf("ambiguous grok-session-id %s: multiple matches: %s", id, strings.Join(ids, ", "))
+		return SessionMeta{}, fmt.Errorf("ambiguous %s-session-id %s: multiple matches: %s", label, id, strings.Join(ids, ", "))
 	}
 }
 

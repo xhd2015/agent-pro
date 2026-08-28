@@ -73,3 +73,8 @@ func runnerKind(cmd string) string {
 func IsGrokRunner(cmd string) bool {
 	return runnerKind(cmd) == "grok"
 }
+
+// IsCodexRunner reports whether cmd is a codex session runner (basename codex).
+func IsCodexRunner(cmd string) bool {
+	return runnerKind(cmd) == "codex"
+}

@@ -319,23 +319,118 @@ func displayTextFromTraceLine(traceLine string) string {
 	return strings.TrimSpace(traceTypes.TraceItemText(item))
 }
 
+// titlePreambleMaxLen skips long injected dumps (AGENTS.md / skills / playbooks)
+// so list TITLE prefers a short follow-up user message.
+const titlePreambleMaxLen = 2000
+
 func titleFromRolloutLine(line string) string {
 	trimmed := strings.TrimSpace(line)
 	if trimmed == "" {
 		return ""
 	}
 	var row rolloutLine
-	if err := json.Unmarshal([]byte(trimmed), &row); err != nil || row.Type != "event_msg" {
+	if err := json.Unmarshal([]byte(trimmed), &row); err != nil {
 		return ""
 	}
-	var p eventMsgPayload
-	if err := json.Unmarshal(row.Payload, &p); err != nil {
+	switch row.Type {
+	case "event_msg":
+		var p eventMsgPayload
+		if err := json.Unmarshal(row.Payload, &p); err != nil {
+			return ""
+		}
+		if p.Type != "user_message" {
+			return ""
+		}
+		return meaningfulTitle(p.Message)
+	case "response_item":
+		return meaningfulTitle(userTextFromResponseItem(row.Payload))
+	default:
 		return ""
 	}
-	if p.Type != "user_message" {
+}
+
+func userTextFromResponseItem(payload json.RawMessage) string {
+	var p struct {
+		Type    string          `json:"type"`
+		Role    string          `json:"role"`
+		Text    string          `json:"text"`
+		Content json.RawMessage `json:"content"`
+	}
+	if err := json.Unmarshal(payload, &p); err != nil {
 		return ""
 	}
-	return strings.TrimSpace(p.Message)
+	if strings.ToLower(strings.TrimSpace(p.Type)) != "message" {
+		return ""
+	}
+	if strings.ToLower(strings.TrimSpace(p.Role)) != "user" {
+		return ""
+	}
+	if t := strings.TrimSpace(p.Text); t != "" {
+		return t
+	}
+	return strings.TrimSpace(textFromMessageContent(p.Content))
+}
+
+func textFromMessageContent(raw json.RawMessage) string {
+	raw = json.RawMessage(strings.TrimSpace(string(raw)))
+	if len(raw) == 0 {
+		return ""
+	}
+	// content may be a plain string or [{type,text},…]
+	var asString string
+	if err := json.Unmarshal(raw, &asString); err == nil {
+		return strings.TrimSpace(asString)
+	}
+	var parts []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(raw, &parts); err != nil {
+		return ""
+	}
+	var b strings.Builder
+	for _, part := range parts {
+		t := strings.TrimSpace(part.Text)
+		if t == "" {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(part.Type)) {
+		case "", "input_text", "text", "output_text":
+			if b.Len() > 0 {
+				b.WriteByte('\n')
+			}
+			b.WriteString(t)
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func meaningfulTitle(text string) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	if isTitlePreamble(text) {
+		return ""
+	}
+	return text
+}
+
+func isTitlePreamble(text string) bool {
+	lower := strings.ToLower(text)
+	if strings.Contains(lower, "<skills_instructions>") {
+		return true
+	}
+	if strings.HasPrefix(text, "# AGENTS.md") {
+		return true
+	}
+	if strings.Contains(text, "<INSTRUCTIONS>") && strings.Contains(lower, "agents.md") {
+		return true
+	}
+	if len(text) > titlePreambleMaxLen {
+		return true
+	}
+	return false
 }
 
 func extractTitle(lines []string) string {

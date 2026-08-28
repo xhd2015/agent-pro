@@ -2147,17 +2147,41 @@ Usage: agent-pro codex session <command> [ARGS]
 Commands:
   info <session-id>   show detailed info for one Codex CLI session
   log  <session-id>   print human-readable session log
+` + codexsessions.StatusCommandHelpLine + `
+` + codexsessions.MessagesCommandHelpLine + `
+` + codexsessions.ListLiveCommandHelpLine + `
+` + codexsessions.OpenCommandHelpLine + `
+` + codexsessions.SnapshotCommandHelpLine + `
+` + codexsessions.SendCommandHelpLine + `
+` + codexsessions.ResolveCommandHelpLine + `
 
 Run agent-pro codex session <command> --help for command-specific options.
 `
 
 const codexSessionInfoHelp = `
-Usage: agent-pro codex session info <session-id> [--json]
+Usage: agent-pro codex session info <session-id> [OPTIONS]
 
 Show detailed info for one Codex CLI rollout session.
+Appends an Active block (File always no; live PIDs when not --no-pid).
 
 Options:
-  --json        output JSON instead of text
+  --no-pid      skip live PID scan
+  --json        output JSON instead of text (no Active block)
+  -h,--help     show help
+`
+
+const codexSessionStatusHelp = `
+Usage: agent-pro codex session status <session-id> [OPTIONS]
+
+Show PID liveness for one Codex CLI session (open-file hard hits on codex runners).
+Codex has no active_sessions.json: File is always no.
+Also prints the rollout path (~-shortened in text).
+
+State: running | inactive
+
+Options:
+  --no-pid      skip live PID scan
+  --json        print SessionStatus as JSON (no ANSI; path is absolute)
   -h,--help     show help
 `
 
@@ -2218,14 +2242,58 @@ func handleCodexSession(args []string) error {
 		return handleCodexSessionInfo(args[1:])
 	case "log":
 		return handleCodexSessionLog(args[1:])
+	case "status":
+		return handleCodexSessionStatus(args[1:])
+	case "messages":
+		return handleCodexSessionMessages(args[1:])
+	case "list-live":
+		return handleCodexSessionListLive(args[1:])
+	case "open":
+		return handleCodexSessionOpen(args[1:])
+	case "snapshot":
+		return handleCodexSessionSnapshot(args[1:])
+	case "send":
+		return handleCodexSessionSend(args[1:])
+	case "resolve":
+		return handleCodexSessionResolve(args[1:])
 	default:
 		return fmt.Errorf("unknown codex session command: %s", args[0])
 	}
 }
 
+func handleCodexSessionMessages(args []string) error {
+	return codexsessions.RunMessages(args, os.Stdout, os.Stderr, agenttty.CodexHome(), nil)
+}
+
+func handleCodexSessionListLive(args []string) error {
+	return codexsessions.RunListLive(args, os.Stdout, os.Stderr, agenttty.CodexHome(), nil)
+}
+
+func handleCodexSessionOpen(args []string) error {
+	return codexsessions.RunOpen(args, os.Stdout, os.Stderr, agenttty.CodexHome(), nil)
+}
+
+func handleCodexSessionSnapshot(args []string) error {
+	return codexsessions.RunSnapshot(args, os.Stdout, os.Stderr, agenttty.CodexHome(), nil)
+}
+
+func handleCodexSessionSend(args []string) error {
+	return codexsessions.RunSend(args, os.Stdout, os.Stderr, agenttty.CodexHome(), nil)
+}
+
+func handleCodexSessionResolve(args []string) error {
+	return codexsessions.RunResolve(args, &codexsessions.ResolveOpts{
+		Stdout:    os.Stdout,
+		Stderr:    os.Stderr,
+		CodexHome: agenttty.CodexHome(),
+	})
+}
+
 func handleCodexSessionInfo(args []string) error {
+	var noPID bool
 	var jsonFlag *bool
-	remaining, err := flags.Bool("--json", &jsonFlag).
+	remaining, err := flags.Bool("--no-pid", &noPID).
+		Bool("--json", &jsonFlag).
 		Help("-h,--help", codexSessionInfoHelp).
 		Parse(args)
 	if err != nil {
@@ -2260,6 +2328,51 @@ func handleCodexSessionInfo(args []string) error {
 		return err
 	}
 	fmt.Println(codexsessions.FormatInfoText(info, home, time.Now()))
+
+	st, err := codexsessions.Status(codexHome, sessionID, !noPID, nil)
+	if err != nil {
+		return err
+	}
+	fmt.Println()
+	fmt.Println(codexsessions.FormatActiveBlock(st))
+	return nil
+}
+
+func handleCodexSessionStatus(args []string) error {
+	var noPID bool
+	var jsonFlag *bool
+	remaining, err := flags.Bool("--no-pid", &noPID).
+		Bool("--json", &jsonFlag).
+		Help("-h,--help", codexSessionStatusHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+	if len(remaining) != 1 {
+		return fmt.Errorf("expected exactly one session id, got %d arguments", len(remaining))
+	}
+
+	sessionID := strings.TrimSpace(remaining[0])
+	if sessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+
+	codexHome := agenttty.CodexHome()
+	st, err := codexsessions.Status(codexHome, sessionID, !noPID, nil)
+	if err != nil {
+		return err
+	}
+
+	if jsonFlag != nil && *jsonFlag {
+		out, err := codexsessions.FormatStatusJSON(st)
+		if err != nil {
+			return fmt.Errorf("format session status json: %w", err)
+		}
+		fmt.Println(out)
+		return nil
+	}
+
+	fmt.Println(codexsessions.FormatStatusText(st))
 	return nil
 }
 

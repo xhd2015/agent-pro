@@ -403,7 +403,7 @@ func sessionMetaFromFile(path string) (Session, error) {
 		StartedAt: info.ModTime(),
 	}
 
-	scanner := bufio.NewScanner(file)
+	scanner := newRolloutScanner(file)
 	if scanner.Scan() {
 		if meta, ok := parseSessionMeta(scanner.Text()); ok {
 			session.ID = meta.ID
@@ -433,7 +433,7 @@ func enrichSessionForList(session *Session) error {
 	}
 	defer file.Close()
 
-	scanner := bufio.NewScanner(file)
+	scanner := newRolloutScanner(file)
 	titleFound := session.Title != ""
 	count := 0
 	for scanner.Scan() {
@@ -494,6 +494,17 @@ func sessionFromFile(path string, lines []string) (Session, error) {
 	return session, nil
 }
 
+// maxRolloutScanToken matches tip.go: Codex rollout lines can exceed the
+// default bufio.Scanner 64KiB limit (base_instructions / large tool payloads).
+const maxRolloutScanToken = 16 * 1024 * 1024
+
+func newRolloutScanner(r io.Reader) *bufio.Scanner {
+	sc := bufio.NewScanner(r)
+	buf := make([]byte, 0, 1024*1024)
+	sc.Buffer(buf, maxRolloutScanToken)
+	return sc
+}
+
 func readLines(path string) ([]string, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -502,7 +513,7 @@ func readLines(path string) ([]string, error) {
 	defer file.Close()
 
 	var lines []string
-	scanner := bufio.NewScanner(file)
+	scanner := newRolloutScanner(file)
 	for scanner.Scan() {
 		lines = append(lines, scanner.Text())
 	}
@@ -566,7 +577,7 @@ func formatAbsoluteTime(ts time.Time) string {
 }
 
 func truncateTitle(title string) string {
-	title = strings.TrimSpace(title)
+	title = strings.Join(strings.Fields(strings.TrimSpace(title)), " ")
 	if len(title) <= 40 {
 		return title
 	}
