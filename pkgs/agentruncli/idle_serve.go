@@ -41,7 +41,11 @@ func startServeIdleWatchdog(ctx context.Context, cancel context.CancelFunc, sess
 		return agenttty.InjectMessage(listenAddr, sessionID, runner, text, false)
 	}
 	syncSnap := func() (string, error) {
-		return ttywatch.SnapshotText(listenAddr, sessionID)
+		// Preserve trailing spaces so occupy ExactlyOneMoreSpace can see a
+		// typed/injected draft space that normal SnapshotText trims away.
+		return ttywatch.SnapshotTextOpts(listenAddr, sessionID, ttywatch.SnapshotTextOptions{
+			PreserveTrailingSpace: true,
+		})
 	}
 
 	w := idle.New(found, idle.Policy{ExitOnIdle: p.ExitOnIdle, IdleTimeout: p.IdleTimeout}, idle.Watchdog{

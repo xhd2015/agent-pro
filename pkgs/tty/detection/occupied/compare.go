@@ -2,8 +2,6 @@
 // and comparing before/after snapshots.
 package occupied
 
-import "unicode/utf8"
-
 // StripNewlines removes \n and \r so compares ignore line breaks.
 func StripNewlines(b []byte) []byte {
 	if len(b) == 0 {
@@ -20,13 +18,11 @@ func StripNewlines(b []byte) []byte {
 }
 
 // ExactlyOneMoreSpace reports whether after is before with exactly one ASCII
-// space (0x20) inserted into real draft text. Both sides are newline-stripped
-// first, then compared byte-by-byte.
+// space (0x20) inserted. Both sides are newline-stripped first, then compared
+// byte-by-byte.
 //
-// Not occupied when:
-//   - before is empty
-//   - the space is inserted into an existing space run (padding)
-//   - the space is inserted immediately after a composer/chrome glyph (›»❯│…)
+// Occupied when: len(after)==len(before)+1, the extra byte is ' ', and removing
+// that byte yields before. Empty before is never occupied.
 func ExactlyOneMoreSpace(before, after []byte) bool {
 	b := StripNewlines(before)
 	a := StripNewlines(after)
@@ -48,36 +44,5 @@ func ExactlyOneMoreSpace(before, after []byte) bool {
 	if string(a[i+1:]) != string(b[i:]) {
 		return false
 	}
-	// Inserted into a space run (padding) → not a draft keystroke.
-	if i > 0 && a[i-1] == ' ' {
-		return false
-	}
-	// Inserted right after a prompt/box glyph → empty composer accepted the probe.
-	if r, ok := leftRune(a, i); ok && isChromeRune(r) {
-		return false
-	}
 	return true
-}
-
-func leftRune(a []byte, i int) (rune, bool) {
-	if i <= 0 {
-		return 0, false
-	}
-	r, size := utf8.DecodeLastRune(a[:i])
-	if r == utf8.RuneError && size == 1 {
-		return 0, false
-	}
-	return r, true
-}
-
-func isChromeRune(r rune) bool {
-	switch r {
-	case '›', '»', '❯', '❱', '|', '·', '╭', '╮', '╰', '╯':
-		return true
-	}
-	// Box drawing block.
-	if r >= 0x2500 && r <= 0x257F {
-		return true
-	}
-	return false
 }

@@ -19,10 +19,12 @@ func TestExactlyOneMoreSpace(t *testing.T) {
 		{"newline ignored equal base", "a\nb", "a b", true}, // after strip: "ab" vs "a b"
 		{"newlines only differ then space", "a\nb", "ab ", true},
 		{"non-space insert", "ab", "aXb", false},
-		{"padding space run", "❯   │", "❯    │", false},
-		{"boxed empty pad", " │ ❯      │", " │ ❯       │", false},
-		{"space after glyph", "│ ❯", "│ ❯ ", false},
+		{"padding space run", "❯   │", "❯    │", true},
+		{"boxed empty pad", " │ ❯      │", " │ ❯       │", true},
+		{"space after glyph", "│ ❯", "│ ❯ ", true},
 		{"draft after glyph line", "│ ❯ hello", "│ ❯ hello ", true},
+		// Live Codex: trailing draft space glued to footer indent after StripNewlines.
+		{"draft trailing glued to footer indent", "› a  gpt-5.6", "› a   gpt-5.6", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
