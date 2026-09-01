@@ -359,3 +359,142 @@ func focusCandidateFromTab(tr *TabResolveResult) FocusCandidate {
 		PID:         tr.RunnerPID,
 	}
 }
+
+// ErrNotFound is returned when the Codex session id is unknown, no live codex
+// process hosts the session, or no iTerm2 tab matches that process TTY.
+var ErrNotFound = errors.New("not found")
+
+// FocusHelp is the text for `agent-pro codex session focus --help`.
+const FocusHelp = `Usage: agent-pro codex session focus <session-id> [--index N]
+  --index N   select candidate N when multiple tabs host the same session
+  -h,--help   show help
+`
+
+// FocusCommandHelpLine is the parent `agent-pro codex session` help row.
+const FocusCommandHelpLine = `  focus  <session-id>   focus the iTerm2 tab that hosts this Codex session`
+
+// FocusResult is the selected candidate after a successful focus.
+type FocusResult struct {
+	Candidate FocusCandidate
+}
+
+// Focus finds the Codex session, maps live codex PIDs to iTerm tabs via TTY,
+// and focuses one existing tab. It never creates a window, tab, or session.
+func Focus(codexHome, sessionID string, opts *FocusOpts) (*FocusResult, error) {
+	if opts == nil {
+		opts = &FocusOpts{}
+	}
+	if _, err := Find(codexHome, sessionID); err != nil {
+		if isSessionNotFound(err) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	disc, err := DiscoverFocusHosting(sessionID, opts)
+	if err != nil {
+		return nil, err
+	}
+	if disc == nil || len(disc.Candidates) == 0 {
+		return nil, ErrNotFound
+	}
+
+	selected, err := selectFocusCandidate(sessionID, disc.Candidates, opts.Index)
+	if err != nil {
+		return nil, err
+	}
+
+	focusFn := opts.FocusITerm
+	if focusFn == nil {
+		focusFn = func(ref iterm2.SessionRef) error {
+			return iterm2.Focus(ref, nil)
+		}
+	}
+	if err := focusFn(iterm2.SessionRef{
+		WindowID:  selected.WindowID,
+		TabIndex:  selected.TabIndex,
+		SessionID: selected.SessionID,
+		TTY:       selected.TTY,
+	}); err != nil {
+		return nil, err
+	}
+	return &FocusResult{Candidate: selected}, nil
+}
+
+// RunFocus implements `agent-pro codex session focus` with injectable writers
+// and process/iTerm hooks. A nil opts uses production probes.
+func RunFocus(args []string, stdout io.Writer, codexHome string, opts *FocusOpts) error {
+	if stdout == nil {
+		stdout = io.Discard
+	}
+	sessionID, index, help, err := parseFocusArgs(args)
+	if err != nil {
+		return err
+	}
+	if help {
+		txt := FocusHelp
+		if !strings.HasSuffix(txt, "\n") {
+			txt += "\n"
+		}
+		_, _ = io.WriteString(stdout, txt)
+		return nil
+	}
+
+	runOpts := FocusOpts{}
+	if opts != nil {
+		runOpts = *opts
+	}
+	runOpts.Index = index
+	result, err := Focus(codexHome, sessionID, &runOpts)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "focused: window %s, tab %d\n", result.Candidate.WindowID, result.Candidate.TabIndex)
+	return nil
+}
+
+func parseFocusArgs(args []string) (sessionID string, index *int, help bool, err error) {
+	var positional []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "-h" || arg == "--help" {
+			return "", nil, true, nil
+		}
+		if arg == "--index" {
+			if i+1 >= len(args) {
+				return "", nil, false, fmt.Errorf("--index must be an integer")
+			}
+			n, convErr := strconv.Atoi(args[i+1])
+			if convErr != nil {
+				return "", nil, false, fmt.Errorf("--index must be an integer")
+			}
+			index = &n
+			i++
+			continue
+		}
+		if strings.HasPrefix(arg, "--index=") {
+			n, convErr := strconv.Atoi(strings.TrimPrefix(arg, "--index="))
+			if convErr != nil {
+				return "", nil, false, fmt.Errorf("--index must be an integer")
+			}
+			index = &n
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			return "", nil, false, fmt.Errorf("unrecognized flag: %s", arg)
+		}
+		positional = append(positional, arg)
+	}
+	if len(positional) != 1 {
+		return "", nil, false, fmt.Errorf("expected exactly one session id, got %d arguments", len(positional))
+	}
+	sessionID = strings.TrimSpace(positional[0])
+	if sessionID == "" {
+		return "", nil, false, fmt.Errorf("session id is required")
+	}
+	return sessionID, index, false, nil
+}
+
+func isSessionNotFound(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "codex session not found")
+}

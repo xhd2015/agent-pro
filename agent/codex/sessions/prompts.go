@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -12,8 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/xhd2015/agent-pro/agent/event/grok_session"
-	types "github.com/xhd2015/agent-pro/agent/event/types"
+	"golang.org/x/term"
 )
 
 const (
@@ -21,60 +19,52 @@ const (
 	missingTimestampMarker  = "[—]" // em dash U+2014
 	promptTruncateEllipsis  = "…"   // U+2026
 	sessionBlockSeparator   = "────────────────────────────────────────"
-	ansiReset = "\x1b[0m"
-	ansiDim   = "\x1b[2m"
+	ansiReset               = "\x1b[0m"
+	ansiDim                 = "\x1b[2m"
+	ansiBoldRed             = "\x1b[1m\x1b[31m"
 )
 
-// UserPrompt is one coalesced user message from a session's updates.jsonl.
+// UserPrompt is one coalesced user message from a Codex rollout JSONL.
 type UserPrompt struct {
 	Index     int       // 1-based chronological within session
 	Timestamp time.Time // from wire; zero if unknown
-	Text      string    // raw coalesced user text (before format collapse)
+	Text      string
 }
 
 // SessionPrompts is a session plus its user prompts in chronological order.
 type SessionPrompts struct {
 	Session
 	UserPrompts   []UserPrompt
-	OmittedBefore int // tail clip; 0 if none
-	OmittedAfter  int // head clip; 0 if none
+	OmittedBefore int
+	OmittedAfter  int
 }
 
-// ListPromptsOptions controls multi-session selection, window filtering, and
-// the per-session text filter pipeline (grep → exclude → head|tail).
-// Now is required when RecentSet is true (relative window).
-// Zero-value filter fields preserve pre-filter behavior.
+// ListPromptsOptions controls multi-session selection and the per-session
+// filter pipeline (grep → exclude → head|tail).
 type ListPromptsOptions struct {
 	Now       time.Time
-	Recent    time.Duration // 0 = no time window
-	RecentSet bool          // true if --recent was provided
-	Limit     int           // session cap; 0 + !LimitSet → default 10 when !RecentSet
+	Recent    time.Duration
+	RecentSet bool
+	Limit     int
 	LimitSet  bool
-	Home      string // optional path shorten for formatters
+	Home      string
 
-	// OnlySessionIDs, when OnlySessionIDsSet, walks these ids (Find order)
-	// instead of discoverSessions. Used by --this-window / --this-space.
 	OnlySessionIDs    []string
 	OnlySessionIDsSet bool
 
-	// MainOnly keeps main-agent class sessions only (drops subagent class).
-	// Same class as ListOptions.MainAgent / --main-agent.
-	MainOnly bool
-
-	Grep       []string // --grep (repeatable); AND on same prompt text
+	Grep       []string
 	GrepSet    bool
 	Exclude    string
 	ExcludeSet bool
-	Head       int // N >= 1 when HeadSet
+	Head       int
 	HeadSet    bool
-	Tail       int // N >= 1 when TailSet
+	Tail       int
 	TailSet    bool
 }
 
-// FilterUserPromptsOptions is the pure in-memory filter pipeline for one
-// session's prompt slice (no FS). Zero-value = identity (keep all).
+// FilterUserPromptsOptions is the pure in-memory filter pipeline.
 type FilterUserPromptsOptions struct {
-	Grep       []string // AND on same prompt text
+	Grep       []string
 	GrepSet    bool
 	Exclude    string
 	ExcludeSet bool
@@ -86,32 +76,23 @@ type FilterUserPromptsOptions struct {
 
 // FormatPromptsOptions controls compact text rendering for CLI stdout.
 type FormatPromptsOptions struct {
-	Now       time.Time
-	Home      string
-	Location  *time.Location // nil → time.Local; tests pass time.UTC
-	Window    time.Duration  // footer only
-	Limit     int            // footer only
-	RecentSet bool
-	LimitSet  bool
-	// ColorMode is "auto" | "always" | "never"; empty treated as "never" for
-	// deterministic Format* string helpers (CLI passes "auto" by default).
-	ColorMode string
-	// Grep / GrepSet: when set, bold-red highlights all pattern matches when
-	// color is on. Without MaxBodySet the full collapsed body is kept; with
-	// MaxBodySet the body is windowed around the first pattern's first match
-	// within MaxBodyRunes.
-	Grep    []string
-	GrepSet bool
-	// MaxBodyRunes soft-caps each collapsed body to N content runes + "…"
-	// (ellipsis outside the N budget) when MaxBodySet is true. N must be >= 1.
+	Now          time.Time
+	Home         string
+	Location     *time.Location
+	Window       time.Duration
+	Limit        int
+	RecentSet    bool
+	LimitSet     bool
+	ColorMode    string
+	Grep         []string
+	GrepSet      bool
 	MaxBodyRunes int
-	MaxBodySet   bool // true if --max-body provided
+	MaxBodySet   bool
 }
 
 var recentWindowRE = regexp.MustCompile(`(?i)^([0-9]+)([dhm])$`)
 
 // ParseRecentWindow parses Nd|Nh|Nm (case-insensitive). 1d = 24h rolling.
-// Rejects empty, bare numbers, 0*, and unsupported units (e.g. 2w).
 func ParseRecentWindow(s string) (time.Duration, error) {
 	s = strings.TrimSpace(s)
 	m := recentWindowRE.FindStringSubmatch(s)
@@ -135,11 +116,13 @@ func ParseRecentWindow(s string) (time.Duration, error) {
 }
 
 // Prompts returns all user prompts for one session (full history).
-// Unknown / empty id → error containing "grok session not found".
-// Missing updates.jsonl → empty UserPrompts, no error.
 // Does not apply text filters; callers use FilterUserPrompts when needed.
-func Prompts(grokHome, sessionID string) (*SessionPrompts, error) {
-	session, err := Find(grokHome, sessionID)
+func Prompts(codexHome, sessionID string) (*SessionPrompts, error) {
+	path, err := Find(codexHome, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	session, err := sessionMetaFromFile(path)
 	if err != nil {
 		return nil, err
 	}
@@ -150,24 +133,18 @@ func Prompts(grokHome, sessionID string) (*SessionPrompts, error) {
 	return &SessionPrompts{Session: session, UserPrompts: prompts}, nil
 }
 
-// FilterUserPrompts applies the pure filter pipeline on an in-memory prompt
-// slice: grep keep → exclude drop → head|tail slice.
-// Returns kept prompts and omission counts for formatter chrome.
-// Invalid opts (head+tail, empty pattern when set, N < 1) → clear error.
+// FilterUserPrompts applies grep keep → exclude drop → head|tail.
 func FilterUserPrompts(prompts []UserPrompt, opts FilterUserPromptsOptions) (kept []UserPrompt, omittedBefore, omittedAfter int, err error) {
 	if err := validateFilterUserPromptsOptions(opts); err != nil {
 		return nil, 0, 0, err
 	}
 
 	kept = prompts
-	grepPatterns, err := validateGrepPatterns(opts.GrepSet, opts.Grep)
-	if err != nil {
-		return nil, 0, 0, err
-	}
 	if opts.GrepSet {
+		patterns := opts.Grep
 		var filtered []UserPrompt
 		for _, p := range kept {
-			if textContainsAllLiteralCI(p.Text, grepPatterns) {
+			if textContainsAllLiteralCI(p.Text, patterns) {
 				filtered = append(filtered, p)
 			}
 		}
@@ -186,7 +163,6 @@ func FilterUserPrompts(prompts []UserPrompt, opts FilterUserPromptsOptions) (kep
 	if opts.HeadSet {
 		if len(kept) > opts.Head {
 			omittedAfter = len(kept) - opts.Head
-			// copy slice head so caller cannot mutate underlying array unexpectedly
 			kept = append([]UserPrompt(nil), kept[:opts.Head]...)
 		}
 	} else if opts.TailSet {
@@ -211,8 +187,15 @@ func validateFilterUserPromptsOptions(opts FilterUserPromptsOptions) error {
 	if opts.TailSet && opts.Tail < 1 {
 		return fmt.Errorf("--tail must be >= 1 (got %d)", opts.Tail)
 	}
-	if _, err := validateGrepPatterns(opts.GrepSet, opts.Grep); err != nil {
-		return fmt.Errorf("--grep pattern must not be empty")
+	if opts.GrepSet {
+		if len(opts.Grep) == 0 {
+			return fmt.Errorf("--grep pattern must not be empty")
+		}
+		for _, p := range opts.Grep {
+			if strings.TrimSpace(p) == "" {
+				return fmt.Errorf("--grep pattern must not be empty")
+			}
+		}
 	}
 	if opts.ExcludeSet && opts.Exclude == "" {
 		return fmt.Errorf("--exclude pattern must not be empty")
@@ -233,31 +216,8 @@ func filterOptsFromList(opts ListPromptsOptions) FilterUserPromptsOptions {
 	}
 }
 
-// ListPrompts discovers sessions newest-first by last_active_at and applies
-// the RecentSet × LimitSet selection matrix.
-//
-// Sessions with zero (in-window when RecentSet) user prompts are always
-// skipped and do not count toward the limit — so --limit N means N sessions
-// that actually have prompts to show.
-//
-// For progressive CLI output, prefer StreamPromptsList (load+print per session).
-func ListPrompts(grokHome string, opts ListPromptsOptions) ([]SessionPrompts, error) {
-	var out []SessionPrompts
-	err := forEachPromptSession(grokHome, opts, func(sp SessionPrompts) error {
-		out = append(out, sp)
-		return nil
-	})
-	return out, err
-}
-
-// StreamPromptsList walks sessions newest-first, loads each session's user
-// prompts, and writes that block to w immediately (separator + header + lines).
-// Footer is written at the end. Partial stdout may exist if a later session fails.
-//
-// This is the progressive path: discovery of summary.json is one pass; heavy
-// updates.jsonl reads happen only for candidates and each ready session is
-// flushed before the next load.
-func StreamPromptsList(w io.Writer, grokHome string, opts ListPromptsOptions, fmtOpts FormatPromptsOptions) error {
+// StreamPromptsList walks sessions newest-first and writes each block immediately.
+func StreamPromptsList(w io.Writer, codexHome string, opts ListPromptsOptions, fmtOpts FormatPromptsOptions) error {
 	if err := validateFormatPromptsOptions(fmtOpts); err != nil {
 		return err
 	}
@@ -285,14 +245,14 @@ func StreamPromptsList(w io.Writer, grokHome string, opts ListPromptsOptions, fm
 	if loc == nil {
 		loc = time.Local
 	}
-	useColor := shouldColor(normalizePromptsColorMode(fmtOpts.ColorMode))
+	useColor := shouldColorPrompts(normalizePromptsColorMode(fmtOpts.ColorMode))
 	now := fmtOpts.Now
 
 	nSess := 0
 	totalMsgs := 0
 	var wroteAny bool
 
-	err := forEachPromptSession(grokHome, opts, func(sp SessionPrompts) error {
+	err := forEachPromptSession(codexHome, opts, func(sp SessionPrompts) error {
 		if nSess > 0 {
 			if _, err := io.WriteString(w, "\n"); err != nil {
 				return err
@@ -316,7 +276,7 @@ func StreamPromptsList(w io.Writer, grokHome string, opts ListPromptsOptions, fm
 		header := fmt.Sprintf(
 			"── %s  ·  %s  ·  %s  ·  %s",
 			sp.ID,
-			formatRelativeTime(sp.LastActiveAt, now),
+			formatRelativeTime(sp.StartedAt, now),
 			title,
 			shortenPath(sp.CWD, fmtOpts.Home),
 		)
@@ -329,7 +289,6 @@ func StreamPromptsList(w io.Writer, grokHome string, opts ListPromptsOptions, fm
 		if err := writeSessionPromptBody(w, &sp, loc, useColor, fmtOpts); err != nil {
 			return err
 		}
-		// Force the session block to the terminal before loading the next file.
 		if err := flushWriter(w); err != nil {
 			return err
 		}
@@ -364,13 +323,8 @@ func StreamPromptsList(w io.Writer, grokHome string, opts ListPromptsOptions, fm
 	return flushWriter(w)
 }
 
-// forEachPromptSession discovers/sorts sessions, loads user prompts per session,
-// applies recent window then grep/exclude/head|tail, skips empties, applies the
-// limit matrix (survivors only), and invokes fn for each kept session in order
-// (before the next load when the caller streams).
-func forEachPromptSession(grokHome string, opts ListPromptsOptions, fn func(SessionPrompts) error) error {
+func forEachPromptSession(codexHome string, opts ListPromptsOptions, fn func(SessionPrompts) error) error {
 	filterOpts := filterOptsFromList(opts)
-	// Validate filter opts up front so empty homes still reject invalid flags.
 	if err := validateFilterUserPromptsOptions(filterOpts); err != nil {
 		return err
 	}
@@ -382,39 +336,39 @@ func forEachPromptSession(grokHome string, opts ListPromptsOptions, fn func(Sess
 			if id == "" {
 				continue
 			}
-			s, err := Find(grokHome, id)
+			path, err := Find(codexHome, id)
 			if err != nil {
-				// Skip hosts whose on-disk session is gone; do not fail the whole list.
+				continue
+			}
+			s, err := sessionMetaFromFile(path)
+			if err != nil {
 				continue
 			}
 			sessions = append(sessions, s)
 		}
 		sort.SliceStable(sessions, func(i, j int) bool {
-			if sessions[i].LastActiveAt.Equal(sessions[j].LastActiveAt) {
+			if sessions[i].StartedAt.Equal(sessions[j].StartedAt) {
 				return sessions[i].ID > sessions[j].ID
 			}
-			return sessions[i].LastActiveAt.After(sessions[j].LastActiveAt)
+			return sessions[i].StartedAt.After(sessions[j].StartedAt)
 		})
 	} else {
 		var err error
-		sessions, err = discoverSessions(grokHome)
+		sessions, err = discoverSessions(codexHome)
 		if err != nil {
 			return err
 		}
 		sort.Slice(sessions, func(i, j int) bool {
-			if sessions[i].LastActiveAt.Equal(sessions[j].LastActiveAt) {
+			if sessions[i].StartedAt.Equal(sessions[j].StartedAt) {
 				return sessions[i].ID > sessions[j].ID
 			}
-			return sessions[i].LastActiveAt.After(sessions[j].LastActiveAt)
+			return sessions[i].StartedAt.After(sessions[j].StartedAt)
 		})
 	}
 
 	sessionCap, hasCap := listPromptsSessionCap(opts)
 	kept := 0
 	for _, s := range sessions {
-		if opts.MainOnly && isSubAgentClass(s) {
-			continue
-		}
 		prompts, err := loadUserPrompts(s)
 		if err != nil {
 			return err
@@ -450,17 +404,9 @@ func flushWriter(w io.Writer) error {
 	if f, ok := w.(flusher); ok {
 		return f.Flush()
 	}
-	// *os.File has no Flush; Sync is too heavy. Prefer bufio from CLI.
 	return nil
 }
 
-// listPromptsSessionCap returns (limit, hasCap) per the selection matrix:
-//
-//	OnlySessionIDsSet && !LimitSet && !RecentSet → no default cap (host scopes)
-//	!RecentSet && !LimitSet → default 10
-//	!RecentSet && LimitSet  → Limit
-//	RecentSet  && !LimitSet → no default cap
-//	RecentSet  && LimitSet  → Limit
 func listPromptsSessionCap(opts ListPromptsOptions) (int, bool) {
 	if opts.OnlySessionIDsSet && !opts.LimitSet && !opts.RecentSet {
 		return 0, false
@@ -484,7 +430,6 @@ func filterPromptsInWindow(prompts []UserPrompt, now time.Time, window time.Dura
 		if p.Timestamp.IsZero() {
 			continue
 		}
-		// Inclusive ends: Timestamp ∈ [Now-Recent, Now]
 		if p.Timestamp.Before(start) || p.Timestamp.After(now) {
 			continue
 		}
@@ -494,55 +439,30 @@ func filterPromptsInWindow(prompts []UserPrompt, now time.Time, window time.Dura
 }
 
 func loadUserPrompts(session Session) ([]UserPrompt, error) {
-	updatesPath := filepath.Join(filepath.Dir(session.Path), "updates.jsonl")
-	data, err := os.ReadFile(updatesPath)
+	all, err := loadChatMessagesFromRollout(session.Path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
 		return nil, err
 	}
-	if len(data) == 0 {
-		return nil, nil
-	}
-	raw := string(data)
-	lines := strings.Split(raw, "\n")
-	events := grok_session.FromUpdatesJSONL(lines)
-
 	var out []UserPrompt
 	idx := 0
-	for _, ev := range events {
-		if ev.Type != types.ActionMessage || ev.Role != "user" {
+	for _, m := range all {
+		if m.Kind != MessageKindUser {
 			continue
 		}
-		if ev.Text == "" {
+		if strings.TrimSpace(m.Text) == "" {
 			continue
 		}
 		idx++
-		var ts time.Time
-		if ev.Timestamp > 0 {
-			ts = time.UnixMilli(ev.Timestamp).UTC()
-		}
 		out = append(out, UserPrompt{
 			Index:     idx,
-			Timestamp: ts,
-			Text:      ev.Text,
+			Timestamp: m.Timestamp,
+			Text:      m.Text,
 		})
 	}
 	return out, nil
 }
 
-// FormatPromptsText renders compact prompt lines for one session.
-// Empty → "No user prompts found\n". Always ends with trailing newline.
-func FormatPromptsText(sp *SessionPrompts, opts FormatPromptsOptions) string {
-	var b strings.Builder
-	_ = WritePromptsText(&b, sp, opts)
-	return b.String()
-}
-
 // WritePromptsText streams compact prompt lines for one session to w.
-// When OmittedBefore/OmittedAfter > 0, prints virtual omission markers
-// (not counted as user messages).
 func WritePromptsText(w io.Writer, sp *SessionPrompts, opts FormatPromptsOptions) error {
 	if err := validateFormatPromptsOptions(opts); err != nil {
 		return err
@@ -555,11 +475,10 @@ func WritePromptsText(w io.Writer, sp *SessionPrompts, opts FormatPromptsOptions
 	if loc == nil {
 		loc = time.Local
 	}
-	useColor := shouldColor(normalizePromptsColorMode(opts.ColorMode))
+	useColor := shouldColorPrompts(normalizePromptsColorMode(opts.ColorMode))
 	return writeSessionPromptBody(w, sp, loc, useColor, opts)
 }
 
-// validateFormatPromptsOptions rejects invalid MaxBody when MaxBodySet.
 func validateFormatPromptsOptions(opts FormatPromptsOptions) error {
 	if opts.MaxBodySet && opts.MaxBodyRunes < 1 {
 		return fmt.Errorf("--max-body must be >= 1 (got %d)", opts.MaxBodyRunes)
@@ -567,7 +486,6 @@ func validateFormatPromptsOptions(opts FormatPromptsOptions) error {
 	return nil
 }
 
-// writeSessionPromptBody writes omission markers + prompt lines for one session.
 func writeSessionPromptBody(w io.Writer, sp *SessionPrompts, loc *time.Location, useColor bool, opts FormatPromptsOptions) error {
 	if sp.OmittedBefore > 0 {
 		if _, err := fmt.Fprintln(w, formatOmissionMarker(sp.OmittedBefore, useColor)); err != nil {
@@ -595,131 +513,41 @@ func formatOmissionMarker(m int, useColor bool) string {
 	return s
 }
 
-// FormatPromptsListText renders multi-session compact output with headers,
-// blank-line + rule separators between sessions, and a footer.
-// Empty list → "No user prompts found\n". Always ends with trailing newline.
-func FormatPromptsListText(list []SessionPrompts, opts FormatPromptsOptions) string {
-	var b strings.Builder
-	_ = WritePromptsList(&b, list, opts)
-	return b.String()
-}
-
-// WritePromptsList streams multi-session compact output to w (session-by-session).
-// Prefer this from CLI for progressive output; FormatPromptsListText wraps it.
-func WritePromptsList(w io.Writer, list []SessionPrompts, opts FormatPromptsOptions) error {
-	if err := validateFormatPromptsOptions(opts); err != nil {
-		return err
-	}
-	// Filter to sessions with prompts for counting / emission.
-	var with []SessionPrompts
-	totalMsgs := 0
-	for i := range list {
-		if len(list[i].UserPrompts) == 0 {
-			continue
-		}
-		with = append(with, list[i])
-		totalMsgs += len(list[i].UserPrompts)
-	}
-	if len(with) == 0 {
-		_, err := io.WriteString(w, "No user prompts found\n")
-		return err
-	}
-
-	loc := opts.Location
-	if loc == nil {
-		loc = time.Local
-	}
-	now := opts.Now
-	if now.IsZero() {
-		now = time.Now()
-	}
-	useColor := shouldColor(normalizePromptsColorMode(opts.ColorMode))
-
-	for i := range with {
-		if i > 0 {
-			// Separator between sessions: blank line + rule + blank line feel
-			if _, err := io.WriteString(w, "\n"); err != nil {
-				return err
-			}
-			rule := sessionBlockSeparator
-			if useColor {
-				rule = dimMeta(rule, true)
-			}
-			if _, err := fmt.Fprintln(w, rule); err != nil {
-				return err
-			}
-			if _, err := io.WriteString(w, "\n"); err != nil {
-				return err
-			}
-		}
-
-		sp := &with[i]
-		title := strings.TrimSpace(sp.Title)
-		if title == "" {
-			title = "(untitled)"
-		}
-		cwd := shortenPath(sp.CWD, opts.Home)
-		header := fmt.Sprintf(
-			"── %s  ·  %s  ·  %s  ·  %s",
-			sp.ID,
-			formatRelativeTime(sp.LastActiveAt, now),
-			title,
-			cwd,
-		)
-		if useColor {
-			header = dimMeta(header, true)
-		}
-		if _, err := fmt.Fprintln(w, header); err != nil {
-			return err
-		}
-		if err := writeSessionPromptBody(w, sp, loc, useColor, opts); err != nil {
-			return err
-		}
-		// Flush if bufio so each session appears promptly when streaming.
-		if f, ok := w.(interface{ Flush() error }); ok {
-			_ = f.Flush()
-		}
-	}
-
-	footer := fmt.Sprintf("%d sessions, %d user messages", len(with), totalMsgs)
-	if opts.RecentSet && opts.Window > 0 {
-		footer += fmt.Sprintf(" (recent %s)", formatWindowShort(opts.Window))
-	}
-	if opts.LimitSet && opts.Limit > 0 {
-		footer += fmt.Sprintf(" (limit %d)", opts.Limit)
-	}
-	if useColor {
-		footer = dimMeta(footer, true)
-	}
-	if _, err := fmt.Fprintln(w, footer); err != nil {
-		return err
-	}
-	if f, ok := w.(interface{ Flush() error }); ok {
-		_ = f.Flush()
-	}
-	return nil
-}
-
 func normalizePromptsColorMode(mode string) string {
 	mode = strings.TrimSpace(strings.ToLower(mode))
 	if mode == "" {
-		// String helpers used by tests default to never (no ANSI in asserts).
 		return "never"
 	}
 	return mode
+}
+
+func shouldColorPrompts(colorMode string) bool {
+	switch strings.ToLower(strings.TrimSpace(colorMode)) {
+	case "always":
+		return true
+	case "never":
+		return false
+	default:
+		if os.Getenv("NO_COLOR") != "" {
+			return false
+		}
+		return term.IsTerminal(int(os.Stdout.Fd()))
+	}
 }
 
 func dimMeta(s string, on bool) string {
 	if !on || s == "" {
 		return s
 	}
-	// Prefer dim; gray as fallback styling family (SGR 2 is widely supported).
 	return ansiDim + s + ansiReset
 }
 
 func formatPromptLine(p UserPrompt, loc *time.Location, useColor bool, opts FormatPromptsOptions) string {
 	prefix := missingTimestampMarker
 	if !p.Timestamp.IsZero() {
+		if loc == nil {
+			loc = time.Local
+		}
 		prefix = "[" + p.Timestamp.In(loc).Format("2006-01-02 15:04:05") + "]"
 	}
 	if useColor {
@@ -729,20 +557,15 @@ func formatPromptLine(p UserPrompt, loc *time.Location, useColor bool, opts Form
 	return prefix + " " + body
 }
 
-// formatPromptBody collapses whitespace. Default (!MaxBodySet): full body.
-// MaxBodySet: soft-truncate to MaxBodyRunes + "…". With GrepSet: highlight all
-// patterns; window around first pattern's first match only when MaxBodySet
-// (budget = MaxBodyRunes).
 func formatPromptBody(text string, opts FormatPromptsOptions, useColor bool) string {
 	collapsed := collapseWhitespace(text)
 
 	patterns := opts.Grep
 	if opts.GrepSet && len(patterns) > 0 {
-		// Window around first pattern; highlight every pattern present in view.
 		start, length, ok := findLiteralCI(collapsed, patterns[0])
 		if ok {
 			if opts.MaxBodySet {
-				snippet, _, _ := windowPromptBody(collapsed, start, length, opts.MaxBodyRunes)
+				snippet := windowPromptBody(collapsed, start, length, opts.MaxBodyRunes)
 				if useColor {
 					return highlightAllLiteralCI(snippet, patterns)
 				}
@@ -753,7 +576,6 @@ func formatPromptBody(text string, opts FormatPromptsOptions, useColor bool) str
 			}
 			return collapsed
 		}
-		// No match for first pattern: still apply MaxBody soft-cap if set.
 		if opts.MaxBodySet {
 			return softTruncateRunes(collapsed, opts.MaxBodyRunes)
 		}
@@ -766,14 +588,11 @@ func formatPromptBody(text string, opts FormatPromptsOptions, useColor bool) str
 	return collapsed
 }
 
-// windowPromptBody builds a ≤maxRunes window around a match in collapsed text.
-// Match offsets are byte positions into the returned snippet.
-// Cut sides get a single Unicode ellipsis (…); same family as soft-truncate.
-func windowPromptBody(collapsed string, matchStart, matchLen, maxRunes int) (snippet string, newStart, newLen int) {
+func windowPromptBody(collapsed string, matchStart, matchLen, maxRunes int) string {
 	runes := []rune(collapsed)
 	total := len(runes)
 	if maxRunes <= 0 || total <= maxRunes {
-		return collapsed, matchStart, matchLen
+		return collapsed
 	}
 
 	matchStartRune := utf8.RuneCountInString(collapsed[:matchStart])
@@ -781,8 +600,7 @@ func windowPromptBody(collapsed string, matchStart, matchLen, maxRunes int) (sni
 	matchRuneCount := matchEndRune - matchStartRune
 
 	if matchRuneCount >= maxRunes {
-		s := string(runes[matchStartRune : matchStartRune+maxRunes])
-		return s, 0, len(s)
+		return string(runes[matchStartRune : matchStartRune+maxRunes])
 	}
 
 	remaining := maxRunes - matchRuneCount
@@ -806,7 +624,6 @@ func windowPromptBody(collapsed string, matchStart, matchLen, maxRunes int) (sni
 		}
 	}
 
-	// Ellipsis is 1 rune (…); reserve from the cut side's budget.
 	const ellipsisRunes = 1
 	needBeforeEllipsis := takeBefore < beforeAvail
 	needAfterEllipsis := takeAfter < afterAvail
@@ -826,21 +643,17 @@ func windowPromptBody(collapsed string, matchStart, matchLen, maxRunes int) (sni
 	}
 
 	var b strings.Builder
-	b.Grow(maxRunes * utf8.UTFMax)
 	if needBeforeEllipsis {
 		b.WriteString(promptTruncateEllipsis)
 	}
 	beforeStart := matchStartRune - contentBefore
 	b.WriteString(string(runes[beforeStart:matchStartRune]))
-	newStart = b.Len()
-	matchStr := string(runes[matchStartRune:matchEndRune])
-	b.WriteString(matchStr)
-	newLen = len(matchStr)
+	b.WriteString(string(runes[matchStartRune:matchEndRune]))
 	b.WriteString(string(runes[matchEndRune : matchEndRune+contentAfter]))
 	if needAfterEllipsis {
 		b.WriteString(promptTruncateEllipsis)
 	}
-	return b.String(), newStart, newLen
+	return b.String()
 }
 
 func softTruncateRunes(s string, max int) string {
@@ -868,4 +681,78 @@ func formatWindowShort(d time.Duration) string {
 		return fmt.Sprintf("%dm", int(d/time.Minute))
 	}
 	return d.String()
+}
+
+func collapseWhitespace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
+func textContainsAllLiteralCI(s string, patterns []string) bool {
+	if len(patterns) == 0 {
+		return true
+	}
+	for _, p := range patterns {
+		if _, _, ok := findLiteralCI(s, p); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func findLiteralCI(s, pattern string) (start, length int, ok bool) {
+	if pattern == "" || s == "" {
+		return 0, 0, false
+	}
+	lowerS := strings.ToLower(s)
+	lowerP := strings.ToLower(pattern)
+	idx := strings.Index(lowerS, lowerP)
+	if idx < 0 {
+		return 0, 0, false
+	}
+	return idx, len(lowerP), true
+}
+
+func highlightAllLiteralCI(s string, patterns []string) string {
+	if s == "" || len(patterns) == 0 {
+		return s
+	}
+	var lowerPats []string
+	for _, p := range patterns {
+		if p == "" {
+			continue
+		}
+		lowerPats = append(lowerPats, strings.ToLower(p))
+	}
+	if len(lowerPats) == 0 {
+		return s
+	}
+	lower := strings.ToLower(s)
+	var b strings.Builder
+	i := 0
+	for i < len(s) {
+		bestStart := -1
+		bestEnd := -1
+		for _, lp := range lowerPats {
+			rel := strings.Index(lower[i:], lp)
+			if rel < 0 {
+				continue
+			}
+			start := i + rel
+			end := start + len(lp)
+			if bestStart < 0 || start < bestStart || (start == bestStart && end > bestEnd) {
+				bestStart = start
+				bestEnd = end
+			}
+		}
+		if bestStart < 0 {
+			b.WriteString(s[i:])
+			break
+		}
+		b.WriteString(s[i:bestStart])
+		b.WriteString(ansiBoldRed)
+		b.WriteString(s[bestStart:bestEnd])
+		b.WriteString(ansiReset)
+		i = bestEnd
+	}
+	return b.String()
 }

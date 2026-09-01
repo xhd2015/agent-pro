@@ -9,6 +9,7 @@ import (
 
 	"github.com/xhd2015/agent-pro/pkgs/procresolve"
 	"github.com/xhd2015/dot-pkgs/go-pkgs/shell/iterm2"
+	"github.com/xhd2015/dot-pkgs/go-pkgs/shell/iterm2/tabselect"
 	"github.com/xhd2015/less-gen/flags"
 )
 
@@ -122,11 +123,11 @@ func RunResolve(args []string, opts *ResolveOpts) error {
 
 	var details ResolveDetails
 	if tabSet || tabIndexSet {
-		var sel TabSelector
+		var sel tabselect.TabSelector
 		if tabSet {
-			sel, err = ParseTabFlag(*tabFlag)
+			sel, err = tabselect.ParseTabFlag(*tabFlag)
 		} else {
-			sel, err = ParseTabIndexFlag(*tabIndexFlag)
+			sel, err = tabselect.ParseTabIndexFlag(*tabIndexFlag)
 		}
 		if err != nil {
 			return err

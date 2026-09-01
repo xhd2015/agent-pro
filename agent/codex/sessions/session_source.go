@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/xhd2015/dot-pkgs/go-pkgs/shell/iterm2"
+	"github.com/xhd2015/dot-pkgs/go-pkgs/shell/iterm2/tabselect"
 )
 
 // SessionSourceOpts drives ResolveSessionSource. Tab hooks mirror TabResolveOpts.
@@ -35,11 +36,11 @@ func ResolveSessionSource(positional []string, tabFlag *string, tabIndexFlag *in
 		if len(positional) > 0 {
 			return "", nil, fmt.Errorf("session id cannot be combined with --tab/--tab-index")
 		}
-		var sel TabSelector
+		var sel tabselect.TabSelector
 		if tabSet {
-			sel, err = ParseTabFlag(*tabFlag)
+			sel, err = tabselect.ParseTabFlag(*tabFlag)
 		} else {
-			sel, err = ParseTabIndexFlag(*tabIndexFlag)
+			sel, err = tabselect.ParseTabIndexFlag(*tabIndexFlag)
 		}
 		if err != nil {
 			return "", nil, err
