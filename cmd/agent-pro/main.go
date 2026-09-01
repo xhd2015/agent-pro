@@ -12,8 +12,10 @@ import (
 	"time"
 
 	codexcfg "github.com/xhd2015/agent-pro/agent/codex/config"
+	codexmodels "github.com/xhd2015/agent-pro/agent/codex/models"
 	codexsessions "github.com/xhd2015/agent-pro/agent/codex/sessions"
 	codexskills "github.com/xhd2015/agent-pro/agent/codex/skills"
+	grokmodels "github.com/xhd2015/agent-pro/agent/grok/models"
 	groksessions "github.com/xhd2015/agent-pro/agent/grok/sessions"
 	grokview "github.com/xhd2015/agent-pro/agent/grok/view"
 	"github.com/xhd2015/agent-pro/agent/opencode/commands"
@@ -748,6 +750,7 @@ const grokHelp = `
 Usage: agent-pro grok <command> [ARGS]
 
 Commands:
+  models            list available Grok models from ~/.grok
   sessions          list recent Grok CLI sessions (table)
   session           per-session ops (info, view, prompts, …)
   sessions prompts  alias for: session prompts (user prompt history)
@@ -762,6 +765,8 @@ func handleGrok(args []string) error {
 	}
 
 	switch args[0] {
+	case "models":
+		return handleGrokModels(args[1:])
 	case "sessions":
 		return handleGrokSessions(args[1:])
 	case "session":
@@ -769,6 +774,53 @@ func handleGrok(args []string) error {
 	default:
 		return fmt.Errorf("unknown grok command: %s", args[0])
 	}
+}
+
+const grokModelsHelp = `
+Usage: agent-pro grok models [OPTIONS]
+
+List available Grok CLI models from on-disk files
+(~/.grok/config.toml and models_cache.json; or $GROK_HOME).
+Does not spawn the grok binary.
+
+Options:
+  --home DIR    Grok home directory (default: $GROK_HOME or ~/.grok)
+  --json        print Catalog as JSON
+  -h,--help     show help
+`
+
+func handleGrokModels(args []string) error {
+	var homeFlag *string
+	var jsonFlag *bool
+	remaining, err := flags.String("--home", &homeFlag).
+		Bool("--json", &jsonFlag).
+		Help("-h,--help", grokModelsHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+	if len(remaining) > 0 {
+		return fmt.Errorf("unexpected arguments: %v", remaining)
+	}
+
+	home := ""
+	if homeFlag != nil {
+		home = strings.TrimSpace(*homeFlag)
+	}
+	cat, err := grokmodels.List(home)
+	if err != nil {
+		return fmt.Errorf("list grok models: %w", err)
+	}
+	if jsonFlag != nil && *jsonFlag {
+		data, err := grokmodels.FormatJSON(cat)
+		if err != nil {
+			return fmt.Errorf("format grok models json: %w", err)
+		}
+		fmt.Println(string(data))
+		return nil
+	}
+	fmt.Print(grokmodels.FormatText(cat))
+	return nil
 }
 
 const grokSessionsHelp = `
@@ -1710,6 +1762,7 @@ Usage: agent-pro codex <command> [ARGS]
 
 Commands:
   model             show configured model settings
+  models            list available Codex models from ~/.codex
   model-providers   list custom model providers
   mcp               list MCP server configurations
   projects          list trusted project paths
@@ -1732,6 +1785,8 @@ func handleCodex(args []string) error {
 	switch args[0] {
 	case "model":
 		return handleCodexModel(args[1:])
+	case "models":
+		return handleCodexModels(args[1:])
 	case "model-providers":
 		return handleCodexModelProviders(args[1:])
 	case "mcp":
@@ -1757,6 +1812,55 @@ func handleCodex(args []string) error {
 
 func loadCodexConfig() (*codexcfg.Config, error) {
 	return codexcfg.ReadDefault()
+}
+
+// --- codex models (catalog) ---
+
+const codexModelsHelp = `
+Usage: agent-pro codex models [OPTIONS]
+
+List available Codex CLI models from on-disk files
+(~/.codex/config.toml and models_cache.json; or $CODEX_HOME).
+Keeps only visibility=list entries. Does not spawn the codex binary.
+
+Options:
+  --home DIR    Codex home directory (default: $CODEX_HOME or ~/.codex)
+  --json        print Catalog as JSON
+  -h,--help     show help
+`
+
+func handleCodexModels(args []string) error {
+	var homeFlag *string
+	var jsonFlag *bool
+	remaining, err := flags.String("--home", &homeFlag).
+		Bool("--json", &jsonFlag).
+		Help("-h,--help", codexModelsHelp).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+	if len(remaining) > 0 {
+		return fmt.Errorf("unexpected arguments: %v", remaining)
+	}
+
+	home := ""
+	if homeFlag != nil {
+		home = strings.TrimSpace(*homeFlag)
+	}
+	cat, err := codexmodels.List(home)
+	if err != nil {
+		return fmt.Errorf("list codex models: %w", err)
+	}
+	if jsonFlag != nil && *jsonFlag {
+		data, err := codexmodels.FormatJSON(cat)
+		if err != nil {
+			return fmt.Errorf("format codex models json: %w", err)
+		}
+		fmt.Println(string(data))
+		return nil
+	}
+	fmt.Print(codexmodels.FormatText(cat))
+	return nil
 }
 
 // --- codex model ---
