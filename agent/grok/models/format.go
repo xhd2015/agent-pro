@@ -26,12 +26,17 @@ func FormatText(cat Catalog) string {
 		b.WriteString("(no models)\n")
 		return b.String()
 	}
-	for _, id := range cat.Models {
+	for _, m := range cat.Models {
 		mark := "  "
-		if cat.Default != "" && id == cat.Default {
+		if cat.Default != "" && m.ID == cat.Default {
 			mark = "* "
 		}
-		fmt.Fprintf(&b, "%s%s\n", mark, id)
+		line := mark + m.ID
+		if m.DisplayName != "" {
+			line += "  " + m.DisplayName
+		}
+		b.WriteString(line)
+		b.WriteByte('\n')
 	}
 	return b.String()
 }

@@ -12,10 +12,10 @@ optional `[models].default`, and may also cache ids in `models_cache.json`.
 errors when a present file is invalid.
 
 CLI contract:
-- human: `Home` / `Default` header, `* ` marks the configured default, empty →
-  `(no models)`
-- `--json`: indented `Catalog` (`home`, `default`, `models`, `from_config`,
-  `from_cache`)
+- human: `Home` / `Default` header, `* ` marks the configured default, optional
+  display name, empty → `(no models)`
+- `--json`: indented `Catalog` with unified model objects
+  (`id`, `source`, `display_name?`) plus `home` / `default` / `from_*`
 
 ## Version
 

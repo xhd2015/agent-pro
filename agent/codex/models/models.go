@@ -36,11 +36,14 @@ type Catalog struct {
 	FromCache bool `json:"from_cache"`
 }
 
-// Model is one selectable Codex model.
+// Model is one selectable Codex model in the unified CLI JSON shape.
 type Model struct {
-	// Slug is the model id passed to codex (e.g. "gpt-5.6-sol"); for a
+	// ID is the model id passed to codex (e.g. "gpt-5.6-sol"); for a
 	// configured provider-qualified id it may look like "provider/model".
-	Slug string `json:"slug"`
+	ID string `json:"id"`
+	// Source is the basename of the file that primarily contributed this id
+	// (models_cache.json for cache rows; config.toml for config-only unions).
+	Source string `json:"source"`
 	// DisplayName is Codex's human name (cache only; empty otherwise).
 	DisplayName string `json:"display_name,omitempty"`
 	// DefaultReasoning is the cache's default_reasoning_level (empty when unknown).
@@ -112,12 +115,13 @@ func List(home string) (Catalog, error) {
 		}
 		cat.FromCache = true
 		for _, cm := range cache.Models {
-			slug := strings.TrimSpace(cm.Slug)
-			if slug == "" || strings.TrimSpace(cm.Visibility) != VisibilityList {
+			id := strings.TrimSpace(cm.Slug)
+			if id == "" || strings.TrimSpace(cm.Visibility) != VisibilityList {
 				continue
 			}
 			cat.Models = append(cat.Models, Model{
-				Slug:             slug,
+				ID:               id,
+				Source:           ModelsCacheFile,
 				DisplayName:      strings.TrimSpace(cm.DisplayName),
 				DefaultReasoning: strings.TrimSpace(cm.DefaultReasoning),
 				Reasoning:        efforts(cm.SupportedReasoningLevel),
@@ -129,8 +133,11 @@ func List(home string) (Catalog, error) {
 
 	// Keep the configured model selectable even when the cache omits it
 	// (e.g. a provider-qualified model from [model_providers.<name>]).
-	if cat.Default != "" && !hasSlug(cat.Models, cat.Default) {
-		cat.Models = append([]Model{{Slug: cat.Default}}, cat.Models...)
+	if cat.Default != "" && !hasID(cat.Models, cat.Default) {
+		cat.Models = append([]Model{{
+			ID:     cat.Default,
+			Source: DefaultConfigFile,
+		}}, cat.Models...)
 	}
 
 	if cat.Models == nil {
@@ -139,7 +146,7 @@ func List(home string) (Catalog, error) {
 	return cat, nil
 }
 
-// Slugs returns the model slug ids from List(home).
+// Slugs returns the model ids from List(home) (legacy name; values are Model.ID).
 func Slugs(home string) ([]string, error) {
 	cat, err := List(home)
 	if err != nil {
@@ -147,7 +154,7 @@ func Slugs(home string) ([]string, error) {
 	}
 	out := make([]string, 0, len(cat.Models))
 	for _, m := range cat.Models {
-		out = append(out, m.Slug)
+		out = append(out, m.ID)
 	}
 	return out, nil
 }
@@ -162,9 +169,9 @@ func efforts(levels []reasoningLevel) []string {
 	return out
 }
 
-func hasSlug(models []Model, slug string) bool {
+func hasID(models []Model, id string) bool {
 	for _, m := range models {
-		if m.Slug == slug {
+		if m.ID == id {
 			return true
 		}
 	}

@@ -1,6 +1,7 @@
 ## Expected
 
 - JSON parses as Catalog with two models (no `gpt-reserve`).
+- Each model uses `id` (not `slug`) and `source`.
 - `gpt-5.5` has reasoning `[low medium high xhigh]` and default_reasoning `xhigh`.
 - `gpt-5.6-sol` includes `ultra` in reasoning.
 
@@ -11,6 +12,7 @@
 ```go
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	codexmodels "github.com/xhd2015/agent-pro/agent/codex/models"
@@ -18,6 +20,9 @@ import (
 
 func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
 	assertSuccess(t, resp)
+	if strings.Contains(string(resp.JSON), `"slug"`) {
+		t.Fatalf("unexpected slug key:\n%s", resp.JSON)
+	}
 	var payload codexmodels.Catalog
 	if err := json.Unmarshal(resp.JSON, &payload); err != nil {
 		t.Fatalf("unmarshal: %v\n%s", err, string(resp.JSON))
@@ -34,15 +39,15 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	if len(payload.Models) != 2 {
 		t.Fatalf("models=%+v want 2", payload.Models)
 	}
-	bySlug := map[string]codexmodels.Model{}
+	byID := map[string]codexmodels.Model{}
 	for _, m := range payload.Models {
-		bySlug[m.Slug] = m
+		byID[m.ID] = m
 	}
-	if _, ok := bySlug["gpt-reserve"]; ok {
-		t.Fatalf("hidden slug leaked: %+v", payload.Models)
+	if _, ok := byID["gpt-reserve"]; ok {
+		t.Fatalf("hidden id leaked: %+v", payload.Models)
 	}
-	sol := bySlug["gpt-5.6-sol"]
-	if sol.DisplayName != "GPT-5.6-Sol" || sol.DefaultReasoning != "medium" {
+	sol := byID["gpt-5.6-sol"]
+	if sol.Source != codexmodels.ModelsCacheFile || sol.DisplayName != "GPT-5.6-Sol" || sol.DefaultReasoning != "medium" {
 		t.Fatalf("sol=%+v", sol)
 	}
 	wantSol := []string{"low", "medium", "high", "xhigh", "max", "ultra"}
@@ -54,9 +59,9 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 			t.Fatalf("sol.Reasoning=%v", sol.Reasoning)
 		}
 	}
-	g55 := bySlug["gpt-5.5"]
+	g55 := byID["gpt-5.5"]
 	want55 := []string{"low", "medium", "high", "xhigh"}
-	if g55.DefaultReasoning != "xhigh" || len(g55.Reasoning) != len(want55) {
+	if g55.Source != codexmodels.ModelsCacheFile || g55.DefaultReasoning != "xhigh" || len(g55.Reasoning) != len(want55) {
 		t.Fatalf("gpt-5.5=%+v", g55)
 	}
 	for i := range want55 {

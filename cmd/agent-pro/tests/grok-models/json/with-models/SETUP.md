@@ -1,6 +1,6 @@
 # Scenario
 
-**Feature**: JSON Catalog includes sorted models and default
+**Feature**: JSON Catalog uses unified model objects with id/source/display_name
 
 ```
 # same fixtures as human/with-models
@@ -9,7 +9,7 @@ List -> Catalog -> FormatJSON
 
 ## Preconditions
 
-- Config + cache fixtures yield three model ids and default `grok-4.5`.
+- Config + cache fixtures yield three model objects with provenance.
 
 ## Steps
 
@@ -31,8 +31,8 @@ name = "AIS - GLM-5.2"
 `)
 	writeGrokCache(t, req.GrokHome, `{
   "models": {
-    "grok-4.6": {},
-    "grok-4.5": {}
+    "grok-4.6": { "info": { "name": "Grok 4.6" } },
+    "grok-4.5": { "info": { "name": "Grok 4.5" } }
   }
 }`)
 	return nil

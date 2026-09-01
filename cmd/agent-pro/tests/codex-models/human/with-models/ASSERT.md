@@ -1,6 +1,7 @@
 ## Expected
 
 - List returns exactly two models (hidden slug excluded); Default is `gpt-5.5`.
+- Models use `id` + `source=models_cache.json`.
 - Human output marks `* gpt-5.5` and shows reasoning for both visible models.
 - Output does not mention `gpt-reserve`.
 
@@ -12,6 +13,8 @@
 import (
 	"strings"
 	"testing"
+
+	codexmodels "github.com/xhd2015/agent-pro/agent/codex/models"
 )
 
 func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err error) {
@@ -21,6 +24,12 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	}
 	if len(resp.Catalog.Models) != 2 {
 		t.Fatalf("Models=%+v want 2 list-visible", resp.Catalog.Models)
+	}
+	if resp.Catalog.Models[0].ID != "gpt-5.6-sol" || resp.Catalog.Models[0].Source != codexmodels.ModelsCacheFile {
+		t.Fatalf("Models[0]=%+v", resp.Catalog.Models[0])
+	}
+	if resp.Catalog.Models[1].ID != "gpt-5.5" || resp.Catalog.Models[1].Source != codexmodels.ModelsCacheFile {
+		t.Fatalf("Models[1]=%+v", resp.Catalog.Models[1])
 	}
 	assertContains(t, resp.Output, "Home: "+req.CodexHome)
 	assertContains(t, resp.Output, "Default: gpt-5.5")

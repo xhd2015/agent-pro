@@ -12,8 +12,8 @@ func TestFormatTextMarksDefaultAndReasoning(t *testing.T) {
 		Home:    "/tmp/.codex",
 		Default: "gpt-5.5",
 		Models: []Model{
-			{Slug: "gpt-5.6-sol", DisplayName: "GPT-5.6-Sol", DefaultReasoning: "medium", Reasoning: []string{"low", "medium", "ultra"}},
-			{Slug: "gpt-5.5", DisplayName: "GPT-5.5", DefaultReasoning: "xhigh", Reasoning: []string{"low", "xhigh"}},
+			{ID: "gpt-5.6-sol", Source: ModelsCacheFile, DisplayName: "GPT-5.6-Sol", DefaultReasoning: "medium", Reasoning: []string{"low", "medium", "ultra"}},
+			{ID: "gpt-5.5", Source: ModelsCacheFile, DisplayName: "GPT-5.5", DefaultReasoning: "xhigh", Reasoning: []string{"low", "xhigh"}},
 		},
 	}
 	out := FormatText(cat)
@@ -45,7 +45,7 @@ func TestFormatJSONRoundTrip(t *testing.T) {
 		Home:    "/tmp/.codex",
 		Default: "gpt-5.5",
 		Models: []Model{
-			{Slug: "gpt-5.5", DisplayName: "GPT-5.5", DefaultReasoning: "xhigh", Reasoning: []string{"low", "xhigh"}},
+			{ID: "gpt-5.5", Source: ModelsCacheFile, DisplayName: "GPT-5.5", DefaultReasoning: "xhigh", Reasoning: []string{"low", "xhigh"}},
 		},
 		FromConfig: true,
 		FromCache:  true,
@@ -61,7 +61,11 @@ func TestFormatJSONRoundTrip(t *testing.T) {
 	if got.Home != cat.Home || got.Default != cat.Default || len(got.Models) != 1 {
 		t.Fatalf("got=%+v", got)
 	}
-	if got.Models[0].Slug != "gpt-5.5" || got.Models[0].DefaultReasoning != "xhigh" {
-		t.Fatalf("model=%+v", got.Models[0])
+	m := got.Models[0]
+	if m.ID != "gpt-5.5" || m.Source != ModelsCacheFile || m.DefaultReasoning != "xhigh" {
+		t.Fatalf("model=%+v", m)
+	}
+	if strings.Contains(string(raw), `"slug"`) {
+		t.Fatalf("unexpected slug key in json:\n%s", raw)
 	}
 }

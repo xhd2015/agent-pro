@@ -15,7 +15,8 @@ the list when the cache omits it.
 CLI contract:
 - human: `Home` / `Default` header, `* ` marks default, includes display name
   and reasoning; empty → `(no models)`
-- `--json`: indented `Catalog` with nested `models[]` objects
+- `--json`: indented `Catalog` with unified model objects
+  (`id`, `source`, `display_name?`, `default_reasoning?`, `reasoning?`)
 
 ## Version
 

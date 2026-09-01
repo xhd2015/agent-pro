@@ -11,13 +11,17 @@ func TestFormatTextMarksDefault(t *testing.T) {
 	cat := Catalog{
 		Home:    "/tmp/.grok",
 		Default: "grok-4.5",
-		Models:  []string{"ais-glm-5-2", "grok-4.5", "grok-4.6"},
+		Models: []Model{
+			{ID: "ais-glm-5-2", Source: DefaultConfigFile, DisplayName: "AIS - GLM-5.2"},
+			{ID: "grok-4.5", Source: DefaultConfigFile, DisplayName: "Grok 4.5"},
+			{ID: "grok-4.6", Source: ModelsCacheFile},
+		},
 	}
 	out := FormatText(cat)
-	if !strings.Contains(out, "* grok-4.5\n") {
+	if !strings.Contains(out, "* grok-4.5  Grok 4.5\n") {
 		t.Fatalf("missing default mark:\n%s", out)
 	}
-	if !strings.Contains(out, "  ais-glm-5-2\n") || !strings.Contains(out, "  grok-4.6\n") {
+	if !strings.Contains(out, "  ais-glm-5-2  AIS - GLM-5.2\n") || !strings.Contains(out, "  grok-4.6\n") {
 		t.Fatalf("missing indented models:\n%s", out)
 	}
 	if strings.Contains(out, "* ais-glm-5-2") {
@@ -27,7 +31,7 @@ func TestFormatTextMarksDefault(t *testing.T) {
 
 func TestFormatTextEmpty(t *testing.T) {
 	t.Parallel()
-	out := FormatText(Catalog{Home: "/tmp/.grok", Models: []string{}})
+	out := FormatText(Catalog{Home: "/tmp/.grok", Models: []Model{}})
 	if !strings.Contains(out, "(no models)") {
 		t.Fatalf("output=%q", out)
 	}
@@ -36,9 +40,11 @@ func TestFormatTextEmpty(t *testing.T) {
 func TestFormatJSONRoundTrip(t *testing.T) {
 	t.Parallel()
 	cat := Catalog{
-		Home:       "/tmp/.grok",
-		Default:    "grok-4.5",
-		Models:     []string{"grok-4.5"},
+		Home:    "/tmp/.grok",
+		Default: "grok-4.5",
+		Models: []Model{
+			{ID: "grok-4.5", Source: DefaultConfigFile, DisplayName: "Grok 4.5"},
+		},
 		FromConfig: true,
 		FromCache:  true,
 	}
@@ -50,7 +56,14 @@ func TestFormatJSONRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(raw, &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Home != cat.Home || got.Default != cat.Default || len(got.Models) != 1 || got.Models[0] != "grok-4.5" {
+	if got.Home != cat.Home || got.Default != cat.Default || len(got.Models) != 1 {
 		t.Fatalf("got=%+v", got)
+	}
+	m := got.Models[0]
+	if m.ID != "grok-4.5" || m.Source != DefaultConfigFile || m.DisplayName != "Grok 4.5" {
+		t.Fatalf("model=%+v", m)
+	}
+	if strings.Contains(string(raw), `"slug"`) {
+		t.Fatalf("unexpected slug key in json:\n%s", raw)
 	}
 }

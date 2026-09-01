@@ -50,7 +50,7 @@ model_reasoning_effort = "medium"
 	if len(cat.Models) != 2 {
 		t.Fatalf("Models=%+v", cat.Models)
 	}
-	if cat.Models[0].Slug != "gpt-5.6-sol" || cat.Models[0].DisplayName != "GPT-5.6-Sol" {
+	if cat.Models[0].ID != "gpt-5.6-sol" || cat.Models[0].Source != ModelsCacheFile || cat.Models[0].DisplayName != "GPT-5.6-Sol" {
 		t.Fatalf("Models[0]=%+v", cat.Models[0])
 	}
 	if got := cat.Models[0].DefaultReasoning; got != "medium" {
@@ -59,7 +59,7 @@ model_reasoning_effort = "medium"
 	if got := strings.Join(cat.Models[0].Reasoning, ","); got != "low,ultra" {
 		t.Fatalf("Reasoning=%v", cat.Models[0].Reasoning)
 	}
-	if cat.Models[1].Slug != "gpt-5.5" {
+	if cat.Models[1].ID != "gpt-5.5" || cat.Models[1].Source != ModelsCacheFile {
 		t.Fatalf("Models[1]=%+v", cat.Models[1])
 	}
 }
@@ -85,10 +85,12 @@ func TestListConfigModelNotInCachePrepended(t *testing.T) {
 	if len(cat.Models) != 2 {
 		t.Fatalf("Models=%+v", cat.Models)
 	}
-	if cat.Models[0].Slug != "openrouter/deepseek-chat" || cat.Models[1].Slug != "gpt-5.5" {
-		t.Fatalf("Models=%+v", cat.Models)
+	if cat.Models[0].ID != "openrouter/deepseek-chat" || cat.Models[0].Source != DefaultConfigFile {
+		t.Fatalf("Models[0]=%+v", cat.Models[0])
 	}
-	// Configured union has no cache metadata.
+	if cat.Models[1].ID != "gpt-5.5" || cat.Models[1].Source != ModelsCacheFile {
+		t.Fatalf("Models[1]=%+v", cat.Models[1])
+	}
 	if cat.Models[0].Reasoning != nil || cat.Models[0].DisplayName != "" {
 		t.Fatalf("Models[0]=%+v", cat.Models[0])
 	}
@@ -145,7 +147,7 @@ func TestListCacheOnly(t *testing.T) {
 	if !cat.FromCache || cat.FromConfig {
 		t.Fatalf("FromCache=%v FromConfig=%v", cat.FromCache, cat.FromConfig)
 	}
-	if len(cat.Models) != 1 || cat.Models[0].Slug != "gpt-5.6-luna" {
+	if len(cat.Models) != 1 || cat.Models[0].ID != "gpt-5.6-luna" || cat.Models[0].Source != ModelsCacheFile {
 		t.Fatalf("Models=%+v", cat.Models)
 	}
 }

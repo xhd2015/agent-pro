@@ -28,11 +28,22 @@ type Catalog struct {
 	Default string `json:"default,omitempty"`
 	// Models is the sorted unique union of config.toml [model."…"] keys and
 	// models_cache.json model ids. Empty when neither source yields ids.
-	Models []string `json:"models"`
+	Models []Model `json:"models"`
 	// FromConfig is true when config.toml was read successfully.
 	FromConfig bool `json:"from_config"`
 	// FromCache is true when models_cache.json was read successfully.
 	FromCache bool `json:"from_cache"`
+}
+
+// Model is one selectable Grok model in the unified CLI JSON shape.
+type Model struct {
+	// ID is the model id passed to grok.
+	ID string `json:"id"`
+	// Source is the basename of the file that primarily contributed this id
+	// (config.toml preferred over models_cache.json when both list it).
+	Source string `json:"source"`
+	// DisplayName is config `name` when set, else cache info.name.
+	DisplayName string `json:"display_name,omitempty"`
 }
 
 type configFile struct {
@@ -41,12 +52,20 @@ type configFile struct {
 }
 
 type configModelsSection struct {
-	Default                 string `toml:"default"`
-	DefaultReasoningEffort  string `toml:"default_reasoning_effort"`
+	Default                string `toml:"default"`
+	DefaultReasoningEffort string `toml:"default_reasoning_effort"`
 }
 
 type modelsCacheFile struct {
 	Models map[string]json.RawMessage `json:"models"`
+}
+
+type cacheModelEntry struct {
+	Info cacheModelInfo `json:"info"`
+}
+
+type cacheModelInfo struct {
+	Name string `json:"name"`
 }
 
 // DefaultHome returns $GROK_HOME when set, otherwise $HOME/.grok.
@@ -71,19 +90,7 @@ func List(home string) (Catalog, error) {
 		home = DefaultHome()
 	}
 	cat := Catalog{Home: home, Models: nil}
-
-	seen := map[string]struct{}{}
-	add := func(id string) {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			return
-		}
-		if _, ok := seen[id]; ok {
-			return
-		}
-		seen[id] = struct{}{}
-		cat.Models = append(cat.Models, id)
-	}
+	byID := map[string]Model{}
 
 	cfgPath := filepath.Join(home, DefaultConfigFile)
 	if raw, err := os.ReadFile(cfgPath); err == nil {
@@ -93,8 +100,16 @@ func List(home string) (Catalog, error) {
 		}
 		cat.FromConfig = true
 		cat.Default = strings.TrimSpace(cfg.Models.Default)
-		for id := range cfg.Model {
-			add(id)
+		for id, v := range cfg.Model {
+			id = strings.TrimSpace(id)
+			if id == "" {
+				continue
+			}
+			byID[id] = Model{
+				ID:          id,
+				Source:      DefaultConfigFile,
+				DisplayName: configModelName(v),
+			}
 		}
 	} else if !os.IsNotExist(err) {
 		return Catalog{}, fmt.Errorf("grok models: read %s: %w", cfgPath, err)
@@ -107,25 +122,68 @@ func List(home string) (Catalog, error) {
 			return Catalog{}, fmt.Errorf("grok models: parse %s: %w", cachePath, err)
 		}
 		cat.FromCache = true
-		for id := range cache.Models {
-			add(id)
+		for id, entryRaw := range cache.Models {
+			id = strings.TrimSpace(id)
+			if id == "" {
+				continue
+			}
+			cacheName := cacheModelName(entryRaw)
+			if existing, ok := byID[id]; ok {
+				// Prefer config for source; fill display name from cache when config omitted it.
+				if existing.DisplayName == "" && cacheName != "" {
+					existing.DisplayName = cacheName
+					byID[id] = existing
+				}
+				continue
+			}
+			byID[id] = Model{
+				ID:          id,
+				Source:      ModelsCacheFile,
+				DisplayName: cacheName,
+			}
 		}
 	} else if !os.IsNotExist(err) {
 		return Catalog{}, fmt.Errorf("grok models: read %s: %w", cachePath, err)
 	}
 
-	sort.Strings(cat.Models)
-	if cat.Models == nil {
-		cat.Models = []string{}
+	ids := make([]string, 0, len(byID))
+	for id := range byID {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	cat.Models = make([]Model, 0, len(ids))
+	for _, id := range ids {
+		cat.Models = append(cat.Models, byID[id])
 	}
 	return cat, nil
 }
 
-// ListIDs is List(home).Models.
+// ListIDs returns List(home) model ids in catalog order.
 func ListIDs(home string) ([]string, error) {
 	cat, err := List(home)
 	if err != nil {
 		return nil, err
 	}
-	return append([]string(nil), cat.Models...), nil
+	out := make([]string, 0, len(cat.Models))
+	for _, m := range cat.Models {
+		out = append(out, m.ID)
+	}
+	return out, nil
+}
+
+func configModelName(v any) string {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return ""
+	}
+	name, _ := m["name"].(string)
+	return strings.TrimSpace(name)
+}
+
+func cacheModelName(raw json.RawMessage) string {
+	var entry cacheModelEntry
+	if err := json.Unmarshal(raw, &entry); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(entry.Info.Name)
 }

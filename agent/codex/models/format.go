@@ -28,10 +28,10 @@ func FormatText(cat Catalog) string {
 	}
 	for _, m := range cat.Models {
 		mark := "  "
-		if cat.Default != "" && m.Slug == cat.Default {
+		if cat.Default != "" && m.ID == cat.Default {
 			mark = "* "
 		}
-		line := mark + m.Slug
+		line := mark + m.ID
 		if m.DisplayName != "" {
 			line += "  " + m.DisplayName
 		}
