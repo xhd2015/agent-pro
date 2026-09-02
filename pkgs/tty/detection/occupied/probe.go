@@ -15,6 +15,11 @@ func (s Status) String() string { return string(s) }
 
 const defaultProbeSettle = 150 * time.Millisecond
 
+// defaultStabilizeAttempts is how many post-DEL Snapshot polls Probe uses to
+// wait for the resting screen to match the pre-probe baseline (Codex may
+// redraw / scroll after space+DEL).
+const defaultStabilizeAttempts = 20
+
 // IO is the injectable snapshot/inject surface for Probe.
 type IO struct {
 	Snapshot func() (string, error)
@@ -23,12 +28,13 @@ type IO struct {
 	// first Snapshot call (avoids a duplicate SnapshotText under idle Tick).
 	Before string
 	// Settle is how long to wait after injecting the space before reading
-	// after (0 → defaultProbeSettle).
+	// after, and between post-DEL stabilize polls (0 → defaultProbeSettle).
 	Settle time.Duration
 }
 
 // Probe types one space, waits Settle, snapshots, classifies with
-// ExactlyOneMoreSpace, then always DELs the space.
+// ExactlyOneMoreSpace, then always DELs the space and waits until Snapshot
+// matches the pre-probe resting text again (or attempts are exhausted).
 //
 // exactly +1 draft space → Occupied
 // any other / no change    → Empty
@@ -50,9 +56,6 @@ func Probe(io IO) Status {
 	if err := io.Inject(" "); err != nil {
 		return Empty
 	}
-	defer func() {
-		_ = io.Inject("\x7f")
-	}()
 
 	settle := io.Settle
 	if settle <= 0 {
@@ -61,14 +64,38 @@ func Probe(io IO) Status {
 	time.Sleep(settle)
 
 	after, err := io.Snapshot()
+	status := Empty
 	if err != nil {
-		return Unknown
+		status = Unknown
+	} else if after == before {
+		status = Empty
+	} else if ExactlyOneMoreSpace([]byte(before), []byte(after)) {
+		status = Occupied
 	}
-	if after == before {
-		return Empty
+
+	_ = io.Inject("\x7f")
+	stabilizeAfterDEL(io, before, settle)
+	return status
+}
+
+// stabilizeAfterDEL polls Snapshot until it equals the pre-probe resting
+// baseline. Space+DEL can scroll/reflow the TUI; idle condition-1 needs the
+// probe owner to leave the resting world as it found it.
+func stabilizeAfterDEL(io IO, before string, settle time.Duration) {
+	if io.Snapshot == nil || before == "" {
+		return
 	}
-	if ExactlyOneMoreSpace([]byte(before), []byte(after)) {
-		return Occupied
+	if settle <= 0 {
+		settle = defaultProbeSettle
 	}
-	return Empty
+	for i := 0; i < defaultStabilizeAttempts; i++ {
+		time.Sleep(settle)
+		cur, err := io.Snapshot()
+		if err != nil {
+			return
+		}
+		if cur == before {
+			return
+		}
+	}
 }

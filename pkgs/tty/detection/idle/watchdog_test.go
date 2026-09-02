@@ -152,10 +152,8 @@ func TestWatchdog_notReadyHolds(t *testing.T) {
 }
 
 func TestWatchdog_preSpaceBaselineIgnoresPostProbeFlicker(t *testing.T) {
-	// Live Codex: space probe collapses "Ask Codex to do anything" to bare ›
-	// (DEL does not restore the hint). Codex redraws the hint before the next
-	// Tick. Resting compare must keep the pre-space baseline so that restore
-	// does not look like session activity.
+	// Live Codex: space collapses placeholder; DEL may leave bare › briefly.
+	// Probe stabilize waits until Snapshot matches pre-probe resting again.
 	var soft int
 	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	now := t0
@@ -163,12 +161,19 @@ func TestWatchdog_preSpaceBaselineIgnoresPostProbeFlicker(t *testing.T) {
 	const collapsed = "›\n  gpt-5.6-luna xhigh · ~/ws\n"
 	var mu sync.Mutex
 	text := resting
+	postDelSnaps := 0
 	w := New(true, Policy{ExitOnIdle: true}, Watchdog{
 		Timeout: 10 * time.Millisecond,
 		Now:     func() time.Time { return now },
 		Snapshot: func() (string, error) {
 			mu.Lock()
 			defer mu.Unlock()
+			if postDelSnaps > 0 {
+				postDelSnaps++
+				if postDelSnaps >= 2 {
+					text = resting
+				}
+			}
 			return text, nil
 		},
 		Inject: func(s string) error {
@@ -177,23 +182,18 @@ func TestWatchdog_preSpaceBaselineIgnoresPostProbeFlicker(t *testing.T) {
 			switch s {
 			case " ":
 				text = collapsed
+				postDelSnaps = 0
 			case "\x7f":
-				// Live Codex: DEL leaves bare ›; hint returns later.
 				text = collapsed
+				postDelSnaps = 1
 			}
 			return nil
 		},
 		SoftExit: func() { soft++ },
 	})
-	w.Tick() // hit1; baseline = resting (not collapsed)
-	mu.Lock()
-	text = resting // Codex redraws placeholder between ticks
-	mu.Unlock()
+	w.Tick() // hit1; Probe restores resting before return
 	now = t0.Add(5 * time.Millisecond)
-	w.Tick() // resting vs resting → hit2
-	mu.Lock()
-	text = resting
-	mu.Unlock()
+	w.Tick() // hit2
 	now = t0.Add(15 * time.Millisecond)
 	w.Tick() // hit3 + SoftExit
 	if soft != 1 {
@@ -216,5 +216,65 @@ func TestWatchdog_disarmedNoOp(t *testing.T) {
 	w.Tick()
 	if soft != 0 {
 		t.Fatalf("SoftExit=%d want 0 when not found", soft)
+	}
+}
+
+// Probe-induced viewport scroll (live Codex): after space/DEL the composer
+// rematches but SnapshotText loses a leading prefix. Idle must still SoftExit —
+// either Probe restores the resting snap, or condition-1 must not treat pure
+// prefix scroll as activity. Today full-string Note resets hits forever.
+func TestWatchdog_probeInducedViewportScrollStillSoftExits(t *testing.T) {
+	const (
+		prefix   = "HEAD_LINE\n  message_id=u"
+		body     = "7oirumTAIL\n"
+		composer = "› Ask Codex to do anything\n  footer\n"
+	)
+	resting := prefix + body + composer
+	afterSpace := body + "›  \n  footer\n"
+	afterDEL := body + composer // composer OK, head still scrolled
+
+	var mu sync.Mutex
+	text := resting
+	postDelSnaps := 0
+	var soft int
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	now := t0
+	w := New(true, Policy{ExitOnIdle: true}, Watchdog{
+		Timeout: 10 * time.Millisecond,
+		Now:     func() time.Time { return now },
+		Snapshot: func() (string, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			// Probe stabilize: scrolled right after DEL, then full restore.
+			if postDelSnaps > 0 {
+				postDelSnaps++
+				if postDelSnaps >= 2 {
+					text = resting
+				}
+			}
+			return text, nil
+		},
+		Inject: func(s string) error {
+			mu.Lock()
+			defer mu.Unlock()
+			switch s {
+			case " ":
+				text = afterSpace
+				postDelSnaps = 0
+			case "\x7f":
+				text = afterDEL
+				postDelSnaps = 1
+			}
+			return nil
+		},
+		SoftExit: func() { soft++ },
+	})
+	w.Tick() // hit1; Probe restores before return
+	now = t0.Add(5 * time.Millisecond)
+	w.Tick() // hit2
+	now = t0.Add(15 * time.Millisecond)
+	w.Tick() // SoftExit
+	if soft != 1 {
+		t.Fatalf("SoftExit=%d want 1 (probe must restore resting snap); hits=%d", soft, w.IdleHits())
 	}
 }

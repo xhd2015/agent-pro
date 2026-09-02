@@ -24,7 +24,7 @@ require (
 	github.com/xhd2015/gitops v0.0.31 // indirect
 	github.com/xhd2015/go-coverage v1.0.41 // indirect
 	github.com/xhd2015/go-inspect v0.0.49 // indirect
-	github.com/xhd2015/tty-watch v0.0.10 // indirect
+	github.com/xhd2015/tty-watch v0.0.11 // indirect
 	github.com/xhd2015/xgo v1.2.8 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
