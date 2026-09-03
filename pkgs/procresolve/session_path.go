@@ -54,6 +54,23 @@ func parseGrokSessionPath(path string) (string, bool) {
 	return sid, ok
 }
 
+// isGrokPrimarySessionOpenPath reports whether path is a primary Grok session
+// artifact open (not a bare session directory from startup scans).
+// Directory-only opens under ~/.grok/sessions/…/<uuid> are common while grok
+// enumerates history and must not count as hard ResolveFromPID hits.
+func isGrokPrimarySessionOpenPath(path string) bool {
+	if path == "" {
+		return false
+	}
+	base := strings.ToLower(filepath.Base(filepath.ToSlash(path)))
+	switch base {
+	case "events.jsonl", "updates.jsonl":
+		return true
+	default:
+		return false
+	}
+}
+
 // GrokSessionDirFromPath returns the session directory (path through the uuid
 // segment) and session id for a Grok open-file hard hit.
 // Example: …/.grok/sessions/%2Ftmp%2Fproj/<uuid>/events.jsonl

@@ -131,7 +131,8 @@ func assertRole(t *testing.T, tree []procresolve.ProcNode, pid int, wantRole str
 	}
 }
 
-// grokSessionPath returns a realistic open path under .grok/sessions with uuid.
+// grokSessionPath returns a primary Grok session open path (events.jsonl).
+// Directory-only session paths are not hard hits for ResolveFromPID.
 func grokSessionPath(uuid string) string {
 	return "/tmp/fake-grok-home/.grok/sessions/2026-07/" + uuid + "/events.jsonl"
 }

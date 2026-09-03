@@ -3,14 +3,15 @@
 **Feature**: resolve Kind=grok from open files under a grok runner
 
 ```
-# grok candidate + Lsof path …/.grok/sessions/…/<uuid>/…
+# grok candidate + Lsof primary artifact …/.grok/sessions/…/<uuid>/events.jsonl
 ResolveFromPID -> Kind=grok, SessionID=<uuid>, Confidence=hard
 ```
 
 ## Preconditions
 
 - Winning candidate is classified as role `grok`.
-- Session uuid parsed from path segment under `.grok/sessions/`.
+- Session uuid from a primary open (`events.jsonl` / `updates.jsonl`) under
+  `.grok/sessions/` (not a bare session directory).
 
 ## Steps
 

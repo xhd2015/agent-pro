@@ -94,6 +94,77 @@ func TestParseSessionFromPath_CodexThreadWriterLock(t *testing.T) {
 	}
 }
 
+func TestResolveFromPID_GrokIgnoresDirectoryScanOpens(t *testing.T) {
+	const want = "01a06639-3c96-7ff0-9256-fd0daa519985"
+	const stale = "01a0464c-08e4-7061-a893-2773ce974845"
+	staleDir := "/Users/x/.grok/sessions/%2Fold/" + stale
+	staleSub := staleDir + "/subagents"
+	primary := "/Users/x/.grok/sessions/%2Ftmp/" + want + "/events.jsonl"
+	res, err := ResolveFromPID(200, Options{
+		ListProcs: func() []Proc {
+			return []Proc{
+				{PID: 100, PPID: 1, Cmd: "agent-run"},
+				{PID: 200, PPID: 100, Cmd: "/usr/local/bin/grok"},
+			}
+		},
+		Lsof: func(pid int) []string {
+			if pid == 200 {
+				// Scan dirs first (old first-hit bug), then primary artifact.
+				return []string{staleDir, staleSub, primary}
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if res.Kind != "grok" || res.SessionID != want || res.Confidence != "hard" {
+		t.Fatalf("res=%+v want session %s", res, want)
+	}
+}
+
+func TestResolveFromPID_GrokDirectoryOnlyIsSoftMiss(t *testing.T) {
+	const stale = "01a0464c-08e4-7061-a893-2773ce974845"
+	staleDir := "/Users/x/.grok/sessions/%2Fold/" + stale
+	res, err := ResolveFromPID(200, Options{
+		ListProcs: func() []Proc {
+			return []Proc{
+				{PID: 200, PPID: 1, Cmd: "/usr/local/bin/grok"},
+			}
+		},
+		Lsof: func(pid int) []string {
+			if pid == 200 {
+				return []string{staleDir, staleDir + "/subagents"}
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if res.Kind != "none" || res.SessionID != "" || res.Confidence != "" {
+		t.Fatalf("directory-only opens must soft-miss; got %+v", res)
+	}
+}
+
+func TestIsGrokPrimarySessionOpenPath(t *testing.T) {
+	cases := []struct {
+		path string
+		want bool
+	}{
+		{"/x/.grok/sessions/%2Fa/01a06639-3c96-7ff0-9256-fd0daa519985/events.jsonl", true},
+		{"/x/.grok/sessions/%2Fa/01a06639-3c96-7ff0-9256-fd0daa519985/updates.jsonl", true},
+		{"/x/.grok/sessions/%2Fa/01a06639-3c96-7ff0-9256-fd0daa519985", false},
+		{"/x/.grok/sessions/%2Fa/01a06639-3c96-7ff0-9256-fd0daa519985/summary.json", false},
+		{"", false},
+	}
+	for _, tc := range cases {
+		if got := isGrokPrimarySessionOpenPath(tc.path); got != tc.want {
+			t.Fatalf("path %q: got %v want %v", tc.path, got, tc.want)
+		}
+	}
+}
+
 func TestResolveFromPID_CodexLockPath(t *testing.T) {
 	const want = "01a064e5-b881-7bb0-b44b-ef6ddd27874d"
 	lock := "/Users/x/.codex/thread-writer-locks/" + want + ".lock"

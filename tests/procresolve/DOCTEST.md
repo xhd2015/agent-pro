@@ -39,8 +39,11 @@ Unicode tree formatter, `groksessions.Info` title enrichment, cmdline
   - `codex` — codex runner
   - `other` — everything else (bash, node wrappers, …)
 - **Session path parser** — from open-file paths only:
-  - **Grok:** path under `…/.grok/sessions/…/<uuid>/…` (uuid often `019f…`)
-  - **Codex:** path under `…/.codex/sessions/…/rollout-…-<uuid>`
+  - **Grok hard hit:** primary artifact under `…/.grok/sessions/…/<uuid>/`
+    whose basename is `events.jsonl` or `updates.jsonl` (uuid often `019f…`).
+    Bare session-directory opens (startup history scans) are **not** hard hits.
+  - **Codex:** path under `…/.codex/sessions/…/rollout-…-<uuid>` or
+    `…/.codex/thread-writer-locks/<uuid>.lock`
 - **Result** — Kind (`grok`|`codex`|`none`), SessionID, Source
   (`open-files` when input itself is the runner; `open-files+tree` when a
   descendant runner was used), Confidence (`hard` on hit, empty when none),
@@ -56,12 +59,14 @@ input pid
   -> classify roles (exclude "grok update" as runner)
   -> candidates = grok|codex nodes; prefer deeper leaves
   -> for each candidate: Lsof -> parse session uuid from path
+  -> grok: skip non-primary opens (require events.jsonl|updates.jsonl)
   -> first hard hit wins
   -> if none: Kind=none, SessionID="", Confidence="", no error
   -> if pid absent from snapshot: error ("pid not found")
 
 # must NOT
   parse cmdline --session-id / --resume as primary session source
+  treat grok bare …/sessions/…/<uuid> directory opens as hard hits
 ```
 
 **Locked types (implementer contract)**

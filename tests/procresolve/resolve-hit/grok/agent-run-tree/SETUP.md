@@ -7,7 +7,7 @@
 pid 200 agent-run run …     (input)
   -> pid 201 agent-run serve …
        -> pid 202 /usr/local/bin/grok
-            Lsof(202) -> …/.grok/sessions/…/019f…/…
+            Lsof(202) -> …/.grok/sessions/…/019f…/events.jsonl
 ResolveFromPID(200) -> Kind=grok, Source=open-files+tree, RunnerPID=202
 ```
 

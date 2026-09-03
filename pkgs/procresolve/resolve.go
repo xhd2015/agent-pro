@@ -8,6 +8,10 @@ import (
 // ResolveFromPID builds the descendant tree of pid, classifies nodes, and
 // resolves a hard session id from open files on grok/codex runner candidates.
 // Session ids come from open-file paths only (not cmdline flags).
+//
+// Grok hard hits require a primary session artifact open (events.jsonl or
+// updates.jsonl). Bare session-directory opens from startup scans are skipped
+// so the first-hit cannot latch onto an unrelated historical session.
 func ResolveFromPID(pid int, opts Options) (*Result, error) {
 	var procs []Proc
 	if opts.ListProcs != nil {
@@ -140,6 +144,11 @@ func ResolveFromPID(pid int, opts Options) (*Result, error) {
 			// Prefer kind from path; fall back to candidate classification.
 			if kind == "" {
 				kind = c.kind
+			}
+			// Grok startup scans open many foreign session directories; only
+			// primary artifacts (events.jsonl / updates.jsonl) are hard hits.
+			if kind == "grok" && !isGrokPrimarySessionOpenPath(f) {
+				continue
 			}
 			result.Kind = kind
 			result.SessionID = sessionID
