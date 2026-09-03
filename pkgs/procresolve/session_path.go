@@ -96,8 +96,13 @@ func GrokSessionDirFromPath(path string) (sessionDir, sessionID string, ok bool)
 	return "", "", false
 }
 
-// Codex: …/.codex/sessions/…/rollout-…-<uuid>[.jsonl]
+// Codex hard hits (either):
+//   - …/.codex/thread-writer-locks/<uuid>.lock  (early; often before submit)
+//   - …/.codex/sessions/…/rollout-…-<uuid>[.jsonl]
 func parseCodexSessionPath(path string) (string, bool) {
+	if id, ok := parseCodexThreadWriterLockPath(path); ok {
+		return id, true
+	}
 	const marker = "/.codex/sessions/"
 	idx := strings.Index(path, marker)
 	if idx < 0 {
@@ -121,4 +126,39 @@ func parseCodexSessionPath(path string) (string, bool) {
 		return strings.ToLower(m), true
 	}
 	return "", false
+}
+
+// parseCodexThreadWriterLockPath extracts a Codex session id from an open
+// flock path: …/.codex/thread-writer-locks/<uuid>.lock (basename must be
+// exactly <uuid>.lock).
+func parseCodexThreadWriterLockPath(path string) (string, bool) {
+	if path == "" {
+		return "", false
+	}
+	slashPath := filepath.ToSlash(path)
+	const marker = "/.codex/thread-writer-locks/"
+	idx := strings.Index(slashPath, marker)
+	if idx < 0 {
+		if strings.HasPrefix(slashPath, ".codex/thread-writer-locks/") {
+			slashPath = "/" + slashPath
+			idx = strings.Index(slashPath, marker)
+		}
+		if idx < 0 {
+			return "", false
+		}
+	}
+	base := filepath.Base(slashPath)
+	const suffix = ".lock"
+	if !strings.HasSuffix(base, suffix) {
+		return "", false
+	}
+	seg := strings.TrimSuffix(base, suffix)
+	if seg == "" {
+		return "", false
+	}
+	m := longestUUID(seg)
+	if m == "" || len(m) != len(seg) {
+		return "", false
+	}
+	return strings.ToLower(m), true
 }
