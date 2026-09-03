@@ -95,13 +95,20 @@ func Find(codexHome string, sessionID string) (string, error) {
 	}
 
 	// Fast path: rollout files are named rollout-*-<sessionID>.jsonl under
-	// sessions/YYYY/MM/DD/. Avoid discoverSessions (full tree open+parse).
+	// sessions/YYYY/MM/DD/. A successful empty Glob is a definitive miss —
+	// do not fall through to discoverSessions (full tree open+parse), which
+	// made kck codex wait lag seconds after new before readiness could run.
 	pattern := filepath.Join(codexHome, "sessions", "*", "*", "*", "rollout-*"+sessionID+".jsonl")
-	if matches, gerr := filepath.Glob(pattern); gerr == nil && len(matches) > 0 {
+	matches, gerr := filepath.Glob(pattern)
+	if gerr == nil {
+		if len(matches) == 0 {
+			return "", sessionNotFoundError(sessionID)
+		}
 		sort.Strings(matches)
 		return matches[len(matches)-1], nil
 	}
 
+	// Glob itself failed (rare); fall back to full discovery.
 	sessions, err := discoverSessions(codexHome)
 	if err != nil {
 		return "", err
