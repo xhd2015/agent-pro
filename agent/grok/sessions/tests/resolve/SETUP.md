@@ -34,9 +34,11 @@ doctest <- stdout/stderr + returned error
 ```go
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/xhd2015/agent-pro/agent/grok/sessions"
 	"github.com/xhd2015/doctest/assert"
@@ -105,6 +107,44 @@ func seedHit(req *Request, sessionID string, grokPID int) {
 		req.Procs = defaultAncestorChain()
 	}
 	req.OpenFiles[grokPID] = []string{grokSessionPath(sessionID)}
+}
+
+const (
+	fixtureDetailsTitle = "resolve details fixture"
+	fixtureDetailsCWD   = "/tmp/proj"
+)
+
+// fixtureDetailsNow is 2 minutes after fixtureDetailsLastActive → "2m ago".
+var (
+	fixtureDetailsLastActive = time.Date(2026, 7, 1, 11, 0, 0, 0, time.UTC)
+	fixtureDetailsNow        = time.Date(2026, 7, 1, 11, 2, 0, 0, time.UTC)
+)
+
+// seedSummary writes summary.json under GrokHome so --details can Find it.
+func seedSummary(t *testing.T, req *Request, sessionID, title, cwd, sessionKind string, lastActive time.Time) {
+	t.Helper()
+	dir := filepath.Join(req.GrokHome, "sessions", "%2Ftmp%2Fproj", sessionID)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir summary: %v", err)
+	}
+	summary := map[string]any{
+		"info": map[string]any{
+			"id":  sessionID,
+			"cwd": cwd,
+		},
+		"generated_title": title,
+		"created_at":      lastActive.UTC().Format("2006-01-02T15:04:05.000Z"),
+		"updated_at":      lastActive.UTC().Format("2006-01-02T15:04:05.000Z"),
+		"last_active_at":  lastActive.UTC().Format("2006-01-02T15:04:05.000Z"),
+		"session_kind":    sessionKind,
+	}
+	body, err := json.MarshalIndent(summary, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal summary: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "summary.json"), append(body, '\n'), 0o644); err != nil {
+		t.Fatalf("write summary: %v", err)
+	}
 }
 
 // seedTabWindow installs a 3-tab window; current is tab 1 (/dev/ttys101).

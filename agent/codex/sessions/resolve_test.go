@@ -2,8 +2,11 @@ package sessions
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/xhd2015/agent-pro/pkgs/procresolve"
 	"github.com/xhd2015/dot-pkgs/go-pkgs/shell/iterm2"
@@ -155,5 +158,67 @@ func TestRunResolve_PidAndTab(t *testing.T) {
 	err := RunResolve([]string{"--pid", "1", "--tab", "1"}, &ResolveOpts{Stdout: &stdout})
 	if err == nil || !strings.Contains(err.Error(), "--pid and --tab/--tab-index cannot be specified together") {
 		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestRunResolve_Details(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	sid := fixtureCodexSID
+	dir := filepath.Join(home, "sessions", "2026", "08", "01")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "rollout-2026-08-01T12-00-00-"+sid+".jsonl")
+	body := `{"type":"session_meta","payload":{"id":"` + sid + `","cwd":"/tmp/codex-ws","timestamp":"2026-08-01T12:00:00.000Z"}}` + "\n" +
+		`{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"codex details title"}]}}` + "\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	procs := []procresolve.Proc{
+		{PID: 100, PPID: 1, Cmd: "/usr/local/bin/codex"},
+		{PID: 200, PPID: 100, Cmd: "/bin/bash"},
+		{PID: 300, PPID: 200, Cmd: "/usr/local/bin/agent-pro"},
+	}
+	now := time.Date(2026, 8, 1, 12, 2, 0, 0, time.UTC)
+	opts := &ResolveOpts{
+		Stdout:    &stdout,
+		Stderr:    &stderr,
+		PID:       300,
+		CodexHome: home,
+		Now:       now,
+		ListProcs: func() []procresolve.Proc { return procs },
+		Lsof: func(pid int) []string {
+			if pid == 100 {
+				return []string{codexRolloutPath(sid)}
+			}
+			return nil
+		},
+	}
+	if err := RunResolve([]string{"--details"}, opts); err != nil {
+		t.Fatalf("RunResolve: %v", err)
+	}
+	want := sid + "\n" +
+		"title:        codex details title\n" +
+		"cwd:          /tmp/codex-ws\n" +
+		"last active:  2m ago\n"
+	if stdout.String() != want {
+		t.Fatalf("stdout mismatch:\ngot:\n%s\nwant:\n%s", stdout.String(), want)
+	}
+	if stderr.String() != "" {
+		t.Fatalf("stderr=%q", stderr.String())
+	}
+}
+
+func TestRunResolve_HelpDocumentsDetails(t *testing.T) {
+	t.Parallel()
+	var stdout bytes.Buffer
+	if err := RunResolve([]string{"-h"}, &ResolveOpts{Stdout: &stdout}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout.String(), "--details") {
+		t.Fatalf("help missing --details:\n%s", stdout.String())
 	}
 }

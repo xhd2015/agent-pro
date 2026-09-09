@@ -1,6 +1,6 @@
 ## Expected
 
-- Help succeeds and documents `--pid`, `--dry-run`, `-v`/`--verbose`, `--json`.
+- Help succeeds and documents `--pid`, `--dry-run`, `-v`/`--verbose`, `--details`, `--json`.
 
 ```go
 import (
@@ -22,7 +22,7 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	if resp.Stdout != want {
 		t.Fatalf("help stdout mismatch:\ngot:\n%s\nwant:\n%s", resp.Stdout, want)
 	}
-	for _, need := range []string{"--pid", "--tab", "--tab-index", "--dry-run", "-v", "--verbose", "--json"} {
+	for _, need := range []string{"--pid", "--tab", "--tab-index", "--dry-run", "-v", "--verbose", "--details", "--json"} {
 		if !strings.Contains(resp.Stdout, need) {
 			t.Fatalf("help missing %q:\n%s", need, resp.Stdout)
 		}

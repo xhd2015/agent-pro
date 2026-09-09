@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/xhd2015/agent-pro/pkgs/procresolve"
 	"github.com/xhd2015/dot-pkgs/go-pkgs/shell/iterm2"
@@ -24,7 +25,8 @@ Options:
   --tab SEL         1-based tab index, or next|left|right (right ≡ next)
   --tab-index N     0-based tab index in this iTerm window
   --dry-run         print resolution plan ([dry-run] lines); same discovery path
-  -v,--verbose      print detail fields on stderr (ancestor or tab)
+  -v,--verbose      print resolve detail fields on stderr (ancestor or tab)
+  --details         also include session title/cwd on stdout (or in --json)
   --json            print session id + detail fields as JSON
   -h,--help         show help
 
@@ -46,6 +48,8 @@ type ResolveOpts struct {
 	ListProcs      func() []procresolve.Proc
 	Lsof           func(pid int) []string
 	CodexHome      string
+	// Now pins relative "last active" formatting for --details (zero → time.Now()).
+	Now time.Time
 
 	// Tab path hooks (nil → production probes used by ResolveFromTab).
 	ListFocusProcs   func() []FocusProc
@@ -67,6 +71,11 @@ type ResolveDetails struct {
 	WindowID    string `json:"window_id,omitempty"`
 	TabIndex    int    `json:"tab_index,omitempty"`
 	TTY         string `json:"tty,omitempty"`
+
+	// Session identity fields (populated only with --details).
+	Title      string `json:"title,omitempty"`
+	CWD        string `json:"cwd,omitempty"`
+	LastActive string `json:"last_active,omitempty"` // RFC3339 with local offset
 }
 
 // RunResolve implements `agent-pro codex session resolve`.
@@ -82,6 +91,7 @@ func RunResolve(args []string, opts *ResolveOpts) error {
 	var tabIndexFlag *int
 	var dryRun bool
 	var verbose bool
+	var detailsFlag bool
 	var jsonOut bool
 
 	stdout := opts.Stdout
@@ -90,6 +100,7 @@ func RunResolve(args []string, opts *ResolveOpts) error {
 		Int("--tab-index", &tabIndexFlag).
 		Bool("--dry-run", &dryRun).
 		Bool("-v,--verbose", &verbose).
+		Bool("--details", &detailsFlag).
 		Bool("--json", &jsonOut).
 		HelpFunc("-h,--help", func() {
 			txt := strings.TrimPrefix(ResolveHelp, "\n")
@@ -190,6 +201,15 @@ func RunResolve(args []string, opts *ResolveOpts) error {
 		}
 	}
 
+	if detailsFlag {
+		enrichResolveSessionDetails(opts, &details)
+	}
+
+	now := opts.Now
+	if now.IsZero() {
+		now = time.Now()
+	}
+
 	if jsonOut {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
@@ -199,11 +219,14 @@ func RunResolve(args []string, opts *ResolveOpts) error {
 		return nil
 	}
 	if dryRun {
-		writeResolveDryRunPlan(stdout, details)
+		writeResolveDryRunPlan(stdout, details, now)
 		return nil
 	}
 
 	fmt.Fprintln(stdout, details.SessionID)
+	if detailsFlag {
+		writeResolveSessionDetails(stdout, details, now)
+	}
 	if verbose {
 		writeResolveVerbose(opts.Stderr, details)
 	}
@@ -228,7 +251,36 @@ func applyResolveDefaults(opts *ResolveOpts) {
 	}
 }
 
-func writeResolveDryRunPlan(w io.Writer, d ResolveDetails) {
+// enrichResolveSessionDetails loads title/cwd/last_active from the rollout.
+// Soft: Find/read misses leave details unchanged (resolve still succeeds).
+func enrichResolveSessionDetails(opts *ResolveOpts, d *ResolveDetails) {
+	if opts == nil || d == nil {
+		return
+	}
+	home := strings.TrimSpace(opts.CodexHome)
+	if home == "" || strings.TrimSpace(d.SessionID) == "" {
+		return
+	}
+	path, err := Find(home, d.SessionID)
+	if err != nil {
+		return
+	}
+	lines, err := readLines(path)
+	if err != nil {
+		return
+	}
+	sess, err := sessionFromFile(path, lines)
+	if err != nil {
+		return
+	}
+	d.Title = strings.TrimSpace(sess.Title)
+	d.CWD = strings.TrimSpace(sess.CWD)
+	if !sess.StartedAt.IsZero() {
+		d.LastActive = sess.StartedAt.In(time.Local).Format(time.RFC3339)
+	}
+}
+
+func writeResolveDryRunPlan(w io.Writer, d ResolveDetails, now time.Time) {
 	if d.Mode == "tab" {
 		fmt.Fprintf(w, "[dry-run] mode:          tab\n")
 		fmt.Fprintf(w, "[dry-run] window:        %s\n", d.WindowID)
@@ -238,14 +290,68 @@ func writeResolveDryRunPlan(w io.Writer, d ResolveDetails) {
 		fmt.Fprintf(w, "[dry-run] would resolve: %s\n", d.SessionID)
 		fmt.Fprintf(w, "[dry-run] source:        %s\n", d.Source)
 		fmt.Fprintf(w, "[dry-run] confidence:    %s\n", d.Confidence)
+	} else {
+		fmt.Fprintf(w, "[dry-run] start pid:     %d\n", d.StartPID)
+		fmt.Fprintf(w, "[dry-run] ancestor pid:  %d\n", d.AncestorPID)
+		fmt.Fprintf(w, "[dry-run] runner pid:    %d\n", d.RunnerPID)
+		fmt.Fprintf(w, "[dry-run] would resolve: %s\n", d.SessionID)
+		fmt.Fprintf(w, "[dry-run] source:        %s\n", d.Source)
+		fmt.Fprintf(w, "[dry-run] confidence:    %s\n", d.Confidence)
+	}
+	writeResolveDryRunSessionDetails(w, d, now)
+}
+
+func writeResolveDryRunSessionDetails(w io.Writer, d ResolveDetails, now time.Time) {
+	if !resolveHasSessionDetails(d) {
 		return
 	}
-	fmt.Fprintf(w, "[dry-run] start pid:     %d\n", d.StartPID)
-	fmt.Fprintf(w, "[dry-run] ancestor pid:  %d\n", d.AncestorPID)
-	fmt.Fprintf(w, "[dry-run] runner pid:    %d\n", d.RunnerPID)
-	fmt.Fprintf(w, "[dry-run] would resolve: %s\n", d.SessionID)
-	fmt.Fprintf(w, "[dry-run] source:        %s\n", d.Source)
-	fmt.Fprintf(w, "[dry-run] confidence:    %s\n", d.Confidence)
+	title := strings.TrimSpace(d.Title)
+	if title == "" {
+		title = "(untitled)"
+	}
+	fmt.Fprintf(w, "[dry-run] title:         %s\n", title)
+	if d.CWD != "" {
+		fmt.Fprintf(w, "[dry-run] cwd:           %s\n", d.CWD)
+	}
+	if rel := resolveLastActiveRelative(d.LastActive, now); rel != "" {
+		fmt.Fprintf(w, "[dry-run] last active:   %s\n", rel)
+	}
+}
+
+func writeResolveSessionDetails(w io.Writer, d ResolveDetails, now time.Time) {
+	if !resolveHasSessionDetails(d) {
+		return
+	}
+	title := strings.TrimSpace(d.Title)
+	if title == "" {
+		title = "(untitled)"
+	}
+	fmt.Fprintf(w, "title:        %s\n", title)
+	if d.CWD != "" {
+		fmt.Fprintf(w, "cwd:          %s\n", d.CWD)
+	}
+	if rel := resolveLastActiveRelative(d.LastActive, now); rel != "" {
+		fmt.Fprintf(w, "last active:  %s\n", rel)
+	}
+}
+
+func resolveHasSessionDetails(d ResolveDetails) bool {
+	return d.Title != "" || d.CWD != "" || d.LastActive != ""
+}
+
+func resolveLastActiveRelative(raw string, now time.Time) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	ts, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return raw
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	return formatRelativeTime(ts, now)
 }
 
 func writeResolveVerbose(w io.Writer, d ResolveDetails) {

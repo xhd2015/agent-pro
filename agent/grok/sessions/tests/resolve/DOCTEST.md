@@ -19,15 +19,18 @@ Harness calls `sessions.RunResolve` (library), not a built `agent-pro` binary.
 - **Tab resolve** — `ResolveFromTab` via injected iTerm refs + FocusProc/TTY +
   Lsof. Selectors: `--tab` (1-based / next|left|right) or `--tab-index`
   (0-based). No wrap at edges.
-- **Output shapes** — bare id (default); `-v` meta on stderr; `--dry-run`
-  `[dry-run]` plan on stdout; `--json` encodes detail fields.
+- **Output shapes** — bare id (default); `-v` resolve meta on stderr; `--details`
+  session title/cwd/kind on stdout; `--dry-run` `[dry-run]` plan on stdout;
+  `--json` encodes detail fields.
 
 **Behaviors**
 
 - Default success: one session id line on stdout.
 - `--dry-run`: same discovery; plan lines with `[dry-run]` prefix; no bare-id
   success shape (go-best-practice dry-run: one pipeline, gate consumer effect).
-- `-v`: bare id on stdout; detail fields on stderr.
+- `-v`: bare id on stdout; resolve detail fields on stderr.
+- `--details`: bare id on stdout, then session title/cwd/kind/last active on
+  stdout (soft if summary missing). With `--json`, those fields are included.
 - `--json`: indented JSON of detail fields; no bare-id line; `-v` meta skipped.
 - Ancestor misses hard-fail: `no ancestor grok`, `session not resolved`, `pid not found`.
 - Tab misses hard-fail: not in iTerm, edge/oob, no grok on tab, multiple
@@ -77,6 +80,9 @@ resolve/
 ├── hit/
 │   ├── bare/
 │   ├── verbose/
+│   ├── details/
+│   ├── details-json/
+│   ├── details-missing/
 │   ├── dry-run/
 │   ├── json/
 │   ├── pid-select/
@@ -118,9 +124,12 @@ Parameter ranking (most → least significant):
 | Leaf | Contract |
 |------|----------|
 | `help/parent-lists-resolve/` | Parent help line names `resolve`. |
-| `help/resolve-usage/` | `resolve -h` documents `--pid`, `--tab`, `--tab-index`, `--dry-run`, `-v`, `--json`. |
+| `help/resolve-usage/` | `resolve -h` documents `--pid`, `--tab`, `--tab-index`, `--dry-run`, `-v`, `--details`, `--json`. |
 | `hit/bare/` | Default stdout is bare session id. |
 | `hit/verbose/` | Bare id on stdout; detail fields on stderr. |
+| `hit/details/` | Id + title/cwd/kind/last active on stdout. |
+| `hit/details-json/` | `--json --details` includes title/cwd/kind. |
+| `hit/details-missing/` | `--details` with no summary still prints bare id. |
 | `hit/dry-run/` | `[dry-run]` plan; no bare-only stdout. |
 | `hit/json/` | JSON includes session_id + verbose fields. |
 | `hit/pid-select/` | `--pid` selects a different ancestor chain. |
@@ -156,6 +165,7 @@ doctest test ./agent/grok/sessions/tests/resolve
 import (
 	"bytes"
 	"testing"
+	"time"
 
 	"github.com/xhd2015/agent-pro/agent/grok/sessions"
 	"github.com/xhd2015/agent-pro/pkgs/procresolve"
@@ -176,6 +186,7 @@ type Request struct {
 	TempDir          string
 	ParentHelp       bool
 	SessionMeta      map[string]sessions.TabSessionMeta
+	Now              time.Time
 }
 
 type FixtureProc struct {
@@ -212,6 +223,7 @@ func Run(t *testing.T, d *session.Doctest, req *Request) (*Response, error) {
 		Stdout: &stdout,
 		Stderr: &stderr,
 		PID:    req.PID,
+		Now:    req.Now,
 		ListProcs: func() []procresolve.Proc {
 			return append([]procresolve.Proc(nil), snap...)
 		},
