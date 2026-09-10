@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/xhd2015/agent-pro/pkgs/agentsend"
+	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 	"github.com/xhd2015/agent-pro/pkgs/tty/detection/idle"
 	"github.com/xhd2015/tty-watch/pkgs/ttywatch"
@@ -21,6 +22,7 @@ func serveIdleHome(serveHome string) string {
 // startServeIdleWatchdog arms the keep-alive idle-exit loop when idle-policy.json
 // says exit_on_idle. SoftExit injects /exit; Shutdown cancels the serve ctx.
 // Detection is runner-agnostic: resting snapshot unchanged + occupy space probe.
+// Decision log: $AGENT_RUN_HOME/sessions/<id>/idle.jsonl.
 func startServeIdleWatchdog(ctx context.Context, cancel context.CancelFunc, sessionID, listenAddr, serveHome, registrySubdir string) {
 	home := serveIdleHome(serveHome)
 	sessionID = strings.TrimSpace(sessionID)
@@ -48,14 +50,26 @@ func startServeIdleWatchdog(ctx context.Context, cancel context.CancelFunc, sess
 		})
 	}
 
+	jsonl := &idle.JSONL{Path: agentstorage.IdleLogPath(home, sessionID)}
 	w := idle.New(found, idle.Policy{ExitOnIdle: p.ExitOnIdle, IdleTimeout: p.IdleTimeout}, idle.Watchdog{
-		Snapshot: syncSnap,
-		Inject:   inject,
-		Ready: func(snapshot string) bool {
+		SessionID: sessionID,
+		Log:       jsonl.Log,
+		Snapshot:  syncSnap,
+		Inject:    inject,
+		ReadyStatus: func(snapshot string) (bool, string) {
 			if provider.CheckWritable == nil {
-				return true
+				return true, ""
 			}
-			return provider.CheckWritable([]byte(snapshot)).Ready
+			st := provider.CheckWritable([]byte(snapshot))
+			state := strings.TrimSpace(st.State)
+			if r := strings.TrimSpace(st.Reason); r != "" {
+				if state != "" {
+					state = state + ":" + r
+				} else {
+					state = r
+				}
+			}
+			return st.Ready, state
 		},
 		QueueLen: func() int {
 			if runner == "" {
@@ -84,6 +98,7 @@ func startServeIdleWatchdog(ctx context.Context, cancel context.CancelFunc, sess
 			}
 		},
 	})
+	w.LogArmed()
 	go idle.RunLoop(ctx, w)
 }
 

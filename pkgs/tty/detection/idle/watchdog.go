@@ -40,11 +40,18 @@ type Watchdog struct {
 	// Ready is an optional hold (typically CheckWritable). nil → treat as ready.
 	// Prevents SoftExit before the TUI can accept input / a draft.
 	Ready func(snapshot string) bool
+	// ReadyStatus when set is preferred over Ready and supplies ready_state for logs.
+	ReadyStatus func(snapshot string) (ready bool, state string)
 	// QueueLen is an optional hold. nil → treat as 0.
 	QueueLen func() int
 
 	SoftExit func()
 	Shutdown func()
+
+	// Log receives idle.jsonl events (armed/tick/reset/soft_exit/shutdown). nil → silent.
+	Log func(Event)
+	// SessionID is copied into log events when set.
+	SessionID string
 
 	armed     bool
 	idleHits  int
@@ -91,6 +98,19 @@ func (w *Watchdog) SoftDone() bool {
 	return w != nil && w.softDone
 }
 
+// LogArmed writes idle.armed when the watchdog is armed and Log is set.
+func (w *Watchdog) LogArmed() {
+	if w == nil || !w.armed {
+		return
+	}
+	w.emit(Event{
+		Event:     EventArmed,
+		SessionID: w.SessionID,
+		Timeout:   w.Timeout.String(),
+		Grace:     w.Grace.String(),
+	})
+}
+
 // Tick advances one resting+occupy check.
 func (w *Watchdog) Tick() {
 	if w == nil || !w.armed {
@@ -103,15 +123,16 @@ func (w *Watchdog) Tick() {
 
 	snap, err := w.snapshotNow()
 	if err != nil {
-		w.resetHits()
+		w.resetHits(ResetSnapshotErr, "", now)
 		return
 	}
 	if w.tracker.Note(snap) {
-		w.resetHits()
+		w.resetHits(ResetChanged, snap, now)
 		return
 	}
-	if w.Ready != nil && !w.Ready(snap) {
-		w.resetHits()
+	ready, readyState := w.readyOf(snap)
+	if !ready {
+		w.resetHits(ResetNotReady, snap, now)
 		return
 	}
 
@@ -124,11 +145,12 @@ func (w *Watchdog) Tick() {
 	// After Ready, Unknown (e.g. mid-probe snapshot glitch) must not block exit.
 	// Only a confirmed Occupied draft holds the session.
 	if status == occupied.Occupied {
-		w.resetHits()
+		w.resetHits(ResetOccupied, snap, now)
 		return
 	}
-	if w.queueLen() != 0 {
-		w.resetHits()
+	q := w.queueLen()
+	if q != 0 {
+		w.resetHits(ResetQueue, snap, now)
 		return
 	}
 
@@ -138,24 +160,62 @@ func (w *Watchdog) Tick() {
 	if w.idleHits < SamplesPerCycle {
 		w.idleHits++
 	}
+	hash, snapLen := SnapMeta(snap)
+	readyTrue := true
+	w.emit(Event{
+		Event:      EventTick,
+		SessionID:  w.SessionID,
+		Hits:       w.idleHits,
+		IdleSince:  formatTime(w.idleSince),
+		Age:        now.Sub(w.idleSince).String(),
+		Ready:      &readyTrue,
+		ReadyState: readyState,
+		Occupy:     string(status),
+		Queue:      intPtr(q),
+		SnapHash:   hash,
+		SnapLen:    snapLen,
+		Timeout:    w.Timeout.String(),
+	})
 	// SoftExit only after N consecutive idle checks AND continuous idle for
 	// Timeout (matches "unchanged and not occupied for N").
 	if !w.softDone && w.idleHits >= SamplesPerCycle && now.Sub(w.idleSince) >= w.Timeout {
 		// Final occupy check: only a confirmed draft holds SoftExit.
 		if st := w.probe(snap); st == occupied.Occupied {
 			w.tracker.Set(snap)
-			w.resetHits()
+			w.resetHits(ResetFinalOccupy, snap, now)
 			return
 		}
 		w.tracker.Set(snap)
 		w.softDone = true
 		w.exitAt = now
+		w.emit(Event{
+			Event:      EventSoftExit,
+			SessionID:  w.SessionID,
+			Hits:       w.idleHits,
+			IdleSince:  formatTime(w.idleSince),
+			Age:        now.Sub(w.idleSince).String(),
+			Ready:      &readyTrue,
+			ReadyState: readyState,
+			Occupy:     string(status),
+			Queue:      intPtr(q),
+			SnapHash:   hash,
+			SnapLen:    snapLen,
+			SnapTail:   SnapTail(snap, 0),
+			Timeout:    w.Timeout.String(),
+			Grace:      w.Grace.String(),
+		})
 		if w.SoftExit != nil {
 			w.SoftExit()
 		}
 	}
 	if w.softDone && !w.shutDone && now.Sub(w.exitAt) >= w.Grace {
 		w.shutDone = true
+		w.emit(Event{
+			Event:     EventShutdown,
+			SessionID: w.SessionID,
+			Age:       now.Sub(w.exitAt).String(),
+			Grace:     w.Grace.String(),
+		})
 		if w.Shutdown != nil {
 			w.Shutdown()
 		}
@@ -168,14 +228,78 @@ func (w *Watchdog) ForceShutdown() {
 		return
 	}
 	w.shutDone = true
+	now := time.Time{}
+	if w.Now != nil {
+		now = w.Now()
+	}
+	age := ""
+	if !w.exitAt.IsZero() && !now.IsZero() {
+		age = now.Sub(w.exitAt).String()
+	}
+	w.emit(Event{
+		Event:     EventShutdown,
+		SessionID: w.SessionID,
+		Age:       age,
+		Grace:     w.Grace.String(),
+		Reason:    "force",
+	})
 	if w.Shutdown != nil {
 		w.Shutdown()
 	}
 }
 
-func (w *Watchdog) resetHits() {
+func (w *Watchdog) resetHits(reason, snap string, now time.Time) {
+	before := w.idleHits
+	idleSince := w.idleSince
 	w.idleHits = 0
 	w.idleSince = time.Time{}
+
+	ev := Event{
+		Event:      EventReset,
+		SessionID:  w.SessionID,
+		Reason:     reason,
+		HitsBefore: before,
+		IdleSince:  formatTime(idleSince),
+		Timeout:    w.Timeout.String(),
+	}
+	if !idleSince.IsZero() && !now.IsZero() {
+		ev.Age = now.Sub(idleSince).String()
+	}
+	if snap != "" {
+		hash, snapLen := SnapMeta(snap)
+		ev.SnapHash = hash
+		ev.SnapLen = snapLen
+		if reason == ResetChanged {
+			ev.SnapTail = SnapTail(snap, 0)
+		}
+		if reason == ResetNotReady {
+			_, state := w.readyOf(snap)
+			ev.ReadyState = state
+			readyFalse := false
+			ev.Ready = &readyFalse
+		}
+	}
+	w.emit(ev)
+}
+
+func (w *Watchdog) readyOf(snap string) (ready bool, state string) {
+	if w.ReadyStatus != nil {
+		return w.ReadyStatus(snap)
+	}
+	if w.Ready != nil {
+		return w.Ready(snap), ""
+	}
+	return true, ""
+}
+
+func (w *Watchdog) emit(e Event) {
+	if w == nil || w.Log == nil {
+		return
+	}
+	if e.TS.IsZero() && w.Now != nil {
+		e.TS = w.Now()
+	}
+	w.Log(e)
 }
 
 func (w *Watchdog) snapshotNow() (string, error) {
@@ -205,6 +329,15 @@ func (w *Watchdog) queueLen() int {
 	}
 	return w.QueueLen()
 }
+
+func formatTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339Nano)
+}
+
+func intPtr(n int) *int { return &n }
 
 type snapshotError string
 

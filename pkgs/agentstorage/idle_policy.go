@@ -29,6 +29,11 @@ func IdlePolicyPath(home, sessionID string) string {
 	return filepath.Join(home, "sessions", sessionID, "idle-policy.json")
 }
 
+// IdleLogPath is $home/sessions/<sessionID>/idle.jsonl (idle watchdog decision log).
+func IdleLogPath(home, sessionID string) string {
+	return filepath.Join(home, "sessions", sessionID, "idle.jsonl")
+}
+
 // WriteIdlePolicy writes compact JSON. Zero timeout + ExitOnIdle → 10m.
 func WriteIdlePolicy(home, sessionID string, p IdlePolicy) error {
 	timeout := p.IdleTimeout
