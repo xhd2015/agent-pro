@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -43,6 +42,7 @@ Commands:
   grok              manage grok CLI sessions
   bookmark          list/show/remove session bookmarks (multi-runner catalog)
   proc              resolve agent session from a process id
+  commandcode       read Command Code account data (usage/whoami/credits/...)
   skills            list available skills; skills update refreshes installs
   skill             show or install a skill (--show / --install)
   traces            view agent trace sessions (web viewer)
@@ -100,6 +100,8 @@ func handle(args []string) error {
 		return handleSkills(args[1:])
 	case "proc":
 		return handleProc(args[1:])
+	case "commandcode":
+		return handleCommandCode(args[1:])
 	case "traces":
 		return handleTraces(args[1:])
 	case "show-agent-files":
