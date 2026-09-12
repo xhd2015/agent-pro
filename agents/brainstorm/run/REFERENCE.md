@@ -7,6 +7,7 @@ Brainstorming specialist. Use this before implementing any feature or fix when y
 - Plan data models, storage layouts, and architecture
 - Define test scenarios and expected outputs
 - Plan CLI output examples when designing commands or sub-commands
+- Include an ASCII-art UI mockup when a web, app, desktop, mobile, or TUI layout is in scope
 - Get explicit user confirmation before proceeding to implementation
 
 ## When NOT to use

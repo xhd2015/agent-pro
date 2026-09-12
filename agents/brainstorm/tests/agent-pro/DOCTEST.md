@@ -18,8 +18,9 @@ command per category. Flash Ideas must reference `brainstorm` and
 `agent-pro skill brainstorm --show`.
 
 Registration of `brainstorm` means `agent-pro skill brainstorm --show`
-succeeds and prints frontmatter `name: brainstorm` plus CLI output planning
-guidance; the skills list includes `brainstorm` with description text.
+succeeds and prints frontmatter `name: brainstorm` plus CLI output and UI
+mockups planning guidance; the skills list includes `brainstorm` with
+description text.
 
 ## Version
 
@@ -40,7 +41,7 @@ agent-pro/
 
 | # | Leaf | Description |
 |---|------|-------------|
-| 1 | `register` | `agent-pro skill brainstorm --show` → `name: brainstorm` + CLI output section |
+| 1 | `register` | `agent-pro skill brainstorm --show` → `name: brainstorm` + CLI output and UI mockups sections |
 | 2 | `list` | `agent-pro skills` → lists `brainstorm` with description |
 | 3 | `intent-route` | `agent-pro skill intent-route --show` → Flash Idea + brainstorm guideline |
 

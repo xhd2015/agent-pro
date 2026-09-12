@@ -30,7 +30,8 @@ Pick the **first** matching mode:
 | Feature | new capability | core mechanism; data models / storage; test scenarios; how to test |
 | Issue | existing behavior wrong (`fix`, symptom, screenshot, "stays / still / broken") | **First sentence = one-line root cause.** Then the same plan fields as a feature |
 | Pure doc | markdown / comments / skill text only | before → after edit map; no tests |
-| + CLI | designing a command, flag, help, or terminal UX | also **CLI output examples** below |
+| + CLI | designing a command, flag, help, or stdout/stderr session | also **CLI output examples** below |
+| + UI | web, app, desktop, mobile, or TUI layout | also **UI mockups** below |
 | + Output layers | plan changes a produced contract | layer list, underlying → caller (see **Output-change layers**) |
 
 ## If this is an issue
@@ -77,7 +78,7 @@ Skip if nothing a caller or user consumes changes. One layer is enough.
 # CLI output examples
 
 When the request involves a CLI command, sub-command, flag, help text, or
-terminal UX, also include fenced mock sessions for:
+stdout/stderr session, also include fenced mock sessions for:
 
 - **Success** — primary result on **stdout**
 - **Warnings** — non-fatal on **stderr**, `warning:` prefix, exit 0 when partial success is acceptable
@@ -101,9 +102,13 @@ $ mytool sessions list
 2 sessions
 ```
 
+# UI mockups
+
+When the request involves a web, app, desktop, mobile, or TUI layout, include an ASCII-art mockup of the primary screen.
+
 # Decisions section (always last in your reply)
 
-Every brainstorm reply — feature, issue, pure doc, or CLI — **MUST** end with a
+Every brainstorm reply — feature, issue, pure doc, CLI, or UI — **MUST** end with a
 decisions section. Use a **context-relevant title** (not a fixed phrase).
 
 Number every user-confirmable item **`1.` `2.` `3.` …** — never `A.` `B.` or

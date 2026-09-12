@@ -135,6 +135,9 @@ func TestBrainstormSkillIsRegistered(t *testing.T) {
 	if !strings.Contains(sk.Content, "CLI output examples") {
 		t.Fatal("brainstorm skill missing CLI output section")
 	}
+	if !strings.Contains(sk.Content, "UI mockups") {
+		t.Fatal("brainstorm skill missing UI mockups section")
+	}
 }
 
 func TestFollowupSkillIsRegistered(t *testing.T) {

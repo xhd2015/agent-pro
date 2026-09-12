@@ -7,6 +7,7 @@ label: e2e
 - Exit code 0.
 - Stdout contains `name: brainstorm`.
 - Stdout contains `CLI output examples` (CLI planning section).
+- Stdout contains `UI mockups` (UI planning section).
 - Stdout is non-empty SKILL.md content (not "unknown skill" error).
 
 ## Exit Code
@@ -30,6 +31,9 @@ func Assert(t *testing.T, d *session.Doctest, req *Request, resp *Response, err 
 	}
 	if !strings.Contains(resp.Stdout, "CLI output examples") {
 		t.Fatalf("brainstorm skill missing CLI output section:\nstdout:\n%s\nstderr:\n%s", resp.Stdout, resp.Stderr)
+	}
+	if !strings.Contains(resp.Stdout, "UI mockups") {
+		t.Fatalf("brainstorm skill missing UI mockups section:\nstdout:\n%s\nstderr:\n%s", resp.Stdout, resp.Stderr)
 	}
 	if strings.Contains(resp.Stderr, "unknown skill") {
 		t.Fatalf("brainstorm not registered in knownSkills:\n%s", resp.Stderr)
