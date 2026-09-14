@@ -92,7 +92,7 @@ func persistRunnerSessionID(store agentstorage.Store, meta agentstorage.SessionM
 	if store != nil && sessionID != "" {
 		_ = store.UpdateSessionRunnerSessionID(sessionID, id)
 	}
-	meta.RunnerSessionID = id
+	meta.SetRunnerSessionBind(id)
 	return meta, true
 }
 

@@ -46,14 +46,23 @@ func ListByRunnerSessionID(store Store, id string, runners ...string) ([]Session
 		return nil, err
 	}
 	var out []SessionMeta
+	seen := map[string]bool{}
 	for _, e := range entries {
-		if filter != nil && !filter[strings.TrimSpace(e.Runner)] {
+		sid := strings.TrimSpace(e.SessionID)
+		if sid == "" || seen[sid] {
 			continue
 		}
-		sess, gerr := store.GetSession(e.SessionID)
+		sess, gerr := store.GetSession(sid)
 		if gerr != nil {
 			continue
 		}
+		if !sessionHasRunnerSessionID(sess.Meta, id) {
+			continue
+		}
+		if filter != nil && !runnerSessionIDMatchesFilter(sess.Meta, id, filter) {
+			continue
+		}
+		seen[sid] = true
 		out = append(out, sess.Meta)
 	}
 	return out, nil
@@ -93,6 +102,95 @@ func findByRunnerSessionID(store Store, id, label string, runners []string) (Ses
 		sort.Strings(ids)
 		return SessionMeta{}, fmt.Errorf("ambiguous %s-session-id %s: multiple matches: %s", label, id, strings.Join(ids, ", "))
 	}
+}
+
+type bindIndexEntry struct {
+	uuid      string
+	sessionID string
+	family    string
+}
+
+// sessionBindIndexEntries lists unique provider UUIDs for a session, tagged
+// with the family that owns each UUID (map slots plus the live slot).
+func sessionBindIndexEntries(m SessionMeta) []bindIndexEntry {
+	m.HydrateRunnerSessions()
+	sid := strings.TrimSpace(m.SessionID)
+	seen := map[string]bool{}
+	var out []bindIndexEntry
+	add := func(uuid, family string) {
+		uuid = strings.TrimSpace(uuid)
+		family = strings.TrimSpace(family)
+		if uuid == "" || sid == "" || seen[uuid] {
+			return
+		}
+		if family == "" {
+			family = RunnerFamily(m.Runner)
+		}
+		if family == "" {
+			return
+		}
+		seen[uuid] = true
+		out = append(out, bindIndexEntry{uuid: uuid, sessionID: sid, family: family})
+	}
+	for fam, id := range m.RunnerSessions {
+		add(id, fam)
+	}
+	add(m.RunnerSessionID, RunnerFamily(m.Runner))
+	return out
+}
+
+func sessionHasRunnerSessionID(meta SessionMeta, id string) bool {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return false
+	}
+	if strings.TrimSpace(meta.RunnerSessionID) == id {
+		return true
+	}
+	for _, v := range meta.RunnerSessions {
+		if strings.TrimSpace(v) == id {
+			return true
+		}
+	}
+	return false
+}
+
+func runnerSessionIDMatchesFilter(meta SessionMeta, id string, filter map[string]bool) bool {
+	if filter == nil {
+		return true
+	}
+	fam := runnerFamilyForSessionID(meta, id)
+	if fam == "" {
+		return false
+	}
+	if filter[fam] {
+		return true
+	}
+	for name := range filter {
+		if SameRunnerFamily(fam, name) {
+			return true
+		}
+	}
+	return false
+}
+
+func runnerFamilyForSessionID(meta SessionMeta, id string) string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return ""
+	}
+	meta.HydrateRunnerSessions()
+	if meta.RunnerSessions != nil {
+		for fam, v := range meta.RunnerSessions {
+			if strings.TrimSpace(v) == id {
+				return strings.TrimSpace(fam)
+			}
+		}
+	}
+	if strings.TrimSpace(meta.RunnerSessionID) == id {
+		return RunnerFamily(meta.Runner)
+	}
+	return ""
 }
 
 func makeRunnerFilter(runners []string) map[string]bool {
@@ -186,14 +284,12 @@ func rebuildRunnerSessionIndex(store Store) (map[string][]runnerSessionIndexEntr
 	}
 	byUUID := make(map[string][]runnerSessionIndexEntry)
 	for _, m := range list {
-		rsid := strings.TrimSpace(m.RunnerSessionID)
-		if rsid == "" {
-			continue
+		for _, e := range sessionBindIndexEntries(m) {
+			byUUID[e.uuid] = append(byUUID[e.uuid], runnerSessionIndexEntry{
+				SessionID: e.sessionID,
+				Runner:    e.family,
+			})
 		}
-		byUUID[rsid] = append(byUUID[rsid], runnerSessionIndexEntry{
-			SessionID: m.SessionID,
-			Runner:    m.Runner,
-		})
 	}
 
 	byDir := byRunnerSessionDir(home)

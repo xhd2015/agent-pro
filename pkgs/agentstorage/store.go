@@ -16,10 +16,15 @@ type Store interface {
 	CreateSession(sessionID string, meta SessionMeta) error
 	UpdateSessionStatus(sessionID, status string) error
 	UpdateSessionRunnerSessionID(sessionID, runnerSessionID string) error
-	// ClearSessionRunnerSessionID removes meta.runner_session_id so the next
-	// AutoSendOrResume can ModeRun instead of ModeResume (orphan/missing
-	// provider sessions). No-op when already unbound.
+	// ClearSessionRunnerSessionID removes the live runner_session_id and the
+	// current family's RunnerSessions slot so the next AutoSendOrResume can
+	// ModeRun that family (orphan/missing provider sessions). Other families
+	// in the map are kept. No-op when the current family is already unbound.
 	ClearSessionRunnerSessionID(sessionID string) error
+	// ActivateSessionRunner sets meta.runner to runner and restores the live
+	// runner_session_id from RunnerSessions[family] when present (else clears
+	// the live slot). Other families in the map are kept.
+	ActivateSessionRunner(sessionID, runner string) error
 	UpdateSessionTerminalSessionID(sessionID, terminalSessionID string) error
 	// UpdateSessionWorkspace sets meta.workspace (e.g. after Grok session relocate).
 	UpdateSessionWorkspace(sessionID, workspace string) error

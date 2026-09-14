@@ -21,14 +21,19 @@ type Config struct {
 
 // SessionMeta is stored in sessions/<session_id>/meta.json.
 type SessionMeta struct {
-	Runner            string `json:"runner"`
-	SessionID         string `json:"session_id"`
-	InitialPrompt     string `json:"initial_prompt,omitempty"`
-	RunnerSessionID   string `json:"runner_session_id,omitempty"`
-	TerminalSessionID string `json:"terminal_session_id,omitempty"`
-	Status            string `json:"status"`
-	Workspace         string `json:"workspace,omitempty"`
-	Model             string `json:"model,omitempty"`
+	Runner          string `json:"runner"`
+	SessionID       string `json:"session_id"`
+	InitialPrompt   string `json:"initial_prompt,omitempty"`
+	RunnerSessionID string `json:"runner_session_id,omitempty"`
+	// RunnerSessions maps provider family (codex, grok, or exact runner name)
+	// to that family's last bound runner_session_id. RunnerSessionID is the
+	// active family's id; this map keeps inactive families so a later runner
+	// switch can resume instead of starting over.
+	RunnerSessions    map[string]string `json:"runner_sessions,omitempty"`
+	TerminalSessionID string            `json:"terminal_session_id,omitempty"`
+	Status            string            `json:"status"`
+	Workspace         string            `json:"workspace,omitempty"`
+	Model             string            `json:"model,omitempty"`
 	// PrependPaths are absolute directories prepended to the TTY child PATH (ordered, no dedup).
 	PrependPaths []string `json:"prepend_paths,omitempty"`
 	// Env is ordered KEY=VALUE entries applied to the TTY child (last-win per key).

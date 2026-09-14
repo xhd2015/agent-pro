@@ -164,16 +164,31 @@ func AutoSendOrResume(ctx context.Context, opts Opts) error {
 	// before Classify so close→follow-up can ModeResume instead of ModeRun:
 	//   - codex: zombie scrollback footer / CODEX_HOME rollout
 	//   - grok: bind.json ok artifact / GROK_HOME DiscoverSession
+	// Bind the *current* family first so a later Activate can archive it.
+	var switchedFamily bool
 	if meta, found, rerr := resolveSession(opts.Store, sessionID); rerr == nil && found {
 		meta = tryBindRunnerSessionFromZombie(opts.Store, meta)
 		_, _ = EnsureCodexRunnerBound(opts.Store, meta, productionCodexBindOpts(opts.Store, meta))
 		_, _ = EnsureGrokRunnerBound(opts.Store, meta, productionGrokBindOpts(opts.Store, meta))
+		var terr error
+		_, switchedFamily, terr = retargetRunnerIfNeeded(opts, meta, found)
+		if terr != nil {
+			return terr
+		}
 	}
 
 	// Prefer explicit opts.Probe; nil → LifecycleProbe inside Classify.
 	mode, meta, found, err := Classify(opts.Store, sessionID, opts.Probe)
 	if err != nil {
 		return err
+	}
+	if switchedFamily {
+		mode = modeAfterFamilySwitch(mode, meta)
+	} else if mode == ModeSend && liveTTYFamilyMismatch(opts.Store, opts, meta) {
+		mode = modeAfterFamilySwitch(ModeSend, meta)
+	}
+	if mode == ModeResume && strings.TrimSpace(meta.RunnerSessionID) == "" {
+		mode = ModeRun
 	}
 
 	switch mode {

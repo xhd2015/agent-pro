@@ -103,6 +103,7 @@ func (s *fileStore) CreateSession(sessionID string, meta SessionMeta) error {
 		meta.CreatedAt = now
 	}
 	meta.UpdatedAt = now
+	meta.HydrateRunnerSessions()
 	data, err := json.Marshal(meta)
 	if err != nil {
 		return err
@@ -137,6 +138,7 @@ func (s *fileStore) GetSession(sessionID string) (*Session, error) {
 			}
 			return nil, err
 		}
+		meta.HydrateRunnerSessions()
 		return &Session{Meta: meta}, nil
 	}
 	return nil, fmt.Errorf("session meta empty or unreadable: %s", sessionID)
@@ -165,7 +167,7 @@ func (s *fileStore) UpdateSessionRunnerSessionID(sessionID, runnerSessionID stri
 	if runnerSessionID == "" {
 		return nil
 	}
-	sess.Meta.RunnerSessionID = runnerSessionID
+	sess.Meta.SetRunnerSessionBind(runnerSessionID)
 	sess.Meta.UpdatedAt = nowRFC3339()
 	data, err := json.Marshal(sess.Meta)
 	if err != nil {
@@ -182,10 +184,49 @@ func (s *fileStore) ClearSessionRunnerSessionID(sessionID string) error {
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(sess.Meta.RunnerSessionID) == "" {
+	fam := RunnerFamily(sess.Meta.Runner)
+	live := strings.TrimSpace(sess.Meta.RunnerSessionID)
+	mapID := ""
+	if sess.Meta.RunnerSessions != nil {
+		mapID = strings.TrimSpace(sess.Meta.RunnerSessions[fam])
+	}
+	if live == "" && mapID == "" {
 		return nil
 	}
-	sess.Meta.RunnerSessionID = ""
+	sess.Meta.ClearCurrentFamilyBind()
+	sess.Meta.UpdatedAt = nowRFC3339()
+	data, err := json.Marshal(sess.Meta)
+	if err != nil {
+		return err
+	}
+	if err := s.writeMetaJSON(sessionID, data); err != nil {
+		return err
+	}
+	return s.bumpGeneration()
+}
+
+func (s *fileStore) ActivateSessionRunner(sessionID, runner string) error {
+	sessionID = strings.TrimSpace(sessionID)
+	runner = strings.TrimSpace(runner)
+	if sessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+	if runner == "" {
+		return fmt.Errorf("runner is required")
+	}
+	sess, err := s.GetSession(sessionID)
+	if err != nil {
+		return err
+	}
+	sess.Meta.HydrateRunnerSessions()
+	oldFamily := RunnerFamily(sess.Meta.Runner)
+	newFamily := RunnerFamily(runner)
+	sess.Meta.Runner = runner
+	if id := strings.TrimSpace(sess.Meta.RunnerSessions[newFamily]); id != "" {
+		sess.Meta.RunnerSessionID = id
+	} else if oldFamily != newFamily {
+		sess.Meta.RunnerSessionID = ""
+	}
 	sess.Meta.UpdatedAt = nowRFC3339()
 	data, err := json.Marshal(sess.Meta)
 	if err != nil {
