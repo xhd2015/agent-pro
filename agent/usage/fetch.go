@@ -15,6 +15,9 @@ type ProviderID string
 const (
 	Grok  ProviderID = "grok"
 	Codex ProviderID = "codex"
+	// CommandCode is fetched over the Command Code HTTP API by Collect; the
+	// TTY facade in FetchWithOptions does not serve it.
+	CommandCode ProviderID = "commandcode"
 )
 
 // Snapshot is the normalized usage payload returned by Fetch.

@@ -1,0 +1,962 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>agent-pro usage</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #161b22;
+    --panel-2: #1c2230;
+    --line: #252c3a;
+    --text: #e6edf3;
+    --muted: #8b98a9;
+    --accent: #4c8dff;
+    --warn: #e3b341;
+    --ok: #2ecc8f;
+    --bad: #ff6b6b;
+    --grok: #8b7cf6;
+    --codex: #22b8a0;
+    --commandcode: #f59e4b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.5 ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 18px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+  }
+  .brand { font-size: 15px; font-weight: 600; letter-spacing: .2px; }
+  .brand span { color: var(--muted); font-weight: 400; margin-left: 8px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+  .muted { color: var(--muted); }
+  .live { display: inline-flex; align-items: center; gap: 7px; }
+  .live i {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--ok); display: inline-block;
+  }
+  .live.loading i { background: var(--accent); animation: pulse 1s infinite ease-in-out; }
+  .live.stale i { background: var(--warn); }
+  .live.error i { background: var(--bad); }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+  .field { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+  select, button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 5px 9px;
+    font: inherit;
+  }
+  button { cursor: pointer; }
+  button:hover { border-color: #3a465c; }
+  main {
+    padding: 16px 18px 40px; display: grid; gap: 14px; max-width: 1400px; margin: 0 auto;
+    /* minmax(0, 1fr) keeps the column at the viewport width instead of
+       growing to the widest panel's max-content and overflowing on narrow screens. */
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* One group per provider; border-left carries the provider colour. */
+  #groups {
+    display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; min-width: 0;
+  }
+  .group {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px 14px;
+    min-width: 0;
+  }
+  .group.failed { border-color: #4a2b2b; }
+  .group-head {
+    display: flex; flex-wrap: wrap; gap: 10px 18px;
+    align-items: flex-start; justify-content: space-between; margin-bottom: 10px;
+  }
+  .group .identity { min-width: 0; }
+  .group .row1 { display: flex; align-items: center; gap: 8px; }
+  .group .name { font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 7px; }
+  .group .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .group .value { font-size: 22px; font-weight: 600; margin-top: 4px; }
+  .group .value small { font-size: 12px; color: var(--muted); font-weight: 400; }
+  .group .group-meta { text-align: right; min-width: 0; }
+  .group-body {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 12px; min-width: 0;
+  }
+  .chart-card {
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 8px; padding: 8px 10px 6px; min-width: 0;
+  }
+  .chart-head {
+    display: flex; flex-wrap: wrap; gap: 4px 10px;
+    align-items: baseline; justify-content: space-between; margin-bottom: 4px;
+  }
+  .chart-head h3 { font-size: 12px; font-weight: 600; margin: 0; }
+  .chart-head .muted { font-size: 11px; }
+  .badge {
+    font-size: 11px; padding: 1px 7px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--muted);
+  }
+  .badge.failed { color: var(--bad); border-color: #4a2b2b; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px 14px;
+  }
+  .panel.warn { border-color: #4a3f22; }
+  .panel-head {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    margin-bottom: 8px;
+  }
+  .panel-head h2 { font-size: 13px; font-weight: 600; margin: 0; }
+  .panel-head .spacer { flex: 1; }
+  .chart { position: relative; width: 100%; }
+  .chart .empty, .empty {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 120px; color: var(--muted); text-align: center; padding: 10px;
+  }
+  .chart svg { display: block; }
+  .grid-line { stroke: var(--line); stroke-width: 1; }
+  .axis-text { fill: var(--muted); font-size: 10px; }
+  .crosshair { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
+  .tip {
+    position: absolute; pointer-events: none;
+    background: #0b0f15ee; border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 8px; font-size: 11px; white-space: nowrap; z-index: 3;
+  }
+  .tip .tip-ts { color: var(--muted); margin-bottom: 3px; }
+  .tip .tip-row { display: flex; align-items: center; gap: 6px; }
+  .tip .dot { width: 7px; height: 7px; border-radius: 50%; }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; color: var(--muted); }
+  .legend .item { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th, td { text-align: left; padding: 5px 10px 5px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; }
+  td.num { text-align: right; }
+  td.path { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .provider { display: inline-flex; align-items: center; gap: 6px; }
+  .provider .dot { width: 8px; height: 8px; border-radius: 50%; }
+  tr.failed td { color: #d99; }
+  ul.error-list { margin: 0; padding-left: 18px; color: var(--warn); }
+  ul.error-list code { color: var(--text); }
+  .empty-state { text-align: center; padding: 26px 10px; }
+  .empty-state .big { font-size: 15px; margin-bottom: 10px; }
+  .empty-state pre {
+    display: inline-block; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 6px; padding: 8px 12px; margin: 0; color: var(--text);
+  }
+  @media (max-width: 720px) {
+    main { padding: 12px; }
+    #groups { gap: 12px; }
+    .group { padding: 10px 12px 12px; }
+    .group .value { font-size: 20px; }
+    .group .group-meta { text-align: left; }
+    .store-path { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">agent-pro usage<span id="store" class="store-path"></span></div>
+  <div class="meta">
+    <span id="live" class="live"><i></i><span id="live-text">connecting…</span></span>
+    <label class="field">metric <select id="metric"></select></label>
+    <label class="field">range <select id="range"></select></label>
+    <button id="refresh" type="button">Refresh</button>
+  </div>
+</header>
+
+<main>
+  <section class="empty-state" id="empty" hidden>
+    <div class="big" id="empty-text"></div>
+    <pre>agent-pro usage collect</pre>
+  </section>
+
+  <section id="groups"></section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>newest snapshots</h2>
+      <span class="muted" id="recent-note"></span>
+    </div>
+    <div class="table-wrap">
+      <table id="recent">
+        <thead>
+          <tr>
+            <th>ts (utc)</th><th>provider</th><th>usage</th>
+            <th class="num">sessions</th><th>file</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel warn" id="errors" hidden>
+    <div class="panel-head"><h2>unreadable snapshots</h2><span class="muted" id="errors-note"></span></div>
+    <ul class="error-list" id="errors-list"></ul>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"
+        integrity="sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i"
+        crossorigin="anonymous"></script>
+
+<script>
+(function () {
+  "use strict";
+
+  var SVG_NS = "http://www.w3.org/2000/svg";
+  var REFRESH_MS = 15000;
+  var PROVIDER_COLORS = { grok: "#8b7cf6", codex: "#22b8a0", commandcode: "#f59e4b" };
+  var PROVIDER_LABELS = { codex: "Codex", grok: "Grok", commandcode: "Command Code" };
+  // Groups render in this order; providers outside the list follow, alphabetically.
+  var PROVIDER_ORDER = ["codex", "grok", "commandcode"];
+  var FALLBACK_COLORS = ["#4c8dff", "#e3b341", "#ff6b6b", "#9b8cff", "#41c7c7"];
+  var RANGES = [
+    { value: "default", label: "default" },
+    { value: "1h", label: "1h" },
+    { value: "24h", label: "24h" },
+    { value: "7d", label: "7d" },
+    { value: "30d", label: "30d" },
+    { value: "all", label: "all" }
+  ];
+
+  var state = {
+    summary: null,
+    metrics: [],         // metric blocks from /api/series: selected metric + sessions_total + primary_percent
+    selected: "primary_percent",
+    range: "default",
+    loading: false,
+    initialized: false
+  };
+
+  var el = {
+    store: document.getElementById("store"),
+    live: document.getElementById("live"),
+    liveText: document.getElementById("live-text"),
+    metric: document.getElementById("metric"),
+    range: document.getElementById("range"),
+    refresh: document.getElementById("refresh"),
+    empty: document.getElementById("empty"),
+    emptyText: document.getElementById("empty-text"),
+    groups: document.getElementById("groups"),
+    recent: document.getElementById("recent").querySelector("tbody"),
+    recentNote: document.getElementById("recent-note"),
+    errors: document.getElementById("errors"),
+    errorsList: document.getElementById("errors-list"),
+    errorsNote: document.getElementById("errors-note")
+  };
+
+  function colorFor(provider) {
+    if (PROVIDER_COLORS[provider]) return PROVIDER_COLORS[provider];
+    var sum = 0, i;
+    for (i = 0; i < provider.length; i++) sum += provider.charCodeAt(i);
+    return FALLBACK_COLORS[sum % FALLBACK_COLORS.length];
+  }
+
+  function getJSON(url) {
+    return fetch(url, { headers: { Accept: "application/json" }, cache: "no-store" })
+      .then(function (resp) {
+        return resp.text().then(function (body) {
+          var parsed = null;
+          try { parsed = body ? JSON.parse(body) : null; } catch (err) { parsed = null; }
+          if (!resp.ok) {
+            var message = parsed && parsed.error ? parsed.error : body || resp.statusText;
+            throw new Error(message);
+          }
+          return parsed;
+        });
+      });
+  }
+
+  function sinceParam() {
+    if (state.range === "default") return "";
+    return "&since=" + encodeURIComponent(state.range);
+  }
+
+  function wantedMetrics(selected) {
+    var names = [selected, "sessions_total", "primary_percent"];
+    var out = [];
+    names.forEach(function (name) { if (out.indexOf(name) < 0) out.push(name); });
+    return out.join(",");
+  }
+
+  function refresh() {
+    if (state.loading) return;
+    state.loading = true;
+    setLive("loading", state.summary ? "refreshing…" : "connecting…");
+    getJSON("/api/summary").then(function (summary) {
+      if (!state.initialized) {
+        state.initialized = true;
+        if (summary.range) RANGES[0].label = "default (" + summary.range + ")";
+        renderRangeOptions();
+      }
+      var selected = pickMetric(summary, state.selected);
+      return getJSON("/api/series?metrics=" + wantedMetrics(selected) + sinceParam())
+        .then(function (series) {
+          state.summary = summary;
+          state.metrics = series.metrics || [];
+          state.selected = selected;
+          render();
+          setLive("live", "live · " + ageLabel(summary.generated_at));
+        });
+    }).catch(function (err) {
+      // Keep whatever is on screen: a failed poll must not blank the dashboard.
+      setLive("error", "error: " + err.message);
+    }).then(function () {
+      state.loading = false;
+    });
+  }
+
+  function setLive(kind, text) {
+    el.live.className = "live" + (kind === "live" ? "" : " " + kind);
+    el.liveText.textContent = text;
+  }
+
+  function ageLabel(generatedAt) {
+    var seconds = Math.max(0, Math.round((Date.now() - Date.parse(generatedAt)) / 1000));
+    return "checked " + seconds + "s ago";
+  }
+
+  function pickMetric(summary, current) {
+    var chartable = (summary.metrics || []).filter(function (metric) { return metric.chartable; });
+    var names = chartable.map(function (metric) { return metric.name; });
+    if (names.indexOf(current) >= 0) return current;
+    if (names.indexOf("primary_percent") >= 0) return "primary_percent";
+    return names.length ? names[0] : "";
+  }
+
+  function renderRangeOptions() {
+    el.range.innerHTML = "";
+    RANGES.forEach(function (range) {
+      var option = document.createElement("option");
+      option.value = range.value;
+      option.textContent = range.label;
+      el.range.appendChild(option);
+    });
+    el.range.value = state.range;
+  }
+
+  function block(name) {
+    for (var i = 0; i < state.metrics.length; i++) {
+      if (state.metrics[i].name === name) return state.metrics[i];
+    }
+    return null;
+  }
+
+  function unitOf(name) {
+    var b = block(name);
+    return b && b.unit ? b.unit : (name === "primary_percent" ? "%" : "");
+  }
+
+  function render() {
+    var summary = state.summary;
+    if (!summary) return;
+
+    el.store.textContent = summary.root ? "  " + summary.root : "";
+    var isEmpty = !summary.providers || summary.providers.length === 0;
+    el.empty.hidden = !isEmpty;
+    el.groups.hidden = isEmpty;
+    if (isEmpty) {
+      el.emptyText.textContent = "no usage snapshots under " + (summary.root || "the store") + " yet — collect some first:";
+      el.groups.innerHTML = "";
+    }
+
+    renderMetricPicker();
+    renderGroups();
+    renderRecent();
+    renderErrors();
+  }
+
+  function latestBlock(name) {
+    var b = block(name);
+    return b && b.series ? b.series : [];
+  }
+
+  // groupProviders lists the providers to draw: the canonical order first, then
+  // any provider the store holds that is not part of it.
+  function groupProviders(summary) {
+    var known = PROVIDER_ORDER.slice();
+    var extra = [];
+    (summary.providers || []).forEach(function (entry) {
+      if (known.indexOf(entry.provider) < 0 && extra.indexOf(entry.provider) < 0) {
+        extra.push(entry.provider);
+      }
+    });
+    state.metrics.forEach(function (metric) {
+      (metric.series || []).forEach(function (series) {
+        if (known.indexOf(series.provider) < 0 && extra.indexOf(series.provider) < 0) {
+          extra.push(series.provider);
+        }
+      });
+    });
+    extra.sort();
+    return known.concat(extra);
+  }
+
+  function providerLabel(provider) {
+    return PROVIDER_LABELS[provider] || provider;
+  }
+
+  // renderGroups draws one section per provider and updates it in place, so a
+  // refresh never blanks charts that are already on screen.
+  function renderGroups() {
+    var summary = state.summary;
+    if (!summary.providers || !summary.providers.length) return;
+
+    var byProvider = {};
+    summary.providers.forEach(function (entry) { byProvider[entry.provider] = entry; });
+
+    var wanted = groupProviders(summary);
+    var existing = {};
+    Array.prototype.forEach.call(el.groups.children, function (section) { existing[section.dataset.provider] = section; });
+    Array.prototype.forEach.call(el.groups.children, function (section) {
+      if (wanted.indexOf(section.dataset.provider) < 0) el.groups.removeChild(section);
+    });
+
+    var primary = {};
+    latestBlock("primary_percent").forEach(function (series) { primary[series.provider] = series; });
+
+    wanted.forEach(function (provider) {
+      var section = existing[provider];
+      if (!section) section = buildGroup(provider);
+      if (el.groups.children[wanted.indexOf(provider)] !== section) {
+        el.groups.appendChild(section);
+      }
+      updateGroup(section, provider, byProvider[provider], primary[provider]);
+    });
+  }
+
+  // buildGroup creates the section skeleton once; updateGroup only writes text
+  // and redraws the two charts inside it.
+  function buildGroup(provider) {
+    var section = document.createElement("section");
+    section.className = "group";
+    section.id = "group-" + provider;
+    section.dataset.provider = provider;
+    section.style.borderLeftColor = colorFor(provider);
+
+    var head = document.createElement("div");
+    head.className = "group-head";
+
+    var identity = document.createElement("div");
+    identity.className = "identity";
+    var row1 = document.createElement("div");
+    row1.className = "row1";
+    var name = document.createElement("div");
+    name.className = "name";
+    name.dataset.role = "name";
+    var dot = document.createElement("span");
+    dot.className = "dot";
+    dot.style.background = colorFor(provider);
+    name.appendChild(dot);
+    row1.appendChild(name);
+    var badge = document.createElement("span");
+    badge.className = "badge";
+    badge.dataset.role = "badge";
+    row1.appendChild(badge);
+    identity.appendChild(row1);
+    var value = document.createElement("div");
+    value.className = "value";
+    value.dataset.role = "value";
+    identity.appendChild(value);
+    head.appendChild(identity);
+
+    var meta = document.createElement("div");
+    meta.className = "group-meta muted";
+    meta.dataset.role = "meta";
+    head.appendChild(meta);
+
+    section.appendChild(head);
+    var body = document.createElement("div");
+    body.className = "group-body";
+    body.appendChild(buildChartCard("metric"));
+    body.appendChild(buildChartCard("sessions"));
+    section.appendChild(body);
+    el.groups.appendChild(section);
+    return section;
+  }
+
+  function buildChartCard(role) {
+    var card = document.createElement("div");
+    card.className = "chart-card";
+    card.dataset.role = role + "-card";
+    var head = document.createElement("div");
+    head.className = "chart-head";
+    var title = document.createElement("h3");
+    title.dataset.role = role + "-title";
+    head.appendChild(title);
+    var summary = document.createElement("span");
+    summary.className = "muted";
+    summary.dataset.role = role + "-summary";
+    head.appendChild(summary);
+    card.appendChild(head);
+    var chart = document.createElement("div");
+    chart.className = "chart";
+    chart.dataset.role = role + "-chart";
+    card.appendChild(chart);
+    return card;
+  }
+
+  function updateGroup(section, provider, entry, primarySeries) {
+    var pick = function (role) { return section.querySelector('[data-role="' + role + '"]'); };
+    var name = pick("name");
+    while (name.childNodes.length > 1) name.removeChild(name.lastChild);
+    name.appendChild(document.createTextNode(providerLabel(provider)));
+
+    var card = pick("metric-card");
+    var sessionsCard = pick("sessions-card");
+    card.hidden = false;
+    sessionsCard.hidden = false;
+
+    var record = entry ? (entry.latest || {}) : null;
+    var usageBlock = record ? (record.usage || {}) : null;
+    var selected = block(state.selected);
+
+    if (!entry) {
+      // Known provider with nothing in the store yet: keep the slot, explain it.
+      section.classList.remove("failed");
+      var missingBadge = pick("badge");
+      missingBadge.className = "badge";
+      missingBadge.textContent = "no data";
+      missingBadge.removeAttribute("title");
+      setName(pick("value"), "no snapshots yet", "");
+      pick("meta").textContent = "nothing collected for " + providerLabel(provider) + " — run agent-pro usage collect";
+      card.hidden = true;
+      sessionsCard.hidden = true;
+      return;
+    }
+
+    var ok = !!(usageBlock && usageBlock.ok);
+    section.classList.toggle("failed", !ok);
+    var badge = pick("badge");
+    badge.className = "badge" + (ok ? "" : " failed");
+    badge.textContent = ok ? "ok" : "failed";
+    if (!ok && usageBlock && usageBlock.error) badge.setAttribute("title", usageBlock.error);
+    else badge.removeAttribute("title");
+
+    if (ok && primarySeries && typeof primarySeries.latest === "number") {
+      setName(pick("value"), formatValue(primarySeries.latest), " " + unitOf("primary_percent"));
+    } else {
+      setName(pick("value"), ok ? "no percentage reported" : "usage fetch failed", "");
+    }
+
+    var lines = [];
+    if (ok && usageBlock.display && usageBlock.display.detail) lines.push(usageBlock.display.detail);
+    if (!ok && usageBlock && usageBlock.error) lines.push(usageBlock.error);
+    var sessions = record.sessions || {};
+    lines.push(sessions.error
+      ? "sessions unreadable"
+      : sessions.total + " session" + (sessions.total === 1 ? "" : "s") + " on disk");
+    lines.push("newest " + shortAge(entry.age_seconds) + " ago");
+    lines.push(entry.count + " snapshot" + (entry.count === 1 ? "" : "s"));
+    var meta = pick("meta");
+    meta.innerHTML = "";
+    lines.forEach(function (line) { meta.appendChild(statLine(line)); });
+
+    var metricTitle = pick("metric-title");
+    metricTitle.textContent = selected ? selected.name + (selected.unit ? " (" + selected.unit + ")" : "") : "metric";
+    drawChart(pick("metric-chart"), selected, 200, provider);
+    pick("metric-summary").textContent = seriesSummary(findSeries(selected, provider), selected);
+
+    var sessionsBlock = block("sessions_total");
+    pick("sessions-title").textContent = "sessions_total";
+    drawChart(pick("sessions-chart"), sessionsBlock, 200, provider);
+    pick("sessions-summary").textContent = seriesSummary(findSeries(sessionsBlock, provider), sessionsBlock);
+  }
+
+  function setName(container, text, small) {
+    container.innerHTML = "";
+    container.appendChild(document.createTextNode(text));
+    if (small) {
+      var element = document.createElement("small");
+      element.textContent = small;
+      container.appendChild(element);
+    }
+  }
+
+  function findSeries(metric, provider) {
+    if (!metric) return null;
+    var found = null;
+    (metric.series || []).forEach(function (series) {
+      if (series.provider === provider) found = series;
+    });
+    return found;
+  }
+
+  function seriesSummary(series, metric) {
+    if (!series || !series.points || !series.points.length) return "no data in range";
+    var unit = (metric && metric.unit) || "";
+    return "latest " + formatValue(series.latest) + unit
+      + " · " + formatValue(series.min) + "–" + formatValue(series.max) + unit;
+  }
+
+  function statLine(text) {
+    var div = document.createElement("div");
+    div.textContent = text;
+    return div;
+  }
+
+  function renderMetricPicker() {
+    var chartable = (state.summary.metrics || []).filter(function (metric) { return metric.chartable; });
+    el.metric.innerHTML = "";
+    chartable.forEach(function (metric) {
+      var option = document.createElement("option");
+      option.value = metric.name;
+      option.textContent = metric.name + (metric.unit ? " (" + metric.unit + ")" : "");
+      el.metric.appendChild(option);
+    });
+    if (state.selected) el.metric.value = state.selected;
+    el.metric.disabled = chartable.length === 0;
+  }
+
+  function formatValue(value) {
+    if (typeof value !== "number" || !isFinite(value)) return "—";
+    if (Math.abs(value) >= 1000) return value.toFixed(0);
+    if (Number.isInteger(value)) return String(value);
+    return value.toFixed(2);
+  }
+
+  // visibleSeries keeps only the requested provider: each group charts its own
+  // series, so every chart has a single line and its own y-scale.
+  function visibleSeries(metric, provider) {
+    if (!metric) return [];
+    return (metric.series || []).filter(function (series) {
+      return series.points && series.points.length && (!provider || series.provider === provider);
+    });
+  }
+
+  // Charts need d3 from the CDN; if it never arrived the page still lists data.
+  function chartsAvailable() {
+    return typeof d3 !== "undefined" && typeof d3.scaleLinear === "function";
+  }
+
+  var CHARTS_MISSING = '<div class="empty">charts unavailable — d3 could not be loaded from cdn.jsdelivr.net'
+    + '<br>check the network or the integrity attribute; snapshot data is still listed below</div>';
+
+  // axisScale fits the y range to one group's own values: 10% padding, a synthetic
+  // band for a flat series (d3.nice() cannot widen a zero-width domain), then the
+  // metric's natural bounds. nice() rounds outward, so the clamp runs last.
+  function axisScale(metric, seriesList) {
+    var isPercent = metric.unit === "%";
+    var vMin = Infinity, vMax = -Infinity;
+    seriesList.forEach(function (series) {
+      series.points.forEach(function (point) {
+        vMin = Math.min(vMin, point.value);
+        vMax = Math.max(vMax, point.value);
+      });
+    });
+
+    var span = vMax - vMin;
+    if (span === 0) {
+      span = isPercent ? 1 : Math.max(Math.abs(vMax) * 0.02, 1);
+      vMin -= span / 2;
+      vMax += span / 2;
+    }
+    var pad = span * 0.1;
+    var lo = vMin - pad, hi = vMax + pad;
+    if (isPercent) { lo = Math.max(0, lo); hi = Math.min(100, hi); }
+    else if (metric.step) { lo = Math.max(0, lo); }
+
+    var scale = d3.scaleLinear().domain([lo, hi]).nice();
+    var domain = scale.domain();
+    var clampedLo = (isPercent || metric.step) ? Math.max(0, domain[0]) : domain[0];
+    var clampedHi = isPercent ? Math.min(100, domain[1]) : domain[1];
+    if (clampedLo !== domain[0] || clampedHi !== domain[1]) {
+      scale.domain([clampedLo, clampedHi]);
+    }
+    return scale;
+  }
+
+  function timeFormatFor(spanMs) {
+    if (spanMs <= 2 * 86400000) return d3.timeFormat("%H:%M");
+    if (spanMs <= 90 * 86400000) return d3.timeFormat("%m-%d");
+    return d3.timeFormat("%Y-%m");
+  }
+
+  function drawChart(container, metric, height, provider) {
+    container.innerHTML = "";
+    if (!metric) {
+      container.innerHTML = '<div class="empty">no metric selected</div>';
+      return;
+    }
+    if (!chartsAvailable()) {
+      container.innerHTML = CHARTS_MISSING;
+      return;
+    }
+    var seriesList = visibleSeries(metric, provider);
+    if (!seriesList.length) {
+      container.innerHTML = '<div class="empty">no data in range</div>';
+      return;
+    }
+
+    var width = Math.max(container.clientWidth || 640, 320);
+    var plotH = height - 12 - 26;
+
+    var tMin = Infinity, tMax = -Infinity;
+    seriesList.forEach(function (series) {
+      series.points.forEach(function (point) {
+        var t = Date.parse(point.ts);
+        if (!isFinite(t)) return;
+        tMin = Math.min(tMin, t);
+        tMax = Math.max(tMax, t);
+      });
+    });
+    if (!isFinite(tMin)) {
+      container.innerHTML = '<div class="empty">no data in range</div>';
+      return;
+    }
+    if (tMin === tMax) { tMin -= 60000; tMax += 60000; }
+
+    var yscale = axisScale(metric, seriesList);
+    var yTickCount = Math.max(2, Math.round(plotH / 45));
+    var yValues = yscale.ticks(yTickCount);
+    var yFormat = yscale.tickFormat(yTickCount);
+    var yLabels = yValues.map(yFormat);
+
+    // Tick labels decide the gutter: "8,640" and "239,437,820" need different room.
+    var widest = 0;
+    yLabels.forEach(function (label) { widest = Math.max(widest, label.length); });
+    var pad = { l: Math.min(120, Math.max(56, Math.round(widest * 6.2) + 12)), r: 16, t: 12, b: 26 };
+    var plotW = Math.max(width - pad.l - pad.r, 40);
+
+    var xscale = d3.scaleTime().domain([new Date(tMin), new Date(tMax)]).range([pad.l, pad.l + plotW]);
+    var ypix = d3.scaleLinear().domain(yscale.domain()).range([pad.t + plotH, pad.t]);
+    var timeFormat = timeFormatFor(tMax - tMin);
+
+    var svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+    svg.setAttribute("width", "100%");
+    svg.setAttribute("height", height);
+    svg.setAttribute("role", "img");
+
+    yValues.forEach(function (value, index) {
+      var y = ypix(value);
+      var grid = document.createElementNS(SVG_NS, "line");
+      grid.setAttribute("x1", pad.l);
+      grid.setAttribute("x2", width - pad.r);
+      grid.setAttribute("y1", y);
+      grid.setAttribute("y2", y);
+      grid.setAttribute("class", "grid-line");
+      svg.appendChild(grid);
+      var label = document.createElementNS(SVG_NS, "text");
+      label.setAttribute("x", pad.l - 8);
+      label.setAttribute("y", y + 3);
+      label.setAttribute("text-anchor", "end");
+      label.setAttribute("class", "axis-text");
+      label.textContent = yLabels[index];
+      svg.appendChild(label);
+    });
+
+    var xValues = xscale.ticks(Math.max(2, Math.round(plotW / 90)));
+    xValues.forEach(function (date, index) {
+      var x = xscale(date);
+      var last = index === xValues.length - 1;
+      var xLabel = document.createElementNS(SVG_NS, "text");
+      xLabel.setAttribute("x", index === 0 ? pad.l : (last ? pad.l + plotW : x));
+      xLabel.setAttribute("y", height - 8);
+      xLabel.setAttribute("text-anchor", index === 0 ? "start" : (last ? "end" : "middle"));
+      xLabel.setAttribute("class", "axis-text");
+      xLabel.textContent = timeFormat(date);
+      svg.appendChild(xLabel);
+    });
+
+    var line = d3.line()
+      .x(function (point) { return xscale(point.t); })
+      .y(function (point) { return ypix(point.value); })
+      .curve(metric.step ? d3.curveStepAfter : d3.curveLinear);
+
+    seriesList.forEach(function (series) {
+      var points = [];
+      series.points.forEach(function (point) {
+        var t = new Date(Date.parse(point.ts));
+        if (!isFinite(t.getTime())) return;
+        points.push({ t: t, value: point.value });
+      });
+      if (!points.length) return;
+      var d = line(points);
+      if (points.length === 1) {
+        // A single sample has no segment to stroke, so give it one pixel.
+        d += "L" + (xscale(points[0].t) + 1).toFixed(1) + "," + ypix(points[0].value).toFixed(1);
+      }
+      var path = document.createElementNS(SVG_NS, "path");
+      path.setAttribute("d", d);
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", colorFor(series.provider));
+      path.setAttribute("stroke-width", "1.75");
+      path.setAttribute("stroke-linejoin", "round");
+      svg.appendChild(path);
+    });
+
+    var crosshair = document.createElementNS(SVG_NS, "line");
+    crosshair.setAttribute("class", "crosshair");
+    crosshair.setAttribute("y1", pad.t);
+    crosshair.setAttribute("y2", pad.t + plotH);
+    crosshair.setAttribute("visibility", "hidden");
+    svg.appendChild(crosshair);
+
+    container.appendChild(svg);
+
+    var tip = document.createElement("div");
+    tip.className = "tip";
+    tip.hidden = true;
+    container.appendChild(tip);
+
+    svg.addEventListener("mousemove", function (event) {
+      var rect = svg.getBoundingClientRect();
+      var scale = width / rect.width;
+      var x = (event.clientX - rect.left) * scale;
+      if (x < pad.l || x > width - pad.r) { hide(); return; }
+      var t = xscale.invert(x).getTime();
+
+      crosshair.setAttribute("x1", x);
+      crosshair.setAttribute("x2", x);
+      crosshair.setAttribute("visibility", "visible");
+
+      var rows = [];
+      seriesList.forEach(function (series) {
+        var nearest = null, best = Infinity;
+        series.points.forEach(function (point) {
+          var distance = Math.abs(Date.parse(point.ts) - t);
+          if (distance < best) { best = distance; nearest = point; }
+        });
+        if (nearest) rows.push({ series: series, point: nearest });
+      });
+      rows.sort(function (a, b) { return a.series.provider < b.series.provider ? -1 : 1; });
+
+      tip.innerHTML = "";
+      var head = document.createElement("div");
+      head.className = "tip-ts";
+      head.textContent = new Date(t).toLocaleString();
+      tip.appendChild(head);
+      rows.forEach(function (row) {
+        var line = document.createElement("div");
+        line.className = "tip-row";
+        var dot = document.createElement("span");
+        dot.className = "dot";
+        dot.style.background = colorFor(row.series.provider);
+        line.appendChild(dot);
+        line.appendChild(document.createTextNode(
+          row.series.provider + "  " + formatValue(row.point.value) + (metric.unit || "")));
+        tip.appendChild(line);
+      });
+      tip.hidden = false;
+      var left = (x / scale) + 14;
+      if (left + tip.offsetWidth > rect.width) left = (x / scale) - tip.offsetWidth - 14;
+      tip.style.left = Math.max(4, left) + "px";
+      tip.style.top = "8px";
+    });
+    svg.addEventListener("mouseleave", hide);
+
+    function hide() {
+      crosshair.setAttribute("visibility", "hidden");
+      tip.hidden = true;
+    }
+  }
+
+  function shortAge(seconds) {
+    if (typeof seconds !== "number" || !isFinite(seconds) || seconds < 0) return "—";
+    if (seconds < 60) return Math.round(seconds) + "s";
+    if (seconds < 3600) return Math.round(seconds / 60) + "m";
+    if (seconds < 86400) return Math.round(seconds / 3600) + "h";
+    return Math.round(seconds / 86400) + "d";
+  }
+
+  function renderRecent() {
+    var recent = state.summary.recent || [];
+    el.recent.innerHTML = "";
+    el.recentNote.textContent = recent.length + " of " + state.summary.snapshot_count + " snapshots";
+    recent.forEach(function (record) {
+      var usageBlock = record.usage || {};
+      var row = document.createElement("tr");
+      if (!usageBlock.ok) row.className = "failed";
+      row.appendChild(cell(new Date(record.ts).toISOString().replace(".000", ""), ""));
+      row.appendChild(providerCell(record.provider));
+      row.appendChild(cell(headline(record), ""));
+      row.appendChild(cell(record.sessions ? String(record.sessions.total) : "0", "num"));
+      row.appendChild(cell(record.path || "", "path"));
+      el.recent.appendChild(row);
+    });
+  }
+
+  function headline(record) {
+    var usageBlock = record.usage || {};
+    if (!usageBlock.ok) return "(failed) " + (usageBlock.error || "");
+    if (usageBlock.display && usageBlock.display.usage) return usageBlock.display.usage;
+    return "ok";
+  }
+
+  function providerCell(provider) {
+    var td = document.createElement("td");
+    var wrap = document.createElement("span");
+    wrap.className = "provider";
+    var dot = document.createElement("span");
+    dot.className = "dot";
+    dot.style.background = colorFor(provider);
+    wrap.appendChild(dot);
+    wrap.appendChild(document.createTextNode(provider));
+    td.appendChild(wrap);
+    return td;
+  }
+
+  function cell(text, className) {
+    var td = document.createElement("td");
+    if (className) td.className = className;
+    td.textContent = text;
+    return td;
+  }
+
+  function renderErrors() {
+    var errors = state.summary.errors || [];
+    el.errors.hidden = errors.length === 0;
+    el.errorsList.innerHTML = "";
+    el.errorsNote.textContent = errors.length
+      ? errors.length + " file" + (errors.length === 1 ? "" : "s") + " skipped"
+      : "";
+    errors.forEach(function (entry) {
+      var item = document.createElement("li");
+      var code = document.createElement("code");
+      code.textContent = entry.path;
+      item.appendChild(code);
+      item.appendChild(document.createTextNode(" — " + entry.error));
+      el.errorsList.appendChild(item);
+    });
+  }
+
+  el.refresh.addEventListener("click", refresh);
+  el.range.addEventListener("change", function () {
+    state.range = el.range.value;
+    refresh();
+  });
+  el.metric.addEventListener("change", function () {
+    state.selected = el.metric.value;
+    refresh();
+  });
+
+  refresh();
+  setInterval(refresh, REFRESH_MS);
+})();
+</script>
+</body>
+</html>
