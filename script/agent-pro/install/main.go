@@ -1,19 +1,23 @@
 // Command install fat-bundles both SPAs agent-pro embeds, then installs the
-// agent-pro binary into $GOPATH/bin (or $GOBIN).
+// agent-pro binary. Destination is LookPath or ~/.local/bin (see
+// gotool/localbin/install). Honor INSTALL_TO_DIR to stage a copy, and
+// INSTALL_GOOS / INSTALL_GOARCH (else GOOS / GOARCH) for the product build
+// so `go run` of this script can stay host-native while cross-compiling.
 //
 // Usage:
 //
 //	go run ./script/agent-pro/install
+//	INSTALL_TO_DIR=/tmp/out INSTALL_GOOS=linux INSTALL_GOARCH=amd64 go run ./script/agent-pro/install
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
+
+	localinstall "github.com/xhd2015/dot-pkgs/go-pkgs/gotool/localbin/install"
 )
 
 func main() {
@@ -29,23 +33,25 @@ func run() error {
 		return fmt.Errorf("resolve module root: %w", err)
 	}
 	fmt.Printf("module root: %s\n", root)
+	fmt.Printf("target: %s/%s\n", localinstall.TargetGOOS(), localinstall.TargetGOARCH())
+	if d := os.Getenv(localinstall.EnvInstallToDir); d != "" {
+		fmt.Printf("%s=%s\n", localinstall.EnvInstallToDir, d)
+	}
 
-	if err := runCmd(root, nil, "go", "run", "./script/agent-pro/bundle"); err != nil {
+	if err := runCmd(root, "go", "run", "./script/agent-pro/bundle"); err != nil {
 		return fmt.Errorf("bundle: %w", err)
 	}
 
-	binDir, err := goPathBinDir(root)
+	res, err := localinstall.Install(localinstall.Options{
+		Dir:     filepath.Join(root, "cmd"),
+		Package: "./agent-pro",
+		Stdout:  os.Stdout,
+		Stderr:  os.Stderr,
+	})
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
-		return fmt.Errorf("create GOPATH bin dir %s: %w", binDir, err)
-	}
-	if err := goInstallAgentPro(root, binDir); err != nil {
-		return err
-	}
-
-	fmt.Printf("\nagent-pro installed: %s\n", filepath.Join(binDir, "agent-pro"))
+	fmt.Printf("\nagent-pro installed: %s\n", res.Primary)
 	return nil
 }
 
@@ -83,63 +89,11 @@ func looksLikeRoot(dir string) bool {
 	return true
 }
 
-func goPathBinDir(root string) (string, error) {
-	cmd := exec.Command("go", "env", "GOPATH")
-	cmd.Dir = root
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		detail := strings.TrimSpace(stderr.String())
-		if detail != "" {
-			return "", fmt.Errorf("go env GOPATH: %w: %s", err, detail)
-		}
-		return "", fmt.Errorf("go env GOPATH: %w", err)
-	}
-	gopath := strings.TrimSpace(string(out))
-	if gopath == "" {
-		return "", fmt.Errorf("go env GOPATH returned empty output")
-	}
-	return filepath.Join(gopath, "bin"), nil
-}
-
-func goInstallAgentPro(root, binDir string) error {
-	fmt.Println("\n== go install -C cmd ./agent-pro ==")
-	env := upsertEnv(os.Environ(), "GOBIN", binDir)
-	if err := runCmd(root, env, "go", "install", "-C", "cmd", "./agent-pro"); err != nil {
-		return fmt.Errorf("go install -C cmd ./agent-pro: %w", err)
-	}
-	return nil
-}
-
-func runCmd(dir string, env []string, name string, args ...string) error {
+func runCmd(dir string, name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	if env != nil {
-		cmd.Env = env
-	}
 	fmt.Printf("+ cd %s\n+ %s\n", dir, cmd.String())
 	return cmd.Run()
-}
-
-func upsertEnv(env []string, key, value string) []string {
-	prefix := key + "="
-	out := make([]string, 0, len(env)+1)
-	replaced := false
-	for _, entry := range env {
-		if strings.HasPrefix(entry, prefix) {
-			if !replaced {
-				out = append(out, prefix+value)
-				replaced = true
-			}
-			continue
-		}
-		out = append(out, entry)
-	}
-	if !replaced {
-		out = append(out, prefix+value)
-	}
-	return out
 }
