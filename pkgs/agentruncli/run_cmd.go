@@ -61,8 +61,11 @@ Options:
   --agent-runner RUNNER   codex, codex-tty, grok-tty, opencode, fake-codex, dsh-web, ...
                       dsh-web: launch dsh web open DIR with the prompt; --open opens
                       the browser, --no-submit saves a draft (also without --open).
-                      Supports --dir, --prompt-file, --open, --no-submit, --verbose only;
-                      no agent-run session, TTY, model override, or event stream.
+                      Supports --dir, --prompt-file, --browser, --open, --no-submit, --verbose only;
+                      any other parsed flag is ignored with a stderr notice. No
+                      agent-run session, TTY, model override, or event stream.
+  --browser NAME      dsh-web only: browser passed to dsh web open
+                      (e.g. brave, firefox); requires --agent-runner dsh-web
   --agent-runner-binary SPEC
                       agent executable: bare name/path or shell-style "binary flags..."
   --agent-runner-config-home PATH
@@ -134,6 +137,7 @@ func runHeadless(args []string, defaultRunner string) error {
 	var detachFlag bool
 	var noSubmit bool
 	var dir string
+	var browser string
 	var allowRelocateResumeSessionDir bool
 	var resumeFromGrokSession *string
 	var forkFlag bool
@@ -155,6 +159,7 @@ func runHeadless(args []string, defaultRunner string) error {
 		Bool("--detach", &detachFlag).
 		Bool("--no-submit", &noSubmit).
 		String("--dir", &dir).
+		String("--browser", &browser).
 		Bool("--allow-relocate-resume-session-dir", &allowRelocateResumeSessionDir).
 		String("--resume-from-grok-session", &resumeFromGrokSession).
 		Bool("--fork", &forkFlag).
@@ -176,8 +181,11 @@ func runHeadless(args []string, defaultRunner string) error {
 	if err != nil {
 		return err
 	}
+	if browser != "" && resolveCLIRunner(agentRunner, defaultRunner) != "dsh-web" {
+		return fmt.Errorf("--browser requires --agent-runner dsh-web")
+	}
 	if resolveCLIRunner(agentRunner, defaultRunner) == "dsh-web" {
-		return runDSHWeb(recorded, strings.Join(remaining, " "), promptFile, dir, openFlag, noSubmit, verboseFlag)
+		return runDSHWeb(recorded, strings.Join(remaining, " "), promptFile, dir, browser, openFlag, noSubmit, verboseFlag)
 	}
 	idleEnabled, idleTimeout, err := ParseRunIdle(exitOnIdle, idleTimeoutRaw)
 	if err != nil {

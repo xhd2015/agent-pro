@@ -54,7 +54,7 @@ agent-pro dsh session messages <session-id>
 
 ## DSH Web task handoff
 
-`agent-run run --agent-runner dsh-web --open --no-submit 'Task...'` opens an editable draft on an already-running DSH Web server. It is a browser launcher, not a terminal or streaming runner. See the [DSH Web runner reference](pkgs/agentruncli/README.md) for file-backed prompts, supported flags, and wrk integration.
+`agent-run run --agent-runner dsh-web --open --no-submit 'Task...'` opens an editable draft on an already-running DSH Web server. It is a browser launcher, not a terminal or streaming runner. `--browser NAME` (dsh-web only) picks the browser for `dsh web open` and is rejected for every other runner. See the [DSH Web runner reference](pkgs/agentruncli/README.md) for file-backed prompts, supported flags, and wrk integration.
 
 ## Development
 
