@@ -15,7 +15,7 @@ Usage: agent-run [--agent-runner RUNNER] [--help]
 
 Commands:
   web        start localhost web UI and API
-  run        headless one-shot agent invocation
+  run        one-shot agent invocation or dsh-web browser handoff
   resume     resume a finished session (run shortcut with provider --resume)
   attach     attach to a live grok-tty or codex-tty session by id
   send       send a message to a live grok-tty or codex-tty session by id
@@ -33,7 +33,7 @@ Commands:
   pty        PTY resource stats and kill orphan __serve processes
 
 Options:
-  --agent-runner RUNNER   default agent runner (codex, codex-tty, grok-tty, opencode, fake-codex, ...)
+  --agent-runner RUNNER   default agent runner (codex, codex-tty, grok-tty, opencode, fake-codex, dsh-web, ...)
   -h, --help              show help
 
 Run agent-run <command> --help for command-specific options.

@@ -39,6 +39,7 @@ Commands:
   pi                manage pi configuration
   crush             manage crush configuration
   codex             manage codex configuration
+  dsh               inspect stored DeepSeek Harness sessions
   grok              manage grok CLI sessions
   bookmark          list/show/remove session bookmarks (multi-runner catalog)
   proc              resolve agent session from a process id
@@ -87,6 +88,8 @@ func handle(args []string) error {
 		return handleOpenCode(args[1:])
 	case "codex":
 		return handleCodex(args[1:])
+	case "dsh":
+		return handleDSH(args[1:])
 	case "grok":
 		return handleGrok(args[1:])
 	case "bookmark", "bookmarks":

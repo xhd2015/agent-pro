@@ -58,7 +58,11 @@ Options:
                       validates id / runner / GROK_HOME presence / not already mapped / --dir vs cwd
   --fork              with --resume-from-grok-session: branch via grok --fork-session into a
                       NEW agent-run session (skips already-mapped for the parent Grok id)
-  --agent-runner RUNNER   codex, codex-tty, grok-tty, opencode, fake-codex, ...
+  --agent-runner RUNNER   codex, codex-tty, grok-tty, opencode, fake-codex, dsh-web, ...
+                      dsh-web: launch dsh web open DIR with the prompt; --open opens
+                      the browser, --no-submit saves a draft (also without --open).
+                      Supports --dir, --prompt-file, --open, --no-submit, --verbose only;
+                      no agent-run session, TTY, model override, or event stream.
   --agent-runner-binary SPEC
                       agent executable: bare name/path or shell-style "binary flags..."
   --agent-runner-config-home PATH
@@ -171,6 +175,9 @@ func runHeadless(args []string, defaultRunner string) error {
 		Parse(args)
 	if err != nil {
 		return err
+	}
+	if resolveCLIRunner(agentRunner, defaultRunner) == "dsh-web" {
+		return runDSHWeb(recorded, strings.Join(remaining, " "), promptFile, dir, openFlag, noSubmit, verboseFlag)
 	}
 	idleEnabled, idleTimeout, err := ParseRunIdle(exitOnIdle, idleTimeoutRaw)
 	if err != nil {

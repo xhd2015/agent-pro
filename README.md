@@ -42,6 +42,20 @@ go run ./cmd/agent-traces --route-prefix agent-traces
 
 Then open `http://localhost:<port>/agent-traces/`.
 
+## DeepSeek Harness sessions
+
+`agent-pro dsh` inspects stored DSH sessions without starting a model or modifying session data. See the [DSH command reference](agent/dsh/README.md) for commands, storage selection, and compatibility limits.
+
+```sh
+agent-pro dsh sessions --here
+agent-pro dsh session info <session-id>
+agent-pro dsh session messages <session-id>
+```
+
+## DSH Web task handoff
+
+`agent-run run --agent-runner dsh-web --open --no-submit 'Task...'` opens an editable draft on an already-running DSH Web server. It is a browser launcher, not a terminal or streaming runner. See the [DSH Web runner reference](pkgs/agentruncli/README.md) for file-backed prompts, supported flags, and wrk integration.
+
 ## Development
 
 ### Dev Mode

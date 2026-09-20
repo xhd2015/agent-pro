@@ -6,7 +6,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/slack-go/slack v0.27.0
 	github.com/xhd2015/agent-pro v0.0.198
-	github.com/xhd2015/dot-pkgs/go-pkgs v0.0.175
+	github.com/xhd2015/dot-pkgs/go-pkgs v0.0.179
 	github.com/xhd2015/less-flags v1.0.5
 	github.com/xhd2015/less-gen v0.0.19
 	github.com/xhd2015/skills v0.0.31
@@ -20,6 +20,7 @@ require (
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02 // indirect
+	github.com/klauspost/compress v1.18.4 // indirect
 	github.com/tidwall/jsonc v0.3.3 // indirect
 	github.com/xhd2015/gitops v0.0.31 // indirect
 	github.com/xhd2015/go-coverage v1.0.41 // indirect
