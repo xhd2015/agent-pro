@@ -339,14 +339,16 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 				} else if !usesCodexHook {
 					_ = waitForBannerRemoteOpts(ctx, listenAddr, sessionID, provider.BannerProvider, provider.BannerMarkers, 0, agentGone)
 				}
+				// Snapshot before Enter so a rollout flushed during inject is
+				// still visible after this offset.
+				submitBaselines := codexSubmitBaselinesIfRetry(runnerID, provider.BannerProvider, promptText, opts.NoSubmit, configHome, opts.Workspace)
 				if err := InjectMessage(listenAddr, sessionID, runnerID, promptText, !opts.NoSubmit); err != nil {
 					recordSessionError(opts, "prompt-inject", err)
 				}
 				// A real Codex TUI can retain the prompt when its initial Enter is
-				// lost. Open used to return before the non-open retry below was
-				// installed, leaving an unintended draft forever.
+				// lost. Confirm against the rollout, not the composer glyphs.
 				if shouldRetryCodexSubmit(runnerID, provider.BannerProvider, promptText, opts.NoSubmit) {
-					go retryCodexSubmitRemote(ctx, listenAddr, sessionID, promptText)
+					go retryCodexSubmitRemote(ctx, listenAddr, sessionID, promptText, CodexHomeForRunner(configHome), opts.Workspace, submitBaselines)
 				}
 			}
 			sid := resolveOpenDetachRunnerSessionID(ctx, opts, runnerID, provider, configHome, runStart, listenAddr, sessionID)
@@ -412,6 +414,7 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	shouldInject := promptText != "" && (isResume || opts.NoSubmit || runnerID == "codex-tty")
 	usesGrokTTYHook := runnerID == "grok-tty" && strings.TrimSpace(os.Getenv(envGrokTTYCommand)) != ""
 	usesLLMMockGrokHook := runnerID == "grok-tty" && strings.TrimSpace(os.Getenv("LLM_MOCK_RUN_GROK_COMMAND")) != ""
+	submitBaselines := codexSubmitBaselinesIfRetry(runnerID, provider.BannerProvider, promptText, opts.NoSubmit, configHome, opts.Workspace)
 	if shouldInject {
 		if err := InjectMessage(listenAddr, sessionID, runnerID, promptText, !opts.NoSubmit); err != nil {
 			// Soft-skip when KeepAlive kept the HTTP serve up after the PTY
@@ -443,9 +446,9 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 
 	var autoExitCancel context.CancelFunc
 	if isCodexProvider(provider.BannerProvider) || runnerID == "codex-tty" {
-		// Retry Enter when prompt may still sit in the composer (inject or argv draft).
+		// Retry Enter until the prompt is a user line in the Codex rollout.
 		if shouldRetryCodexSubmit(runnerID, provider.BannerProvider, promptText, opts.NoSubmit) {
-			go retryCodexSubmitRemote(ctx, listenAddr, sessionID, promptText)
+			go retryCodexSubmitRemote(ctx, listenAddr, sessionID, promptText, CodexHomeForRunner(configHome), opts.Workspace, submitBaselines)
 		}
 		if !opts.KeepTerminalAlive {
 			autoExitCtx, cancel := context.WithCancel(ctx)

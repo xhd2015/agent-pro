@@ -115,15 +115,43 @@ func drainStep(home string, sess Session, provider agenttty.Provider) bool {
 	if submit && sess.Runner == "grok-tty" && !strings.Contains(payload, "\n") {
 		payload += "\n"
 	}
+	// Snapshot before inject so a rollout flushed by this Enter stays after the baseline.
+	confirm := codexSubmitConfirmOpts(sess, payload, submit)
 	// codex-tty: one-shot text+\r only types into the composer on real Codex TUI;
 	// InjectMessage types then sends a separate Enter.
 	if err := agenttty.InjectMessage(sess.ListenAddr, sess.TerminalSessionID, sess.Runner, payload, submit); err != nil {
 		return true
 	}
+	if confirm != nil {
+		armCodexSubmitConfirm(context.Background(), *confirm)
+	}
 	if err := dequeueHead(path); err != nil {
 		return true
 	}
 	return queueHasWork(home, sess)
+}
+
+// armCodexSubmitConfirm starts the rollout Enter retry. Tests replace it.
+var armCodexSubmitConfirm = func(ctx context.Context, opts agenttty.CodexSubmitConfirmOpts) {
+	go agenttty.StartCodexSubmitConfirm(ctx, opts)
+}
+
+// codexSubmitConfirmOpts is nil unless this drain should confirm a Codex submit.
+// NoSubmit and non-Codex runners return nil.
+func codexSubmitConfirmOpts(sess Session, payload string, submit bool) *agenttty.CodexSubmitConfirmOpts {
+	if !submit || (sess.Runner != "codex-tty" && sess.Runner != "codex") {
+		return nil
+	}
+	codexHome, workspace := agenttty.CodexSubmitPlace(sess.Home, sess.Runner, sess.TerminalSessionID)
+	return &agenttty.CodexSubmitConfirmOpts{
+		ListenAddr:        sess.ListenAddr,
+		TerminalSessionID: sess.TerminalSessionID,
+		Prompt:            payload,
+		Runner:            sess.Runner,
+		CodexHome:         codexHome,
+		Workspace:         workspace,
+		Baselines:         agenttty.CodexRolloutBaselines(codexHome, workspace),
+	}
 }
 
 func queueHasWork(home string, sess Session) bool {

@@ -400,41 +400,19 @@ func persistentTurnComplete(scrollback []byte, prompt, promptCompact string, cfg
 	return strings.TrimSpace(extractAssistantTextForProvider(scrollback, prompt, cfg.bannerMarkers, cfg.bannerProvider)) != ""
 }
 
-func retryCodexSubmitRemote(ctx context.Context, listenAddr, sessionID, prompt string) {
-	promptCompact := compactBannerText(strings.ToLower(prompt))
-	if promptCompact == "" {
-		return
-	}
-	ticker := time.NewTicker(750 * time.Millisecond)
-	defer ticker.Stop()
-	deadline := time.Now().Add(2 * time.Minute)
-	var lastQueueAttempt time.Time
-	for time.Now().Before(deadline) {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-		snapshot, err := fetchSnapshotBytes(listenAddr, sessionID)
-		if err != nil {
-			continue
-		}
-		if codexTurnCompleteForExit(snapshot, promptCompact) {
-			return
-		}
-		if !codexPromptStillInInput(snapshot, promptCompact) {
-			if codexPromptVisibleInInput(snapshot, promptCompact) && time.Since(lastQueueAttempt) >= 2*time.Second {
-				lastQueueAttempt = time.Now()
-				if err := ttywatch.InjectInput(listenAddr, sessionID, []byte("\t")); err != nil {
-					return
-				}
-			}
-			continue
-		}
-		if err := ttywatch.SendMessage(listenAddr, sessionID, "", true); err != nil {
-			return
-		}
-	}
+// retryCodexSubmitRemote presses Enter until the prompt is a user message in
+// the Codex rollout. Screen glyphs are not the signal: a draft can sit on a
+// » composer under a • usage bullet and never match ›+full text.
+func retryCodexSubmitRemote(ctx context.Context, listenAddr, sessionID, prompt, codexHome, workspace string, baselines map[string]int64) {
+	StartCodexSubmitConfirm(ctx, CodexSubmitConfirmOpts{
+		ListenAddr:        listenAddr,
+		TerminalSessionID: sessionID,
+		Prompt:            prompt,
+		Runner:            "codex-tty",
+		CodexHome:         codexHome,
+		Workspace:         workspace,
+		Baselines:         baselines,
+	})
 }
 
 // shouldRetryCodexSubmit reports whether a submitted Codex prompt needs the
@@ -464,14 +442,6 @@ func codexPromptStillInInput(scrollback []byte, promptCompact string) bool {
 		}
 	}
 	return true
-}
-
-func codexPromptVisibleInInput(scrollback []byte, promptCompact string) bool {
-	if promptCompact == "" {
-		return false
-	}
-	compact := compactBannerText(strings.ToLower(stripPlain(scrollback)))
-	return strings.Contains(compact, "›"+promptCompact)
 }
 
 func codexTurnCompleteForExit(scrollback []byte, promptCompact string) bool {
