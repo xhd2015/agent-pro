@@ -94,6 +94,20 @@ func TestParseSessionFromPath_CodexThreadWriterLock(t *testing.T) {
 	}
 }
 
+func TestParseSessionFromPath_DSHWriteLease(t *testing.T) {
+	const id = "session-4a7802d3-18e0-4fd3-a7ef-a45447a78b81"
+	kind, sid, ok := ParseSessionFromPath("/Users/x/.dsh/sessions/--proj--/" + id + "/session.lock")
+	if !ok || kind != "dsh" || sid != id {
+		t.Fatalf("got ok=%v kind=%q sid=%q", ok, kind, sid)
+	}
+	if _, _, ok := ParseSessionFromPath("/Users/x/.dsh/sessions/--proj--/" + id + "/session.v3.jsonl.zstd"); ok {
+		t.Fatal("the log is not the write lease")
+	}
+	if _, _, ok := ParseSessionFromPath("/tmp/session.lock"); ok {
+		t.Fatal("a lock outside the dsh sessions root is not a session")
+	}
+}
+
 func TestResolveFromPID_GrokIgnoresDirectoryScanOpens(t *testing.T) {
 	const want = "01a06639-3c96-7ff0-9256-fd0daa519985"
 	const stale = "01a0464c-08e4-7061-a893-2773ce974845"

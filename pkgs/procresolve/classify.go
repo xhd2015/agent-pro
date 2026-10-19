@@ -78,3 +78,17 @@ func IsGrokRunner(cmd string) bool {
 func IsCodexRunner(cmd string) bool {
 	return runnerKind(cmd) == "codex"
 }
+
+// IsDSHWriter reports whether cmd is a DSH process that can hold session write
+// leases. The long-running server is `node … apps/cli/src/bin.ts`, not a binary
+// named dsh, so a basename check alone misses it.
+func IsDSHWriter(cmd string) bool {
+	fields := strings.Fields(cmd)
+	if len(fields) == 0 {
+		return false
+	}
+	if filepath.Base(fields[0]) == "dsh" {
+		return true
+	}
+	return strings.Contains(strings.Join(fields, " "), "apps/cli/src/bin.ts")
+}

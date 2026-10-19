@@ -45,7 +45,7 @@ A missing root produces an empty listing. Unsupported or malformed session artif
 - Only v3 is supported; v0, v1, and v2 need a DSH-owned migration before this inspector can interpret them.
 - The reader validates the records it uses, but does not implement DSH's full replay validation, plugin composition, historical migration, or current-context derivation.
 - Inspection observes persisted bytes, not unflushed live events. It is not an atomic snapshot across multiple sessions.
-- `send`, `open`, `focus`, `snapshot`, `fork`, `backup`, and `list-live` are not implemented. In particular, headless DSH is not used as a substitute for delivery to an existing live Web session.
+- `send`, `open`, `focus`, `snapshot`, `fork`, and `backup` are not implemented. `ListLive` reports sessions whose `session.lock` write lease is open; it does not acquire that lock, and it does not require an iTerm tab.
 
 ## Development checks
 

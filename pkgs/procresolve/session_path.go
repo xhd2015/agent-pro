@@ -11,13 +11,13 @@ import (
 var uuidPattern = regexp.MustCompile(`(?i)[0-9a-f]{8,}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
 
 // ParseSessionFromPath extracts a hard session hit from an open-file path.
-// Returns kind ("grok"|"codex"), sessionID (lowercased), ok.
+// Returns kind ("grok"|"codex"|"dsh"), sessionID (lowercased), ok.
 func ParseSessionFromPath(path string) (kind, sessionID string, ok bool) {
 	return parseSessionFromPath(path)
 }
 
 // parseSessionFromPath extracts a hard session hit from an open-file path.
-// Returns kind ("grok"|"codex"), sessionID, ok.
+// Returns kind ("grok"|"codex"|"dsh"), sessionID, ok.
 func parseSessionFromPath(path string) (kind, sessionID string, ok bool) {
 	if path == "" {
 		return "", "", false
@@ -31,7 +31,33 @@ func parseSessionFromPath(path string) (kind, sessionID string, ok bool) {
 	if id, found := parseCodexSessionPath(slashPath); found {
 		return "codex", id, true
 	}
+	if id, found := parseDSHSessionLockPath(slashPath); found {
+		return "dsh", id, true
+	}
 	return "", "", false
+}
+
+// parseDSHSessionLockPath reports a live DSH write lease. The lease file is
+// session.lock inside session-<uuid>/, and the id matches Store.List (the
+// directory name, including the session- prefix). Other files in that
+// directory, including the log, are not the lease.
+func parseDSHSessionLockPath(path string) (string, bool) {
+	if path == "" || filepath.Base(path) != "session.lock" {
+		return "", false
+	}
+	if !strings.Contains(path, "/.dsh/sessions/") {
+		return "", false
+	}
+	dir := filepath.Base(filepath.Dir(path))
+	const prefix = "session-"
+	if !strings.HasPrefix(dir, prefix) {
+		return "", false
+	}
+	idPart := strings.TrimPrefix(dir, prefix)
+	if uuidPattern.FindString(idPart) != idPart {
+		return "", false
+	}
+	return strings.ToLower(dir), true
 }
 
 // longestUUID returns the longest uuidPattern match in s (prefer full IDs
