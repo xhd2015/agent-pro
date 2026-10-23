@@ -27,7 +27,7 @@ const sessionHelp = `Usage: agent-pro dsh session <command> [ARGS]
 Commands:
   list              alias for: agent-pro dsh sessions
   info ID           show durable session metadata
-  status ID         show durable outcome, not process liveness
+  status ID         show activity, liveness, and durable outcome
   log ID            print durable transcript
   messages ID       print user and assistant messages
   prompts [ID]      print human prompts (or recent sessions)
@@ -163,13 +163,11 @@ func Run(args []string, stdout, stderr io.Writer) error {
 		}
 		return printInfo(stdout, inspection.Summary, false)
 	case "status":
+		status := sessionStatus(inspection)
 		if jsonMode {
-			return writeJSON(stdout, struct {
-				sessions.Summary
-				StatusScope string `json:"status_scope"`
-			}{inspection.Summary, "durable-log-only; process liveness unknown"})
+			return writeJSON(stdout, status)
 		}
-		return printInfo(stdout, inspection.Summary, true)
+		return printStatus(stdout, status)
 	case "messages", "prompts":
 		items, messageErr := messages(inspection, action == "prompts")
 		if messageErr != nil {
@@ -204,7 +202,7 @@ func leafHelp(action string) string {
 	}
 	text += "  -h, --help          show help\n"
 	if action == "status" {
-		text += "\nReports durable-log outcome only, not process liveness.\n"
+		text += "\nReports live activity (thinking / responding / tool_calling / error / idle),\nprocess liveness, and the durable-log outcome.\n"
 	}
 	return text
 }

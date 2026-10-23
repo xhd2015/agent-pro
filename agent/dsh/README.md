@@ -36,13 +36,13 @@ The session root is selected in this order:
 
 Use `--sessions-dir` for DSH deployments whose persistence configuration points outside the standard home. The inspector does not execute Cordis configuration or infer custom roots from patch files. The `--here` and `--dir` filters compare cleaned absolute cwd strings; they do not resolve symlink aliases.
 
-Each root contains project directories, then session directories. The reader selects the numerically highest canonical generation filename in each directory. It supports format v3 in plain `session.v3.jsonl` and concatenated Zstandard `session.v3.jsonl.zstd` artifacts. Temporary and noncanonical filenames are not generations. An unsupported highest generation is never replaced by a readable older one. Roots mixing plain and compressed artifacts are rejected.
+Each root contains project directories, then session directories. The reader selects the numerically highest canonical generation filename in each directory. It supports formats v3 and v4 in plain `session.vN.jsonl` and concatenated Zstandard `session.vN.jsonl.zstd` artifacts. Temporary and noncanonical filenames are not generations. An unsupported highest generation is never replaced by a readable older one. Roots mixing plain and compressed artifacts are rejected.
 
 A missing root produces an empty listing. Unsupported or malformed session artifacts produce warnings during a listing; an exact inspection of such a session fails. A final plaintext fragment without a newline is omitted as an uncommitted tail. Damaged or truncated Zstandard streams fail rather than attempting DSH's compressed-tail recovery. Files remain unchanged on success and failure.
 
 ## Limits
 
-- Only v3 is supported; v0, v1, and v2 need a DSH-owned migration before this inspector can interpret them.
+- Only v3 and v4 are supported; v0, v1, and v2 need a DSH-owned migration before this inspector can interpret them. Newer generations are refused.
 - The reader validates the records it uses, but does not implement DSH's full replay validation, plugin composition, historical migration, or current-context derivation.
 - Inspection observes persisted bytes, not unflushed live events. It is not an atomic snapshot across multiple sessions.
 - `send`, `open`, `focus`, `snapshot`, `fork`, and `backup` are not implemented. `ListLive` reports sessions whose `session.lock` write lease is open; it does not acquire that lock, and it does not require an iTerm tab.

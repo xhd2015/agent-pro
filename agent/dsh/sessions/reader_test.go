@@ -11,7 +11,10 @@ import (
 )
 
 func header(id string) string {
-	b, _ := json.Marshal(map[string]any{"type": "session", "version": 3, "id": id, "createdAt": 10, "cwd": "/workspace", "isSeeded": false, "delegationDepth": 0})
+	return headerAt(id, 3)
+}
+func headerAt(id string, version int) string {
+	b, _ := json.Marshal(map[string]any{"type": "session", "version": version, "id": id, "createdAt": 10, "cwd": "/workspace", "isSeeded": false, "delegationDepth": 0, "agentPreset": "std-no-subagent"})
 	return string(b) + "\n"
 }
 func row(typ string, seq int, data string) string {
@@ -219,5 +222,65 @@ func TestNewestFirstAndRawExtensions(t *testing.T) {
 	got, err := store.Inspect("c")
 	if err != nil || string(got.Events[0].Raw) != raw {
 		t.Fatal(got, err)
+	}
+}
+
+func TestReadV4TimelineAndActivity(t *testing.T) {
+	root := t.TempDir()
+	body := headerAt("v4-sess", 4) +
+		row("turn/start", 0, `{"turn":1}`) +
+		`{"type":"user/message","seq":1,"time":21,"data":{"content":[{"type":"text","text":"hi"}],"source":{"kind":"user"}},"surfaceOp":"append"}` + "\n" +
+		row("tool/call", 2, `{"name":"bash"}`) +
+		row("request/header", 3, `{"header":{"config":{"provider":"p","model":"m"}}}`)
+	path := put(t, root, "v4-sess", "session.v4.jsonl", body)
+	got, err := (&Store{root}).Inspect("v4-sess")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Path != path || got.FormatVersion != 4 || got.Provider != "p" || got.Model != "m" || got.Outcome != "incomplete" || got.AgentPreset != "std-no-subagent" || len(got.Events) != 4 {
+		t.Fatalf("%+v", got)
+	}
+	act := Classify(got.Events, true)
+	if act.Kind != ActivityToolCalling || act.Detail != "bash" || !act.Live {
+		t.Fatalf("activity=%+v", act)
+	}
+}
+
+func TestReadV4Zstd(t *testing.T) {
+	enc, err := zstd.NewWriter(nil, zstd.WithEncoderCRC(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer enc.Close()
+	data := enc.EncodeAll([]byte(headerAt("z4", 4)+row("turn/start", 0, `{"turn":1}`)), nil)
+	root := t.TempDir()
+	put(t, root, "z4", "session.v4.jsonl.zstd", string(data))
+	got, err := (&Store{root}).Inspect("z4")
+	if err != nil || got.FormatVersion != 4 || got.Encoding != "zstd" || got.Outcome != "incomplete" {
+		t.Fatal(got, err)
+	}
+}
+
+func TestV4PreferredOverV3InSameDirectory(t *testing.T) {
+	root := t.TempDir()
+	put(t, root, "both", "session.v3.jsonl", header("both"))
+	put(t, root, "both", "session.v4.jsonl", headerAt("both", 4)+row("turn/start", 0, `{"turn":1}`))
+	got, err := (&Store{root}).Inspect("both")
+	if err != nil || got.FormatVersion != 4 || got.Outcome != "incomplete" {
+		t.Fatal(got, err)
+	}
+}
+
+func TestUnsupportedGenerationsStayRefused(t *testing.T) {
+	root := t.TempDir()
+	put(t, root, "old", "session.v2.jsonl", headerAt("old", 2))
+	put(t, root, "new", "session.v5.jsonl", headerAt("new", 5))
+	store := Store{root}
+	_, err := store.Inspect("old")
+	requireError(t, err, "v2")
+	_, err = store.Inspect("new")
+	requireError(t, err, "v5")
+	if err == nil || !strings.Contains(err.Error(), "v3 and v4") {
+		t.Fatalf("want supports v3 and v4: %v", err)
 	}
 }

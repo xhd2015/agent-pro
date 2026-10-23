@@ -8,11 +8,11 @@ Agent-pro's provider commands expose stored session history, but DSH uses a diff
 
 ## Decision
 
-The DSH inspector reads v3 JSONL and Zstandard artifacts directly in Go. It selects the highest canonical generation, retains original event records for NDJSON, and presents recorded history rather than reconstructing DSH's current model context. It writes no session state and does not acquire writer ownership. Unsupported generations remain explicit failures; older readable predecessors are not fallbacks. Cross-session listings isolate damaged or unsupported artifacts with diagnostics, while exact inspection fails.
+The DSH inspector reads v3 and v4 JSONL and Zstandard artifacts directly in Go. It selects the highest canonical generation, retains original event records for NDJSON, and presents recorded history rather than reconstructing DSH's current model context. It writes no session state and does not acquire writer ownership. Unsupported generations remain explicit failures; older readable predecessors are not fallbacks. Cross-session listings isolate damaged or unsupported artifacts with diagnostics, while exact inspection fails.
 
 ## Alternatives considered
 
-**A DSH-owned inspection API:** This would reuse DSH's codecs and migration semantics, but requires shipping an additional DSH interface before agent-pro can inspect local sessions. The native inspector instead accepts an explicit v3-only compatibility limit.
+**A DSH-owned inspection API:** This would reuse DSH's codecs and migration semantics, but requires shipping an additional DSH interface before agent-pro can inspect local sessions. The native inspector instead accepts an explicit v3-and-v4 physical compatibility limit (same JSONL row framing; no DSH migration codec).
 
 **Plain JSONL only:** This avoids a decompression dependency but excludes the default DSH storage configuration. A maintained Go Zstandard decoder supports ordinary installations without requiring a separate executable.
 

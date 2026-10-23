@@ -127,6 +127,35 @@ func TestPromptOutputSnapshot(t *testing.T) {
 	}
 }
 
+func TestStatusJSONIncludesActivity(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "project", "done")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"type":"session","version":3,"id":"done","createdAt":10,"cwd":"/workspace","isSeeded":false,"delegationDepth":0}` + "\n" +
+		`{"type":"turn/start","seq":0,"time":20,"data":{"turn":1}}` + "\n" +
+		`{"type":"assistant/message","seq":1,"time":21,"data":{"message":{"content":[{"type":"text","text":"ok"}]}}}` + "\n" +
+		`{"type":"turn/end","seq":2,"time":22,"data":{"turn":1,"reason":{"kind":"completed"}}}` + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "session.v3.jsonl"), []byte(body), 0644); err != nil {
+		t.Fatal(err)
+	}
+	var out, diag bytes.Buffer
+	if err := Run([]string{"session", "status", "done", "--sessions-dir", root, "--json"}, &out, &diag); err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["activity"] != "idle" {
+		t.Fatalf("activity=%v body=%s", got["activity"], out.String())
+	}
+	if _, ok := got["live"]; !ok {
+		t.Fatal("missing live")
+	}
+}
+
 func TestRejectIgnoredOptions(t *testing.T) {
 	for _, args := range [][]string{{"session", "info", "s", "--tail", "2"}, {"session", "status", "s", "--tail", "2"}, {"session", "prompts", "s", "--limit", "20"}, {"session", "prompts", "s", "--here"}} {
 		var out, diag bytes.Buffer

@@ -128,6 +128,45 @@ func printList(w io.Writer, rows []sessions.Summary) error {
 	_, err := fmt.Fprintf(w, "\n%d sessions\n", len(rows))
 	return err
 }
+
+type sessionStatusDoc struct {
+	sessions.Summary
+	Activity       string `json:"activity"`
+	ActivityDetail string `json:"activity_detail,omitempty"`
+	Live           bool   `json:"live"`
+	StatusScope    string `json:"status_scope"`
+}
+
+func sessionStatus(inspection *sessions.Inspection) sessionStatusDoc {
+	live := false
+	liveKnown := true
+	rows, err := sessions.ListLive(nil)
+	if err != nil {
+		liveKnown = false
+	} else {
+		for _, row := range rows {
+			if row.ID == inspection.ID {
+				live = true
+				break
+			}
+		}
+	}
+	var act sessions.Activity
+	if liveKnown {
+		act = sessions.Classify(inspection.Events, live)
+	} else {
+		act = sessions.ClassifyLog(inspection.Events)
+		act.Live = live
+	}
+	return sessionStatusDoc{
+		Summary:        inspection.Summary,
+		Activity:       string(act.Kind),
+		ActivityDetail: act.Detail,
+		Live:           act.Live,
+		StatusScope:    "durable log + process liveness",
+	}
+}
+
 func printInfo(w io.Writer, row sessions.Summary, status bool) error {
 	if _, err := fmt.Fprintf(w, "Session:       %s\nStorage:       %s\nFormat:        v%d (%s)\nLast activity: %s\nLast turn:     %s\n", clean(row.ID), clean(row.Path), row.FormatVersion, clean(row.Encoding), stamp(row.UpdatedAt), clean(row.Outcome)); err != nil {
 		return err
@@ -141,6 +180,26 @@ func printInfo(w io.Writer, row sessions.Summary, status bool) error {
 		}
 	}
 	_, err := fmt.Fprintln(w, "\nStatus scope: durable log only; process liveness is unknown.")
+	return err
+}
+
+func printStatus(w io.Writer, row sessionStatusDoc) error {
+	live := "no"
+	if row.Live {
+		live = "yes"
+	}
+	if _, err := fmt.Fprintf(w, "Session:       %s\nStorage:       %s\nFormat:        v%d (%s)\nLast activity: %s\nLast turn:     %s\nActivity:      %s\n", clean(row.ID), clean(row.Path), row.FormatVersion, clean(row.Encoding), stamp(row.UpdatedAt), clean(row.Outcome), clean(row.Activity)); err != nil {
+		return err
+	}
+	if row.ActivityDetail != "" {
+		if _, err := fmt.Fprintf(w, "Detail:        %s\n", clean(row.ActivityDetail)); err != nil {
+			return err
+		}
+	}
+	if _, err := fmt.Fprintf(w, "Live:          %s\n", live); err != nil {
+		return err
+	}
+	_, err := fmt.Fprintln(w, "\nStatus scope: durable log + process liveness.")
 	return err
 }
 func printLog(w io.Writer, in *sessions.Inspection, tail int, jsonMode bool) error {

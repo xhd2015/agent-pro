@@ -18,6 +18,22 @@ import (
 
 const maxSafeInteger int64 = 9007199254740991
 
+// supportedFormatGenerations are the physical JSONL generations this inspector
+// reads. DSH currently writes v4 with the same row framing as v3; v0–v2 need a
+// DSH-owned migration, and newer generations are refused.
+const (
+	minSupportedFormat = 3
+	maxSupportedFormat = 4
+)
+
+func supportedFormat(version uint64) bool {
+	return version >= minSupportedFormat && version <= maxSupportedFormat
+}
+
+func unsupportedFormatError(version uint64) error {
+	return fmt.Errorf("unsupported session format v%d (reader supports v%d and v%d)", version, minSupportedFormat, maxSupportedFormat)
+}
+
 // ResolveRoot resolves the explicit session root or the selected DSH home's sessions directory.
 func ResolveRoot(opts Options) (string, error) {
 	path := opts.SessionsDir
@@ -259,8 +275,8 @@ func artifactID(a artifact) (string, error) {
 }
 
 func readArtifact(a artifact) (*Inspection, error) {
-	if a.version != 3 {
-		return nil, fmt.Errorf("unsupported session format v%d (reader supports v3)", a.version)
+	if !supportedFormat(a.version) {
+		return nil, unsupportedFormatError(a.version)
 	}
 	f, err := openArtifact(a.path)
 	if err != nil {
@@ -336,7 +352,7 @@ func readArtifact(a artifact) (*Inspection, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := &Inspection{Summary: Summary{ID: id, CreatedAt: created, UpdatedAt: created, Cwd: cwd, ParentSession: parent, Origin: origin, IsSeeded: seeded, AgentPreset: preset, DelegationDepth: depth, FormatVersion: 3, Path: a.path, Encoding: a.encoding, SizeBytes: stat.Size(), Outcome: "empty"}, Header: bytes.Clone(bytes.TrimSpace(line)), Events: []Event{}}
+	result := &Inspection{Summary: Summary{ID: id, CreatedAt: created, UpdatedAt: created, Cwd: cwd, ParentSession: parent, Origin: origin, IsSeeded: seeded, AgentPreset: preset, DelegationDepth: depth, FormatVersion: int(a.version), Path: a.path, Encoding: a.encoding, SizeBytes: stat.Size(), Outcome: "empty"}, Header: bytes.Clone(bytes.TrimSpace(line)), Events: []Event{}}
 	for {
 		line, err = reader.ReadBytes('\n')
 		if err == io.EOF {
