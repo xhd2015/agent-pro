@@ -7,123 +7,82 @@ description: >-
   to the mechanism and leads with a one-sentence root cause.
 ---
 
-You are a brainstorming specialist. Discuss the approach with the user before
-any implementation.
+# Purpose and approval
 
-# When to use
+Discuss the approach before implementing a feature, fix, or CLI design; use when
+invoked with `/brainstorm`, planning is requested, or test strategy needs agreement.
+Skip for trivial changes with an obvious approach or an explicit implementation request.
 
-- New feature or fix where approach and trade-offs need discussion first
-- User invoked `/brainstorm` or asked to plan before coding
-- Work where test strategy should be agreed upfront
+During brainstorming, do not write code, edit files, or run implementation commands
+until the user says **"go ahead"**. The only exception is the requested review artifact
+in **UI mockups**; it does not authorize application implementation or unrelated edits.
+Approval adopts all listed defaults and Locked decisions unless the user overrides them.
+For approved implementation, add running tests to the todo list when applicable.
 
-# When NOT to use
+# Response workflow
 
-- User already said "go ahead" or asked to implement directly
-- Trivial change with an obvious approach from the codebase
+1. Select the base mode below; for an issue, investigate before replying.
+2. Add **Output-change layers**, **CLI examples**, and **UI mockups** where applicable.
+3. End every brainstorm reply with **Decisions**.
 
-# Required output
+| Base mode | Required output |
+|-----------|-----------------|
+| Pure doc — markdown, comments, or skill text only | Concrete edit sites as a **before → after** map (table or paired bullets); no tests needed |
+| Issue — existing behavior wrong (`fix`, symptom, screenshot, "stays / still / broken") | **Issue investigation**, then **Plan fields** |
+| Feature — new capability | **Plan fields** |
 
-Pick the **first** matching mode:
+# Plan fields
 
-| Mode | When | Must tell the user |
-|------|------|--------------------|
-| Feature | new capability | core mechanism; data models / storage; test scenarios; how to test |
-| Issue | existing behavior wrong (`fix`, symptom, screenshot, "stays / still / broken") | **First sentence = one-line root cause.** Then the same plan fields as a feature |
-| Pure doc | markdown / comments / skill text only | before → after edit map; no tests |
-| + CLI | designing a command, flag, help, or stdout/stderr session | also **CLI output examples** below |
-| + UI | web, app, desktop, mobile, or TUI layout | also **UI mockups** below |
-| + Output layers | plan changes a produced contract | layer list, underlying → caller (see **Output-change layers**) |
+- **Core mechanism** — what runs, what it touches, and why that control flow delivers the change.
+- **Data models and storage layout** — what is stored, where, and what is ephemeral.
+- **Test scenarios** — cases and expected outputs; always consider adding correctness tests.
+- **How to test** — prefer rerunnable tests.
 
-## If this is an issue
+# Issue investigation
 
-Investigate until the actual mechanism is identified. Do not plan against the
-first grep hit. Do not stop at the wrong product surface or a mid-level label
-("it's the updater"). Open the user's evidence first (screenshot, exact copy,
-log); walk trigger → persisted or held state → why the symptom survives after
-the trigger is gone.
-
-Read-only investigation is required. Lead the reply with one sentence that
-states that root cause, then short evidence (path + why that surface), then
-the plan (same fields as Feature, including **core mechanism** of the fix —
-not a repeat of the root cause).
-
-## If this is a feature request
-
-Explicitly tell the user:
-
-1. **Core mechanism** — short: the path/control flow the change uses (what
-   runs, what it touches, why that delivers the fix/capability)
-2. **Data models and storage layout** — what is stored, where, and what is ephemeral
-3. **Test scenarios** and expected output
-4. **How to test** — prefer rerunnable tests
-
-Always consider adding tests to verify correctness. If the user approved the
-plan, add running tests to the todo list when you later implement.
-
-## If this is a pure doc change
-
-No test needed. Analyse the document and propose the structural edit as a
-**before → after** map of concrete sites (table or paired bullets).
+Investigate read-only to the actual mechanism: open the user's evidence first
+(screenshot, exact copy, log), identify the correct product surface, then trace
+trigger → persisted or held state → why the symptom survives after the trigger is gone.
+Do not stop at the first search hit or a mid-level label such as "the updater".
+Start the reply with a **Root Cause** section: first prose sentence = one-line cause,
+then short evidence (path + why that surface). Follow with **Plan fields**; the fix's
+core mechanism must explain the remedy, not restate the cause.
 
 # Output-change layers
 
-When a **produced contract** changes (API return, CLI/HTTP/UI payload, on-disk record):
+When a produced contract changes (API return, CLI/HTTP/UI payload, on-disk record),
+list layers bottom-up, producer → callers: project + module, then producer package
+and callers when crossing a package API. Show current → new for each layer.
+One layer is enough; skip when no caller- or user-consumed output changes.
 
-| Order | Layer | Document |
-|-------|--------|----------|
-| Bottom-up (producer → callers) | Project + module (`go.mod`, `package.json`, …). Inside one module, producer package then callers if the output crosses a package API | How this layer changes (current → new) |
+# CLI examples
 
-Skip if nothing a caller or user consumes changes. One layer is enough.
+For commands, flags, help, or stdout/stderr design, include fenced mock sessions:
 
-# CLI output examples
+| Case | Required contract |
+|------|-------------------|
+| Success | Primary result on stdout |
+| Warning | Non-fatal on stderr, `warning:` prefix; exit 0 when partial success is acceptable |
+| Error | Fatal on stderr, `Error:` (or `cmdname:`) prefix; non-zero exit |
+| Help | `-h` / `--help` at every level: root, sub-command, nested action |
 
-When the request involves a CLI command, sub-command, flag, help text, or
-stdout/stderr session, also include fenced mock sessions for:
-
-- **Success** — primary result on **stdout**
-- **Warnings** — non-fatal on **stderr**, `warning:` prefix, exit 0 when partial success is acceptable
-- **Errors** — fatal on **stderr**, `Error:` prefix (or `cmdname:`), non-zero exit
-- **Help** — `-h` / `--help` at every command level (root, sub-command, nested action)
-
-Color: yellow `warning:` on stderr; red `Error:` on stderr; green success/status
-on stdout; gray meta labels on stdout; no ANSI in JSON or other machine-readable
-output.
-
-### Example mockups
-
-Success (stdout):
-
-```text
-$ mytool sessions list
-  ID           Status     Runner
-  sess-abc12   running    codex
-  sess-def34   finished   opencode
-
-2 sessions
-```
+Color: yellow warnings and red errors on stderr; green success/status and gray meta
+labels on stdout. No ANSI in JSON or other machine-readable output.
 
 # UI mockups
 
-When the request involves a web, app, desktop, mobile, or TUI layout, include an ASCII-art mockup of the primary screen.
+For an **HTML mockup request**, immediately create an initial self-contained HTML file
+and present the actual file in the **first response** (file-presentation tool if
+available, otherwise a file link). Do not wait for approval or preliminary design
+answers: use reasonable defaults, label assumptions, and let the user review the draft.
+For other web, app, desktop, mobile, or TUI layout requests, include an ASCII-art
+mockup of the primary screen.
 
-# Decisions section (always last in your reply)
+# Decisions
 
-Every brainstorm reply — feature, issue, pure doc, CLI, or UI — **MUST** end with a
-decisions section. Use a **context-relevant title** (not a fixed phrase).
-
-Number every user-confirmable item **`1.` `2.` `3.` …** — never `A.` `B.` or
-bullets alone for confirmable choices.
-
-Each open decision: one most sound default (bold or clearly marked); one-line
-**why** (project conventions, smallest reversible risk, existing patterns —
-not "most ambitious"); optional compact alternatives (real contenders only).
-
-When all decisions are confirmed (or none remain open): begin with a Locked
-decisions table (or a title that clearly means locked).
-
-# Stop condition
-
-Do not write code, edit files, or run implementation commands until the user
-explicitly confirms with **"go ahead"**. That means: implement the plan using
-**all listed defaults** and any **Locked decisions**, unless the user overrode
-specific items in the same message (or earlier in the thread).
+This section is always last, with a context-relevant title rather than a fixed phrase.
+Number user-confirmable items **`1.` `2.` `3.` …**, not letters or unnumbered bullets.
+For each open decision, mark one most sound default and give a one-line reason grounded
+in project conventions, existing patterns, or smallest reversible risk; include only
+real alternatives. If none remain open, begin the section with a **Locked decisions**
+table or a title that clearly means locked.
