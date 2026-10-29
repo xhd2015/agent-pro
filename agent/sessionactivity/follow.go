@@ -41,31 +41,16 @@ func (p Probe) Follow(runner, sessionID string, afterSeq int64, tail int) (Snaps
 }
 
 func followDSH(sessionID string, afterSeq int64, tail int) (Snapshot, []dshsessions.TranscriptRow, error) {
-	store, err := dshsessions.NewStore(dshsessions.Options{})
+	cur, err := dshTail(sessionID)
 	if err != nil {
 		return Snapshot{}, nil, err
 	}
-	inspection, err := store.Inspect(sessionID)
-	if err != nil {
-		return Snapshot{}, nil, err
-	}
-	live := false
-	liveKnown := true
-	rows, err := dshsessions.ListLive(nil)
-	if err != nil {
-		liveKnown = false
-	} else {
-		for _, row := range rows {
-			if row.ID == sessionID {
-				live = true
-				break
-			}
-		}
-	}
-	snap := snapshotFromDSH(inspection, live, liveKnown)
+	ids, liveKnown := dshLiveIDs()
+	snap := snapshotFromTail(cur, liveKnown && ids[sessionID], liveKnown)
 	snap.Runner = RunnerDSH
 	snap.SessionID = sessionID
-	return snap, dshsessions.Transcript(inspection.Events, afterSeq, tail), nil
+	rows := dshsessions.TranscriptFilter(cur.Rows, afterSeq, tail)
+	return snap, append([]dshsessions.TranscriptRow{}, rows...), nil
 }
 
 func followGrok(sessionID string, afterSeq int64, tail int) (Snapshot, []dshsessions.TranscriptRow, error) {

@@ -13,6 +13,9 @@ func ClassifyChat(lastKind, tool string, live bool) (Kind, string) {
 		if !live {
 			return ErrorKind, "tool call but session is not live"
 		}
+		if tool == "ask_user_question" {
+			return Waiting, tool
+		}
 		return ToolCalling, tool
 	case "response":
 		return Idle, ""

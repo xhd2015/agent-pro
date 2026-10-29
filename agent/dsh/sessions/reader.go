@@ -186,43 +186,18 @@ func (s *Store) Inspect(id string) (*Inspection, error) {
 	if id == "" {
 		return nil, fmt.Errorf("session id is required")
 	}
-	artifacts, warnings, err := s.artifacts()
+	selected, err := s.lookupArtifact(id)
 	if err != nil {
 		return nil, err
 	}
-	var selected *artifact
-	var failures []string
-	for _, a := range artifacts {
-		actual, err := artifactID(a)
-		if err != nil {
-			failures = append(failures, fmt.Sprintf("%s: %v", a.path, err))
-			continue
-		}
-		if actual != id {
-			continue
-		}
-		if selected != nil {
-			return nil, fmt.Errorf("duplicate session id %q in %s and %s", id, selected.path, a.path)
-		}
-		copy := a
-		selected = &copy
+	result, err := readArtifact(selected)
+	if err != nil {
+		return nil, fmt.Errorf("session %q (%s): %w", id, selected.path, err)
 	}
-	if selected != nil {
-		result, err := readArtifact(*selected)
-		if err != nil {
-			return nil, fmt.Errorf("session %q (%s): %w", id, selected.path, err)
-		}
-		if result.ID != id {
-			return nil, fmt.Errorf("session header identity changed while reading %s", selected.path)
-		}
-		return result, nil
+	if result.ID != id {
+		return nil, fmt.Errorf("session header identity changed while reading %s", selected.path)
 	}
-	failures = append(warnings, failures...)
-	detail := ""
-	if len(failures) > 0 {
-		detail = "; unreadable entries: " + strings.Join(failures, "; ")
-	}
-	return nil, fmt.Errorf("DSH session %q was not found under %s%s", id, s.Root, detail)
+	return result, nil
 }
 
 // Session artifacts must be ordinary files; links and special files are not inspected.
@@ -439,6 +414,16 @@ func parseEvent(raw []byte, expected int64) (Event, error) {
 }
 func project(summary *Summary, event Event) error {
 	switch event.Type {
+	case "session/title":
+		data, err := object(event.Data)
+		if err != nil {
+			return err
+		}
+		title, err := requiredString(data, "title")
+		if err != nil {
+			return err
+		}
+		summary.Title = title
 	case "turn/start", "turn/end", "request/header":
 		data, err := object(event.Data)
 		if err != nil {

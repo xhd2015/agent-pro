@@ -2,34 +2,20 @@ package sessionactivity
 
 import (
 	codexsessions "github.com/xhd2015/agent-pro/agent/codex/sessions"
-	dshsessions "github.com/xhd2015/agent-pro/agent/dsh/sessions"
 	groksessions "github.com/xhd2015/agent-pro/agent/grok/sessions"
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 )
 
 func readDSH(sessionID string) (Snapshot, error) {
-	store, err := dshsessions.NewStore(dshsessions.Options{})
+	cur, err := dshTail(sessionID)
 	if err != nil {
 		return Snapshot{}, err
 	}
-	inspection, err := store.Inspect(sessionID)
-	if err != nil {
-		return Snapshot{}, err
-	}
-	live := false
-	liveKnown := true
-	rows, err := dshsessions.ListLive(nil)
-	if err != nil {
-		liveKnown = false
-	} else {
-		for _, row := range rows {
-			if row.ID == sessionID {
-				live = true
-				break
-			}
-		}
-	}
-	return snapshotFromDSH(inspection, live, liveKnown), nil
+	ids, liveKnown := dshLiveIDs()
+	snap := snapshotFromTail(cur, liveKnown && ids[sessionID], liveKnown)
+	snap.Runner = RunnerDSH
+	snap.SessionID = sessionID
+	return snap, nil
 }
 
 func readGrok(sessionID string) (Snapshot, error) {

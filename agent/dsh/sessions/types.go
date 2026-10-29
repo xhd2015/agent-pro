@@ -27,6 +27,7 @@ type Summary struct {
 	Outcome         string `json:"outcome"`
 	Provider        string `json:"provider"`
 	Model           string `json:"model"`
+	Title           string `json:"title,omitempty"`
 }
 
 // Inspection retains physical JSON records; it does not reconstruct current model history.

@@ -60,6 +60,20 @@ func TestRootPrecedence(t *testing.T) {
 		t.Fatalf("%+v %v", got, err)
 	}
 }
+func TestInspectLastSessionTitle(t *testing.T) {
+	root := t.TempDir()
+	body := header("s-title") + row("session/title", 0, `{"title":"first"}`) + row("turn/start", 1, `{"turn":1}`) + row("session/title", 2, `{"title":"Orchestrator agents and todo tracker"}`)
+	put(t, root, "s-title", "session.v3.jsonl", body)
+	store := Store{Root: root}
+	got, err := store.Inspect("s-title")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Title != "Orchestrator agents and todo tracker" {
+		t.Fatalf("title=%q", got.Title)
+	}
+}
+
 func TestReadTimelineAndExactHeaderIdentity(t *testing.T) {
 	root := t.TempDir()
 	body := header("../opaque") + row("turn/start", 0, `{"turn":1}`) + row("request/header", 1, `{"header":{"config":{"provider":"p","model":"m"}}}`) + row("turn/end", 2, `{"turn":1,"reason":{"kind":"completed"}}`) + row("external/opaque", 3, `null`)

@@ -1,6 +1,9 @@
 package sessionactivity
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	dshsessions "github.com/xhd2015/agent-pro/agent/dsh/sessions"
@@ -31,5 +34,35 @@ func TestChatTranscriptMapsKinds(t *testing.T) {
 	}, 1, 24)
 	if len(later) != 1 || later[0].Text != "b" {
 		t.Fatalf("%+v", later)
+	}
+}
+
+func TestFollowDSHUnchangedReusesFile(t *testing.T) {
+	home := t.TempDir()
+	id := "s-follow-cache"
+	header, _ := json.Marshal(map[string]any{
+		"type": "session", "version": 3, "id": id, "createdAt": 10,
+		"cwd": "/workspace", "isSeeded": false, "delegationDepth": 0, "agentPreset": "std",
+	})
+	row, _ := json.Marshal(map[string]any{
+		"type": "tool/call", "seq": 0, "time": 20,
+		"data": json.RawMessage(`{"name":"read","arguments":{"path":"f"}}`),
+	})
+	path := filepath.Join(home, "sessions", "p", id, "session.v3.jsonl")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(append(header, '\n'), append(row, '\n')...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DSH_HOME", home)
+	t.Setenv("HOME", home)
+	first, rows, err := Follow(RunnerDSH, id, 0, 24)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("first %+v %v %v", first, rows, err)
+	}
+	second, rows2, err := Follow(RunnerDSH, id, 0, 24)
+	if err != nil || second.Kind != first.Kind || len(rows2) != 1 || rows2[0].Tool != rows[0].Tool {
+		t.Fatalf("second %+v %v %v", second, rows2, err)
 	}
 }

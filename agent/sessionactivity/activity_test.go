@@ -18,6 +18,8 @@ func TestClassifyChat(t *testing.T) {
 		{kind: "thinking", live: true, want: Thinking},
 		{kind: "thinking", live: false, want: ErrorKind, detail: "thinking but session is not live"},
 		{kind: "tool", tool: "bash", live: true, want: ToolCalling, detail: "bash"},
+		{kind: "tool", tool: "ask_user_question", live: true, want: Waiting, detail: "ask_user_question"},
+		{kind: "tool", tool: "ask_user_question", live: false, want: ErrorKind, detail: "tool call but session is not live"},
 		{kind: "tool", live: false, want: ErrorKind, detail: "tool call but session is not live"},
 		{kind: "response", live: true, want: Idle},
 		{kind: "response", live: false, want: Idle},
@@ -42,7 +44,7 @@ func TestProbeReadUnknownRunner(t *testing.T) {
 
 func TestProbeReadDSH(t *testing.T) {
 	inspection := &dshsessions.Inspection{
-		Summary: dshsessions.Summary{ID: "s1", Cwd: "/ws", Outcome: "incomplete", UpdatedAt: 9},
+		Summary: dshsessions.Summary{ID: "s1", Cwd: "/ws", Title: "Probe name", Outcome: "incomplete", UpdatedAt: 9},
 		Events: []dshsessions.Event{
 			{Type: "turn/start", Data: json.RawMessage(`{"turn":1}`)},
 			{Type: "tool/call", Data: json.RawMessage(`{"name":"bash"}`)},
@@ -57,7 +59,7 @@ func TestProbeReadDSH(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Kind != ToolCalling || got.Detail != "bash" || !got.Live || got.Workspace != "/ws" || got.Runner != "dsh" || got.SessionID != "s1" {
+	if got.Kind != ToolCalling || got.Detail != "bash" || !got.Live || got.Workspace != "/ws" || got.Title != "Probe name" || got.Runner != "dsh" || got.SessionID != "s1" {
 		t.Fatalf("%+v", got)
 	}
 }

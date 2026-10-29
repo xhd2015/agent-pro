@@ -14,7 +14,9 @@ const (
 	ActivityThinking    ActivityKind = "thinking"
 	ActivityResponding  ActivityKind = "responding"
 	ActivityToolCalling ActivityKind = "tool_calling"
+	ActivityWaiting     ActivityKind = "waiting"
 	ActivityError       ActivityKind = "error"
+	ActivityAborted     ActivityKind = "aborted"
 )
 
 // Activity is one session's current phase. Live is process liveness, not
@@ -39,64 +41,88 @@ func ClassifyLog(events []Event) Activity {
 	return classify(events, false, false)
 }
 
+type classifyState struct {
+	kind        ActivityKind
+	detail      string
+	turnOpen    bool
+	pendingUser bool
+}
+
 func classify(events []Event, live, liveKnown bool) Activity {
-	kind := ActivityIdle
-	detail := ""
-	turnOpen := false
-	pendingUser := false
+	var state classifyState
 	for _, event := range events {
-		switch event.Type {
-		case "turn/start":
-			turnOpen = true
-			pendingUser = false
-			kind = ActivityThinking
-			detail = ""
-		case "user/message":
-			if !turnOpen {
-				pendingUser = true
-			}
-		case "assistant/attempt":
-			turnOpen = true
-			pendingUser = false
-			if assistantHasText(event) {
-				kind = ActivityResponding
-			} else {
-				kind = ActivityThinking
-			}
-			detail = ""
-		case "assistant/message":
-			turnOpen = true
-			pendingUser = false
-			if assistantHasText(event) {
-				kind = ActivityResponding
-			} else {
-				kind = ActivityThinking
-			}
-			detail = ""
-		case "tool/call", "command/run":
-			turnOpen = true
-			pendingUser = false
-			kind = ActivityToolCalling
-			detail = toolName(event)
-		case "tool/result", "command/done":
-			if turnOpen {
-				kind = ActivityThinking
-				detail = ""
-			}
-		case "turn/end":
-			turnOpen = false
-			pendingUser = false
-			endKind := turnEndKind(event)
-			if endKind != "" && endKind != "completed" {
-				kind = ActivityError
-				detail = endKind
-			} else {
-				kind = ActivityIdle
-				detail = ""
-			}
+		state.add(event)
+	}
+	return state.finish(live, liveKnown)
+}
+
+func (s *classifyState) add(event Event) {
+	switch event.Type {
+	case "turn/start":
+		s.turnOpen = true
+		s.pendingUser = false
+		s.kind = ActivityThinking
+		s.detail = ""
+	case "user/message":
+		if !s.turnOpen {
+			s.pendingUser = true
+		}
+	case "assistant/attempt":
+		s.turnOpen = true
+		s.pendingUser = false
+		if assistantHasText(event) {
+			s.kind = ActivityResponding
+		} else {
+			s.kind = ActivityThinking
+		}
+		s.detail = ""
+	case "assistant/message":
+		s.turnOpen = true
+		s.pendingUser = false
+		if assistantHasText(event) {
+			s.kind = ActivityResponding
+		} else {
+			s.kind = ActivityThinking
+		}
+		s.detail = ""
+	case "tool/call", "command/run":
+		s.turnOpen = true
+		s.pendingUser = false
+		name := toolName(event)
+		if name == "ask_user_question" {
+			s.kind = ActivityWaiting
+		} else {
+			s.kind = ActivityToolCalling
+		}
+		s.detail = name
+	case "tool/result", "command/done":
+		if s.turnOpen {
+			s.kind = ActivityThinking
+			s.detail = ""
+		}
+	case "turn/end":
+		s.turnOpen = false
+		s.pendingUser = false
+		endKind := turnEndKind(event)
+		if endKind == "aborted" {
+			s.kind = ActivityAborted
+			s.detail = endKind
+		} else if endKind != "" && endKind != "completed" {
+			s.kind = ActivityError
+			s.detail = endKind
+		} else {
+			s.kind = ActivityIdle
+			s.detail = ""
 		}
 	}
-	if pendingUser && !turnOpen {
+}
+
+func (s classifyState) finish(live, liveKnown bool) Activity {
+	kind, detail := s.kind, s.detail
+	if kind == "" {
+		kind = ActivityIdle
+	}
+	if s.pendingUser && !s.turnOpen {
 		if live {
 			kind = ActivityThinking
 			detail = ""
@@ -105,7 +131,7 @@ func classify(events []Event, live, liveKnown bool) Activity {
 			detail = ""
 		}
 	}
-	if liveKnown && turnOpen && !live {
+	if liveKnown && s.turnOpen && !live {
 		kind = ActivityError
 		if detail == "" {
 			detail = "turn open but session is not live"

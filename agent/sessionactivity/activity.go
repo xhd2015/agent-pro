@@ -2,7 +2,7 @@
 //
 // Eluc (and any other caller) should use Read rather than re-implementing
 // per-runner log scans. Kinds are idle, thinking, responding, tool_calling,
-// and error.
+// waiting, error, and aborted.
 package sessionactivity
 
 import (
@@ -26,7 +26,9 @@ const (
 	Thinking    Kind = "thinking"
 	Responding  Kind = "responding"
 	ToolCalling Kind = "tool_calling"
+	Waiting     Kind = "waiting"
 	ErrorKind   Kind = "error"
+	Aborted     Kind = "aborted"
 )
 
 // Snapshot is one session's current phase plus durable facts the caller
@@ -118,6 +120,7 @@ func snapshotFromDSH(inspection *dshsessions.Inspection, live bool, liveKnown bo
 		Detail:    act.Detail,
 		Live:      act.Live,
 		Workspace: inspection.Cwd,
+		Title:     inspection.Title,
 		UpdatedAt: inspection.UpdatedAt,
 		Outcome:   inspection.Outcome,
 	}
