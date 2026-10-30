@@ -82,6 +82,42 @@ func TestListRecentKeepsLastSessionTitle(t *testing.T) {
 	}
 }
 
+func TestListRecentSeesTitleAppendedLater(t *testing.T) {
+	root := t.TempDir()
+	path := put(t, root, "s-grow", "session.v3.jsonl", header("s-grow"))
+	store := Store{Root: root}
+	got, _, err := store.ListRecent(1)
+	if err != nil || len(got) != 1 || got[0].Title != "" {
+		t.Fatalf("%+v %v", got, err)
+	}
+	body := header("s-grow") + row("session/title", 0, `{"title":"Later"}`)
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	later := time.Now().Add(2 * time.Second)
+	if err := os.Chtimes(path, later, later); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err = store.ListRecent(1)
+	if err != nil || len(got) != 1 || got[0].Title != "Later" {
+		t.Fatalf("%+v %v", got, err)
+	}
+}
+
+func TestLookupFindsSessionCreatedAfterIndex(t *testing.T) {
+	root := t.TempDir()
+	put(t, root, "s-first", "session.v3.jsonl", header("s-first"))
+	store := Store{Root: root}
+	if _, err := store.lookupArtifact("s-first"); err != nil {
+		t.Fatal(err)
+	}
+	put(t, root, "s-second", "session.v3.jsonl", header("s-second"))
+	got, err := store.lookupArtifact("s-second")
+	if err != nil || got.path == "" {
+		t.Fatalf("%+v %v", got, err)
+	}
+}
+
 func TestExistsLooksUpSessionID(t *testing.T) {
 	root := t.TempDir()
 	put(t, root, "s-here", "session.v3.jsonl", header("s-here"))

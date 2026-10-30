@@ -7,12 +7,17 @@ import (
 	"time"
 )
 
-const inspectIndexTTL = 2 * time.Second
+// inspectIndexTTL is longer than the orchestrator poll (3s) so a warm server
+// does not re-walk every session log on each refresh. A lookup that misses
+// still rebuilds, so a session created after the index was cached is visible
+// on the next read.
+const inspectIndexTTL = 15 * time.Second
 
 type inspectIndex struct {
-	root string
-	at   time.Time
-	byID map[string]artifact
+	root     string
+	at       time.Time
+	byID     map[string]artifact
+	failures []string
 }
 
 var inspectMemo = struct {
@@ -37,25 +42,45 @@ func (s *Store) Exists(id string) (bool, error) {
 }
 
 func (s *Store) lookupArtifact(id string) (artifact, error) {
+	// Hold the lock across the rebuild so concurrent probes share one walk
+	// instead of each re-reading every session header.
 	inspectMemo.mu.Lock()
-	idx := inspectMemo.index
-	if idx != nil && idx.root == s.Root && time.Since(idx.at) < inspectIndexTTL {
-		a, ok := idx.byID[id]
-		inspectMemo.mu.Unlock()
-		if !ok {
-			return artifact{}, fmt.Errorf("DSH session %q was not found under %s", id, s.Root)
-		}
+	defer inspectMemo.mu.Unlock()
+	if a, ok := s.cachedArtifact(id); ok {
 		return a, nil
 	}
-	inspectMemo.mu.Unlock()
-
-	artifacts, warnings, err := s.artifacts()
+	idx, err := s.buildArtifactIndex()
 	if err != nil {
 		return artifact{}, err
 	}
+	inspectMemo.index = idx
+	a, ok := idx.byID[id]
+	if !ok {
+		detail := ""
+		if len(idx.failures) > 0 {
+			detail = "; unreadable entries: " + strings.Join(idx.failures, "; ")
+		}
+		return artifact{}, fmt.Errorf("DSH session %q was not found under %s%s", id, s.Root, detail)
+	}
+	return a, nil
+}
+
+func (s *Store) cachedArtifact(id string) (artifact, bool) {
+	idx := inspectMemo.index
+	if idx == nil || idx.root != s.Root || time.Since(idx.at) >= inspectIndexTTL {
+		return artifact{}, false
+	}
+	a, ok := idx.byID[id]
+	return a, ok
+}
+
+func (s *Store) buildArtifactIndex() (*inspectIndex, error) {
+	artifacts, warnings, err := s.artifacts()
+	if err != nil {
+		return nil, err
+	}
 	byID := map[string]artifact{}
-	var failures []string
-	failures = append(failures, warnings...)
+	failures := append([]string(nil), warnings...)
 	for _, a := range artifacts {
 		actual, idErr := artifactID(a)
 		if idErr != nil {
@@ -63,20 +88,9 @@ func (s *Store) lookupArtifact(id string) (artifact, error) {
 			continue
 		}
 		if prev, ok := byID[actual]; ok {
-			return artifact{}, fmt.Errorf("duplicate session id %q in %s and %s", actual, prev.path, a.path)
+			return nil, fmt.Errorf("duplicate session id %q in %s and %s", actual, prev.path, a.path)
 		}
 		byID[actual] = a
 	}
-	inspectMemo.mu.Lock()
-	inspectMemo.index = &inspectIndex{root: s.Root, at: time.Now(), byID: byID}
-	inspectMemo.mu.Unlock()
-	a, ok := byID[id]
-	if !ok {
-		detail := ""
-		if len(failures) > 0 {
-			detail = "; unreadable entries: " + strings.Join(failures, "; ")
-		}
-		return artifact{}, fmt.Errorf("DSH session %q was not found under %s%s", id, s.Root, detail)
-	}
-	return a, nil
+	return &inspectIndex{root: s.Root, at: time.Now(), byID: byID, failures: failures}, nil
 }

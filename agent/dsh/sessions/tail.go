@@ -13,16 +13,32 @@ import (
 
 const tailKeep = 200
 
+// coldTailMin is the compressed size above which the first SyncTail reads the
+// header and a suffix instead of JSON-parsing the whole log. Smaller logs,
+// including the session fixtures, stay on the full read.
+const coldTailMin = 256 * 1024
+
+// coldTailWindow is the first suffix. It doubles until the suffix holds
+// coldTailRows transcript rows and a classify anchor, or it covers the file.
+const coldTailWindow = 256 * 1024
+
+// coldTailRows is the suffix size that satisfies a live transcript poll.
+// The orchestrator asks for 24 rows; tailKeep is only the in-memory cap.
+const coldTailRows = 24
+
 // Tail is an incremental session cursor. It never retains the full event log.
 type Tail struct {
-	Path    string
-	Size    int64
-	Offset  int64
-	Summary Summary
-	Rows    []TranscriptRow
-	fold    classifyState
-	nextSeq int64
-	header  bool
+	Path      string
+	Size      int64
+	Offset    int64
+	Summary   Summary
+	Rows      []TranscriptRow
+	fold      classifyState
+	nextSeq   int64
+	header    bool
+	resyncSeq bool
+	windowed  bool
+	sawAnchor bool
 }
 
 // SyncTail reads only bytes after the previous offset (new jsonl lines or
@@ -56,6 +72,94 @@ func (t *Tail) Activity(live, liveKnown bool) Activity {
 }
 
 func (t *Tail) advance(a artifact, size int64) error {
+	if size <= t.Offset {
+		return nil
+	}
+	if t.Offset == 0 && !t.header && a.encoding == "zstd" && size > coldTailMin {
+		return t.advanceColdZstd(a, size)
+	}
+	return t.advanceBytes(a, size)
+}
+
+// advanceColdZstd reads the session header from the front of a large
+// concatenated-zstd log and folds only a suffix. The cursor stays on a frame
+// boundary, so a later append still parses just the new frames.
+func (t *Tail) advanceColdZstd(a artifact, size int64) error {
+	base, err := recentSummary(a)
+	if err != nil {
+		return err
+	}
+	window := int64(coldTailWindow)
+	for {
+		if window > size {
+			window = size
+		}
+		start, ok, err := suffixFrameStart(a.path, size, window)
+		if err != nil {
+			return err
+		}
+		if ok && start > 0 {
+			probe := &Tail{
+				Path:      a.path,
+				Offset:    start,
+				Summary:   base,
+				header:    true,
+				resyncSeq: true,
+				windowed:  true,
+			}
+			if err := probe.advanceBytes(a, size); err != nil {
+				return err
+			}
+			if probe.enoughTail() || window == size {
+				*t = *probe
+				return nil
+			}
+		}
+		if window == size {
+			break
+		}
+		window *= 2
+	}
+	t.Path = a.path
+	t.Offset = 0
+	t.Summary = Summary{Path: a.path, Encoding: a.encoding, FormatVersion: int(a.version), Outcome: "empty"}
+	t.Rows = nil
+	t.fold = classifyState{}
+	t.nextSeq = 0
+	t.header = false
+	t.resyncSeq = false
+	t.windowed = false
+	t.sawAnchor = false
+	return t.advanceBytes(a, size)
+}
+
+func (t *Tail) enoughTail() bool {
+	return t.sawAnchor && len(t.Rows) >= coldTailRows
+}
+
+func suffixFrameStart(path string, size, window int64) (int64, bool, error) {
+	if window > size {
+		window = size
+	}
+	from := size - window
+	f, err := openArtifact(path)
+	if err != nil {
+		return 0, false, err
+	}
+	defer f.Close()
+	buf := make([]byte, window)
+	n, err := f.ReadAt(buf, from)
+	if err != nil && err != io.EOF {
+		return 0, false, err
+	}
+	rel := findFrameStart(buf[:n])
+	if rel < 0 {
+		return 0, false, nil
+	}
+	return from + int64(rel), true, nil
+}
+
+func (t *Tail) advanceBytes(a artifact, size int64) error {
 	if size <= t.Offset {
 		return nil
 	}
@@ -141,6 +245,23 @@ func (t *Tail) consumeJSONL(data []byte, complete bool) (int, error) {
 	}
 }
 
+func lineSeq(line []byte) (int64, error) {
+	fields, err := object(line)
+	if err != nil {
+		return 0, err
+	}
+	return requiredInteger(fields, "seq", true)
+}
+
+func tailAnchor(typ string) bool {
+	switch typ {
+	case "turn/start", "turn/end", "assistant/attempt", "assistant/message", "tool/call", "command/run":
+		return true
+	default:
+		return false
+	}
+}
+
 func (t *Tail) consumeLine(line []byte) error {
 	if len(line) == 0 {
 		return nil
@@ -159,6 +280,14 @@ func (t *Tail) consumeLine(line []byte) error {
 		t.header = true
 		return nil
 	}
+	if t.resyncSeq {
+		seq, err := lineSeq(line)
+		if err != nil {
+			return err
+		}
+		t.nextSeq = seq
+		t.resyncSeq = false
+	}
 	event, err := parseEvent(line, t.nextSeq)
 	if err != nil {
 		return fmt.Errorf("event row %d: %w", t.nextSeq+1, err)
@@ -171,6 +300,12 @@ func (t *Tail) consumeLine(line []byte) error {
 		t.Summary.UpdatedAt = event.Time
 	}
 	t.fold.add(event)
+	if tailAnchor(event.Type) {
+		t.sawAnchor = true
+	}
+	if t.windowed && t.fold.turnOpen && (t.Summary.Outcome == "" || t.Summary.Outcome == "empty") {
+		t.Summary.Outcome = "incomplete"
+	}
 	if row, ok := transcriptRow(event); ok {
 		if len(t.Rows) >= tailKeep {
 			copy(t.Rows, t.Rows[1:])

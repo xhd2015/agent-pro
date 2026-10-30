@@ -8,6 +8,30 @@ type zstdFrame struct {
 	start, end int
 }
 
+func hasZstdMagic(buf []byte) bool {
+	if len(buf) < 4 {
+		return false
+	}
+	magic := uint32(buf[0]) | uint32(buf[1])<<8 | uint32(buf[2])<<16 | uint32(buf[3])<<24
+	return magic == zstdMagic
+}
+
+// findFrameStart returns the first offset that begins a complete Zstandard
+// frame. A suffix read lands mid-frame, and the magic can also appear inside
+// compressed bytes, so a candidate counts only when the bytes from there scan.
+func findFrameStart(buf []byte) int {
+	for i := 0; i+4 <= len(buf); i++ {
+		if !hasZstdMagic(buf[i:]) {
+			continue
+		}
+		frames, _, _, err := scanZstdFrames(buf[i:])
+		if err == nil && len(frames) > 0 {
+			return i
+		}
+	}
+	return -1
+}
+
 // scanZstdFrames locates complete concatenated Zstandard frames. A torn
 // final frame returns tornStart and only the complete prefix.
 func scanZstdFrames(buf []byte) (frames []zstdFrame, tornStart int, torn bool, err error) {
