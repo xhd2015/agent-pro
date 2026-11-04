@@ -214,6 +214,17 @@ func TestServiceBrowserFailureIsStructuredAndNeverRedelivers(t *testing.T) {
 	}
 }
 
+func TestServiceReservesPrefixedDSHSessionID(t *testing.T) {
+	t.Parallel()
+	f := newServiceFixture(t)
+	if _, err := f.service().OpenSession(context.Background(), f.opts()); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.creates) != 1 || !strings.HasPrefix(f.creates[0], "session-") {
+		t.Fatalf("reserved %q", f.creates)
+	}
+}
+
 func TestServiceAmbiguousDeliveryReusesRequestID(t *testing.T) {
 	t.Parallel()
 	f := newServiceFixture(t)

@@ -62,7 +62,7 @@ func (s Service) deliver(ctx context.Context, opts SessionOptions, initial bool)
 			if err != nil {
 				return err
 			}
-			state = State{Runner: Runner, Browser: browser, Workspace: workspace, DSHSessionID: uuid.NewString(), InitialModelSelection: selected}
+			state = State{Runner: Runner, Browser: browser, Workspace: workspace, DSHSessionID: reserveDSHSessionID(), InitialModelSelection: selected}
 			if err := record.Save(state); err != nil {
 				return err
 			}
@@ -72,7 +72,7 @@ func (s Service) deliver(ctx context.Context, opts SessionOptions, initial bool)
 		}
 		// Legacy not-yet-created records may predate reservation of provider IDs.
 		if state.DSHSessionID == "" {
-			state.DSHSessionID = uuid.NewString()
+			state.DSHSessionID = reserveDSHSessionID()
 			if err := record.Save(state); err != nil {
 				return err
 			}
@@ -129,6 +129,12 @@ func (s Service) deliver(ctx context.Context, opts SessionOptions, initial bool)
 		return nil
 	})
 	return result, err
+}
+
+// reserveDSHSessionID mints the same Host shape as DSH Web New Session
+// (createMinted): session-<uuid>.
+func reserveDSHSessionID() string {
+	return "session-" + uuid.NewString()
 }
 
 func setPending(state *State, prompt string, noSubmit bool, hash string) {
