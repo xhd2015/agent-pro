@@ -19,7 +19,7 @@ type Service struct {
 }
 
 // OpenSession creates/reuses a caller-keyed DSH conversation, admits its first
-// input once, and opens the selected browser unless NoOpen. Repeated calls do
+// input once, and opens the selected browser unless NoOpen or BrowserNone. Repeated calls do
 // not resubmit an admitted initial prompt. Use Send for a subsequent message.
 func (s Service) OpenSession(ctx context.Context, opts SessionOptions) (Result, error) {
 	return s.deliver(ctx, opts, true)
@@ -70,6 +70,10 @@ func (s Service) deliver(ctx context.Context, opts SessionOptions, initial bool)
 		if err := validateState(state); err != nil {
 			return err
 		}
+		browser, err := NormalizeBrowser(state.Browser)
+		if err != nil {
+			return fmt.Errorf("invalid DSH binding: %w", err)
+		}
 		// Legacy not-yet-created records may predate reservation of provider IDs.
 		if state.DSHSessionID == "" {
 			state.DSHSessionID = reserveDSHSessionID()
@@ -115,8 +119,8 @@ func (s Service) deliver(ctx context.Context, opts SessionOptions, initial bool)
 			}
 		}
 		result.Accepted = state.InitialDelivered
-		if !opts.NoOpen && !state.BrowserOpened {
-			if err := s.Client.Open(state.DSHSessionID, state.Browser); err != nil {
+		if !opts.NoOpen && browser != BrowserNone && !state.BrowserOpened {
+			if err := s.Client.Open(state.DSHSessionID, browser); err != nil {
 				result.Warnings = append(result.Warnings, Warning{Code: "browser_open_failed", Message: err.Error()})
 				return nil // admission already committed; don't request redelivery
 			}
@@ -172,8 +176,10 @@ func (s Service) flush(ctx context.Context, record Record, state *State) error {
 	return record.Save(*state)
 }
 
-// Open only opens an existing, created DSH session. It never creates a provider
-// session, submits/retries pending input, or consults a terminal runner.
+// Open only opens an existing, created DSH session. A BrowserNone binding uses
+// the system default browser for this explicit action without changing its pin.
+// It never creates a provider session, submits/retries pending input, or consults
+// a terminal runner.
 func (s Service) Open(ctx context.Context, key string) (result Result, err error) {
 	if s.Store == nil {
 		return result, fmt.Errorf("DSH session store is required")
@@ -192,11 +198,18 @@ func (s Service) Open(ctx context.Context, key string) (result Result, err error
 		if err := validateState(state); err != nil {
 			return err
 		}
+		browser, err := NormalizeBrowser(state.Browser)
+		if err != nil {
+			return fmt.Errorf("invalid DSH binding: %w", err)
+		}
 		if !state.Created {
 			return fmt.Errorf("DSH session has not been created; retry its initial delivery")
 		}
 		result.SessionID = state.DSHSessionID
-		if err := s.Client.Open(state.DSHSessionID, state.Browser); err != nil {
+		if browser == BrowserNone {
+			browser = "" // This explicit action does not change automatic opening policy.
+		}
+		if err := s.Client.Open(state.DSHSessionID, browser); err != nil {
 			return err
 		}
 		result.BrowserOpened = true

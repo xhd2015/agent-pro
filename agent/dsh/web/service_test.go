@@ -25,6 +25,7 @@ type serviceFixture struct {
 	modelSelections  []*ModelSelection
 	noModelEcho      bool
 	echoOverride     *ModelSelection
+	methods          []string
 	creates          []string
 	attempts         []string
 	prompts          []string
@@ -60,6 +61,7 @@ func newServiceFixture(t *testing.T) *serviceFixture {
 			return
 		}
 		request := req.Payload.Args.Request
+		f.methods = append(f.methods, req.Method)
 		value := any(map[string]any{"accepted": true})
 		switch req.Method {
 		case "workspace/create":

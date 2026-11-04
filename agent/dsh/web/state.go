@@ -48,7 +48,8 @@ type Store interface {
 // SessionOptions identifies one caller-owned conversation and its first input.
 // Workspace/Browser are pinned on first creation; later preference changes do
 // not silently relocate an existing session. NoOpen suppresses automatic browser
-// opening, but never changes prompt delivery semantics.
+// opening for this call, but never changes prompt delivery semantics. BrowserNone
+// instead pins automatic opening off across retries and restarts.
 type SessionOptions struct {
 	// ModelSelection is pinned only when a new binding is reserved.
 	ModelSelection *ModelSelection

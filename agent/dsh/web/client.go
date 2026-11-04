@@ -22,6 +22,10 @@ import (
 
 const Runner = "dsh-web"
 
+// BrowserNone disables automatic session-window opening while retaining normal
+// session creation and prompt delivery. It is a persisted browser preference.
+const BrowserNone = "none"
+
 // Listen contains discovery credentials. Never persist or log Token in a
 // consumer's session binding; read the current record on each operation.
 type Listen struct {
@@ -43,7 +47,7 @@ func NormalizeBrowser(raw string) (string, error) {
 	switch s {
 	case "", "default":
 		return "", nil
-	case "brave", "chrome", "firefox", "edge", "safari", "opera":
+	case BrowserNone, "brave", "chrome", "firefox", "edge", "safari", "opera":
 		return s, nil
 	default:
 		return "", fmt.Errorf("unknown DSH browser: %s", raw)
@@ -169,8 +173,9 @@ func (c Client) Send(ctx context.Context, sessionID, requestID, text string, noS
 	return c.rpc(ctx, method, map[string]any{"request": request}, nil)
 }
 
-// Open opens the existing session. Opener errors are deliberately redacted:
-// platform diagnostics can contain the authenticated URL.
+// Open opens the existing session, or does nothing for BrowserNone without
+// discovering the server or invoking the OS opener. Service.Open is the explicit
+// manual-opening operation. Opener errors redact the authenticated URL.
 func (c Client) Open(sessionID, browser string) error {
 	if strings.TrimSpace(sessionID) == "" {
 		return fmt.Errorf("DSH session ID is required")
@@ -178,6 +183,9 @@ func (c Client) Open(sessionID, browser string) error {
 	browser, err := NormalizeBrowser(browser)
 	if err != nil {
 		return err
+	}
+	if browser == BrowserNone {
+		return nil
 	}
 	rec, err := c.listen()
 	if err != nil {

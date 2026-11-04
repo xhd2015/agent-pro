@@ -40,14 +40,32 @@ result, err = service.Open(ctx, "business-conversation-123")
 
 | Operation | Contract |
 | --- | --- |
-| `OpenSession` | Reserve a provider identity, create/reuse the session, admit the initial prompt once, and open its browser once. Repeated calls preserve pinned workspace/browser/initial model and do not resubmit admitted initial input. An empty prompt permits a blank session. |
+| `OpenSession` | Reserve a provider identity, create/reuse the session, admit the initial prompt once, and automatically open its browser once unless suppressed. Repeated calls preserve pinned workspace/browser/initial model and do not resubmit admitted initial input. An empty prompt permits a blank session. |
 | `Send` | Require an existing binding, settle any interrupted input with its original request ID, then admit the next message. Never automatically pop a browser. |
 | `Open` | Open an existing, created session only. Never create a session or submit/retry pending input. |
 
 `NoSubmit` stores a composer draft instead of submitting a model turn. `NoOpen`
-on `OpenSession` suppresses automatic browser opening without affecting admission.
-Supported browser names are system default, brave, chrome, firefox, edge, safari,
-and opera; `NormalizeBrowser`/`IsRunner` are reusable validation helpers.
+on `OpenSession` suppresses automatic browser opening for that call without affecting
+admission. `Browser: BrowserNone` (`"none"`) instead pins automatic opening off for
+the conversation, including retries and restarts. Creation, model selection and
+prompt submission still run normally; successful admission returns `Accepted: true`
+and `BrowserOpened: false`, without a browser warning. Do not use `NoSubmit` for
+background execution. Empty/omitted browser still means the system default.
+
+```go
+result, err := service.OpenSession(ctx, dshweb.SessionOptions{
+    Key: conversationID, Workspace: workspace, Prompt: prompt,
+    Browser: dshweb.BrowserNone,
+})
+```
+
+`Service.Open` is an explicit user action: a `BrowserNone` binding opens in the
+system default browser without changing its pinned preference or delivering input.
+Low-level `Client.Open(id, BrowserNone)` is a no-op and does not discover the server
+or call an OS opener. Other supported browser names are brave, chrome, firefox,
+edge, safari and opera; `NormalizeBrowser`/`IsRunner` are reusable validation helpers.
+Background sessions still require a running DSH Web service and can wait for human
+approval. This policy does not disable browser-automation tools used by the agent.
 
 ## Live models and Session-only overrides
 
