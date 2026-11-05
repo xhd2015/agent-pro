@@ -25,6 +25,7 @@ Usage: agent-run run [OPTIONS] ["prompt"]
 Options:
   --json              stream NDJSON AgentEvent lines to stdout
   --model MODEL       model name
+  --require-codex-connection-v1  internal re-exec guard: require an existing ad hoc binding
   --model-reasoning-effort LEVEL  optional reasoning effort (pass-through; empty/omitted = no default)
   --prompt-file PATH  read initial prompt from PATH (exclusive with positional prompt)
   --session ID        session id
@@ -113,6 +114,7 @@ func ResolveRunPrompt(positionalPrompt, promptFile string) (string, error) {
 
 func runHeadless(args []string, defaultRunner string) error {
 	var jsonFlag bool
+	var requireCodexConnection bool
 	var model string
 	var modelReasoningEffort string
 	var promptFile string
@@ -145,6 +147,7 @@ func runHeadless(args []string, defaultRunner string) error {
 	var eventBusToken string
 	var recorded flags.Flags
 	remaining, err := flags.Bool("--json", &jsonFlag).
+		Bool("--require-codex-connection-v1", &requireCodexConnection).
 		String("--model", &model).
 		String("--model-reasoning-effort", &modelReasoningEffort).
 		String("--prompt-file", &promptFile).
@@ -180,6 +183,18 @@ func runHeadless(args []string, defaultRunner string) error {
 		Parse(args)
 	if err != nil {
 		return err
+	}
+	if requireCodexConnection {
+		if !autoSendOrResume || resolveCLIRunner(agentRunner, defaultRunner) != "codex-tty" {
+			return fmt.Errorf("Codex connection guard requires codex-tty --auto-send-or-resume")
+		}
+		store, err := openStore()
+		if err != nil {
+			return err
+		}
+		if _, err := agentstorage.ReadCodexConnection(store.Home(), sessionID); err != nil {
+			return err
+		}
 	}
 	if browser != "" && resolveCLIRunner(agentRunner, defaultRunner) != "dsh-web" {
 		return fmt.Errorf("--browser requires --agent-runner dsh-web")

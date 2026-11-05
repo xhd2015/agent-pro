@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xhd2015/agent-pro/agent/codex/adhoc"
 	"github.com/xhd2015/agent-pro/pkgs/agentdriver"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 	"github.com/xhd2015/agent-pro/pkgs/shell"
@@ -36,6 +37,7 @@ type RunOpts struct {
 	WorkspaceDir         string
 	Model                string
 	ModelReasoningEffort string
+	CodexConnection      *adhoc.Connection
 	AgentRunner          string
 	SessionID            string
 	OpenTerminal         bool
@@ -153,6 +155,9 @@ func normalizeRunOpts(opts *RunOpts) error {
 	if opts.PollInterval <= 0 {
 		opts.PollInterval = DefaultRunPollInterval
 	}
+	if opts.CodexConnection != nil && strings.TrimSpace(opts.AgentRunner) == "" {
+		opts.AgentRunner = "codex-tty"
+	}
 	if strings.TrimSpace(opts.SessionID) == "" {
 		opts.SessionID = fmt.Sprintf("run-%s", time.Now().UTC().Format("20060102T150405.000000000Z"))
 	}
@@ -179,6 +184,16 @@ func startRun(ctx context.Context, opts RunOpts) (RunHandle, error) {
 	if err != nil {
 		return RunHandle{}, err
 	}
+	meta, found, err := resolveSession(store, opts.SessionID)
+	if err != nil {
+		return RunHandle{}, err
+	}
+	connectionOpts := Opts{SessionID: opts.SessionID, Prompt: opts.Prompt, WorkspaceDir: opts.WorkspaceDir, AgentRunner: opts.AgentRunner, Model: opts.Model, ModelReasoningEffort: opts.ModelReasoningEffort, CodexConnection: opts.CodexConnection, Env: opts.Env, Store: store}
+	if _, err := prepareCodexConnection(&connectionOpts, meta, found); err != nil {
+		return RunHandle{}, err
+	}
+	opts.CodexConnection = connectionOpts.CodexConnection.Clone()
+	opts.Model, opts.ModelReasoningEffort = connectionOpts.Model, connectionOpts.ModelReasoningEffort
 	handle := RunHandle{
 		SessionID:    opts.SessionID,
 		WorkspaceDir: opts.WorkspaceDir,
@@ -226,6 +241,7 @@ func launchDetach(ctx context.Context, opts RunOpts, store agentstorage.Store) e
 		AgentRunner:                   opts.AgentRunner,
 		Model:                         opts.Model,
 		ModelReasoningEffort:          opts.ModelReasoningEffort,
+		CodexConnection:               opts.CodexConnection.Clone(),
 		Detach:                        true,
 		AllowRelocateResumeSessionDir: true,
 		Color:                         true,
@@ -238,6 +254,8 @@ func launchDetach(ctx context.Context, opts RunOpts, store agentstorage.Store) e
 
 func launchOpen(opts RunOpts, store agentstorage.Store) error {
 	fuOpts := FollowUpOpts{
+		RequireCodexConnection:        opts.CodexConnection != nil,
+		StoreHome:                     store.Home(),
 		Driver:                        opts.Driver,
 		SessionID:                     opts.SessionID,
 		Prompt:                        opts.Prompt,

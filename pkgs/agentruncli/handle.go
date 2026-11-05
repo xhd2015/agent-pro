@@ -46,6 +46,9 @@ Run agent-run <command> --help for command-specific options.
 // Success (including help) returns nil; failures return an error for the
 // thin main to print and exit 1.
 func Handle(args []string) error {
+	if len(args) > 0 && args[0] == "__codex-adhoc-exec" {
+		return runCodexAdhocExec(args[1:])
+	}
 	if len(args) > 0 && ttywatch.IsServeSubcommand(args[0]) {
 		return runServeSession(args[1:])
 	}

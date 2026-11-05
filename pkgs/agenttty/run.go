@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xhd2015/agent-pro/agent/codex/adhoc"
 	types "github.com/xhd2015/agent-pro/agent/event/types"
 	"github.com/xhd2015/agent-pro/pkgs/agentdriver"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
@@ -19,10 +20,11 @@ import (
 
 // RunOptions configures a headless TTY runner invocation via detached serve.
 type RunOptions struct {
-	Home      string
-	Workspace string
-	Prompt    string
-	Model     string
+	Home            string
+	Workspace       string
+	Prompt          string
+	Model           string
+	CodexConnection *adhoc.Connection
 	// ModelReasoningEffort is optional Codex -c model_reasoning_effort=<level>.
 	// Applied after BuildArgv for codex-tty only; empty leaves Codex home config.
 	ModelReasoningEffort string
@@ -143,6 +145,15 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 		bannerMarkers:  provider.BannerMarkers,
 	}
 
+	if opts.CodexConnection != nil {
+		if runnerID != "codex-tty" {
+			return "", "", fmt.Errorf("ad hoc connection requires codex-tty")
+		}
+		if err := opts.CodexConnection.Validate(); err != nil {
+			return "", "", err
+		}
+		opts.Model = opts.CodexConnection.Model
+	}
 	env := newExecEnv()
 	argv, err := provider.BuildArgv(env, opts.SettingsPath, opts.AgentPath, opts.Model, opts.ResumeSessionID)
 	if err != nil {
@@ -151,8 +162,16 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 	// codex-tty: reasoning effort + trust workspace cwd (skips directory-trust modal).
 	// Sink / seatalk / agent-run all pass Workspace (hub or bot cwd).
 	if runnerID == "codex-tty" {
-		argv = ApplyCodexReasoningEffort(argv, opts.ModelReasoningEffort)
+		if opts.CodexConnection == nil {
+			argv = ApplyCodexReasoningEffort(argv, opts.ModelReasoningEffort)
+		}
 		argv = ApplyCodexTrustedProject(argv, opts.Workspace)
+	}
+	if opts.CodexConnection != nil {
+		argv, err = opts.CodexConnection.Apply(argv, true)
+		if err != nil {
+			return "", "", err
+		}
 	}
 	if opts.Verbose {
 		writeVerboseArgvNotice(opts.Stderr, runnerID, argv)
@@ -197,12 +216,28 @@ func RunHeadless(ctx context.Context, opts RunOptions) (runnerSessionID, termina
 		return "", "", err
 	}
 
+	command := argv
+	if opts.CodexConnection != nil {
+		if err := agentdriver.VerifyCodexAdhoc(ctx, driver); err != nil {
+			return "", "", err
+		}
+		if err := opts.CodexConnection.ValidatePersistedEnv(opts.Env); err != nil {
+			return "", "", err
+		}
+		if _, err := agentstorage.ReadCodexConnection(opts.Home, opts.AgentSessionID); err != nil {
+			return "", "", err
+		}
+		command, err = agentdriver.MustArgv(driver, append([]string{"__codex-adhoc-exec", opts.Home, opts.AgentSessionID, "--"}, argv...)...)
+		if err != nil {
+			return "", "", err
+		}
+	}
 	result, err := ttywatch.HeadlessRun(ctx, ttywatch.HeadlessRunOptions{
 		Home:           opts.Home,
 		RegistrySubdir: provider.RegistryDir,
 		SessionID:      strings.TrimSpace(opts.SessionID),
 		Driver:         driver,
-		Command:        argv,
+		Command:        command,
 		CommandEnv:     envSpec.Set,
 		CommandUnset:   envSpec.Unset,
 		Cwd:            opts.Workspace,

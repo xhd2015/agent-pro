@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xhd2015/agent-pro/agent/codex/adhoc"
 	"github.com/xhd2015/agent-pro/pkgs/agentdriver"
 	"github.com/xhd2015/agent-pro/pkgs/agentstorage"
 )
@@ -88,6 +89,9 @@ type Opts struct {
 	AgentRunnerBinary string
 	RunnerConfigHome  string
 	Model             string
+	// CodexConnection pins a process-scoped Responses target for new codex-tty sessions.
+	// Existing sessions restore their binding; nil remains the native launch path.
+	CodexConnection *adhoc.Connection
 	// ModelReasoningEffort is optional Codex -c model_reasoning_effort=<level>.
 	// Plumbed into agentui/agenttty RunOptions for codex-tty (ApplyCodexReasoningEffort).
 	ModelReasoningEffort          string
@@ -189,6 +193,11 @@ func AutoSendOrResume(ctx context.Context, opts Opts) error {
 	}
 	if mode == ModeResume && strings.TrimSpace(meta.RunnerSessionID) == "" {
 		mode = ModeRun
+	}
+
+	meta, err = prepareCodexConnection(&opts, meta, found)
+	if err != nil {
+		return err
 	}
 
 	switch mode {

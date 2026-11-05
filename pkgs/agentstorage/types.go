@@ -3,6 +3,7 @@ package agentstorage
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/xhd2015/agent-pro/agent/codex/adhoc"
 	"os"
 	"path/filepath"
 	"time"
@@ -34,6 +35,8 @@ type SessionMeta struct {
 	Status            string            `json:"status"`
 	Workspace         string            `json:"workspace,omitempty"`
 	Model             string            `json:"model,omitempty"`
+	// CodexConnection is a non-secret, immutable per-conversation target.
+	CodexConnection *adhoc.Connection `json:"codex_connection,omitempty"`
 	// PrependPaths are absolute directories prepended to the TTY child PATH (ordered, no dedup).
 	PrependPaths []string `json:"prepend_paths,omitempty"`
 	// Env is ordered KEY=VALUE entries applied to the TTY child (last-win per key).

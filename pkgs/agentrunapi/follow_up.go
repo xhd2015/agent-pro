@@ -87,6 +87,10 @@ type FollowUpOpts struct {
 	// ModelReasoningEffort is optional; when non-empty, emits
 	// --model-reasoning-effort=<level>. Empty → omit (no default max).
 	ModelReasoningEffort string
+	// RequireCodexConnection fails closed on an older receiver or missing binding.
+	RequireCodexConnection bool
+	// StoreHome is the non-secret agent-run store used by this re-exec child.
+	StoreHome string
 	// PromptFile when non-empty: emit --prompt-file=<abs>; omit Prompt body after --.
 	// Caller already spilled; do not re-write the file.
 	PromptFile string
@@ -168,6 +172,9 @@ func BuildFollowUpCommand(opts FollowUpOpts) (string, error) {
 	if e := strings.TrimSpace(opts.ModelReasoningEffort); e != "" {
 		remainder = append(remainder, "--model-reasoning-effort="+e)
 	}
+	if opts.RequireCodexConnection {
+		remainder = append(remainder, "--require-codex-connection-v1")
+	}
 	// Env delivery priority (before ExtraArgs / prompt):
 	// 1. Explicit EnvFile → --env-file=abs; no -e
 	// 2. Any Env entry > EnvFileSpillMinRunes → spill ALL env + --env-file; no -e
@@ -238,7 +245,11 @@ func BuildFollowUpCommand(opts FollowUpOpts) (string, error) {
 	for _, tok := range tokens {
 		quoted = append(quoted, shell.ShellQuote(tok))
 	}
-	return strings.Join(quoted, " "), nil
+	line := strings.Join(quoted, " ")
+	if opts.StoreHome != "" {
+		line = "AGENT_RUN_HOME=" + shell.ShellQuote(opts.StoreHome) + " " + line
+	}
+	return line, nil
 }
 
 // spillFollowUpPrompt writes TrimSpace(Prompt) under PromptSpillDir (or a

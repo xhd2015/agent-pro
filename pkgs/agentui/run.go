@@ -20,6 +20,7 @@ import (
 	piagent "github.com/xhd2015/agent-pro/agent/cli/pi"
 	agentprovider "github.com/xhd2015/agent-pro/agent/cli/provider"
 	"github.com/xhd2015/agent-pro/agent/cli/registry"
+	"github.com/xhd2015/agent-pro/agent/codex/adhoc"
 	codexargv "github.com/xhd2015/agent-pro/agent/codex/argv"
 	"github.com/xhd2015/agent-pro/agent/event/codex_types"
 	eventprint "github.com/xhd2015/agent-pro/agent/event/print"
@@ -32,9 +33,10 @@ import (
 
 // RunOptions configures a headless agent-run invocation.
 type RunOptions struct {
-	Prompt string
-	Runner string
-	Model  string
+	Prompt          string
+	Runner          string
+	Model           string
+	CodexConnection *adhoc.Connection
 	// ModelReasoningEffort is optional Codex -c model_reasoning_effort=<level>
 	// (codex-tty via agenttty; headless codex via streamCodexLike).
 	ModelReasoningEffort string
@@ -139,6 +141,9 @@ func Run(ctx context.Context, opts RunOptions) error {
 		workspace = wd
 	}
 
+	if err := resolveCodexConnection(&opts, sessionID, runner); err != nil {
+		return err
+	}
 	runnerSessionID := ""
 	if sess, err := opts.Store.GetSession(sessionID); err == nil {
 		runnerSessionID = strings.TrimSpace(sess.Meta.RunnerSessionID)
@@ -153,13 +158,16 @@ func Run(ctx context.Context, opts RunOptions) error {
 			SessionID:             sessionID,
 			Status:                "running",
 			Model:                 opts.Model,
+			CodexConnection:       opts.CodexConnection.Clone(),
 			InitialPrompt:         strings.TrimSpace(opts.Prompt),
 			Workspace:             workspace,
 			PrependPaths:          append([]string(nil), opts.PrependPaths...),
 			Env:                   append([]string(nil), opts.Env...),
 			AgentRunnerConfigHome: strings.TrimSpace(opts.AgentRunnerConfigHome),
 		}
-		_ = opts.Store.CreateSession(sessionID, createMeta)
+		if err := opts.Store.CreateSession(sessionID, createMeta); err != nil && opts.CodexConnection != nil {
+			return err
+		}
 	}
 
 	priorEvents, _, _ := opts.Store.ReadEvents(sessionID, 0)
@@ -257,7 +265,7 @@ func Run(ctx context.Context, opts RunOptions) error {
 		}
 		_ = opts.Store.UpdateSessionRunnerSessionID(sessionID, id)
 	}
-	newRunnerSessionID, newTerminalSessionID, runErr := streamRunner(ctx, runner, opts.Store.Home(), workspace, env, runnerPrompt, opts.Model, opts.ModelReasoningEffort, opts.AgentRunnerBinary, opts.AgentRunnerConfigHome, opts.PrependPaths, opts.Env, opts.Color, opts.Verbose, opts.ExitOnIdle, opts.IdleTimeout, runnerSessionID, sessionID, ttySessionID, opts.StreamPhases, opts.KeepTerminalAlive, opts.Open, opts.Detach, opts.NoSubmit, opts.Fork, opts.ForkSessionID, ttyGrokSyncOwnsEvents, opts.Driver, persistTerminalSessionID, persistRunnerSessionID, emit, stderr)
+	newRunnerSessionID, newTerminalSessionID, runErr := streamRunner(ctx, runner, opts.Store.Home(), workspace, env, runnerPrompt, opts.Model, opts.ModelReasoningEffort, opts.AgentRunnerBinary, opts.AgentRunnerConfigHome, opts.PrependPaths, opts.Env, opts.Color, opts.Verbose, opts.ExitOnIdle, opts.IdleTimeout, runnerSessionID, sessionID, ttySessionID, opts.StreamPhases, opts.KeepTerminalAlive, opts.Open, opts.Detach, opts.NoSubmit, opts.Fork, opts.ForkSessionID, ttyGrokSyncOwnsEvents, opts.Driver, opts.CodexConnection, persistTerminalSessionID, persistRunnerSessionID, emit, stderr)
 	if strings.TrimSpace(newRunnerSessionID) != "" {
 		_ = opts.Store.UpdateSessionRunnerSessionID(sessionID, newRunnerSessionID)
 	}
@@ -494,7 +502,7 @@ func resolveTTYSessionID(opts RunOptions, userSessionID string) string {
 
 // streamRunner runs the selected agent. ttySessionID is the custom terminal
 // registry id (from --session / --session-id-from-prompt); empty keeps session-N.
-func streamRunner(ctx context.Context, runner, home, workspace string, env *agentexec.Env, prompt, model, modelReasoningEffort, agentRunnerBinary, agentRunnerConfigHome string, prependPaths, envEntries []string, color, verbose bool, exitOnIdle bool, idleTimeout time.Duration, runnerSessionID, agentSessionID, ttySessionID string, streamPhases, keepTerminalAlive, open, detach, noSubmit, fork bool, forkSessionID string, grokSyncOwnsEvents bool, driver agentdriver.Driver, onTerminalSessionID, onRunnerSessionID func(string), emit func(types.AgentEvent) error, stderr io.Writer) (string, string, error) {
+func streamRunner(ctx context.Context, runner, home, workspace string, env *agentexec.Env, prompt, model, modelReasoningEffort, agentRunnerBinary, agentRunnerConfigHome string, prependPaths, envEntries []string, color, verbose bool, exitOnIdle bool, idleTimeout time.Duration, runnerSessionID, agentSessionID, ttySessionID string, streamPhases, keepTerminalAlive, open, detach, noSubmit, fork bool, forkSessionID string, grokSyncOwnsEvents bool, driver agentdriver.Driver, connection *adhoc.Connection, onTerminalSessionID, onRunnerSessionID func(string), emit func(types.AgentEvent) error, stderr io.Writer) (string, string, error) {
 	if agenttty.IsTTYRunner(runner) {
 		terminalSessionID := ""
 		onID := func(id string) {
@@ -509,6 +517,7 @@ func streamRunner(ctx context.Context, runner, home, workspace string, env *agen
 			Prompt:                prompt,
 			Model:                 model,
 			ModelReasoningEffort:  modelReasoningEffort,
+			CodexConnection:       connection.Clone(),
 			ResumeSessionID:       runnerSessionID,
 			Fork:                  fork,
 			ForkSessionID:         forkSessionID,
