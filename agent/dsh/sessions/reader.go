@@ -182,22 +182,14 @@ func (s *Store) List() ([]Summary, []string, error) {
 }
 
 // Inspect matches an exact header identity, never interpolating the supplied ID into a path.
+// The returned Inspection is read-only: an unchanged artifact is served from a
+// process-wide mtime+size cache shared with View.
 func (s *Store) Inspect(id string) (*Inspection, error) {
-	if id == "" {
-		return nil, fmt.Errorf("session id is required")
-	}
-	selected, err := s.lookupArtifact(id)
+	body, err := s.loadInspectBody(id)
 	if err != nil {
 		return nil, err
 	}
-	result, err := readArtifact(selected)
-	if err != nil {
-		return nil, fmt.Errorf("session %q (%s): %w", id, selected.path, err)
-	}
-	if result.ID != id {
-		return nil, fmt.Errorf("session header identity changed while reading %s", selected.path)
-	}
-	return result, nil
+	return body.inspection, nil
 }
 
 // Session artifacts must be ordinary files; links and special files are not inspected.

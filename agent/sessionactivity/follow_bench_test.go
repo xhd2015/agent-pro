@@ -46,7 +46,7 @@ func writeBenchSession(b *testing.B, events int) string {
 	return id
 }
 
-// BenchmarkInspectRepeat is the pre-cache cost: every poll re-parses the JSONL.
+// BenchmarkInspectRepeat is the warm Inspect poll after the mtime+size cache fills.
 func BenchmarkInspectRepeat(b *testing.B) {
 	id := writeBenchSession(b, 4000)
 	store, err := dshsessions.NewStore(dshsessions.Options{})
