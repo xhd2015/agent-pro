@@ -81,10 +81,14 @@ func (s *Store) View(id string) (*View, error) {
 		return view, nil
 	}
 	inspectBodies.mu.Unlock()
+	if err := s.ensureInspectEvents(body); err != nil {
+		return nil, err
+	}
 	view := ProjectInspection(body.inspection)
 	inspectBodies.mu.Lock()
 	if body.view == nil {
 		body.view = view
+		dropInspectEventsLocked(body)
 	}
 	out := body.view
 	inspectBodies.mu.Unlock()

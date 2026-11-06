@@ -8,11 +8,16 @@ import (
 	"time"
 )
 
-// inspectBodyCap bounds decoded Inspections. A 20+ MB zstd log expands to a
-// large Events slice; a handful of open preview tabs is the live set.
+// inspectBodyCap bounds decoded snapshots by count. Event payloads are also
+// bounded by inspectBodyEventBytesCap (artifact bytes whose Events are retained).
 const inspectBodyCap = 16
 
+// inspectBodyEventBytesCap is compressed artifact bytes kept with Events.
+// View drops Events after projecting; a 32MiB budget is a few large logs, not 16.
+var inspectBodyEventBytesCap int64 = 32 << 20
+
 type inspectBody struct {
+	selected   artifact
 	path       string
 	size       int64
 	modNano    int64
@@ -131,6 +136,7 @@ func readInspectBody(selected artifact, id string) (*inspectBody, error) {
 		return nil, err
 	}
 	return &inspectBody{
+		selected:   selected,
 		path:       selected.path,
 		size:       info.Size(),
 		modNano:    info.ModTime().UnixNano(),
@@ -138,8 +144,57 @@ func readInspectBody(selected artifact, id string) (*inspectBody, error) {
 	}, nil
 }
 
+func (body *inspectBody) holdsEvents() bool {
+	return body != nil && body.inspection != nil && body.inspection.Events != nil
+}
+
+func inspectEventBytesLocked() int64 {
+	var n int64
+	for _, body := range inspectBodies.cache {
+		if body.holdsEvents() {
+			n += body.size
+		}
+	}
+	return n
+}
+
+func dropInspectEventsLocked(body *inspectBody) {
+	if body != nil && body.inspection != nil {
+		body.inspection.Events = nil
+	}
+}
+
+func (s *Store) ensureInspectEvents(body *inspectBody) error {
+	if body == nil {
+		return fmt.Errorf("session inspect body is missing")
+	}
+	inspectBodies.mu.Lock()
+	if body.holdsEvents() {
+		inspectBodies.mu.Unlock()
+		return nil
+	}
+	selected := body.selected
+	id := ""
+	if body.inspection != nil {
+		id = body.inspection.ID
+	}
+	inspectBodies.mu.Unlock()
+	fresh, err := readInspectBody(selected, id)
+	if err != nil {
+		return err
+	}
+	inspectBodies.mu.Lock()
+	body.inspection = fresh.inspection
+	body.size = fresh.size
+	body.modNano = fresh.modNano
+	body.selected = fresh.selected
+	evictInspectBodiesLocked()
+	inspectBodies.mu.Unlock()
+	return nil
+}
+
 func evictInspectBodiesLocked() {
-	for len(inspectBodies.cache) > inspectBodyCap {
+	for len(inspectBodies.cache) > inspectBodyCap || inspectEventBytesLocked() > inspectBodyEventBytesCap {
 		var oldestKey string
 		var oldest time.Time
 		first := true
@@ -149,6 +204,9 @@ func evictInspectBodiesLocked() {
 				oldest = body.used
 				first = false
 			}
+		}
+		if oldestKey == "" {
+			return
 		}
 		delete(inspectBodies.cache, oldestKey)
 	}

@@ -73,3 +73,77 @@ func TestInspectSingleflight(t *testing.T) {
 		t.Fatalf("parallel Inspect reads=%d want 1", got)
 	}
 }
+
+func TestViewDropsEventsAndInspectReloads(t *testing.T) {
+	resetInspectBodies()
+	root := t.TempDir()
+	id := "s-drop"
+	path := put(t, root, id, "session.v3.jsonl", header(id)+row("user/message", 0, `{"source":{"kind":"user"},"content":[{"type":"text","text":"hi"}]}`))
+	store := Store{Root: root}
+	if _, err := store.View(id); err != nil {
+		t.Fatal(err)
+	}
+	inspectBodies.mu.Lock()
+	body := inspectBodies.cache[path]
+	held := body != nil && body.holdsEvents()
+	inspectBodies.mu.Unlock()
+	if held {
+		t.Fatal("View should drop Inspection.Events")
+	}
+	if got := InspectReads.Load(); got != 1 {
+		t.Fatalf("view reads=%d", got)
+	}
+	insp, err := store.Inspect(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(insp.Events) == 0 {
+		t.Fatal("Inspect should reload Events")
+	}
+	if got := InspectReads.Load(); got != 2 {
+		t.Fatalf("inspect after view reads=%d want 2", got)
+	}
+	if _, err := store.View(id); err != nil {
+		t.Fatal(err)
+	}
+	if got := InspectReads.Load(); got != 2 {
+		t.Fatalf("cached view should not reload: reads=%d", got)
+	}
+}
+
+func TestInspectEventByteCap(t *testing.T) {
+	resetInspectBodies()
+	prev := inspectBodyEventBytesCap
+	t.Cleanup(func() { inspectBodyEventBytesCap = prev })
+	root := t.TempDir()
+	store := Store{Root: root}
+	ids := []string{"s-bytes-a", "s-bytes-b", "s-bytes-c"}
+	var oneSize int64
+	for i, id := range ids {
+		path := put(t, root, id, "session.v3.jsonl", header(id)+row("user/message", 0, `{"source":{"kind":"user"},"content":[{"type":"text","text":"hi"}]}`))
+		if i == 0 {
+			info, err := os.Stat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			oneSize = info.Size()
+		}
+	}
+	inspectBodyEventBytesCap = oneSize
+	for _, id := range ids {
+		if _, err := store.Inspect(id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	inspectBodies.mu.Lock()
+	held := 0
+	for _, body := range inspectBodies.cache {
+		if body.holdsEvents() {
+			held++
+		}
+	}
+	inspectBodies.mu.Unlock()
+	if held > 1 {
+		t.Fatalf("event-bearing cache entries=%d want <=1", held)
+	}
+}

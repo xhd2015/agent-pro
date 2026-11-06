@@ -189,6 +189,9 @@ func (s *Store) Inspect(id string) (*Inspection, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := s.ensureInspectEvents(body); err != nil {
+		return nil, err
+	}
 	return body.inspection, nil
 }
 
