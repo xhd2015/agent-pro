@@ -26,6 +26,11 @@ const coldTailWindow = 256 * 1024
 // The orchestrator asks for 24 rows; tailKeep is only the in-memory cap.
 const coldTailRows = 24
 
+// coldTailSummaryWindow is the first suffix for a summary-only cursor, which
+// needs the newest turn event but no rows. A smaller suffix keeps the listing
+// from parsing whole frames it would only discard.
+const coldTailSummaryWindow = 64 * 1024
+
 // Tail is an incremental session cursor. It never retains the full event log.
 type Tail struct {
 	Path      string
@@ -39,6 +44,9 @@ type Tail struct {
 	resyncSeq bool
 	windowed  bool
 	sawAnchor bool
+	// summaryOnly keeps only the newest turn event and drops transcript rows,
+	// so a listing reads a smaller suffix than a transcript poll.
+	summaryOnly bool
 }
 
 // SyncTail reads only bytes after the previous offset (new jsonl lines or
@@ -90,6 +98,9 @@ func (t *Tail) advanceColdZstd(a artifact, size int64) error {
 		return err
 	}
 	window := int64(coldTailWindow)
+	if t.summaryOnly {
+		window = coldTailSummaryWindow
+	}
 	for {
 		if window > size {
 			window = size
@@ -106,6 +117,8 @@ func (t *Tail) advanceColdZstd(a artifact, size int64) error {
 				header:    true,
 				resyncSeq: true,
 				windowed:  true,
+
+				summaryOnly: t.summaryOnly,
 			}
 			if err := probe.advanceBytes(a, size); err != nil {
 				return err
@@ -134,7 +147,13 @@ func (t *Tail) advanceColdZstd(a artifact, size int64) error {
 }
 
 func (t *Tail) enoughTail() bool {
-	return t.sawAnchor && len(t.Rows) >= coldTailRows
+	if !t.sawAnchor {
+		return false
+	}
+	if t.summaryOnly {
+		return true
+	}
+	return len(t.Rows) >= coldTailRows
 }
 
 func suffixFrameStart(path string, size, window int64) (int64, bool, error) {
@@ -305,6 +324,9 @@ func (t *Tail) consumeLine(line []byte) error {
 	}
 	if t.windowed && t.fold.turnOpen && (t.Summary.Outcome == "" || t.Summary.Outcome == "empty") {
 		t.Summary.Outcome = "incomplete"
+	}
+	if t.summaryOnly {
+		return nil
 	}
 	if row, ok := transcriptRow(event); ok {
 		if len(t.Rows) >= tailKeep {
