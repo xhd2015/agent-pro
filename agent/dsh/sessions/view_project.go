@@ -457,23 +457,26 @@ func userImageRefs(event Event) []Image {
 	var out []Image
 	index := 0
 	for _, block := range eventContent(event) {
-		mime, ok := userImageMeta(block)
+		mime, sha, ok := userImageMeta(block)
 		if !ok {
 			continue
 		}
-		out = append(out, Image{MimeType: mime, Index: index})
+		out = append(out, Image{MimeType: mime, Index: index, SHA256: sha})
 		index++
 	}
 	return out
 }
 
-func userImageMeta(block map[string]json.RawMessage) (string, bool) {
+// userImageMeta reports the media type and, for attachment-backed images, the
+// validated content address. The address is what the attachment store is keyed
+// by, so a caller that wants the bytes does not need to re-read the log.
+func userImageMeta(block map[string]json.RawMessage) (mime, sha string, ok bool) {
 	if blockString(block, "type") != "image" {
-		return "", false
+		return "", "", false
 	}
 	id, mime := blockAttachment(block)
 	if blockString(block, "data") == "" && id == "" {
-		return "", false
+		return "", "", false
 	}
 	if mime == "" {
 		mime = blockString(block, "mediaType", "mimeType")
@@ -481,7 +484,7 @@ func userImageMeta(block map[string]json.RawMessage) (string, bool) {
 	if mime == "" {
 		mime = "image/png"
 	}
-	return mime, true
+	return mime, id, true
 }
 
 func blockAttachment(block map[string]json.RawMessage) (id, mime string) {

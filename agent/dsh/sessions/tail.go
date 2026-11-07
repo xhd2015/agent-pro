@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"sync/atomic"
 
 	"github.com/klauspost/compress/zstd"
 )
@@ -25,7 +26,13 @@ const coldTailWindow = 256 * 1024
 // coldTailMaxWindow bounds the doubling search. Each step re-decodes the whole
 // window, so a log whose anchor is not in a short tail is cheaper to read once
 // than to bisect towards: past this suffix the cold path reads every event.
-const coldTailMaxWindow = 8 << 20
+// It is a var so tests can shrink the search instead of building huge fixtures.
+var coldTailMaxWindow int64 = 8 << 20
+
+// TailFullFallbacks counts cold SyncTail reads that could not keep a decoded
+// suffix and re-read the whole log. A non-zero value means a log keeps its
+// first anchor deeper than coldTailMaxWindow.
+var TailFullFallbacks atomic.Int64
 
 // coldTailRows is the suffix size that satisfies a live transcript poll.
 // The orchestrator asks for 24 rows; tailKeep is only the in-memory cap.
@@ -128,7 +135,11 @@ func (t *Tail) advanceColdZstd(a artifact, size int64) error {
 			if err := probe.advanceBytes(a, size); err != nil {
 				return err
 			}
-			if probe.enoughTail() || window == size {
+			// A suffix that holds an anchor but not yet coldTailRows rows is
+			// still a usable tail: the caller keeps it and widens later
+			// (SyncTail appends, ViewTailBefore pages backwards) instead of
+			// decoding the whole log now.
+			if probe.enoughTail() || window == size || (probe.sawAnchor && len(probe.Rows) > 0) {
 				*t = *probe
 				return nil
 			}
@@ -141,6 +152,7 @@ func (t *Tail) advanceColdZstd(a artifact, size int64) error {
 		}
 		window *= 2
 	}
+	TailFullFallbacks.Add(1)
 	t.Path = a.path
 	t.Offset = 0
 	t.Summary = Summary{Path: a.path, Encoding: a.encoding, FormatVersion: int(a.version), Outcome: "empty"}
@@ -164,11 +176,23 @@ func (t *Tail) enoughTail() bool {
 	return len(t.Rows) >= coldTailRows
 }
 
+// suffixFrameStart returns the first frame boundary inside the last window
+// bytes of the log, so a decode from 0 never starts mid-frame.
 func suffixFrameStart(path string, size, window int64) (int64, bool, error) {
-	if window > size {
-		window = size
+	return frameStartBefore(path, size, window)
+}
+
+// frameStartBefore returns the first frame boundary in [end-window, end). The
+// candidate only counts when the bytes from there scan as whole frames up to
+// end, so end must itself be a frame boundary (the file size or a known start).
+func frameStartBefore(path string, end, window int64) (int64, bool, error) {
+	if window > end {
+		window = end
 	}
-	from := size - window
+	if window <= 0 {
+		return 0, false, nil
+	}
+	from := end - window
 	f, err := openArtifact(path)
 	if err != nil {
 		return 0, false, err

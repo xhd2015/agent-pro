@@ -27,6 +27,10 @@ type Message struct {
 type Image struct {
 	MimeType string `json:"mimeType"`
 	Index    int    `json:"index"`
+	// SHA256 is the content address of an attachment-backed image, so callers
+	// can read the bytes from the attachment store instead of re-reading the
+	// log. Empty for inline (data:) images.
+	SHA256 string `json:"sha256,omitempty"`
 }
 
 type PresentFile struct {

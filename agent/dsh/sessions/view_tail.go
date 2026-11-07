@@ -65,12 +65,19 @@ var viewTailClock atomic.Int64
 // Tests use it to prove an unchanged file is not re-read.
 var ViewTailReads atomic.Int64
 
+// ViewTailFullFallbacks counts cold ViewTail reads that kept no suffix at all
+// and decoded the whole log. A non-zero value means a log's last frame spans
+// more than coldTailMaxWindow, or a window held no frame boundary.
+var ViewTailFullFallbacks atomic.Int64
+
 func resetViewTails() {
 	viewTails.mu.Lock()
 	viewTails.cache = map[string]*viewTailCursor{}
 	viewTails.inflight = map[string]*viewTailFlight{}
 	viewTails.mu.Unlock()
 	ViewTailReads.Store(0)
+	ViewTailFullFallbacks.Store(0)
+	TailFullFallbacks.Store(0)
 }
 
 // ViewTail returns a display projection of the newest keep messages without
@@ -260,7 +267,10 @@ func (c *viewTailCursor) coldZstd(a artifact, size int64, want func(*viewTailCur
 			if err := probe.readRange(a, start, size, true); err != nil {
 				return err
 			}
-			if want(probe) || window == size {
+			// A suffix that decoded rows is a usable tail even when it does not
+			// hold keep rows: the cursor keeps Truncated=true and pages towards
+			// earlier messages on demand instead of decoding the whole log now.
+			if want(probe) || window == size || len(probe.rows) > 0 {
 				*c = *probe
 				if window == size {
 					c.truncated = false
@@ -276,6 +286,7 @@ func (c *viewTailCursor) coldZstd(a artifact, size int64, want func(*viewTailCur
 		}
 		window *= 2
 	}
+	ViewTailFullFallbacks.Add(1)
 	c.offset = 0
 	c.start = 0
 	c.header = false
@@ -294,29 +305,36 @@ func (c *viewTailCursor) coldZstd(a artifact, size int64, want func(*viewTailCur
 
 // growBackward widens the decoded suffix to an earlier frame boundary and
 // prepends only the newly exposed rows, so paging to earlier messages costs the
-// bytes it adds instead of a whole-log decode.
+// bytes it adds instead of a whole-log decode. The search window is measured
+// backwards from the current start, not from the end of the file: re-anchoring
+// on the end re-finds the same boundary while one frame spans the whole window
+// (a log whose history was written as a single bulk frame), which would stall
+// "load earlier" forever.
 func (c *viewTailCursor) growBackward(a artifact, size int64, want func(*viewTailCursor) bool) (bool, error) {
-	window := size - c.start
-	if window <= 0 {
-		window = int64(coldTailWindow)
+	span := size - c.start
+	if span <= 0 {
+		span = int64(coldTailWindow)
 	}
+	budget := span * 2
 	for step := 0; step < beforeSeqGrowSteps; step++ {
-		if c.start <= 0 {
+		if c.start <= 0 || want(c) {
 			break
-		}
-		if want(c) {
-			return true, nil
 		}
 		if a.encoding != "zstd" {
 			break
 		}
-		window *= 2
-		start, ok, err := suffixFrameStart(a.path, size, window)
-		if err != nil {
-			return false, err
-		}
-		if !ok || start >= c.start {
-			break
+		// A window with no boundary in it means the frame before c.start is
+		// larger than the budget, so read the prefix once instead of bisecting
+		// towards it.
+		start := int64(0)
+		if c.start > budget {
+			found, ok, err := frameStartBefore(a.path, c.start, budget)
+			if err != nil {
+				return false, err
+			}
+			if ok && found < c.start {
+				start = found
+			}
 		}
 		base, err := recentSummary(a)
 		if err != nil {
@@ -349,6 +367,7 @@ func (c *viewTailCursor) growBackward(a artifact, size int64, want func(*viewTai
 			c.truncated = false
 			break
 		}
+		budget *= 2
 	}
 	return want(c), nil
 }
