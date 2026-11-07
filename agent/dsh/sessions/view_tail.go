@@ -1,7 +1,6 @@
 package sessions
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -573,28 +572,26 @@ func (c *viewTailCursor) consumeZstd(suffix []byte) error {
 	return nil
 }
 
+// consumeJSONL scans lines in place. data is a transient decode buffer, so
+// lines are handed out as subslices instead of copies; every value that
+// outlives this call is cloned by parseEvent.
 func (c *viewTailCursor) consumeJSONL(data []byte, complete bool) (int, error) {
-	reader := bufio.NewReader(bytes.NewReader(data))
 	consumed := 0
-	for {
-		line, err := reader.ReadBytes('\n')
-		if err == io.EOF {
-			if len(line) == 0 {
-				return consumed, nil
-			}
+	for consumed < len(data) {
+		rest := data[consumed:]
+		idx := bytes.IndexByte(rest, '\n')
+		if idx < 0 {
 			if !complete {
 				return consumed, nil
 			}
 			return consumed, fmt.Errorf("incomplete JSONL row")
 		}
-		if err != nil {
-			return consumed, err
-		}
-		consumed += len(line)
-		if err := c.consumeLine(bytes.TrimSpace(line)); err != nil {
+		consumed += idx + 1
+		if err := c.consumeLine(bytes.TrimSpace(rest[:idx])); err != nil {
 			return consumed, err
 		}
 	}
+	return consumed, nil
 }
 
 func (c *viewTailCursor) consumeLine(line []byte) error {

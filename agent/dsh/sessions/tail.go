@@ -1,12 +1,12 @@
 package sessions
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"sync"
 
 	"github.com/klauspost/compress/zstd"
 )
@@ -231,37 +231,49 @@ func (t *Tail) advanceJSONL(suffix []byte) error {
 	return nil
 }
 
-func decodeZstdFrame(frame []byte) ([]byte, error) {
-	dec, err := zstd.NewReader(bytes.NewReader(frame), zstd.WithDecoderConcurrency(1))
+// zstdDecoders reuses decoder instances across frames. A fresh decoder
+// allocates its window buffer for every frame, which was the single largest
+// idle allocation source (history.ensureBlock); a pooled decoder keeps the
+// window and only grows it when a bigger frame arrives. DecodeAll fits because
+// callers always pass exactly one frame.
+var zstdDecoders = sync.Pool{New: func() any {
+	dec, err := zstd.NewReader(nil, zstd.WithDecoderConcurrency(1))
 	if err != nil {
-		return nil, err
+		return nil
 	}
-	defer dec.Close()
-	return io.ReadAll(dec)
+	return dec
+}}
+
+func decodeZstdFrame(frame []byte) ([]byte, error) {
+	raw := zstdDecoders.Get()
+	if raw == nil {
+		return nil, fmt.Errorf("zstd: cannot create decoder")
+	}
+	dec := raw.(*zstd.Decoder)
+	defer zstdDecoders.Put(dec)
+	return dec.DecodeAll(frame, nil)
 }
 
+// consumeJSONL scans lines in place. data is a transient decode buffer, so
+// lines are handed out as subslices instead of copies; every value that
+// outlives this call is cloned by parseEvent.
 func (t *Tail) consumeJSONL(data []byte, complete bool) (int, error) {
-	reader := bufio.NewReader(bytes.NewReader(data))
 	consumed := 0
-	for {
-		line, err := reader.ReadBytes('\n')
-		if err == io.EOF {
-			if len(line) == 0 {
-				return consumed, nil
-			}
+	for consumed < len(data) {
+		rest := data[consumed:]
+		idx := bytes.IndexByte(rest, '\n')
+		if idx < 0 {
 			if !complete {
 				return consumed, nil
 			}
 			return consumed, fmt.Errorf("incomplete JSONL row")
 		}
-		if err != nil {
-			return consumed, err
-		}
-		consumed += len(line)
-		if err := t.consumeLine(bytes.TrimSpace(line)); err != nil {
+		consumed += idx + 1
+		if err := t.consumeLine(bytes.TrimSpace(rest[:idx])); err != nil {
 			return consumed, err
 		}
 	}
+	return consumed, nil
 }
 
 func lineSeq(line []byte) (int64, error) {

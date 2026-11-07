@@ -96,6 +96,9 @@ type recentHeaderCacheEntry struct {
 	size    int64
 	modUnix int64
 	sum     Summary
+	// stable means the sample covered the lines the header and title live in,
+	// so later appends cannot change them and the entry survives growth.
+	stable bool
 }
 
 // recentHeaderCache keeps header summaries keyed by path, size, and mtime.
@@ -109,13 +112,15 @@ var recentHeaderCache = struct {
 func cachedRecentSummary(a artifact, size int64, mod time.Time) (Summary, error) {
 	modUnix := mod.UnixNano()
 	recentHeaderCache.Lock()
-	if ent, ok := recentHeaderCache.items[a.path]; ok && ent.size == size && ent.modUnix == modUnix {
-		sum := ent.sum
-		recentHeaderCache.Unlock()
-		return sum, nil
+	if ent, ok := recentHeaderCache.items[a.path]; ok {
+		if (ent.size == size && ent.modUnix == modUnix) || (ent.stable && size > ent.size) {
+			sum := ent.sum
+			recentHeaderCache.Unlock()
+			return sum, nil
+		}
 	}
 	recentHeaderCache.Unlock()
-	sum, err := recentSummary(a)
+	sum, stable, err := recentSummaryStable(a)
 	if err != nil {
 		return Summary{}, err
 	}
@@ -123,41 +128,54 @@ func cachedRecentSummary(a artifact, size int64, mod time.Time) (Summary, error)
 	if len(recentHeaderCache.items) > 4000 {
 		recentHeaderCache.items = map[string]recentHeaderCacheEntry{}
 	}
-	recentHeaderCache.items[a.path] = recentHeaderCacheEntry{size: size, modUnix: modUnix, sum: sum}
+	recentHeaderCache.items[a.path] = recentHeaderCacheEntry{size: size, modUnix: modUnix, sum: sum, stable: stable}
 	recentHeaderCache.Unlock()
 	return sum, nil
 }
 
 const recentPrefixBytes = 256 * 1024
 
+// recentStableLines is the header plus the lines a title can appear in.
+// A sample holding every one of them cannot be changed by an append.
+const recentStableLines = 257
+
+var newlineBytes = []byte("\n")
+
 func recentSummary(a artifact) (Summary, error) {
+	sum, _, err := recentSummaryStable(a)
+	return sum, err
+}
+
+// recentSummaryStable reports whether the sampled prefix already contains
+// every line that can affect the summary.
+func recentSummaryStable(a artifact) (Summary, bool, error) {
 	if !supportedFormat(a.version) {
-		return Summary{}, unsupportedFormatError(a.version)
+		return Summary{}, false, unsupportedFormatError(a.version)
 	}
 	f, err := openArtifact(a.path)
 	if err != nil {
-		return Summary{}, err
+		return Summary{}, false, err
 	}
 	defer f.Close()
 	if a.encoding != "zstd" {
 		prefix := make([]byte, recentPrefixBytes)
 		n, err := f.Read(prefix)
 		if err != nil && err != io.EOF {
-			return Summary{}, err
+			return Summary{}, false, err
 		}
-		return summaryFromPrefix(prefix[:n], a)
+		return stableSummary(prefix[:n], a)
 	}
 	// The title lives in the first lines. Stop there instead of decoding
 	// every frame in the 256KiB prefix. A torn frame after those lines is
 	// the writer still appending; the header we already have is enough.
 	dec, err := zstd.NewReader(io.LimitReader(f, recentPrefixBytes), zstd.WithDecoderConcurrency(1))
 	if err != nil {
-		return Summary{}, err
+		return Summary{}, false, err
 	}
 	defer dec.Close()
 	var plain bytes.Buffer
 	reader := bufio.NewReader(dec)
-	for lines := 0; lines < 257; lines++ {
+	for lines := 0; lines < recentStableLines; lines++ {
 		line, readErr := reader.ReadBytes('\n')
 		plain.Write(line)
 		if readErr != nil {
@@ -165,9 +183,21 @@ func recentSummary(a artifact) (Summary, error) {
 		}
 	}
 	if plain.Len() == 0 {
-		return Summary{}, fmt.Errorf("incomplete first Zstandard frame")
+		return Summary{}, false, fmt.Errorf("incomplete first Zstandard frame")
 	}
-	return summaryFromPrefix(plain.Bytes(), a)
+	return stableSummary(plain.Bytes(), a)
+}
+
+// stableSummary parses the sampled prefix and reports whether an append can
+// still change it: only a sample holding every title line with a title found
+// is final.
+func stableSummary(sample []byte, a artifact) (Summary, bool, error) {
+	sum, err := summaryFromPrefix(sample, a)
+	if err != nil {
+		return Summary{}, false, err
+	}
+	stable := sum.Title != "" && bytes.Count(sample, newlineBytes) >= recentStableLines
+	return sum, stable, nil
 }
 
 func summaryFromPrefix(data []byte, a artifact) (Summary, error) {

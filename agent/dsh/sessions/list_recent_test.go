@@ -104,6 +104,66 @@ func TestListRecentSeesTitleAppendedLater(t *testing.T) {
 	}
 }
 
+func TestRecentSummaryStableOnlyOnceTitleLinesAreSampled(t *testing.T) {
+	root := t.TempDir()
+	body := header("s-long") + row("session/title", 0, `{"title":"Named"}`)
+	for seq := 1; seq < 300; seq++ {
+		body += row("tool/call", seq, `{"name":"read"}`)
+	}
+	longPath := put(t, root, "s-long", "session.v3.jsonl.zstd", string(encodeZstdFrame(t, body)))
+	sum, stable, err := recentSummaryStable(artifact{path: longPath, version: 3, encoding: "zstd"})
+	if err != nil || sum.Title != "Named" || !stable {
+		t.Fatalf("long: title=%q stable=%v err=%v", sum.Title, stable, err)
+	}
+	shortPath := put(t, root, "s-short", "session.v3.jsonl", header("s-short")+row("session/title", 0, `{"title":"Named"}`))
+	if _, stable, err := recentSummaryStable(artifact{path: shortPath, version: 3, encoding: "jsonl"}); err != nil || stable {
+		t.Fatalf("short: stable=%v err=%v", stable, err)
+	}
+}
+
+// A log whose sampled prefix already holds the title lines keeps its cached
+// summary when it grows, and still re-reads when it shrinks or is replaced.
+func TestListRecentReusesStableSummaryAcrossAppends(t *testing.T) {
+	root := t.TempDir()
+	body := header("s-live") + row("session/title", 0, `{"title":"Named"}`)
+	for seq := 1; seq < 300; seq++ {
+		body += row("tool/call", seq, `{"name":"read"}`)
+	}
+	path := put(t, root, "s-live", "session.v3.jsonl", body)
+	store := Store{Root: root}
+	got, warnings, err := store.ListRecent(1)
+	if err != nil || len(warnings) != 0 || len(got) != 1 || got[0].Title != "Named" {
+		t.Fatalf("%+v %v %v", got, warnings, err)
+	}
+	// A longer rewrite with a corrupt header proves the sample was not re-read.
+	broken := "garbage\n" + body + body[:len(body)/2]
+	if err := os.WriteFile(path, []byte(broken), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	later := time.Now().Add(2 * time.Second)
+	if err := os.Chtimes(path, later, later); err != nil {
+		t.Fatal(err)
+	}
+	got, warnings, err = store.ListRecent(1)
+	if err != nil || len(warnings) != 0 || len(got) != 1 || got[0].Title != "Named" {
+		t.Fatalf("grown: %+v %v %v", got, warnings, err)
+	}
+	if got[0].SizeBytes != int64(len(broken)) {
+		t.Fatalf("size = %d, want %d", got[0].SizeBytes, len(broken))
+	}
+	// A shorter file no longer matches the cached size, so it is re-read.
+	if err := os.WriteFile(path, []byte("garbage\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	shorter := time.Now().Add(4 * time.Second)
+	if err := os.Chtimes(path, shorter, shorter); err != nil {
+		t.Fatal(err)
+	}
+	if got, warnings, err = store.ListRecent(1); err == nil && len(warnings) == 0 {
+		t.Fatalf("shrunk file should be re-read: %+v %v", got, warnings)
+	}
+}
+
 func TestLookupFindsSessionCreatedAfterIndex(t *testing.T) {
 	root := t.TempDir()
 	put(t, root, "s-first", "session.v3.jsonl", header("s-first"))
