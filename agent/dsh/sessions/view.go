@@ -7,6 +7,8 @@ type View struct {
 	ReasoningEffort string
 	Todos           []Todo
 	Rows            []Message
+	// Truncated means Rows come from a suffix, not the whole log.
+	Truncated bool
 }
 
 // Message is one display line of a session preview.
