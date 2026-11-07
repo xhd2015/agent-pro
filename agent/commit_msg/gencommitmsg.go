@@ -14,8 +14,6 @@ import (
 	"github.com/xhd2015/agent-pro/agent/git_runner"
 	"github.com/xhd2015/agent-pro/agent/opencode/models"
 	"github.com/xhd2015/agent-pro/agent/opencode/run"
-	"github.com/xhd2015/dot-pkgs/go-pkgs/file/detect"
-	"github.com/xhd2015/dot-pkgs/go-pkgs/git/submodule"
 	"github.com/xhd2015/gitops/git"
 	"github.com/xhd2015/gitops/gitwrite"
 	"github.com/xhd2015/less-gen/flags"
@@ -151,19 +149,27 @@ func runGenCommitMsgDryRun(dir string, commit, noVerify bool) error {
 	}
 
 	// Plan binary/submodule unstage without mutating the index.
-	binaries, subModuleDirs, err := detectUnstageCandidates(dir, stagedFiles)
+	candidates, err := DetectUnstageCandidates(dir, stagedFiles)
 	if err != nil {
 		return fmt.Errorf("auto unstage failed: %w", err)
 	}
-	for _, b := range binaries {
-		if b.desc != "" {
-			fmt.Fprintf(os.Stderr, "would: unstage %s (%s)\n", b.path, b.desc)
+	for _, candidate := range candidates {
+		if candidate.Kind != UnstageKindBinary {
+			continue
+		}
+		if candidate.Desc != "" {
+			fmt.Fprintf(os.Stderr, "would: unstage %s (%s)\n", candidate.Path, candidate.Desc)
 		} else {
-			fmt.Fprintf(os.Stderr, "would: unstage %s\n", b.path)
+			fmt.Fprintf(os.Stderr, "would: unstage %s\n", candidate.Path)
 		}
 	}
-	for _, sm := range subModuleDirs {
-		fmt.Fprintf(os.Stderr, "would: unstage %s/\n", sm)
+	seenSubModuleDir := map[string]bool{}
+	for _, candidate := range candidates {
+		if candidate.Kind != UnstageKindSubmodule || seenSubModuleDir[candidate.SubmoduleDir] {
+			continue
+		}
+		seenSubModuleDir[candidate.SubmoduleDir] = true
+		fmt.Fprintf(os.Stderr, "would: unstage %s/\n", candidate.SubmoduleDir)
 	}
 
 	n := len(stagedFiles)
@@ -408,149 +414,6 @@ func runCommandCodeAgent(dir string, options GenerateOptions, promptPath string,
 		logger.Log(se)
 	}
 	return stdout.String(), nil
-}
-
-type unstagedItem struct {
-	path string
-	desc string
-}
-
-// detectUnstageCandidates finds staged binaries and submodule paths that would
-// be auto-unstaged. stagedFiles may be nil to list ACMRT-filtered staged paths.
-// Paths are evaluated from the repo root (same chdir semantics as detectAndUnstage).
-func detectUnstageCandidates(dir string, stagedFiles []string) (binaries []unstagedItem, subModuleDirs []string, err error) {
-	dir = filepath.Clean(dir)
-
-	repoRoot, err := git.ShowToplevel(dir)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to resolve git toplevel: %w", err)
-	}
-	if repoRoot == "" {
-		return nil, nil, fmt.Errorf("empty git toplevel")
-	}
-
-	origDir, err := os.Getwd()
-	if err != nil {
-		return nil, nil, fmt.Errorf("getwd: %w", err)
-	}
-	if err := os.Chdir(repoRoot); err != nil {
-		return nil, nil, fmt.Errorf("chdir %s: %w", repoRoot, err)
-	}
-	defer os.Chdir(origDir)
-
-	if stagedFiles == nil {
-		stagedFiles, err = git.GetStagedFiles(dir)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to list staged files: %w", err)
-		}
-	}
-	if len(stagedFiles) == 0 {
-		return nil, nil, nil
-	}
-
-	subModuleDirs = submodule.DetectSubModules(stagedFiles)
-
-	isInSubmodule := func(f string) bool {
-		for _, smDir := range subModuleDirs {
-			if strings.HasPrefix(f, smDir+string(filepath.Separator)) || f == smDir {
-				return true
-			}
-		}
-		return false
-	}
-
-	for _, f := range stagedFiles {
-		if isInSubmodule(f) {
-			continue
-		}
-		info, err := os.Stat(f)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				continue
-			}
-			return nil, nil, fmt.Errorf("stat %s: %w", f, err)
-		}
-		if info.IsDir() {
-			continue
-		}
-		desc, isBin, err := detect.DetectFileType(f)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				continue
-			}
-			return nil, nil, fmt.Errorf("detect %s: %w", f, err)
-		}
-		if isBin {
-			binaries = append(binaries, unstagedItem{path: f, desc: desc})
-		}
-	}
-
-	return binaries, subModuleDirs, nil
-}
-
-func detectAndUnstage(dir string, logger Logger) error {
-	binaries, subModuleDirs, err := detectUnstageCandidates(dir, nil)
-	if err != nil {
-		return err
-	}
-
-	// Rebuild toUnstage list (binaries + any staged path under a submodule).
-	// Re-list ACMRT staged files for submodule file paths.
-	stagedFiles, err := git.GetStagedFiles(dir)
-	if err != nil {
-		return fmt.Errorf("failed to list staged files: %w", err)
-	}
-
-	isInSubmodule := func(f string) bool {
-		for _, smDir := range subModuleDirs {
-			if strings.HasPrefix(f, smDir+string(filepath.Separator)) || f == smDir {
-				return true
-			}
-		}
-		return false
-	}
-
-	var toUnstage []string
-	for _, b := range binaries {
-		toUnstage = append(toUnstage, b.path)
-	}
-	for _, f := range stagedFiles {
-		if isInSubmodule(f) {
-			toUnstage = append(toUnstage, f)
-		}
-	}
-
-	if len(toUnstage) == 0 {
-		return nil
-	}
-
-	if len(binaries) > 0 {
-		fmt.Fprintf(os.Stderr, "\nAuto-unstaged binary files:\n")
-		for _, b := range binaries {
-			if b.desc != "" {
-				fmt.Fprintf(os.Stderr, "  %s (%s)\n", b.path, b.desc)
-			} else {
-				fmt.Fprintf(os.Stderr, "  %s\n", b.path)
-			}
-		}
-	}
-	if len(subModuleDirs) > 0 {
-		fmt.Fprintf(os.Stderr, "\nAuto-unstaged submodule directories:\n")
-		for _, sm := range subModuleDirs {
-			fmt.Fprintf(os.Stderr, "  %s/\n", sm)
-		}
-	}
-
-	if len(toUnstage) > 0 {
-		fmt.Fprintf(os.Stderr, "\nTo include these files back: use `git add <file> && git commit --amend --no-edit`\n")
-	}
-
-	logger.Log("Unstaging binary/submodule entries...")
-	if err := gitwrite.RestoreStaged(dir, toUnstage...); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 type CommitMsg struct {
