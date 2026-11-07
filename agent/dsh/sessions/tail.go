@@ -22,6 +22,11 @@ const coldTailMin = 256 * 1024
 // coldTailRows transcript rows and a classify anchor, or it covers the file.
 const coldTailWindow = 256 * 1024
 
+// coldTailMaxWindow bounds the doubling search. Each step re-decodes the whole
+// window, so a log whose anchor is not in a short tail is cheaper to read once
+// than to bisect towards: past this suffix the cold path reads every event.
+const coldTailMaxWindow = 8 << 20
+
 // coldTailRows is the suffix size that satisfies a live transcript poll.
 // The orchestrator asks for 24 rows; tailKeep is only the in-memory cap.
 const coldTailRows = 24
@@ -129,6 +134,9 @@ func (t *Tail) advanceColdZstd(a artifact, size int64) error {
 			}
 		}
 		if window == size {
+			break
+		}
+		if next := window * 2; next > coldTailMaxWindow && size > next {
 			break
 		}
 		window *= 2

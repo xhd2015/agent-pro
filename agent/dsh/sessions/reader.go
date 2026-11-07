@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/klauspost/compress/zstd"
 )
 
 const maxSafeInteger int64 = 9007199254740991
@@ -242,85 +244,84 @@ func artifactID(a artifact) (string, error) {
 	return requiredString(header, "id")
 }
 
-func readArtifact(a artifact) (*Inspection, error) {
+// openArtifactReader streams an artifact's JSONL rows from the front. The
+// release function closes the file and returns the decoder to the pool, so it
+// must run before the caller exits.
+func openArtifactReader(a artifact) (*bufio.Reader, int64, func(), error) {
+	f, err := openArtifact(a.path)
+	if err != nil {
+		return nil, 0, nil, err
+	}
+	stat, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, 0, nil, err
+	}
+	if !stat.Mode().IsRegular() {
+		f.Close()
+		return nil, 0, nil, fmt.Errorf("selected artifact is not a regular file")
+	}
+	var input io.Reader = f
+	var dec *zstd.Decoder
+	if a.encoding == "zstd" {
+		dec, err = zstdStream(f)
+		if err != nil {
+			f.Close()
+			return nil, 0, nil, err
+		}
+		input = dec
+	}
+	release := func() {
+		if dec != nil {
+			releaseZstdStream(dec)
+		}
+		f.Close()
+	}
+	return bufio.NewReader(input), stat.Size(), release, nil
+}
+
+// readArtifactHeader decodes only the session header row. Identity, cwd and
+// lineage live there, so a caller that needs them must not pay for the events.
+func readArtifactHeader(a artifact) (*Inspection, error) {
 	if !supportedFormat(a.version) {
 		return nil, unsupportedFormatError(a.version)
 	}
-	f, err := openArtifact(a.path)
+	reader, size, release, err := openArtifactReader(a)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
-	stat, err := f.Stat()
-	if err != nil {
-		return nil, err
-	}
-	if !stat.Mode().IsRegular() {
-		return nil, fmt.Errorf("selected artifact is not a regular file")
-	}
-	var input io.Reader = f
-	if a.encoding == "zstd" {
-		dec, err := zstdStream(f)
-		if err != nil {
-			return nil, err
-		}
-		defer releaseZstdStream(dec)
-		input = dec
-	}
-	reader := bufio.NewReader(input)
+	defer release()
+	return readArtifactHeaderFrom(reader, a, size)
+}
+
+// readArtifactHeaderFrom consumes exactly one row from an open artifact stream.
+func readArtifactHeaderFrom(reader *bufio.Reader, a artifact, size int64) (*Inspection, error) {
 	line, err := reader.ReadBytes('\n')
 	if err != nil {
 		return nil, fmt.Errorf("read complete session header: %w", err)
 	}
-	header, err := object(line)
-	if err != nil {
-		return nil, fmt.Errorf("invalid session header: %w", err)
-	}
-	typ, err := requiredString(header, "type")
-	if err != nil || typ != "session" {
-		return nil, fmt.Errorf("invalid session header type")
-	}
-	version, err := requiredInteger(header, "version", true)
-	if err != nil || version != int64(a.version) {
-		return nil, fmt.Errorf("header version does not match generation v%d", a.version)
-	}
-	id, err := requiredString(header, "id")
+	summary, err := parseSessionHeader(line, int(a.version), a.path, a.encoding)
 	if err != nil {
 		return nil, err
 	}
-	created, err := requiredInteger(header, "createdAt", true)
+	summary.SizeBytes = size
+	return &Inspection{Summary: summary, Header: bytes.Clone(bytes.TrimSpace(line)), Events: []Event{}}, nil
+}
+
+func readArtifact(a artifact) (*Inspection, error) {
+	if !supportedFormat(a.version) {
+		return nil, unsupportedFormatError(a.version)
+	}
+	reader, size, release, err := openArtifactReader(a)
 	if err != nil {
 		return nil, err
 	}
-	var seeded bool
-	raw, ok := header["isSeeded"]
-	if !ok || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
-		return nil, fmt.Errorf("isSeeded must be a boolean")
-	}
-	if err := json.Unmarshal(raw, &seeded); err != nil {
-		return nil, err
-	}
-	depth, err := requiredInteger(header, "delegationDepth", true)
+	defer release()
+	result, err := readArtifactHeaderFrom(reader, a, size)
 	if err != nil {
 		return nil, err
 	}
-	preset, err := optionalString(header, "agentPreset")
-	if err != nil {
-		return nil, err
-	}
-	cwd, err := optionalString(header, "cwd")
-	if err != nil {
-		return nil, err
-	}
-	parent, err := optionalString(header, "parentSession")
-	if err != nil {
-		return nil, err
-	}
-	origin, err := optionalString(header, "origin")
-	if err != nil {
-		return nil, err
-	}
-	result := &Inspection{Summary: Summary{ID: id, CreatedAt: created, UpdatedAt: created, Cwd: cwd, ParentSession: parent, Origin: origin, IsSeeded: seeded, AgentPreset: preset, DelegationDepth: depth, FormatVersion: int(a.version), Path: a.path, Encoding: a.encoding, SizeBytes: stat.Size(), Outcome: "empty"}, Header: bytes.Clone(bytes.TrimSpace(line)), Events: []Event{}}
+	var line []byte
 	for {
 		line, err = reader.ReadBytes('\n')
 		if err == io.EOF {

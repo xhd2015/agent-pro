@@ -271,6 +271,9 @@ func (c *viewTailCursor) coldZstd(a artifact, size int64, want func(*viewTailCur
 		if window == size {
 			break
 		}
+		if next := window * 2; next > coldTailMaxWindow && size > next {
+			break
+		}
 		window *= 2
 	}
 	c.offset = 0

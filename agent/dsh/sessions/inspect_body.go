@@ -58,6 +58,7 @@ func resetInspectBodies() {
 func ResetInspectCache() {
 	resetInspectBodies()
 	resetArtifactIDs()
+	resetHeaderCache()
 	resetViewTails()
 	inspectMemo.mu.Lock()
 	inspectMemo.index = nil
