@@ -158,7 +158,7 @@ func (s *Store) List() ([]Summary, []string, error) {
 	out := []Summary{}
 	ids := map[string]string{}
 	for _, a := range artifacts {
-		id, identityErr := artifactID(a)
+		id, identityErr := artifactIDCached(a)
 		if identityErr == nil {
 			if prev, ok := ids[id]; ok {
 				return nil, warnings, fmt.Errorf("duplicate session id %q in %s and %s", id, prev, a.path)

@@ -57,6 +57,10 @@ func resetInspectBodies() {
 // isolate load counts; production callers should not need it.
 func ResetInspectCache() {
 	resetInspectBodies()
+	resetArtifactIDs()
+	inspectMemo.mu.Lock()
+	inspectMemo.index = nil
+	inspectMemo.mu.Unlock()
 }
 
 func (s *Store) loadInspectBody(id string) (*inspectBody, error) {
