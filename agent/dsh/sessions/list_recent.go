@@ -9,8 +9,6 @@ import (
 	"sort"
 	"sync"
 	"time"
-
-	"github.com/klauspost/compress/zstd"
 )
 
 const defaultRecentLimit = 40
@@ -168,11 +166,11 @@ func recentSummaryStable(a artifact) (Summary, bool, error) {
 	// The title lives in the first lines. Stop there instead of decoding
 	// every frame in the 256KiB prefix. A torn frame after those lines is
 	// the writer still appending; the header we already have is enough.
-	dec, err := zstd.NewReader(io.LimitReader(f, recentPrefixBytes), zstd.WithDecoderConcurrency(1))
+	dec, err := zstdStream(io.LimitReader(f, recentPrefixBytes))
 	if err != nil {
 		return Summary{}, false, err
 	}
-	defer dec.Close()
+	defer releaseZstdStream(dec)
 	var plain bytes.Buffer
 	reader := bufio.NewReader(dec)
 	for lines := 0; lines < recentStableLines; lines++ {

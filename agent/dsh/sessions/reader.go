@@ -12,8 +12,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/klauspost/compress/zstd"
 )
 
 const maxSafeInteger int64 = 9007199254740991
@@ -222,11 +220,11 @@ func artifactID(a artifact) (string, error) {
 	}
 	var input io.Reader = f
 	if a.encoding == "zstd" {
-		dec, err := zstd.NewReader(f, zstd.WithDecoderConcurrency(1))
+		dec, err := zstdStream(f)
 		if err != nil {
 			return "", err
 		}
-		defer dec.Close()
+		defer releaseZstdStream(dec)
 		input = dec
 	}
 	line, err := bufio.NewReader(input).ReadBytes('\n')
@@ -262,11 +260,11 @@ func readArtifact(a artifact) (*Inspection, error) {
 	}
 	var input io.Reader = f
 	if a.encoding == "zstd" {
-		dec, err := zstd.NewReader(f, zstd.WithDecoderConcurrency(1))
+		dec, err := zstdStream(f)
 		if err != nil {
 			return nil, err
 		}
-		defer dec.Close()
+		defer releaseZstdStream(dec)
 		input = dec
 	}
 	reader := bufio.NewReader(input)
