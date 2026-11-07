@@ -2,6 +2,8 @@ package sessions
 
 import (
 	"sort"
+	"sync"
+	"time"
 
 	"github.com/xhd2015/agent-pro/pkgs/procresolve"
 )
@@ -22,13 +24,73 @@ type ListLiveOpts struct {
 	Lsof      func(pid int) []string
 }
 
+// listLiveCacheTTL bounds how often the process-table scan runs. The live
+// lease makes one process listing plus one lsof exec the whole cost of
+// ListLive, and the orchestrator polls the listing that calls it every three
+// seconds; a short cache drops those syscalls while keeping a finished session
+// from lingering for more than one poll.
+const listLiveCacheTTL = 4 * time.Second
+
+var listLiveCache struct {
+	sync.Mutex
+	rows    []LiveSession
+	expires time.Time
+}
+
+func cachedListLive(now time.Time) ([]LiveSession, bool) {
+	listLiveCache.Lock()
+	defer listLiveCache.Unlock()
+	if listLiveCache.rows == nil || now.After(listLiveCache.expires) {
+		return nil, false
+	}
+	out := make([]LiveSession, len(listLiveCache.rows))
+	copy(out, listLiveCache.rows)
+	return out, true
+}
+
+func storeListLive(rows []LiveSession, now time.Time) {
+	kept := make([]LiveSession, len(rows))
+	copy(kept, rows)
+	listLiveCache.Lock()
+	defer listLiveCache.Unlock()
+	listLiveCache.rows = kept
+	listLiveCache.expires = now.Add(listLiveCacheTTL)
+}
+
+func resetListLiveCache() {
+	listLiveCache.Lock()
+	defer listLiveCache.Unlock()
+	listLiveCache.rows = nil
+	listLiveCache.expires = time.Time{}
+}
+
 // ListLive returns DSH sessions that currently have session.lock open.
 // One process may hold many leases. An iTerm tab is not required: dsh web
 // keeps its leases without one.
+//
+// Unhooked calls reuse a result for listLiveCacheTTL. Callers that inject
+// hooks always run the scan, so tests and custom probes stay exact.
 func ListLive(opts *ListLiveOpts) ([]LiveSession, error) {
 	if opts == nil {
 		opts = &ListLiveOpts{}
 	}
+	cacheable := opts.ListProcs == nil && opts.Lsof == nil
+	if cacheable {
+		if rows, ok := cachedListLive(time.Now()); ok {
+			return rows, nil
+		}
+	}
+	rows, err := scanListLive(opts)
+	if err != nil {
+		return nil, err
+	}
+	if cacheable {
+		storeListLive(rows, time.Now())
+	}
+	return rows, nil
+}
+
+func scanListLive(opts *ListLiveOpts) ([]LiveSession, error) {
 	listProcs := opts.ListProcs
 	if listProcs == nil {
 		listProcs = procresolve.ListLiveProcs

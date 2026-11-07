@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"testing"
+	"time"
 
 	"github.com/xhd2015/agent-pro/pkgs/procresolve"
 )
@@ -61,5 +62,62 @@ func TestListLiveIgnoresALockFileWithNoOpenFD(t *testing.T) {
 	}
 	if len(rows) != 0 {
 		t.Fatalf("rows=%+v, want none", rows)
+	}
+}
+
+func TestListLiveHookedCallsSkipTheCache(t *testing.T) {
+	resetListLiveCache()
+	t.Cleanup(resetListLiveCache)
+
+	scans := 0
+	opts := func() *ListLiveOpts {
+		return &ListLiveOpts{
+			ListProcs: func() []procresolve.Proc {
+				scans++
+				return []procresolve.Proc{{PID: 10, Cmd: "dsh web"}}
+			},
+			Lsof: func(int) []string { return nil },
+		}
+	}
+	for i := 0; i < 2; i++ {
+		if _, err := ListLive(opts()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if scans != 2 {
+		t.Fatalf("scans = %d, want 2: hooked calls must not share the cache", scans)
+	}
+	if rows, ok := cachedListLive(time.Now()); ok {
+		t.Fatalf("cached rows = %+v, want none", rows)
+	}
+}
+
+func TestListLiveCacheReturnsACopy(t *testing.T) {
+	resetListLiveCache()
+	t.Cleanup(resetListLiveCache)
+
+	storeListLive([]LiveSession{{ID: "session-a", PID: 7}}, time.Now())
+	first, ok := cachedListLive(time.Now())
+	if !ok || len(first) != 1 || first[0].ID != "session-a" {
+		t.Fatalf("cached rows = %+v ok=%v", first, ok)
+	}
+	first[0].ID = "mutated"
+	second, ok := cachedListLive(time.Now())
+	if !ok || second[0].ID != "session-a" {
+		t.Fatalf("cached rows after mutation = %+v, want session-a", second)
+	}
+}
+
+func TestListLiveCacheExpires(t *testing.T) {
+	resetListLiveCache()
+	t.Cleanup(resetListLiveCache)
+
+	start := time.Now()
+	storeListLive([]LiveSession{{ID: "session-a", PID: 7}}, start)
+	if _, ok := cachedListLive(start.Add(listLiveCacheTTL - time.Millisecond)); !ok {
+		t.Fatal("cache miss one millisecond before expiry")
+	}
+	if _, ok := cachedListLive(start.Add(listLiveCacheTTL + time.Millisecond)); ok {
+		t.Fatal("cache hit after expiry")
 	}
 }
