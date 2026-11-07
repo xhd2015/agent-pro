@@ -9,7 +9,7 @@ require (
 	github.com/xhd2015/dot-pkgs/go-pkgs v0.0.197
 	github.com/xhd2015/less-flags v1.0.5
 	github.com/xhd2015/less-gen v0.0.19
-	github.com/xhd2015/skills v0.0.31
+	github.com/xhd2015/skills v0.0.34
 	golang.org/x/term v0.45.0
 )
 

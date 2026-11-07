@@ -6,16 +6,18 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/xhd2015/skills/skillcmd"
 )
 
 func TestDebugWithUserSkillIsRegistered(t *testing.T) {
-	names := knownSkillNames()
+	names := agentProSkillNames()
 	if !containsString(names, "debug-with-user") {
-		t.Fatalf("knownSkillNames missing debug-with-user: %v", names)
+		t.Fatalf("agentProSkillNames missing debug-with-user: %v", names)
 	}
-	sk, ok := knownSkills["debug-with-user"]
+	sk, ok := agentProSkill("debug-with-user")
 	if !ok {
-		t.Fatal("knownSkills missing debug-with-user")
+		t.Fatal("agentProSkill missing debug-with-user")
 	}
 	if !strings.Contains(sk.Content, "name: debug-with-user") {
 		t.Fatalf("skill content missing frontmatter name:\n%s", sk.Content)
@@ -23,18 +25,18 @@ func TestDebugWithUserSkillIsRegistered(t *testing.T) {
 }
 
 func TestConsolidateCodeSkillIsRegistered(t *testing.T) {
-	names := knownSkillNames()
+	names := agentProSkillNames()
 	if !containsString(names, "consolidate-code") {
-		t.Fatalf("knownSkillNames missing consolidate-code: %v", names)
+		t.Fatalf("agentProSkillNames missing consolidate-code: %v", names)
 	}
-	sk, ok := knownSkills["consolidate-code"]
+	sk, ok := agentProSkill("consolidate-code")
 	if !ok {
-		t.Fatal("knownSkills missing consolidate-code")
+		t.Fatal("agentProSkill missing consolidate-code")
 	}
 	if !strings.Contains(sk.Content, "name: consolidate-code") {
 		t.Fatalf("skill content missing frontmatter name:\n%s", sk.Content)
 	}
-	if sk.Description == "" {
+	if skillcmd.ExtractDescription(sk.Content) == "" {
 		t.Fatal("consolidate-code skill missing description")
 	}
 	if !strings.Contains(sk.Content, "doctest-tdd") {
@@ -43,35 +45,35 @@ func TestConsolidateCodeSkillIsRegistered(t *testing.T) {
 }
 
 func TestVerifyWithPrototypeSkillIsRegistered(t *testing.T) {
-	names := knownSkillNames()
+	names := agentProSkillNames()
 	if !containsString(names, "verify-with-prototype") {
-		t.Fatalf("knownSkillNames missing verify-with-prototype: %v", names)
+		t.Fatalf("agentProSkillNames missing verify-with-prototype: %v", names)
 	}
-	sk, ok := knownSkills["verify-with-prototype"]
+	sk, ok := agentProSkill("verify-with-prototype")
 	if !ok {
-		t.Fatal("knownSkills missing verify-with-prototype")
+		t.Fatal("agentProSkill missing verify-with-prototype")
 	}
 	if !strings.Contains(sk.Content, "name: verify-with-prototype") {
 		t.Fatalf("skill content missing frontmatter name:\n%s", sk.Content)
 	}
-	if sk.Description == "" {
+	if skillcmd.ExtractDescription(sk.Content) == "" {
 		t.Fatal("verify-with-prototype skill missing description")
 	}
 }
 
 func TestVerifyOnBehalfOfUserSkillIsRegistered(t *testing.T) {
-	names := knownSkillNames()
+	names := agentProSkillNames()
 	if !containsString(names, "verify-on-behalf-of-user") {
-		t.Fatalf("knownSkillNames missing verify-on-behalf-of-user: %v", names)
+		t.Fatalf("agentProSkillNames missing verify-on-behalf-of-user: %v", names)
 	}
-	sk, ok := knownSkills["verify-on-behalf-of-user"]
+	sk, ok := agentProSkill("verify-on-behalf-of-user")
 	if !ok {
-		t.Fatal("knownSkills missing verify-on-behalf-of-user")
+		t.Fatal("agentProSkill missing verify-on-behalf-of-user")
 	}
 	if !strings.Contains(sk.Content, "name: verify-on-behalf-of-user") {
 		t.Fatalf("skill content missing frontmatter name:\n%s", sk.Content)
 	}
-	if sk.Description == "" {
+	if skillcmd.ExtractDescription(sk.Content) == "" {
 		t.Fatal("verify-on-behalf-of-user skill missing description")
 	}
 	if !strings.Contains(sk.Content, "## Topics") {
@@ -101,38 +103,38 @@ func TestVerifyOnBehalfOfUserSkillIsRegistered(t *testing.T) {
 }
 
 func TestInvestigateSkillIsRegistered(t *testing.T) {
-	names := knownSkillNames()
+	names := agentProSkillNames()
 	if !containsString(names, "investigate") {
-		t.Fatalf("knownSkillNames missing investigate: %v", names)
+		t.Fatalf("agentProSkillNames missing investigate: %v", names)
 	}
-	sk, ok := knownSkills["investigate"]
+	sk, ok := agentProSkill("investigate")
 	if !ok {
-		t.Fatal("knownSkills missing investigate")
+		t.Fatal("agentProSkill missing investigate")
 	}
 	if !strings.Contains(sk.Content, "name: investigate") {
 		t.Fatalf("skill content missing frontmatter name:\n%s", sk.Content)
 	}
-	if sk.Description == "" {
+	if skillcmd.ExtractDescription(sk.Content) == "" {
 		t.Fatal("investigate skill missing description")
 	}
 }
 
 func TestBrainstormSkillIsRegistered(t *testing.T) {
-	names := knownSkillNames()
+	names := agentProSkillNames()
 	if !containsString(names, "brainstorm") {
-		t.Fatalf("knownSkillNames missing brainstorm: %v", names)
+		t.Fatalf("agentProSkillNames missing brainstorm: %v", names)
 	}
-	sk, ok := knownSkills["brainstorm"]
+	sk, ok := agentProSkill("brainstorm")
 	if !ok {
-		t.Fatal("knownSkills missing brainstorm")
+		t.Fatal("agentProSkill missing brainstorm")
 	}
 	if !strings.Contains(sk.Content, "name: brainstorm") {
 		t.Fatalf("skill content missing frontmatter name:\n%s", sk.Content)
 	}
-	if sk.Description == "" {
+	if skillcmd.ExtractDescription(sk.Content) == "" {
 		t.Fatal("brainstorm skill missing description")
 	}
-	if !strings.Contains(sk.Content, "CLI output examples") {
+	if !strings.Contains(sk.Content, "CLI examples") {
 		t.Fatal("brainstorm skill missing CLI output section")
 	}
 	if !strings.Contains(sk.Content, "UI mockups") {
@@ -141,18 +143,18 @@ func TestBrainstormSkillIsRegistered(t *testing.T) {
 }
 
 func TestFollowupSkillIsRegistered(t *testing.T) {
-	names := knownSkillNames()
+	names := agentProSkillNames()
 	if !containsString(names, "followup") {
-		t.Fatalf("knownSkillNames missing followup: %v", names)
+		t.Fatalf("agentProSkillNames missing followup: %v", names)
 	}
-	sk, ok := knownSkills["followup"]
+	sk, ok := agentProSkill("followup")
 	if !ok {
-		t.Fatal("knownSkills missing followup")
+		t.Fatal("agentProSkill missing followup")
 	}
 	if !strings.Contains(sk.Content, "name: followup") {
 		t.Fatalf("skill content missing frontmatter name:\n%s", sk.Content)
 	}
-	if sk.Description == "" {
+	if skillcmd.ExtractDescription(sk.Content) == "" {
 		t.Fatal("followup skill missing description")
 	}
 	if !strings.Contains(sk.Content, "clarification phase") {
@@ -161,18 +163,18 @@ func TestFollowupSkillIsRegistered(t *testing.T) {
 }
 
 func TestEstablishALoopSkillIsRegistered(t *testing.T) {
-	names := knownSkillNames()
+	names := agentProSkillNames()
 	if !containsString(names, "establish-a-loop") {
-		t.Fatalf("knownSkillNames missing establish-a-loop: %v", names)
+		t.Fatalf("agentProSkillNames missing establish-a-loop: %v", names)
 	}
-	sk, ok := knownSkills["establish-a-loop"]
+	sk, ok := agentProSkill("establish-a-loop")
 	if !ok {
-		t.Fatal("knownSkills missing establish-a-loop")
+		t.Fatal("agentProSkill missing establish-a-loop")
 	}
 	if !strings.Contains(sk.Content, "name: establish-a-loop") {
 		t.Fatalf("skill content missing frontmatter name:\n%s", sk.Content)
 	}
-	if sk.Description == "" {
+	if skillcmd.ExtractDescription(sk.Content) == "" {
 		t.Fatal("establish-a-loop skill missing description")
 	}
 	if !strings.Contains(sk.Content, "LOOP_<YYYY-MM-DD>_<slug>.md") {
@@ -191,52 +193,52 @@ func TestEstablishALoopSkillIsRegistered(t *testing.T) {
 }
 
 func TestRunTheLoopSkillIsRegistered(t *testing.T) {
-	names := knownSkillNames()
+	names := agentProSkillNames()
 	if !containsString(names, "run-the-loop") {
-		t.Fatalf("knownSkillNames missing run-the-loop: %v", names)
+		t.Fatalf("agentProSkillNames missing run-the-loop: %v", names)
 	}
-	sk, ok := knownSkills["run-the-loop"]
+	sk, ok := agentProSkill("run-the-loop")
 	if !ok {
-		t.Fatal("knownSkills missing run-the-loop")
+		t.Fatal("agentProSkill missing run-the-loop")
 	}
 	if !strings.Contains(sk.Content, "name: run-the-loop") {
 		t.Fatalf("skill content missing frontmatter name:\n%s", sk.Content)
 	}
-	if sk.Description == "" {
+	if skillcmd.ExtractDescription(sk.Content) == "" {
 		t.Fatal("run-the-loop skill missing description")
 	}
 }
 
 func TestSoundFixSkillIsRegistered(t *testing.T) {
-	names := knownSkillNames()
+	names := agentProSkillNames()
 	if !containsString(names, "sound-fix") {
-		t.Fatalf("knownSkillNames missing sound-fix: %v", names)
+		t.Fatalf("agentProSkillNames missing sound-fix: %v", names)
 	}
-	sk, ok := knownSkills["sound-fix"]
+	sk, ok := agentProSkill("sound-fix")
 	if !ok {
-		t.Fatal("knownSkills missing sound-fix")
+		t.Fatal("agentProSkill missing sound-fix")
 	}
 	if !strings.Contains(sk.Content, "name: sound-fix") {
 		t.Fatalf("skill content missing frontmatter name:\n%s", sk.Content)
 	}
-	if sk.Description == "" {
+	if skillcmd.ExtractDescription(sk.Content) == "" {
 		t.Fatal("sound-fix skill missing description")
 	}
 }
 
 func TestSplitPhasesSkillIsRegistered(t *testing.T) {
-	names := knownSkillNames()
+	names := agentProSkillNames()
 	if !containsString(names, "split-phases") {
-		t.Fatalf("knownSkillNames missing split-phases: %v", names)
+		t.Fatalf("agentProSkillNames missing split-phases: %v", names)
 	}
-	sk, ok := knownSkills["split-phases"]
+	sk, ok := agentProSkill("split-phases")
 	if !ok {
-		t.Fatal("knownSkills missing split-phases")
+		t.Fatal("agentProSkill missing split-phases")
 	}
 	if !strings.Contains(sk.Content, "name: split-phases") {
 		t.Fatalf("skill content missing frontmatter name:\n%s", sk.Content)
 	}
-	if sk.Description == "" {
+	if skillcmd.ExtractDescription(sk.Content) == "" {
 		t.Fatal("split-phases skill missing description")
 	}
 	if !strings.Contains(sk.Content, "independently implementable") {
@@ -248,13 +250,13 @@ func TestSplitPhasesSkillIsRegistered(t *testing.T) {
 }
 
 func TestGitResolveConflictsSkillIsRegistered(t *testing.T) {
-	names := knownSkillNames()
+	names := agentProSkillNames()
 	if !containsString(names, "git-resolve-conflicts") {
-		t.Fatalf("knownSkillNames missing git-resolve-conflicts: %v", names)
+		t.Fatalf("agentProSkillNames missing git-resolve-conflicts: %v", names)
 	}
-	sk, ok := knownSkills["git-resolve-conflicts"]
+	sk, ok := agentProSkill("git-resolve-conflicts")
 	if !ok {
-		t.Fatal("knownSkills missing git-resolve-conflicts")
+		t.Fatal("agentProSkill missing git-resolve-conflicts")
 	}
 	if !strings.Contains(sk.Content, "git rebase --continue") {
 		t.Fatalf("skill content does not describe rebase follow-up:\n%s", sk.Content)
@@ -265,18 +267,18 @@ func TestGitResolveConflictsSkillIsRegistered(t *testing.T) {
 }
 
 func TestSummarizeASkillIsRegistered(t *testing.T) {
-	names := knownSkillNames()
+	names := agentProSkillNames()
 	if !containsString(names, "summarize-a-skill") {
-		t.Fatalf("knownSkillNames missing summarize-a-skill: %v", names)
+		t.Fatalf("agentProSkillNames missing summarize-a-skill: %v", names)
 	}
-	sk, ok := knownSkills["summarize-a-skill"]
+	sk, ok := agentProSkill("summarize-a-skill")
 	if !ok {
-		t.Fatal("knownSkills missing summarize-a-skill")
+		t.Fatal("agentProSkill missing summarize-a-skill")
 	}
 	if !strings.Contains(sk.Content, "name: summarize-a-skill") {
 		t.Fatalf("skill content missing frontmatter name:\n%s", sk.Content)
 	}
-	if sk.Description == "" {
+	if skillcmd.ExtractDescription(sk.Content) == "" {
 		t.Fatal("summarize-a-skill skill missing description")
 	}
 	if !strings.Contains(sk.Content, "Output path resolution") {
@@ -442,4 +444,51 @@ func captureStdout(t *testing.T, fn func()) string {
 		t.Fatalf("close stdout reader: %v", err)
 	}
 	return string(out)
+}
+
+func agentProSkillNames() []string {
+	skills := agentProSkills()
+	names := make([]string, 0, len(skills))
+	for _, sk := range skills {
+		names = append(names, sk.Name)
+	}
+	return names
+}
+
+func agentProSkill(name string) (skillcmd.RegisteredSkill, bool) {
+	for _, sk := range agentProSkills() {
+		if sk.Name == name {
+			return sk, true
+		}
+	}
+	return skillcmd.RegisteredSkill{}, false
+}
+
+func TestHandleSkillShowTopicBothForms(t *testing.T) {
+	for _, args := range [][]string{
+		{"--show", "verify-on-behalf-of-user/transcript"},
+		{"--show", "verify-on-behalf-of-user", "transcript"},
+	} {
+		stdout := captureStdout(t, func() {
+			if err := handleSkill(args); err != nil {
+				t.Fatalf("handleSkill(%v): %v", args, err)
+			}
+		})
+		if !strings.Contains(stdout, "Transcript format rules") {
+			t.Fatalf("handleSkill(%v) missing topic content:\n%s", args, stdout)
+		}
+	}
+}
+
+func TestHandleSkillListShowsEverySkill(t *testing.T) {
+	stdout := captureStdout(t, func() {
+		if err := handleSkill([]string{"--list"}); err != nil {
+			t.Fatalf("--list: %v", err)
+		}
+	})
+	for _, name := range agentProSkillNames() {
+		if !strings.Contains(stdout, name) {
+			t.Fatalf("--list missing %q:\n%s", name, stdout)
+		}
+	}
 }

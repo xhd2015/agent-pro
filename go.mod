@@ -21,7 +21,7 @@ require (
 	github.com/xhd2015/gitops v0.0.39
 	github.com/xhd2015/less-flags v1.0.5
 	github.com/xhd2015/less-gen v0.0.19
-	github.com/xhd2015/skills v0.0.31
+	github.com/xhd2015/skills v0.0.34
 	github.com/xhd2015/tty-watch v0.0.11
 	github.com/xhd2015/xgo v1.2.8
 	golang.org/x/sys v0.47.0
