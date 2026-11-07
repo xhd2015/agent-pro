@@ -563,57 +563,72 @@ func blockText(block map[string]json.RawMessage) string {
 	return ""
 }
 
+// eventAgentTodos returns the list written by a todo_write tool call. Callers
+// that fold events one at a time keep the last ok result instead of re-scanning
+// every event.
+func eventAgentTodos(event Event) ([]Todo, bool) {
+	if event.Type != "tool/call" {
+		return nil, false
+	}
+	var data struct {
+		Name string `json:"name"`
+	}
+	if json.Unmarshal(event.Data, &data) != nil || data.Name != "todo_write" {
+		return nil, false
+	}
+	args := toolArguments(event)
+	var todos []Todo
+	if json.Unmarshal(args["todos"], &todos) != nil {
+		return nil, false
+	}
+	kept := make([]Todo, 0, len(todos))
+	for _, todo := range todos {
+		content := strings.TrimSpace(todo.Content)
+		if content == "" {
+			continue
+		}
+		status := strings.TrimSpace(todo.Status)
+		if status == "" {
+			status = "pending"
+		}
+		kept = append(kept, Todo{Content: content, Status: status})
+	}
+	return kept, true
+}
+
 func latestAgentTodos(events []Event) []Todo {
 	var out []Todo
 	for _, event := range events {
-		if event.Type != "tool/call" {
-			continue
+		if todos, ok := eventAgentTodos(event); ok {
+			out = todos
 		}
-		var data struct {
-			Name string `json:"name"`
-		}
-		if json.Unmarshal(event.Data, &data) != nil || data.Name != "todo_write" {
-			continue
-		}
-		args := toolArguments(event)
-		var todos []Todo
-		if json.Unmarshal(args["todos"], &todos) != nil {
-			continue
-		}
-		kept := make([]Todo, 0, len(todos))
-		for _, todo := range todos {
-			content := strings.TrimSpace(todo.Content)
-			if content == "" {
-				continue
-			}
-			status := strings.TrimSpace(todo.Status)
-			if status == "" {
-				status = "pending"
-			}
-			kept = append(kept, Todo{Content: content, Status: status})
-		}
-		out = kept
 	}
 	return out
+}
+
+// eventReasoningEffort returns the effort a request/header event names, or ""
+// when the event carries none.
+func eventReasoningEffort(event Event) string {
+	if event.Type != "request/header" {
+		return ""
+	}
+	var data struct {
+		Header struct {
+			Config struct {
+				ReasoningEffort string `json:"reasoningEffort"`
+			} `json:"config"`
+		} `json:"header"`
+	}
+	if json.Unmarshal(event.Data, &data) != nil {
+		return ""
+	}
+	return strings.TrimSpace(data.Header.Config.ReasoningEffort)
 }
 
 func lastReasoningEffort(events []Event) string {
 	effort := ""
 	for _, event := range events {
-		if event.Type != "request/header" {
-			continue
-		}
-		var data struct {
-			Header struct {
-				Config struct {
-					ReasoningEffort string `json:"reasoningEffort"`
-				} `json:"config"`
-			} `json:"header"`
-		}
-		if json.Unmarshal(event.Data, &data) != nil {
-			continue
-		}
-		if next := strings.TrimSpace(data.Header.Config.ReasoningEffort); next != "" {
+		if next := eventReasoningEffort(event); next != "" {
 			effort = next
 		}
 	}
