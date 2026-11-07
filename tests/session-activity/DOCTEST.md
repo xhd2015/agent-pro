@@ -12,7 +12,10 @@
   `assistant/message`, `tool/call`, `tool/result`, `turn/end`, `user/message`).
 - **Last chat message** — grok/codex coalesced kind (`thinking` | `tool` |
   `response` | `user`) plus optional tool name.
-- **Liveness** — whether a write lease / runner PID is held.
+- **Liveness** — whether a write lease / runner PID is held. For DSH that lease
+  only proves the Session is *loaded*; when a RunStatus hook is installed, an
+  Agent executing a turn decides liveness instead, so a loaded but idle Session
+  is not live.
 - **Activity** — `idle` | `thinking` | `responding` | `tool_calling` | `error`.
 
 **Behaviors**
@@ -22,6 +25,7 @@
 - DSH `tool/call` without `tool/result` → tool_calling (detail = tool name).
 - DSH `turn/end` completed → idle.
 - DSH open turn and not live → error.
+- DSH open turn, lease held, but its Agent is idle → not live → error.
 - Chat last kind thinking + live → thinking; thinking + not live → error.
 - Chat last kind tool + live → tool_calling.
 - Chat last kind response → idle (TUI may still be open).

@@ -50,15 +50,18 @@ type Probe struct {
 	DSH   func(sessionID string) (Snapshot, error)
 	Grok  func(sessionID string) (Snapshot, error)
 	Codex func(sessionID string) (Snapshot, error)
+
+	// RunStatus decides liveness for the default DSH reader when set; nil uses
+	// the installed default from SetDefaultRunStatus. It does not apply when DSH
+	// is set, because that reader answers liveness itself, and it never applies
+	// to Grok or Codex.
+	RunStatus RunStatus
 }
 
-// Default is the production probe. Tests replace fields.
+// Default is the production probe: every nil field reads the live agent home,
+// and the DSH reader therefore also consults the installed RunStatus hook.
 func Default() Probe {
-	return Probe{
-		DSH:   readDSH,
-		Grok:  readGrok,
-		Codex: readCodex,
-	}
+	return Probe{}
 }
 
 // Read reports one session's activity using the production probe.
@@ -79,9 +82,11 @@ func (p Probe) Read(runner, sessionID string) (Snapshot, error) {
 	var fn func(string) (Snapshot, error)
 	switch runner {
 	case RunnerDSH:
-		fn = p.DSH
-		if fn == nil {
-			fn = readDSH
+		if p.DSH != nil {
+			fn = p.DSH
+		} else {
+			rs := p.runStatusHook()
+			fn = func(id string) (Snapshot, error) { return readDSHStatus(id, rs) }
 		}
 	case RunnerGrok:
 		fn = p.Grok

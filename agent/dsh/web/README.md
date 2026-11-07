@@ -139,6 +139,35 @@ last committed request ID available for retry. No error falls back to a terminal
 `Client` remains available for consumers that already own equivalent session
 orchestration; prefer `Service` to avoid duplicating lifecycle and recovery logic.
 
+## Run status
+
+`Client.Status` asks the daemon's `session/status` RPC which Sessions are
+executing a turn. It is the truth a UI needs for an activity light, and it is
+different from "loaded": a daemon keeps a lease on every Session it loaded, so a
+process lease alone cannot tell a thinking Session from an idle one.
+
+```go
+running, err := client.Status(ctx, nil)          // every loaded Session
+running, err = client.Status(ctx, []string{id})  // just one
+```
+
+An id is absent from the result when the daemon never loaded that Session,
+denies it to the caller, or does not know it — a Session opened by a plain `dsh`
+TUI is not in the daemon's registry. Absence means unknown, not idle.
+
+`RunStatus` wraps `Status` into the per-Session liveness hook that
+`agent/sessionactivity` reads, caching one batch answer per TTL:
+
+```go
+sessionactivity.SetDefaultRunStatus(dshweb.NewRunStatus(dshweb.Client{}).Running)
+```
+
+The hook is consulted only for DSH Sessions, and only to decide "running". It
+must never be installed for a different daemon than the one that loaded the
+Session, because a Session ID is answered only by its own daemon. A failed
+refresh reports unknown for everything instead of replaying a stale answer, so
+the activity reader falls back to the process lease.
+
 ## Verification
 
 ```sh

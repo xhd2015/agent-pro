@@ -30,7 +30,7 @@ func (p Probe) Follow(runner, sessionID string, afterSeq int64, tail int) (Snaps
 	}
 	switch runner {
 	case RunnerDSH:
-		return followDSH(sessionID, afterSeq, tail)
+		return followDSHStatus(sessionID, afterSeq, tail, p.runStatusHook())
 	case RunnerGrok:
 		return followGrok(sessionID, afterSeq, tail)
 	case RunnerCodex:
@@ -40,13 +40,15 @@ func (p Probe) Follow(runner, sessionID string, afterSeq int64, tail int) (Snaps
 	}
 }
 
-func followDSH(sessionID string, afterSeq int64, tail int) (Snapshot, []dshsessions.TranscriptRow, error) {
+// followDSHStatus follows a DSH Session, deciding liveness exactly as
+// readDSHStatus does so the transcript card and the activity read agree.
+func followDSHStatus(sessionID string, afterSeq int64, tail int, rs RunStatus) (Snapshot, []dshsessions.TranscriptRow, error) {
 	cur, err := dshTail(sessionID)
 	if err != nil {
 		return Snapshot{}, nil, err
 	}
-	ids, liveKnown := dshLiveIDs()
-	snap := snapshotFromTail(cur, liveKnown && ids[sessionID], liveKnown)
+	live, liveKnown := dshLiveness(sessionID, rs)
+	snap := snapshotFromTail(cur, live, liveKnown)
 	snap.Runner = RunnerDSH
 	snap.SessionID = sessionID
 	rows := dshsessions.TranscriptFilter(cur.Rows, afterSeq, tail)

@@ -6,13 +6,23 @@ import (
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 )
 
-func readDSH(sessionID string) (Snapshot, error) {
+// dshLiveness resolves one DSH Session's liveness, combining the process lease
+// with the optional RunStatus hook. Both the activity read and the transcript
+// follow use it so the Messages card and the activity dot cannot disagree.
+func dshLiveness(sessionID string, rs RunStatus) (live, known bool) {
+	ids, leaseKnown := dshLiveIDs()
+	return pickLive(sessionID, leaseKnown && ids[sessionID], leaseKnown, rs)
+}
+
+// readDSHStatus reports one DSH Session, letting rs decide liveness when it
+// answers for that Session; a nil or silent rs keeps the process-lease answer.
+func readDSHStatus(sessionID string, rs RunStatus) (Snapshot, error) {
 	cur, err := dshTail(sessionID)
 	if err != nil {
 		return Snapshot{}, err
 	}
-	ids, liveKnown := dshLiveIDs()
-	snap := snapshotFromTail(cur, liveKnown && ids[sessionID], liveKnown)
+	live, liveKnown := dshLiveness(sessionID, rs)
+	snap := snapshotFromTail(cur, live, liveKnown)
 	snap.Runner = RunnerDSH
 	snap.SessionID = sessionID
 	return snap, nil
