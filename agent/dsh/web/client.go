@@ -157,20 +157,33 @@ func (c Client) CreateWithOptions(ctx context.Context, opts CreateOptions) (Crea
 // Send queues a prompt (or stores a draft). A caller-supplied requestID is reused
 // across retries so an ambiguous transport failure does not enqueue twice.
 func (c Client) Send(ctx context.Context, sessionID, requestID, text string, noSubmit bool) error {
-	if strings.TrimSpace(sessionID) == "" || strings.TrimSpace(text) == "" || strings.TrimSpace(requestID) == "" {
-		return fmt.Errorf("DSH session, request ID and prompt are required")
+	if strings.TrimSpace(sessionID) == "" || strings.TrimSpace(text) == "" {
+		return fmt.Errorf("DSH session and prompt are required")
 	}
-	request := map[string]any{"sessionId": sessionID}
-	method := "session/prompt"
 	if noSubmit {
-		method = "session/setDraft"
-		request["text"] = text
-	} else {
-		request["requestId"] = requestID
-		request["mode"] = "queue"
-		request["content"] = []map[string]string{{"type": "text", "text": text}}
+		return c.SetDraft(ctx, sessionID, text)
 	}
-	return c.rpc(ctx, method, map[string]any{"request": request}, nil)
+	if strings.TrimSpace(requestID) == "" {
+		return fmt.Errorf("DSH request ID is required")
+	}
+	request := map[string]any{
+		"sessionId": sessionID,
+		"requestId": requestID,
+		"mode":      "queue",
+		"content":   []map[string]string{{"type": "text", "text": text}},
+	}
+	return c.rpc(ctx, "session/prompt", map[string]any{"request": request}, nil)
+}
+
+// SetDraft stores text in the session composer without submitting a turn, so a
+// caller can hand a prepared prompt to the operator for review. It is the
+// transport behind Send(noSubmit) and the seeding step of a fork.
+func (c Client) SetDraft(ctx context.Context, sessionID, text string) error {
+	if strings.TrimSpace(sessionID) == "" || strings.TrimSpace(text) == "" {
+		return fmt.Errorf("DSH session and draft text are required")
+	}
+	request := map[string]any{"sessionId": sessionID, "text": text}
+	return c.rpc(ctx, "session/setDraft", map[string]any{"request": request}, nil)
 }
 
 // Open opens the existing session, or does nothing for BrowserNone without
