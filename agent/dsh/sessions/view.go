@@ -15,7 +15,7 @@ type View struct {
 type Message struct {
 	Seq     int64    `json:"seq"`
 	Time    int64    `json:"time"`
-	Kind    string   `json:"kind"` // user | assistant | tool | thinking | error | aborted
+	Kind    string   `json:"kind"` // user | assistant | tool | thinking | error | aborted | command
 	Text    string   `json:"text,omitempty"`
 	Sum     string   `json:"sum,omitempty"`
 	Tool    string   `json:"tool,omitempty"`

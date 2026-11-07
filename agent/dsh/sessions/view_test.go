@@ -131,3 +131,41 @@ func TestViewCachesProjection(t *testing.T) {
 		t.Fatalf("grown view rows=%d ptr-equal=%v", len(third.Rows), third == first)
 	}
 }
+
+func TestProjectCommandRunFoldsDone(t *testing.T) {
+	events := []Event{
+		{Type: "user/message", Seq: 1, Time: 1, Data: json.RawMessage(`{"source":{"kind":"user"},"content":[{"type":"text","text":"hi"}]}`)},
+		{Type: "command/run", Seq: 2, Time: 2, Data: json.RawMessage(`{"commandId":"c1","name":"compact","source":{"kind":"user"}}`)},
+		{Type: "command/done", Seq: 3, Time: 3, Data: json.RawMessage(`{"commandId":"c1","kind":"success","text":"Compacted 42 history items (~12k tokens)."}`)},
+	}
+	got := Project(events)
+	if len(got) != 2 || got[0].Kind != "user" || got[1].Kind != TranscriptCommand {
+		t.Fatalf("kinds=%v", kindsOf(got))
+	}
+	row := got[1]
+	if row.Tool != "compact" || row.Sum != "success" || row.Text != "Compacted 42 history items (~12k tokens)." {
+		t.Fatalf("command=%+v", row)
+	}
+	if row.Seq != 2 {
+		t.Fatalf("seq=%d want run seq", row.Seq)
+	}
+}
+
+func TestProjectCommandRunAloneIsPending(t *testing.T) {
+	got := Project([]Event{
+		{Type: "command/run", Seq: 8, Time: 8, Data: json.RawMessage(`{"commandId":"c2","name":"compact","source":{"kind":"user"}}`)},
+	})
+	if len(got) != 1 || got[0].Kind != TranscriptCommand || got[0].Tool != "compact" || got[0].Text != "" || got[0].Sum != "" {
+		t.Fatalf("pending=%+v", got)
+	}
+}
+
+func TestProjectCommandDoneError(t *testing.T) {
+	got := Project([]Event{
+		{Type: "command/run", Seq: 1, Time: 1, Data: json.RawMessage(`{"commandId":"c3","name":"compact"}`)},
+		{Type: "command/done", Seq: 2, Time: 2, Data: json.RawMessage(`{"commandId":"c3","kind":"error","text":"No compactable history yet."}`)},
+	})
+	if len(got) != 1 || got[0].Sum != "error" || got[0].Text != "No compactable history yet." {
+		t.Fatalf("error=%+v", got)
+	}
+}

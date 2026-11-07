@@ -11,8 +11,25 @@ import (
 // tool summaries, turn-end errors). It does not filter afterSeq/tail.
 func Project(events []Event) []Message {
 	out := make([]Message, 0, len(events))
+	runAt := map[string]int{}
 	for _, event := range events {
-		out = append(out, projectEvent(event)...)
+		switch event.Type {
+		case "command/run":
+			id := commandID(event)
+			if id != "" {
+				runAt[id] = len(out)
+			}
+			out = append(out, commandRunMessage(event))
+		case "command/done":
+			id := commandID(event)
+			if i, ok := runAt[id]; ok {
+				applyCommandDone(&out[i], event)
+			} else {
+				out = append(out, commandDoneMessage(event))
+			}
+		default:
+			out = append(out, projectEvent(event)...)
+		}
 	}
 	byCall := map[string]*Ask{}
 	for i := range out {
@@ -33,6 +50,9 @@ func Project(events []Event) []Message {
 }
 
 func projectEvent(event Event) []Message {
+	if event.Type == "command/run" || event.Type == "command/done" {
+		return nil
+	}
 	if event.Type == "turn/end" {
 		return turnEndRows(event)
 	}
