@@ -154,6 +154,61 @@ func TestModelCatalogDistinguishesEmptyCatalogFromMalformedData(t *testing.T) {
 	}
 }
 
+func TestSessionModelReadsNextAndLastUsed(t *testing.T) {
+	t.Parallel()
+	value := map[string]any{
+		"kind": "sequenced", "asOfSeq": 9,
+		"values": map[string]any{"modelSelection": map[string]any{
+			"next":     ModelSelection{Provider: "llm-proxy-grok", Model: "grok-4.6", ReasoningEffort: "high"},
+			"lastUsed": ModelSelection{Provider: "deepseek-official", Model: "deepseek-v4-flash"},
+		}},
+	}
+	got, err := sessionModelClient(t, value, "s-model").SessionModel(context.Background(), "s-model")
+	if err != nil || got.Next == nil || got.Next.Model != "grok-4.6" || got.LastUsed == nil || got.LastUsed.Model != "deepseek-v4-flash" {
+		t.Fatal(got, err)
+	}
+}
+
+func TestSessionModelBlankIsNewSession(t *testing.T) {
+	t.Parallel()
+	for _, value := range []any{nil, map[string]any{"kind": "sequenced", "values": map[string]any{}}} {
+		got, err := sessionModelClient(t, value, "blank").SessionModel(context.Background(), "blank")
+		if err != nil || got.Next != nil || got.LastUsed != nil {
+			t.Fatal(value, got, err)
+		}
+	}
+}
+
+func TestSessionModelRequiresSessionID(t *testing.T) {
+	t.Parallel()
+	if _, err := (Client{}).SessionModel(context.Background(), "  "); err == nil || !strings.Contains(err.Error(), "session is required") {
+		t.Fatal(err)
+	}
+}
+
+func sessionModelClient(t *testing.T, value any, wantSession string) Client {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			RPCID   string `json:"rpcId"`
+			Method  string `json:"method"`
+			Payload struct {
+				Args map[string]any `json:"args"`
+			} `json:"payload"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+		}
+		req, _ := request.Payload.Args["request"].(map[string]any)
+		if request.Method != "session/projections" || r.URL.Path != "/api/session/projections" || req["sessionId"] != wantSession {
+			t.Errorf("unexpected projections RPC: %+v", request)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"type": "server-response", "rpcId": request.RPCID, "result": map[string]any{"ok": true, "value": value}})
+	}))
+	t.Cleanup(server.Close)
+	return Client{ReadListen: func() (Listen, error) { return Listen{Origin: server.URL, Token: "tok"}, nil }}
+}
+
 func catalogClient(t *testing.T, value any) Client {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

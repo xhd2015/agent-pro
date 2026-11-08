@@ -1,7 +1,9 @@
 package web
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -80,6 +82,42 @@ func (c Client) ModelCatalog(ctx context.Context) (ModelCatalog, error) {
 		}
 	}
 	return catalog, nil
+}
+
+// SessionModel is the durable model-selection fold for one Session. Next is the
+// pending route for the next request; LastUsed is the last consumed route.
+// Both nil means a new Session that has never selected a model.
+type SessionModel struct {
+	Next     *ModelSelection `json:"next"`
+	LastUsed *ModelSelection `json:"lastUsed"`
+}
+
+// SessionModel reads session/projections and returns only modelSelection.
+func (c Client) SessionModel(ctx context.Context, sessionID string) (SessionModel, error) {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return SessionModel{}, fmt.Errorf("DSH session is required")
+	}
+	var raw json.RawMessage
+	if err := c.rpc(ctx, "session/projections", map[string]any{"request": map[string]any{"sessionId": sessionID}}, &raw); err != nil {
+		return SessionModel{}, err
+	}
+	return sessionModelFromProjections(raw), nil
+}
+
+func sessionModelFromProjections(raw json.RawMessage) SessionModel {
+	if len(bytes.TrimSpace(raw)) == 0 || string(raw) == "null" {
+		return SessionModel{}
+	}
+	var envelope struct {
+		Values struct {
+			ModelSelection *SessionModel `json:"modelSelection"`
+		} `json:"values"`
+	}
+	if json.Unmarshal(raw, &envelope) != nil || envelope.Values.ModelSelection == nil {
+		return SessionModel{}
+	}
+	return *envelope.Values.ModelSelection
 }
 
 func normalizeModelSelection(selection *ModelSelection) (*ModelSelection, error) {
