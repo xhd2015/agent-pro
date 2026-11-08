@@ -165,8 +165,8 @@ sessionactivity.SetDefaultRunStatus(dshweb.NewRunStatus(dshweb.Client{}).Running
 The hook is consulted only for DSH Sessions, and only to decide "running". It
 must never be installed for a different daemon than the one that loaded the
 Session, because a Session ID is answered only by its own daemon. A failed
-refresh reports unknown for everything instead of replaying a stale answer, so
-the activity reader falls back to the process lease.
+refresh reports unknown for everything instead of replaying a stale answer.
+The activity reader does not fall back to the process lease on `session.lock`.
 
 ## Verification
 

@@ -7,22 +7,18 @@ func TestPickLive(t *testing.T) {
 	running := RunStatus(func(string) (bool, bool) { return true, true })
 	idle := RunStatus(func(string) (bool, bool) { return false, true })
 	cases := []struct {
-		name                  string
-		leaseLive, leaseKnown bool
-		rs                    RunStatus
-		wantLive, wantKnown   bool
+		name                string
+		rs                  RunStatus
+		wantLive, wantKnown bool
 	}{
-		{name: "no hook keeps a live lease", leaseLive: true, leaseKnown: true, wantLive: true, wantKnown: true},
-		{name: "no hook keeps an idle lease", leaseLive: false, leaseKnown: true, wantLive: false, wantKnown: true},
-		{name: "no hook keeps an unknown lease", wantLive: false, wantKnown: false},
-		{name: "running agent is live even without a lease", rs: running, wantLive: true, wantKnown: true},
-		{name: "idle agent overrides a held lease", leaseLive: true, leaseKnown: true, rs: idle, wantLive: false, wantKnown: true},
-		{name: "unknown id falls back to a held lease", leaseLive: true, leaseKnown: true, rs: unknown, wantLive: true, wantKnown: true},
-		{name: "unknown id and unknown lease stay unknown", rs: unknown, wantLive: false, wantKnown: false},
+		{name: "no hook is unknown, not a lock probe", wantLive: false, wantKnown: false},
+		{name: "running agent is live", rs: running, wantLive: true, wantKnown: true},
+		{name: "idle agent is not live", rs: idle, wantLive: false, wantKnown: true},
+		{name: "unknown id stays unknown", rs: unknown, wantLive: false, wantKnown: false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			live, known := pickLive("s1", tc.leaseLive, tc.leaseKnown, tc.rs)
+			live, known := pickLive("s1", tc.rs)
 			if live != tc.wantLive || known != tc.wantKnown {
 				t.Fatalf("got live=%v known=%v, want live=%v known=%v", live, known, tc.wantLive, tc.wantKnown)
 			}
@@ -86,16 +82,16 @@ func TestProbeRunStatusDoesNotLeak(t *testing.T) {
 	}
 }
 
-// dshLiveness must prefer an answered hook and otherwise report whatever the
-// process lease cache knows.
-func TestDSHLivenessFallsBackToLease(t *testing.T) {
+func TestDSHLivenessUsesOnlyRunStatus(t *testing.T) {
 	running := RunStatus(func(string) (bool, bool) { return true, true })
 	if live, known := dshLiveness("no-such-session", running); !live || !known {
 		t.Fatalf("answered hook: live=%v known=%v", live, known)
 	}
-	ids, leaseKnown := dshLiveIDs()
-	wantLive := leaseKnown && ids["no-such-session"]
-	if live, known := dshLiveness("no-such-session", nil); live != wantLive || known != leaseKnown {
-		t.Fatalf("no hook: live=%v known=%v, want live=%v known=%v", live, known, wantLive, leaseKnown)
+	if live, known := dshLiveness("no-such-session", nil); live || known {
+		t.Fatalf("no hook must not probe session.lock: live=%v known=%v", live, known)
+	}
+	unknown := RunStatus(func(string) (bool, bool) { return false, false })
+	if live, known := dshLiveness("no-such-session", unknown); live || known {
+		t.Fatalf("silent hook must not probe session.lock: live=%v known=%v", live, known)
 	}
 }

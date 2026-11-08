@@ -6,16 +6,16 @@ import (
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 )
 
-// dshLiveness resolves one DSH Session's liveness, combining the process lease
-// with the optional RunStatus hook. Both the activity read and the transcript
-// follow use it so the Messages card and the activity dot cannot disagree.
+// dshLiveness is running vs not-running from the daemon's session/status RPC.
+// It never inspects session.lock: a dsh web process holds that lease for every
+// loaded Session, so the lock cannot tell a turn in flight from an idle one.
 func dshLiveness(sessionID string, rs RunStatus) (live, known bool) {
-	ids, leaseKnown := dshLiveIDs()
-	return pickLive(sessionID, leaseKnown && ids[sessionID], leaseKnown, rs)
+	return pickLive(sessionID, rs)
 }
 
-// readDSHStatus reports one DSH Session, letting rs decide liveness when it
-// answers for that Session; a nil or silent rs keeps the process-lease answer.
+// readDSHStatus reports one DSH Session. Liveness is only the RunStatus hook
+// (session/status). A nil or silent hook leaves live unknown; Classify then
+// uses the log only.
 func readDSHStatus(sessionID string, rs RunStatus) (Snapshot, error) {
 	cur, err := dshTail(sessionID)
 	if err != nil {
