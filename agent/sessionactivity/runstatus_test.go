@@ -32,7 +32,7 @@ func TestPickLookup(t *testing.T) {
 	}
 }
 
-func TestKindFromRunIgnoresTailWhenNotRunning(t *testing.T) {
+func TestKindFromRunWithoutLiveness(t *testing.T) {
 	tail := &dshsessions.Tail{}
 	cases := []struct {
 		name string
@@ -41,7 +41,7 @@ func TestKindFromRunIgnoresTailWhenNotRunning(t *testing.T) {
 	}{
 		{name: "unanswered is error", look: Lookup{}, want: ErrorKind},
 		{name: "absent is not_found", look: Lookup{Answered: true}, want: NotFound},
-		{name: "false is idle", look: Lookup{Answered: true, Present: true}, want: Idle},
+		{name: "false classifies an empty tail as idle", look: Lookup{Answered: true, Present: true}, want: Idle},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

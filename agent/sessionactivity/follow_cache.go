@@ -48,13 +48,12 @@ func snapshotFromTail(tail *dshsessions.Tail, look Lookup) Snapshot {
 		snap.Kind = NotFound
 		return snap
 	}
-	if !look.Running {
-		snap.Kind = Idle
-		return snap
-	}
-	act := tail.Activity(true, true)
+	// The session is present, so liveness is known: classify the tail either way.
+	// A not-running session still carries its last turn/end in the log, and that
+	// durable error or abort must not be flattened into idle.
+	act := tail.Activity(look.Running, true)
 	snap.Kind = Kind(act.Kind)
 	snap.Detail = act.Detail
-	snap.Live = true
+	snap.Live = act.Live
 	return snap
 }

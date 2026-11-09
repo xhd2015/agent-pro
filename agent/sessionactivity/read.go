@@ -10,9 +10,11 @@ func dshLookup(sessionID string, rs RunStatus) Lookup {
 	return pickLookup(sessionID, rs)
 }
 
-// readDSHStatus reports one DSH Session. Kind comes from session/status first:
-// running classifies the tail; false is idle; a successful map without this id
-// is not_found; an unanswered RPC is error. The log is never a fallback.
+// readDSHStatus reports one DSH Session. Kind comes from session/status plus the
+// tail: an unanswered RPC is error and a successful map without this id is
+// not_found, but any answered, present session is classified from its log with
+// liveness taken from the answer. So a durable turn/end error or abort still
+// shows through after the process is gone.
 func readDSHStatus(sessionID string, rs RunStatus) (Snapshot, error) {
 	look := dshLookup(sessionID, rs)
 	cur, err := dshTail(sessionID)
