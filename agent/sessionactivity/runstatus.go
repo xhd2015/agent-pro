@@ -5,9 +5,13 @@ import "sync"
 // Lookup is one Session's answer from session/status.
 //
 // Answered is whether the daemon replied. Present is whether this id was in
-// the map. Running is the map value when Present. The DSH reader does not
-// fall back to the log when Answered is true: missing means not_found,
-// false means idle, true means classify the tail.
+// the map. Running is the map value when Present.
+//
+// The map only holds sessions the daemon has loaded, so absence is not
+// evidence that a log is gone: missing means idle, exactly like Present with
+// Running false. Both read the log header for metadata; only true reads the
+// tail. not_found is reserved for a header the store cannot find at all, and
+// an unanswered RPC is error.
 type Lookup struct {
 	Running  bool
 	Present  bool

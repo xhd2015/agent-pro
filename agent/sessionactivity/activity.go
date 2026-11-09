@@ -3,6 +3,13 @@
 // Eluc (and any other caller) should use Read rather than re-implementing
 // per-runner log scans. Kinds are idle, thinking, responding, tool_calling,
 // waiting, error, aborted, and not_found.
+//
+// DSH logs are read in two depths. A session session/status lists is tailed and
+// classified with its liveness, so a failed or aborted turn survives the
+// process exiting; a session the answered map does not list is answered from
+// its log header, because the daemon has no state for it and its tail would
+// only cost time. not_found therefore means the log is gone, never merely "not
+// loaded by the daemon".
 package sessionactivity
 
 import (

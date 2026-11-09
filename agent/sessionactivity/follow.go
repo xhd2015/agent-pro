@@ -41,28 +41,34 @@ func (p Probe) Follow(runner, sessionID string, afterSeq int64, tail int) (Snaps
 }
 
 // followDSHStatus follows a DSH Session, deciding liveness exactly as
-// readDSHStatus does so the transcript card and the activity read agree.
+// readDSHStatus does so the transcript card and the activity read agree. The
+// transcript always comes from the log, because rendering it is why this call
+// exists; only a failed tail may not downgrade a listed session to not_found.
 func followDSHStatus(sessionID string, afterSeq int64, tail int, rs RunStatus) (Snapshot, []dshsessions.TranscriptRow, error) {
 	look := dshLookup(sessionID, rs)
-	cur, err := dshTail(sessionID)
-	if look.Answered && look.Present && look.Running && err != nil {
-		return Snapshot{}, nil, err
+	cur, tailErr := dshTailFn(sessionID)
+	if look.Running && tailErr != nil {
+		return Snapshot{}, nil, tailErr
 	}
-	var snap Snapshot
-	var rows []dshsessions.TranscriptRow
-	if err == nil {
-		snap = snapshotFromTail(cur, look)
-		rows = dshsessions.TranscriptFilter(cur.Rows, afterSeq, tail)
-	} else if !look.Answered {
-		snap = Snapshot{Kind: ErrorKind, Detail: "dsh status unreachable"}
-	} else if !look.Present {
-		snap = Snapshot{Kind: NotFound}
-	} else {
-		snap = Snapshot{Kind: Idle}
+	if look.Answered && look.Present && tailErr == nil {
+		snap := snapshotFromTail(cur, look)
+		snap.Runner = RunnerDSH
+		snap.SessionID = sessionID
+		rows := dshsessions.TranscriptFilter(cur.Rows, afterSeq, tail)
+		return snap, append([]dshsessions.TranscriptRow{}, rows...), nil
 	}
-	snap.Runner = RunnerDSH
-	snap.SessionID = sessionID
-	return snap, append([]dshsessions.TranscriptRow{}, rows...), nil
+	// Not listed by the daemon (or its status is unreachable): answer from the
+	// header, and keep whatever rows the log still has.
+	snap := snapshotFromHeader(sessionID)
+	if !look.Answered {
+		snap.Kind = ErrorKind
+		snap.Detail = "dsh status unreachable"
+	}
+	rows := []dshsessions.TranscriptRow{}
+	if tailErr == nil {
+		rows = append(rows, dshsessions.TranscriptFilter(cur.Rows, afterSeq, tail)...)
+	}
+	return snap, rows, nil
 }
 
 func followGrok(sessionID string, afterSeq int64, tail int) (Snapshot, []dshsessions.TranscriptRow, error) {

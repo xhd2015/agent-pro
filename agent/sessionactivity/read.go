@@ -10,34 +10,34 @@ func dshLookup(sessionID string, rs RunStatus) Lookup {
 	return pickLookup(sessionID, rs)
 }
 
-// readDSHStatus reports one DSH Session. Kind comes from session/status plus the
-// tail: an unanswered RPC is error and a successful map without this id is
-// not_found, but any answered, present session is classified from its log with
-// liveness taken from the answer. So a durable turn/end error or abort still
-// shows through after the process is gone.
+// readDSHStatus reports one DSH Session. session/status decides how deep the
+// log is read: an unanswered RPC is error without touching the disk, an id
+// missing from an answered map is only known to be not loaded (so its metadata
+// comes from the log header, never a tail), and a listed session is classified
+// from its tail with liveness taken from the answer, so a durable turn/end
+// error or abort still shows through after the process is gone. not_found is
+// reserved for a header that proves the log itself is gone.
 func readDSHStatus(sessionID string, rs RunStatus) (Snapshot, error) {
 	look := dshLookup(sessionID, rs)
-	cur, err := dshTail(sessionID)
-	if look.Answered && look.Present && look.Running {
-		if err != nil {
+	if !look.Answered {
+		return Snapshot{
+			Runner:    RunnerDSH,
+			SessionID: sessionID,
+			Kind:      ErrorKind,
+			Detail:    "dsh status unreachable",
+		}, nil
+	}
+	if !look.Present {
+		return snapshotFromHeader(sessionID), nil
+	}
+	cur, err := dshTailFn(sessionID)
+	if err != nil {
+		if look.Running {
 			return Snapshot{}, err
 		}
-		snap := snapshotFromTail(cur, look)
-		snap.Runner = RunnerDSH
-		snap.SessionID = sessionID
-		return snap, nil
+		return snapshotFromHeader(sessionID), nil
 	}
-	snap := Snapshot{Runner: RunnerDSH, SessionID: sessionID}
-	if err == nil {
-		snap = snapshotFromTail(cur, look)
-	} else if !look.Answered {
-		snap.Kind = ErrorKind
-		snap.Detail = "dsh status unreachable"
-	} else if !look.Present {
-		snap.Kind = NotFound
-	} else {
-		snap.Kind = Idle
-	}
+	snap := snapshotFromTail(cur, look)
 	snap.Runner = RunnerDSH
 	snap.SessionID = sessionID
 	return snap, nil
