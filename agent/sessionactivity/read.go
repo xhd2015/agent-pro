@@ -21,10 +21,11 @@ func readDSHStatus(sessionID string, rs RunStatus) (Snapshot, error) {
 	look := dshLookup(sessionID, rs)
 	if !look.Answered {
 		return Snapshot{
-			Runner:    RunnerDSH,
-			SessionID: sessionID,
-			Kind:      ErrorKind,
-			Detail:    "dsh status unreachable",
+			Runner:     RunnerDSH,
+			SessionID:  sessionID,
+			Kind:       ErrorKind,
+			Detail:     "dsh status unreachable",
+			Unanswered: true,
 		}, nil
 	}
 	if !look.Present {

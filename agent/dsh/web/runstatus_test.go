@@ -148,3 +148,38 @@ func TestRunStatusFailureReportsUnknown(t *testing.T) {
 		t.Fatalf("expected one retry after the window, got %d calls", got)
 	}
 }
+
+// A stalled daemon must not be mistaken for a broken one by the batch clock:
+// the default window outlasts a queued reply, and a caller that cannot wait
+// shortens it explicitly.
+func TestRunStatusTimeoutOutlastsAStall(t *testing.T) {
+	if runStatusTimeout < time.Minute {
+		t.Fatalf("default status timeout=%s, want at least a minute", runStatusTimeout)
+	}
+	var calls int32
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		// Only the client's own deadline can end this handler before release:
+		// an override that never fired would stall the test for 5s.
+		select {
+		case <-release:
+		case <-time.After(5 * time.Second):
+		}
+	}))
+	defer srv.Close()
+	defer close(release)
+
+	rs := NewRunStatus(statusClient(srv))
+	rs.Timeout = 50 * time.Millisecond
+	started := time.Now()
+	if live, known := rs.Running("running-session"); live || known {
+		t.Fatalf("stalled refresh: live=%v known=%v", live, known)
+	}
+	if elapsed := time.Since(started); elapsed < 40*time.Millisecond || elapsed > 2*time.Second {
+		t.Fatalf("override timeout took %s, want about 50ms", elapsed)
+	}
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Fatalf("expected one RPC, got %d", got)
+	}
+}

@@ -12,10 +12,13 @@ import (
 // turn that starts or ends within the second.
 const DefaultRunStatusTTL = time.Second
 
-// runStatusTimeout caps one status RPC. The daemon answers from memory, so a
-// slow reply means it is saturated or gone, and the caller's lease fallback is
-// better than a long stall.
-const runStatusTimeout = 3 * time.Second
+// runStatusTimeout caps one status RPC. The daemon answers from memory, but a
+// saturated event loop (a page reload, a large session list, a cold registry)
+// can queue one reply for a long while, and an aborted batch turns every
+// Session into an error the caller only gets to see as a flash. A minute is
+// long enough to outlast a stall and short enough to bound a dead daemon; a
+// caller that cannot wait sets RunStatus.Timeout.
+const runStatusTimeout = 60 * time.Second
 
 // Status asks the daemon which Sessions are executing a turn.
 //
@@ -56,6 +59,9 @@ func (c Client) Status(ctx context.Context, ids []string) (map[string]bool, erro
 type RunStatus struct {
 	Client Client
 	TTL    time.Duration
+	// Timeout overrides how long one status RPC may take. Zero uses
+	// runStatusTimeout.
+	Timeout time.Duration
 	// Now overrides the clock in tests. Nil uses time.Now.
 	Now func() time.Time
 
@@ -110,7 +116,11 @@ func (r *RunStatus) current() (map[string]bool, bool) {
 	if !r.fetchedAt.IsZero() && now.Sub(r.fetchedAt) < ttl {
 		return r.running, r.known
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), runStatusTimeout)
+	timeout := r.Timeout
+	if timeout <= 0 {
+		timeout = runStatusTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	running, err := r.Client.Status(ctx, nil)
 	r.fetchedAt = now

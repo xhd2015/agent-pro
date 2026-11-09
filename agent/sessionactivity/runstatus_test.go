@@ -94,6 +94,9 @@ func TestReadDSHStatusTailsOnlyLoadedSessions(t *testing.T) {
 		wantTails   int
 		wantHeaders int
 		wantDetail  string
+		// wantUnanswered marks a placeholder snapshot: the RPC did not answer,
+		// so the kind is a fallback rather than the session's real phase.
+		wantUnanswered bool
 	}{
 		{
 			name: "running reads the log", rs: running,
@@ -114,7 +117,7 @@ func TestReadDSHStatusTailsOnlyLoadedSessions(t *testing.T) {
 		},
 		{
 			name: "unanswered rpc is error without touching disk", rs: nil,
-			wantKind: ErrorKind, wantDetail: "dsh status unreachable",
+			wantKind: ErrorKind, wantDetail: "dsh status unreachable", wantUnanswered: true,
 		},
 	}
 	for _, tc := range cases {
@@ -138,6 +141,9 @@ func TestReadDSHStatusTailsOnlyLoadedSessions(t *testing.T) {
 			}
 			if tc.wantDetail != "" && snap.Detail != tc.wantDetail {
 				t.Fatalf("detail=%q want %q", snap.Detail, tc.wantDetail)
+			}
+			if snap.Unanswered != tc.wantUnanswered {
+				t.Fatalf("unanswered=%v want %v", snap.Unanswered, tc.wantUnanswered)
 			}
 		})
 	}

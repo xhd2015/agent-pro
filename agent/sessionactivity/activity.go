@@ -51,6 +51,11 @@ type Snapshot struct {
 	Title     string `json:"title,omitempty"`
 	UpdatedAt int64  `json:"updated_at,omitempty"`
 	Outcome   string `json:"outcome,omitempty"`
+	// Unanswered marks a placeholder snapshot taken while the status source
+	// did not answer (RPC timeout, daemon still starting). Kind stays ErrorKind
+	// so every existing consumer keeps its fallback, but a caller that can show
+	// "not known yet" must not present this as the session's real state.
+	Unanswered bool `json:"unanswered,omitempty"`
 }
 
 // Probe is the injectable entry point. Nil fields use the live agent homes.
