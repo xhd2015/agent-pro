@@ -6,23 +6,36 @@ import (
 	"github.com/xhd2015/agent-pro/pkgs/agenttty"
 )
 
-// dshLiveness is running vs not-running from the daemon's session/status RPC.
-// It never inspects session.lock: a dsh web process holds that lease for every
-// loaded Session, so the lock cannot tell a turn in flight from an idle one.
-func dshLiveness(sessionID string, rs RunStatus) (live, known bool) {
-	return pickLive(sessionID, rs)
+func dshLookup(sessionID string, rs RunStatus) Lookup {
+	return pickLookup(sessionID, rs)
 }
 
-// readDSHStatus reports one DSH Session. Liveness is only the RunStatus hook
-// (session/status). A nil or silent hook leaves live unknown; Classify then
-// uses the log only.
+// readDSHStatus reports one DSH Session. Kind comes from session/status first:
+// running classifies the tail; false is idle; a successful map without this id
+// is not_found; an unanswered RPC is error. The log is never a fallback.
 func readDSHStatus(sessionID string, rs RunStatus) (Snapshot, error) {
+	look := dshLookup(sessionID, rs)
 	cur, err := dshTail(sessionID)
-	if err != nil {
-		return Snapshot{}, err
+	if look.Answered && look.Present && look.Running {
+		if err != nil {
+			return Snapshot{}, err
+		}
+		snap := snapshotFromTail(cur, look)
+		snap.Runner = RunnerDSH
+		snap.SessionID = sessionID
+		return snap, nil
 	}
-	live, liveKnown := dshLiveness(sessionID, rs)
-	snap := snapshotFromTail(cur, live, liveKnown)
+	snap := Snapshot{Runner: RunnerDSH, SessionID: sessionID}
+	if err == nil {
+		snap = snapshotFromTail(cur, look)
+	} else if !look.Answered {
+		snap.Kind = ErrorKind
+		snap.Detail = "dsh status unreachable"
+	} else if !look.Present {
+		snap.Kind = NotFound
+	} else {
+		snap.Kind = Idle
+	}
 	snap.Runner = RunnerDSH
 	snap.SessionID = sessionID
 	return snap, nil

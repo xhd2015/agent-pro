@@ -2,15 +2,22 @@ package sessionactivity
 
 import "sync"
 
-// RunStatus answers whether one Session is executing a turn right now, as the
-// runner's own agent registry sees it.
+// Lookup is one Session's answer from session/status.
 //
-// known is false when the caller cannot answer for that Session: an unknown id,
-// a runner without a registry, an unreachable daemon, or a Session started
-// outside the daemon (a plain `dsh` TUI session, which nothing registers). A
-// caller treats that as unknown rather than as idle, and does not probe
-// session.lock. An answered true or false is authoritative.
-type RunStatus func(sessionID string) (running bool, known bool)
+// Answered is whether the daemon replied. Present is whether this id was in
+// the map. Running is the map value when Present. The DSH reader does not
+// fall back to the log when Answered is true: missing means not_found,
+// false means idle, true means classify the tail.
+type Lookup struct {
+	Running  bool
+	Present  bool
+	Answered bool
+}
+
+// RunStatus answers whether one Session is executing a turn right now, as the
+// runner's own agent registry sees it. A silent hook (nil, failed RPC) leaves
+// Answered false. An id missing from a successful map is Present false.
+type RunStatus func(sessionID string) Lookup
 
 var (
 	runStatusMu sync.RWMutex
@@ -47,12 +54,9 @@ func (p Probe) runStatusHook() RunStatus {
 	return defaultRunStatus()
 }
 
-// pickLive is running vs not-running from the session/status hook only.
-// A silent hook (nil, unknown id, denied, failed RPC) reports unknown; it
-// never falls back to the process lease on session.lock.
-func pickLive(sessionID string, rs RunStatus) (live, known bool) {
+func pickLookup(sessionID string, rs RunStatus) Lookup {
 	if rs == nil {
-		return false, false
+		return Lookup{}
 	}
 	return rs(sessionID)
 }

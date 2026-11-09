@@ -71,15 +71,22 @@ func NewRunStatus(client Client) *RunStatus {
 	return &RunStatus{Client: client}
 }
 
-// Running reports whether the daemon's registry has sessionID executing a turn.
-// known is false when the daemon did not name the Session or could not answer.
-func (r *RunStatus) Running(sessionID string) (running bool, known bool) {
+// Lookup is the session/status answer for one id: whether the RPC succeeded,
+// whether the id was in the map, and whether that entry is running.
+func (r *RunStatus) Lookup(sessionID string) (running, present, answered bool) {
 	current, answered := r.current()
 	if !answered {
-		return false, false
+		return false, false, false
 	}
 	value, present := current[sessionID]
-	return value, present
+	return value, present, true
+}
+
+// Running reports whether the daemon's registry has sessionID executing a turn.
+// known is true only when the RPC succeeded and named this id.
+func (r *RunStatus) Running(sessionID string) (running bool, known bool) {
+	running, present, answered := r.Lookup(sessionID)
+	return running, answered && present
 }
 
 // current returns the cached batch answer, refreshing it once per TTL.

@@ -8,12 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/xhd2015/agent-pro/agent/sessionactivity"
 )
-
-// The hook this package returns must plug into the activity reader's seam.
-var _ sessionactivity.RunStatus = (&RunStatus{}).Running
 
 // statusServer answers session/status and records what each call asked for.
 func statusServer(t *testing.T, running map[string]bool) (*httptest.Server, *[]map[string]any, *int32) {
@@ -109,8 +104,11 @@ func TestRunStatusCachesOneBatchPerTTL(t *testing.T) {
 	if got := atomic.LoadInt32(calls); got != 1 {
 		t.Fatalf("expected one RPC for two lookups in the window, got %d", got)
 	}
+	if live, present, answered := rs.Lookup("unloaded-session"); live || present || !answered {
+		t.Fatalf("absent id: live=%v present=%v answered=%v", live, present, answered)
+	}
 	if _, known := rs.Running("unloaded-session"); known {
-		t.Fatal("a Session the daemon never named must report unknown")
+		t.Fatal("Running treats an unnamed Session as not known")
 	}
 	now = now.Add(DefaultRunStatusTTL)
 	if live, known := rs.Running("running-session"); !live || !known {

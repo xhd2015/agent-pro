@@ -43,15 +43,25 @@ func (p Probe) Follow(runner, sessionID string, afterSeq int64, tail int) (Snaps
 // followDSHStatus follows a DSH Session, deciding liveness exactly as
 // readDSHStatus does so the transcript card and the activity read agree.
 func followDSHStatus(sessionID string, afterSeq int64, tail int, rs RunStatus) (Snapshot, []dshsessions.TranscriptRow, error) {
+	look := dshLookup(sessionID, rs)
 	cur, err := dshTail(sessionID)
-	if err != nil {
+	if look.Answered && look.Present && look.Running && err != nil {
 		return Snapshot{}, nil, err
 	}
-	live, liveKnown := dshLiveness(sessionID, rs)
-	snap := snapshotFromTail(cur, live, liveKnown)
+	var snap Snapshot
+	var rows []dshsessions.TranscriptRow
+	if err == nil {
+		snap = snapshotFromTail(cur, look)
+		rows = dshsessions.TranscriptFilter(cur.Rows, afterSeq, tail)
+	} else if !look.Answered {
+		snap = Snapshot{Kind: ErrorKind, Detail: "dsh status unreachable"}
+	} else if !look.Present {
+		snap = Snapshot{Kind: NotFound}
+	} else {
+		snap = Snapshot{Kind: Idle}
+	}
 	snap.Runner = RunnerDSH
 	snap.SessionID = sessionID
-	rows := dshsessions.TranscriptFilter(cur.Rows, afterSeq, tail)
 	return snap, append([]dshsessions.TranscriptRow{}, rows...), nil
 }
 

@@ -30,17 +30,31 @@ func dshTail(sessionID string) (*dshsessions.Tail, error) {
 	return tail, nil
 }
 
-func snapshotFromTail(tail *dshsessions.Tail, live, liveKnown bool) Snapshot {
-	act := tail.Activity(live, liveKnown)
-	return Snapshot{
+func snapshotFromTail(tail *dshsessions.Tail, look Lookup) Snapshot {
+	snap := Snapshot{
 		Runner:    RunnerDSH,
 		SessionID: tail.Summary.ID,
-		Kind:      Kind(act.Kind),
-		Detail:    act.Detail,
-		Live:      act.Live,
 		Workspace: tail.Summary.Cwd,
 		Title:     tail.Summary.Title,
 		UpdatedAt: tail.Summary.UpdatedAt,
 		Outcome:   tail.Summary.Outcome,
 	}
+	if !look.Answered {
+		snap.Kind = ErrorKind
+		snap.Detail = "dsh status unreachable"
+		return snap
+	}
+	if !look.Present {
+		snap.Kind = NotFound
+		return snap
+	}
+	if !look.Running {
+		snap.Kind = Idle
+		return snap
+	}
+	act := tail.Activity(true, true)
+	snap.Kind = Kind(act.Kind)
+	snap.Detail = act.Detail
+	snap.Live = true
+	return snap
 }

@@ -2,7 +2,7 @@
 //
 // Eluc (and any other caller) should use Read rather than re-implementing
 // per-runner log scans. Kinds are idle, thinking, responding, tool_calling,
-// waiting, error, and aborted.
+// waiting, error, aborted, and not_found.
 package sessionactivity
 
 import (
@@ -29,6 +29,7 @@ const (
 	Waiting     Kind = "waiting"
 	ErrorKind   Kind = "error"
 	Aborted     Kind = "aborted"
+	NotFound    Kind = "not_found"
 )
 
 // Snapshot is one session's current phase plus durable facts the caller
