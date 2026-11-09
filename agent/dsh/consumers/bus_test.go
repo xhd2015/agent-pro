@@ -677,7 +677,7 @@ func TestNewValidatesConsumers(t *testing.T) {
 	if _, err := New(nil, Options{}); err == nil {
 		t.Fatalf("nil store accepted")
 	}
-	if got := Defaults(); len(got) != 4 {
+	if got := Defaults(); len(got) != 6 {
 		t.Fatalf("defaults = %d consumers", len(got))
 	}
 }

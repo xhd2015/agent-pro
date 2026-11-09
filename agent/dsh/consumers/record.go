@@ -100,6 +100,23 @@ func (r *record) ensure(consumers []Consumer) bool {
 	return false
 }
 
+// covers reports whether the record holds state for every registered consumer,
+// at the version that consumer folds with. A record written by an older build
+// can lack one: reading its absent state as zero would report a real-looking
+// answer, so callers treat an uncovered record as no cache at all.
+func (r *record) covers(consumers []Consumer) bool {
+	if r == nil {
+		return false
+	}
+	for _, consumer := range consumers {
+		entry, ok := r.Consumers[consumer.ID()]
+		if !ok || entry.Version != consumer.Version() {
+			return false
+		}
+	}
+	return true
+}
+
 // slowest is the position of the least advanced consumer.
 func (r *record) slowest() int64 {
 	if len(r.Consumers) == 0 {

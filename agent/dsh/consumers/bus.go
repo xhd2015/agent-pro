@@ -228,6 +228,33 @@ func (b *Bus) Stats() Stats {
 	}
 }
 
+// Peek returns what the folds already know about one session.
+//
+// Peek never reads the log and never waits on a stream: it answers from the
+// in-memory record, or from the one on disk when this process has not touched
+// the session yet. A request handler fills a header or a footer with it instead
+// of paying for a cold fold, where reading a large log costs seconds.
+//
+// The second result is false when nothing usable is cached, and also when the
+// record predates a registered consumer: its absent state would read as zero.
+// CaughtUp reports whether the rows behind the record were folded to the end of
+// the artifact; a caught-up record can still be behind the artifact's current
+// size, so a caller that needs fresh numbers compares Size with the log.
+func (b *Bus) Peek(id string) (Snapshot, bool) {
+	if id == "" {
+		return Snapshot{}, false
+	}
+	lock := b.sessionLock(id)
+	lock.Lock()
+	defer lock.Unlock()
+	rec, err := b.load(id)
+	if err != nil || !rec.covers(b.consumers) {
+		return Snapshot{}, false
+	}
+	b.remember(id, rec)
+	return rec.snapshot(0, 0, 0), true
+}
+
 // Sync brings one session up to date and returns its consumers' state.
 //
 // The stream resumes from the cached frame boundary and reads only new bytes.

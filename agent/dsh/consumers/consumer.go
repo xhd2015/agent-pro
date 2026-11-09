@@ -106,6 +106,8 @@ func Defaults() []Consumer {
 		Outcome(),
 		Question(),
 		Usage(),
+		Model(),
+		SessionStats(),
 	}
 }
 
