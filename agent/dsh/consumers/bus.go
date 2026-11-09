@@ -134,6 +134,11 @@ type Bus struct {
 	mu      sync.Mutex
 	records map[string]*record
 
+	// latest is the snapshot each session last finished a Sync with. Peek reads
+	// it instead of the record so it never takes the session lock, which a cold
+	// fold holds for seconds.
+	latest sync.Map // session ID -> Snapshot
+
 	locks sync.Map // session ID -> *sync.Mutex
 	sem   chan struct{}
 
@@ -230,10 +235,15 @@ func (b *Bus) Stats() Stats {
 
 // Peek returns what the folds already know about one session.
 //
-// Peek never reads the log and never waits on a stream: it answers from the
-// in-memory record, or from the one on disk when this process has not touched
-// the session yet. A request handler fills a header or a footer with it instead
-// of paying for a cold fold, where reading a large log costs seconds.
+// Peek never reads the log and never waits on a stream: it answers with the
+// snapshot the last Sync finished, the in-memory record, or the one on disk when
+// this process has not touched the session yet. A request handler fills a header
+// or a footer with it instead of paying for a cold fold, where reading a large
+// log costs seconds.
+//
+// A fold in flight does not block Peek. The reporter answers with what the
+// previous fold left, so a poll during a cold fold costs a map lookup instead of
+// the several seconds the fold holds its session lock for.
 //
 // The second result is false when nothing usable is cached, and also when the
 // record predates a registered consumer: its absent state would read as zero.
@@ -244,9 +254,12 @@ func (b *Bus) Peek(id string) (Snapshot, bool) {
 	if id == "" {
 		return Snapshot{}, false
 	}
-	lock := b.sessionLock(id)
-	lock.Lock()
-	defer lock.Unlock()
+	if cached, ok := b.latest.Load(id); ok {
+		return cached.(Snapshot), true
+	}
+	// The record file is written by rename, so reading it without the session
+	// lock cannot observe a half-written record. A miss here is not cached: the
+	// next caller retries, and a Sync in flight will publish its result.
 	rec, err := b.load(id)
 	if err != nil || !rec.covers(b.consumers) {
 		return Snapshot{}, false
@@ -262,6 +275,15 @@ func (b *Bus) Peek(id string) (Snapshot, bool) {
 // origin and the stream is re-read while the unchanged consumers skip rows they
 // already folded.
 func (b *Bus) Sync(id string) (Snapshot, error) {
+	snapshot, err := b.sync(id)
+	if err != nil {
+		return snapshot, err
+	}
+	b.publish(snapshot)
+	return snapshot, nil
+}
+
+func (b *Bus) sync(id string) (Snapshot, error) {
 	if id == "" {
 		return Snapshot{}, fmt.Errorf("consumers: session id is required")
 	}
@@ -548,4 +570,15 @@ func (b *Bus) forget(id string) {
 	b.mu.Lock()
 	delete(b.records, id)
 	b.mu.Unlock()
+	b.latest.Delete(id)
+}
+
+// publish records what one finished pass left, for the next Peek to answer with.
+func (b *Bus) publish(snapshot Snapshot) {
+	if snapshot.SessionID == "" {
+		return
+	}
+	// A peeked snapshot never describes work done by this call.
+	snapshot.ReadBytes, snapshot.Folded, snapshot.Skipped = 0, 0, 0
+	b.latest.Store(snapshot.SessionID, snapshot)
 }

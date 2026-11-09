@@ -1,6 +1,10 @@
 package consumers
 
-import "testing"
+import (
+	"sync"
+	"testing"
+	"time"
+)
 
 func TestPeekAnswersWithoutACache(t *testing.T) {
 	f := newFixture(t)
@@ -105,5 +109,91 @@ func TestPeekRejectsARecordMissingAConsumer(t *testing.T) {
 	}
 	if snapshot, ok := wide.Peek("session-peek"); !ok || snapshot.Stats().Turns != 1 {
 		t.Fatalf("peek after the wider sync = %+v ok=%v", snapshot, ok)
+	}
+}
+
+// A poll that lands while a cold fold runs must not queue behind it: the fold
+// holds the session lock for as long as the log takes to read.
+func TestPeekDoesNotWaitForARunningSync(t *testing.T) {
+	f := newFixture(t)
+	f.plain("session-peek", headerAt("session-peek", 4)+
+		row("user/message", 1, `{"content":[{"type":"text","text":"hi"}]}`))
+	slow := &blockingConsumer{entered: make(chan struct{}), release: make(chan struct{})}
+	bus := f.bus(Options{Consumers: []Consumer{slow}})
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if _, err := bus.Sync("session-peek"); err != nil {
+			t.Errorf("sync: %v", err)
+		}
+	}()
+	<-slow.entered
+
+	type answer struct {
+		snapshot Snapshot
+		ok       bool
+	}
+	answered := make(chan answer, 1)
+	go func() {
+		snapshot, ok := bus.Peek("session-peek")
+		answered <- answer{snapshot, ok}
+	}()
+	select {
+	case got := <-answered:
+		if got.ok {
+			t.Fatalf("peek during the first fold answered %+v", got.snapshot)
+		}
+	case <-time.After(2 * time.Second):
+		slow.letGo()
+		t.Fatal("peek blocked behind the running fold")
+	}
+
+	slow.letGo()
+	<-done
+	peeked, ok := bus.Peek("session-peek")
+	if !ok || !peeked.CaughtUp || peeked.LastSeq != 1 {
+		t.Fatalf("peek after the fold = %+v, %v", peeked, ok)
+	}
+	if peeked.ReadBytes != 0 || peeked.Folded != 0 {
+		t.Fatalf("peek reported the fold's work: %+v", peeked)
+	}
+}
+
+// blockingConsumer stalls one fold until the test releases it.
+type blockingConsumer struct {
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+	onceRel sync.Once
+}
+
+func (c *blockingConsumer) letGo() { c.onceRel.Do(func() { close(c.release) }) }
+
+func (c *blockingConsumer) ID() string      { return "blocking" }
+func (c *blockingConsumer) Version() int    { return 1 }
+func (c *blockingConsumer) Types() []string { return []string{"user/message"} }
+func (c *blockingConsumer) New() any        { return new(int64) }
+
+func (c *blockingConsumer) Fold(state any, ev Event, at Point) error {
+	c.once.Do(func() { close(c.entered) })
+	<-c.release
+	return nil
+}
+
+func TestPeekMissesAfterForget(t *testing.T) {
+	f := newFixture(t)
+	f.plain("session-peek", headerAt("session-peek", 4)+
+		row("session/title", 1, `{"title":"Hello"}`))
+	bus := f.bus(Options{})
+	mustSync(t, bus, "session-peek")
+	if _, ok := bus.Peek("session-peek"); !ok {
+		t.Fatal("peek after sync missed")
+	}
+	if err := bus.Forget("session-peek"); err != nil {
+		t.Fatalf("forget: %v", err)
+	}
+	if snapshot, ok := bus.Peek("session-peek"); ok {
+		t.Fatalf("peek after forget answered %+v", snapshot)
 	}
 }
