@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -391,12 +392,57 @@ func toolSummary(event Event, row TranscriptRow) string {
 		return anyArg("url")
 	case "web_search":
 		return anyArg("query")
+	// A command is what the caller wants to read back; the description is the
+	// next best line when a shell call carries no command text.
+	case "bash", "pwsh":
+		if command := anyArg("command", "description"); command != "" {
+			return sumLine(firstLine(command))
+		}
 	case "task", "agent":
 		return anyArg("description", "prompt")
 	}
-	for _, raw := range args {
-		var value string
-		if json.Unmarshal(raw, &value) == nil && strings.TrimSpace(value) != "" {
+	// The generic tail runs in a fixed key order on purpose: handing the summary
+	// to Go's randomized map order is what made one bash row read back as
+	// `danger-full-access` and another as its workdir.
+	return genericToolSummary(args, arg)
+}
+
+// toolSummaryFallbackKeys is the preferred order for tools without a dedicated
+// case: the arguments that describe what a call did.
+var toolSummaryFallbackKeys = []string{
+	"command", "description", "path", "file_path", "notebook_path",
+	"pattern", "query", "url", "prompt", "name", "jobId",
+}
+
+// toolSummaryBookkeeping names the arguments that describe how a call was
+// allowed to run, never what it did. A summary must never be one of them.
+var toolSummaryBookkeeping = map[string]bool{
+	"sandbox_permissions": true,
+	"justification":       true,
+	"workdir":             true,
+	"run_in_background":   true,
+	"timeoutMs":           true,
+}
+
+func genericToolSummary(args map[string]json.RawMessage, arg func(string) string) string {
+	if value := firstArg(toolSummaryFallbackKeys, arg); value != "" {
+		return value
+	}
+	// An unknown tool still gets a summary, but one picked by sorted key rather
+	// than by Go's map order, and never by a bookkeeping argument.
+	rest := make([]string, 0, len(args))
+	for key := range args {
+		if !toolSummaryBookkeeping[key] {
+			rest = append(rest, key)
+		}
+	}
+	sort.Strings(rest)
+	return firstArg(rest, arg)
+}
+
+func firstArg(keys []string, arg func(string) string) string {
+	for _, key := range keys {
+		if value := arg(key); value != "" {
 			return sumLine(firstLine(value))
 		}
 	}

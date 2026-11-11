@@ -132,12 +132,12 @@ func messageText(event Event) (string, error) {
 
 func toolCallPreview(event Event) (string, string) {
 	name := toolName(event)
-	var data map[string]json.RawMessage
-	if json.Unmarshal(event.Data, &data) != nil || data == nil {
-		return name, ""
-	}
-	var args map[string]json.RawMessage
-	if json.Unmarshal(data["arguments"], &args) != nil || args == nil {
+	// toolArguments decodes both shapes a transcript can hold: a plain JSON
+	// object, and the JSON string some runners double-encode it into. Parsing
+	// the arguments straight into a map dropped every tool/call row whose
+	// arguments arrived as a string, which is most of them.
+	args := toolArguments(event)
+	if args == nil {
 		return name, ""
 	}
 	var command string
