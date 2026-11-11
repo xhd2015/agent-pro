@@ -20,6 +20,11 @@ const (
 	ActivityAborted     ActivityKind = "aborted"
 )
 
+// DetailTurnOpen is the detail of an error whose turn never ended because the
+// process that ran it is gone. It is not a provider failure: nobody answered the
+// turn, so a retry has nothing to re-send.
+const DetailTurnOpen = "turn open but session is not live"
+
 // Live is one process-liveness observation of a session: whether it runs, and
 // when that was observed.
 //
@@ -179,7 +184,7 @@ func (s classifyState) finish(live Live) Activity {
 		if s.livenessAnsweredTurn(live.At) {
 			kind = ActivityError
 			if detail == "" {
-				detail = "turn open but session is not live"
+				detail = DetailTurnOpen
 			}
 			return Activity{Kind: kind, Detail: detail, Live: live.Running}
 		}

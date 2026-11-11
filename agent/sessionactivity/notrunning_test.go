@@ -95,7 +95,7 @@ func TestNotRunningClassifiesTail(t *testing.T) {
 			name:       "open turn without liveness is an error",
 			events:     []dshEvent{turnStart()},
 			wantKind:   ErrorKind,
-			wantDetail: "turn open but session is not live",
+			wantDetail: DetailTurnOpen,
 		},
 		{
 			name:     "empty log is idle",
@@ -141,29 +141,52 @@ func TestNotRunningKeepsOutcomeAndKindInStep(t *testing.T) {
 	}
 }
 
-func TestNotRunningTellsAbsentFromUnreachable(t *testing.T) {
-	presentIdle(t)
+// An absent session is not evidence of an idle session: a successful map that
+// omits the id says only that no daemon process runs it. With no folded turn
+// state to consult either, the read must abstain rather than inherit "unknown
+// means idle" — the bug that rendered a killed session as finished.
+func TestAbsentSessionAbstainsWithoutAFold(t *testing.T) {
 	id := "s-not-running-presents"
 	writeDSHLog(t, id, turnStart(), turnEnd("completed"))
 
-	tail, err := dshTail(id)
-	if err != nil {
-		t.Fatal(err)
-	}
 	cases := []struct {
-		name string
-		look Lookup
-		want Kind
+		name           string
+		look           Lookup
+		wantKind       Kind
+		wantDetail     string
+		wantUnanswered bool
 	}{
-		{name: "unanswered rpc is error", look: Lookup{}, want: ErrorKind},
-		{name: "absent from a successful map is not_found", look: Lookup{Answered: true}, want: NotFound},
-		{name: "present and idle classifies the tail", look: Lookup{Answered: true, Present: true}, want: Idle},
-		{name: "present and live classifies the tail", look: Lookup{Answered: true, Present: true, Running: true}, want: Idle},
+		{
+			name: "unanswered rpc is error", look: Lookup{},
+			wantKind: ErrorKind, wantDetail: "dsh status unreachable", wantUnanswered: true,
+		},
+		{
+			name: "absent and unfolded abstains", look: Lookup{Answered: true},
+			wantKind: ErrorKind, wantDetail: DetailNotFolded, wantUnanswered: true,
+		},
+		{
+			// Listed, so the tail still owns the last word on how the last turn
+			// ended and the read needs no fold.
+			name: "present and idle classifies the tail", look: Lookup{Answered: true, Present: true},
+			wantKind: Idle,
+		},
+		{
+			name: "present and live classifies the tail", look: Lookup{Answered: true, Present: true, Running: true},
+			wantKind: Idle,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := snapshotFromTail(tail, tc.look).Kind; got != tc.want {
-				t.Fatalf("kind=%s want %s", got, tc.want)
+			src := verdictSources(answers(tc.look), DurableOutcome{}, false, true)
+			snap, err := readDSHStatus(id, src)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if snap.Kind != tc.wantKind || snap.Detail != tc.wantDetail {
+				t.Fatalf("%+v want %s/%q", snap, tc.wantKind, tc.wantDetail)
+			}
+			if snap.Unanswered != tc.wantUnanswered {
+				t.Fatalf("unanswered=%v want %v", snap.Unanswered, tc.wantUnanswered)
 			}
 		})
 	}

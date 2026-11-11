@@ -30,7 +30,7 @@ func (p Probe) Follow(runner, sessionID string, afterSeq int64, tail int) (Snaps
 	}
 	switch runner {
 	case RunnerDSH:
-		return followDSHStatus(sessionID, afterSeq, tail, p.runStatusHook())
+		return followDSHStatus(sessionID, afterSeq, tail, dshSourcesOf(p))
 	case RunnerGrok:
 		return followGrok(sessionID, afterSeq, tail)
 	case RunnerCodex:
@@ -40,29 +40,22 @@ func (p Probe) Follow(runner, sessionID string, afterSeq int64, tail int) (Snaps
 	}
 }
 
-// followDSHStatus follows a DSH Session, deciding liveness exactly as
-// readDSHStatus does so the transcript card and the activity read agree. The
-// transcript always comes from the log, because rendering it is why this call
-// exists; only a failed tail may not downgrade a listed session to not_found.
-func followDSHStatus(sessionID string, afterSeq int64, tail int, rs RunStatus) (Snapshot, []dshsessions.TranscriptRow, error) {
-	look := dshLookup(sessionID, rs)
+// followDSHStatus follows a DSH Session, deciding the phase through dshPhase so
+// the transcript card and the activity read cannot disagree. The transcript
+// always comes from the log, because rendering it is why this call exists; the
+// verdict may therefore come from the fold while the rows come from the tail.
+// A tail this session needs and cannot read is the only hard error: a session
+// whose turn is running must not lose its transcript to a path that also answers
+// not_found for a log it merely did not read.
+func followDSHStatus(sessionID string, afterSeq int64, tail int, src dshSources) (Snapshot, []dshsessions.TranscriptRow, error) {
+	look := dshLookup(sessionID, src.runStatus)
 	cur, tailErr := dshTailFn(sessionID)
 	if look.Running && tailErr != nil {
 		return Snapshot{}, nil, tailErr
 	}
-	if look.Answered && look.Present && tailErr == nil {
-		snap := snapshotFromTail(cur, look)
-		snap.Runner = RunnerDSH
-		snap.SessionID = sessionID
-		rows := dshsessions.TranscriptFilter(cur.Rows, afterSeq, tail)
-		return snap, append([]dshsessions.TranscriptRow{}, rows...), nil
-	}
-	// Not listed by the daemon (or its status is unreachable): answer from the
-	// header, and keep whatever rows the log still has.
-	snap := snapshotFromHeader(sessionID)
-	if !look.Answered {
-		snap.Kind = ErrorKind
-		snap.Detail = "dsh status unreachable"
+	snap, err := dshPhase(sessionID, src, look)
+	if err != nil {
+		return Snapshot{}, nil, err
 	}
 	rows := []dshsessions.TranscriptRow{}
 	if tailErr == nil {

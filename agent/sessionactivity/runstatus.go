@@ -11,10 +11,13 @@ import (
 // the map. Running is the map value when Present.
 //
 // The map only holds sessions the daemon has loaded, so absence is not
-// evidence that a log is gone: missing means idle, exactly like Present with
-// Running false. Both read the log header for metadata; only true reads the
-// tail. not_found is reserved for a header the store cannot find at all, and
-// an unanswered RPC is error.
+// evidence that a session is idle: a session whose daemon was restarted, or one
+// running in a standalone TUI, is absent while its log may still hold an open
+// turn. Absence therefore says only that no daemon process runs the turn, and
+// the readers decide the phase from the folded log and the write lease
+// instead. Present with Running false still reads the tail; not_found is
+// reserved for a log the store cannot find at all, and an unanswered RPC is
+// error.
 type Lookup struct {
 	Running  bool
 	Present  bool

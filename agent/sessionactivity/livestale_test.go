@@ -58,7 +58,7 @@ func TestReadDSHStatusAbstainsOnAnOlderLivenessAnswer(t *testing.T) {
 	stale := RunStatus(func(string) Lookup {
 		return Lookup{Present: true, Answered: true, At: time.UnixMilli(999)}
 	})
-	snap, err := readDSHStatus("s-stale-answer", stale)
+	snap, err := readDSHStatus("s-stale-answer", verdictSources(stale, DurableOutcome{}, false, true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,11 +72,11 @@ func TestReadDSHStatusAbstainsOnAnOlderLivenessAnswer(t *testing.T) {
 	fresh := RunStatus(func(string) Lookup {
 		return Lookup{Present: true, Answered: true, At: time.UnixMilli(1000)}
 	})
-	snap, err = readDSHStatus("s-stale-answer", fresh)
+	snap, err = readDSHStatus("s-stale-answer", verdictSources(fresh, DurableOutcome{}, false, true))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if snap.Kind != ErrorKind || snap.Detail != "turn open but session is not live" || snap.LiveStale {
+	if snap.Kind != ErrorKind || snap.Detail != DetailTurnOpen || snap.LiveStale {
 		t.Fatalf("%+v, a turn that outlives the answer really is dead", snap)
 	}
 	if snap.Unanswered {
@@ -91,7 +91,7 @@ func TestFollowDSHStatusAbstainsOnAnOlderLivenessAnswer(t *testing.T) {
 	stale := RunStatus(func(string) Lookup {
 		return Lookup{Present: true, Answered: true, At: time.UnixMilli(999)}
 	})
-	snap, rows, err := followDSHStatus("s-stale-follow", 0, 10, stale)
+	snap, rows, err := followDSHStatus("s-stale-follow", 0, 10, verdictSources(stale, DurableOutcome{}, false, true))
 	if err != nil {
 		t.Fatal(err)
 	}

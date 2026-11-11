@@ -14,9 +14,11 @@ type dshSession struct {
 
 var dshSessions sync.Map
 
-// Seams for tests: the readers must prove which of the two paths they took.
-// A session the answered map lists owns its phase in the log; a session the map
-// does not list must stop at the header.
+// Seams for tests: the readers must prove which of the two depths they took.
+// A tail is read when the liveness answer lists the session or an outside writer
+// still holds its lease; a quiescent session is answered from its header and the
+// folded turn state, because reading its tail would only re-derive what the fold
+// already consumed.
 var (
 	dshTailFn   = dshTail
 	dshHeaderFn = dshHeader
@@ -77,10 +79,11 @@ func liveFromLookup(look Lookup) dshsessions.Live {
 	}
 }
 
-// snapshotFromTail answers a session session/status lists. Its liveness is then
-// known either way, so the tail is classified with look.Running as the live
-// flag: a not-running session still carries its last turn/end in the log, and
-// that durable error or abort must not be flattened into idle.
+// snapshotFromTail classifies a session whose liveness is known: dshPhase only
+// calls it for a session the registry lists, or for an open turn an outside
+// writer is still executing. The tail carries the last turn/end either way, and
+// that durable error or abort must not be flattened into idle; look.At travels
+// with the answer so an open turn the answer predates is not called dead.
 func snapshotFromTail(tail *dshsessions.Tail, look Lookup) Snapshot {
 	snap := Snapshot{
 		Runner:    RunnerDSH,
@@ -90,48 +93,10 @@ func snapshotFromTail(tail *dshsessions.Tail, look Lookup) Snapshot {
 		UpdatedAt: tail.Summary.UpdatedAt,
 		Outcome:   tail.Summary.Outcome,
 	}
-	if !look.Answered {
-		snap.Kind = ErrorKind
-		snap.Detail = "dsh status unreachable"
-		return snap
-	}
-	if !look.Present {
-		snap.Kind = NotFound
-		return snap
-	}
-	// The session is present, so liveness is known: classify the tail either way.
-	// A not-running session still carries its last turn/end in the log, and that
-	// durable error or abort must not be flattened into idle. look.At travels with
-	// the answer so an open turn this answer predates is not called dead.
 	act := tail.Activity(liveFromLookup(look))
 	snap.Kind = Kind(act.Kind)
 	snap.Detail = act.Detail
 	snap.Live = act.Live
 	snap.LiveStale = act.LiveStale
-	return snap
-}
-
-// snapshotFromHeader answers a session the answered map does not list: the
-// daemon has no state for it, so nothing past the header is read. not_found
-// therefore means the header lookup proved there is no log at all — an id the
-// daemon merely never loaded is idle, not missing.
-func snapshotFromHeader(sessionID string) Snapshot {
-	snap := Snapshot{Runner: RunnerDSH, SessionID: sessionID}
-	info, err := dshHeaderFn(sessionID)
-	if err != nil {
-		snap.Kind = NotFound
-		snap.Detail = err.Error()
-		return snap
-	}
-	if info.Summary.ID != "" {
-		snap.SessionID = info.Summary.ID
-	}
-	snap.Kind = Idle
-	snap.Workspace = info.Summary.Cwd
-	snap.Title = info.Summary.Title
-	snap.UpdatedAt = info.ModTime
-	if snap.UpdatedAt == 0 {
-		snap.UpdatedAt = info.Summary.UpdatedAt
-	}
 	return snap
 }

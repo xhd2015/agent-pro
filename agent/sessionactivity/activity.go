@@ -4,12 +4,16 @@
 // per-runner log scans. Kinds are idle, thinking, responding, tool_calling,
 // waiting, error, aborted, and not_found.
 //
-// DSH logs are read in two depths. A session session/status lists is tailed and
-// classified with its liveness, so a failed or aborted turn survives the
-// process exiting; a session the answered map does not list is answered from
-// its log header, because the daemon has no state for it and its tail would
-// only cost time. not_found therefore means the log is gone, never merely "not
-// loaded by the daemon".
+// DSH phases are composed from three independent observations, because no
+// single one covers every session: the agent registry says whether a turn is
+// running, but only for the sessions a daemon has loaded; the folded session
+// log says whether the newest turn ever closed, for any session with a log; and
+// the log's write lease tells an open turn that is still executing from one
+// whose process is gone. A session the registry does not list is therefore not
+// idle: it is an interrupted error when its log left a turn open and no writer
+// holds the lease, a running turn when a writer does, and an Unanswered
+// placeholder when the log has not been folded yet. not_found means the log is
+// gone, never merely "not loaded by the daemon".
 package sessionactivity
 
 import (
@@ -56,10 +60,12 @@ type Snapshot struct {
 	// that turn, not because the turn failed. A caller must not render a stale
 	// read as an error.
 	LiveStale bool `json:"live_stale,omitempty"`
-	// Unanswered marks a placeholder snapshot taken while the status source
-	// did not answer (RPC timeout, daemon still starting). Kind stays ErrorKind
-	// so every existing consumer keeps its fallback, but a caller that can show
-	// "not known yet" must not present this as the session's real state.
+	// Unanswered marks a placeholder snapshot taken while the evidence behind
+	// this phase was missing: the status source did not answer (RPC timeout,
+	// daemon still starting), the folded log has not caught up, or the write
+	// lease could not be observed. Kind stays ErrorKind so every existing
+	// consumer keeps its fallback, but a caller that can show "not known yet"
+	// must not present this as the session's real state.
 	Unanswered bool `json:"unanswered,omitempty"`
 }
 
@@ -74,10 +80,20 @@ type Probe struct {
 	// is set, because that reader answers liveness itself, and it never applies
 	// to Grok or Codex.
 	RunStatus RunStatus
+
+	// Outcome and Writers complete that reader's verdict: whether the newest
+	// turn in the folded log closed, and whether a process still holds the log's
+	// write lease. Nil uses the installed defaults from SetDefaultOutcome and
+	// SetDefaultWriter, and a missing hook makes the reader abstain rather than
+	// call a turn dead. Like RunStatus they do not apply when DSH is set, and
+	// they never apply to Grok or Codex.
+	Outcome DurableOutcomeSource
+	Writers WriterSource
 }
 
 // Default is the production probe: every nil field reads the live agent home,
-// and the DSH reader therefore also consults the installed RunStatus hook.
+// and the DSH reader therefore also consults the installed RunStatus, Outcome
+// and Writer hooks.
 func Default() Probe {
 	return Probe{}
 }
@@ -103,8 +119,8 @@ func (p Probe) Read(runner, sessionID string) (Snapshot, error) {
 		if p.DSH != nil {
 			fn = p.DSH
 		} else {
-			rs := p.runStatusHook()
-			fn = func(id string) (Snapshot, error) { return readDSHStatus(id, rs) }
+			src := dshSourcesOf(p)
+			fn = func(id string) (Snapshot, error) { return readDSHStatus(id, src) }
 		}
 	case RunnerGrok:
 		fn = p.Grok
