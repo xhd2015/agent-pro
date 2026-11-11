@@ -77,22 +77,40 @@ func NewRunStatus(client Client) *RunStatus {
 	return &RunStatus{Client: client}
 }
 
-// Lookup is the session/status answer for one id: whether the RPC succeeded,
-// whether the id was in the map, and whether that entry is running.
-func (r *RunStatus) Lookup(sessionID string) (running, present, answered bool) {
-	current, answered := r.current()
+// Answer is the session/status answer about one id: whether the RPC succeeded,
+// whether the id was in the map, whether that entry is running, and when the
+// batch was sampled.
+//
+// At is the instant the request was sent, so it never claims to be fresher than
+// the answer. A cache hit reports the batch's instant, not the lookup's: that is
+// what lets a reader decide whether the answer could have seen a turn the log
+// already has.
+type Answer struct {
+	Running  bool
+	Present  bool
+	Answered bool
+	At       time.Time
+}
+
+// Lookup is the session/status answer for one id.
+func (r *RunStatus) Lookup(sessionID string) Answer {
+	current, at, answered := r.current()
+	answer := Answer{At: at}
 	if !answered {
-		return false, false, false
+		return answer
 	}
 	value, present := current[sessionID]
-	return value, present, true
+	answer.Running = value
+	answer.Present = present
+	answer.Answered = true
+	return answer
 }
 
 // Running reports whether the daemon's registry has sessionID executing a turn.
 // known is true only when the RPC succeeded and named this id.
 func (r *RunStatus) Running(sessionID string) (running bool, known bool) {
-	running, present, answered := r.Lookup(sessionID)
-	return running, answered && present
+	answer := r.Lookup(sessionID)
+	return answer.Running, answer.Answered && answer.Present
 }
 
 // current returns the cached batch answer, refreshing it once per TTL.
@@ -100,7 +118,7 @@ func (r *RunStatus) Running(sessionID string) (running bool, known bool) {
 // The lock is held across the RPC on purpose: concurrent readers then wait for
 // one batched answer instead of each sending its own request, and the wait is
 // capped by runStatusTimeout.
-func (r *RunStatus) current() (map[string]bool, bool) {
+func (r *RunStatus) current() (map[string]bool, time.Time, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	now := time.Now()
@@ -114,7 +132,7 @@ func (r *RunStatus) current() (map[string]bool, bool) {
 	// A failed refresh is cached for the same window: a daemon that is down must
 	// not be retried once per Session lookup.
 	if !r.fetchedAt.IsZero() && now.Sub(r.fetchedAt) < ttl {
-		return r.running, r.known
+		return r.running, r.fetchedAt, r.known
 	}
 	timeout := r.Timeout
 	if timeout <= 0 {
@@ -123,13 +141,16 @@ func (r *RunStatus) current() (map[string]bool, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	running, err := r.Client.Status(ctx, nil)
+	// The request instant, not the reply instant: the daemon decides while the
+	// answer is in flight, so this is the earliest moment the answer is guaranteed
+	// to reflect. Sampling later would make the answer look fresher than it is.
 	r.fetchedAt = now
 	if err != nil {
 		r.known = false
 		r.running = nil
-		return nil, false
+		return nil, r.fetchedAt, false
 	}
 	r.known = true
 	r.running = running
-	return running, true
+	return running, r.fetchedAt, true
 }

@@ -3,6 +3,7 @@ package sessions
 import (
 	"encoding/json"
 	"strings"
+	"time"
 )
 
 // ActivityKind is the live phase of a DSH session, derived from the durable
@@ -19,26 +20,45 @@ const (
 	ActivityAborted     ActivityKind = "aborted"
 )
 
+// Live is one process-liveness observation of a session: whether it runs, and
+// when that was observed.
+//
+// At is the instant the answer was sampled: the moment the request was issued,
+// which is never later than the reply. It exists because liveness is answered by
+// a cached batch RPC while the phase is folded from the log: without the instant
+// the two facts cannot be ordered, and a turn started in between is reported as
+// a dead session.
+type Live struct {
+	Running bool
+	Known   bool
+	At      time.Time
+}
+
 // Activity is one session's current phase. Live is process liveness, not
 // stored in the log.
 type Activity struct {
 	Kind   ActivityKind `json:"kind"`
 	Detail string       `json:"detail,omitempty"`
 	Live   bool         `json:"live"`
+	// LiveStale marks a phase folded from a log whose open turn is newer than
+	// the liveness answer. Live is then false without the turn having failed:
+	// the answer could not testify about it.
+	LiveStale bool `json:"live_stale,omitempty"`
 }
 
-// Classify derives activity from a durable event stream and whether the
-// session currently holds a write lease. An open turn whose process is gone
-// is an error, not idle.
-func Classify(events []Event, live bool) Activity {
-	return classify(events, live, true)
+// Classify derives activity from a durable event stream and one liveness
+// observation of the same session. An open turn whose process is gone is an
+// error, not idle — but only an answer at least as new as that turn's start can
+// say so, which is why Live carries its instant.
+func Classify(events []Event, live Live) Activity {
+	return classify(events, live)
 }
 
 // ClassifyLog derives activity from the durable log only and never applies
 // the open-turn-not-live error. Use it when process liveness could not be
 // probed.
 func ClassifyLog(events []Event) Activity {
-	return classify(events, false, false)
+	return classify(events, Live{})
 }
 
 type classifyState struct {
@@ -46,20 +66,23 @@ type classifyState struct {
 	detail      string
 	turnOpen    bool
 	pendingUser bool
+	// openedAt is when the open turn started, in the log's epoch ms, taken from
+	// the earliest event that opened it. Zero means the log does not say.
+	openedAt int64
 }
 
-func classify(events []Event, live, liveKnown bool) Activity {
+func classify(events []Event, live Live) Activity {
 	var state classifyState
 	for _, event := range events {
 		state.add(event)
 	}
-	return state.finish(live, liveKnown)
+	return state.finish(live)
 }
 
 func (s *classifyState) add(event Event) {
 	switch event.Type {
 	case "turn/start":
-		s.turnOpen = true
+		s.open(event.Time)
 		s.pendingUser = false
 		s.kind = ActivityThinking
 		s.detail = ""
@@ -68,7 +91,7 @@ func (s *classifyState) add(event Event) {
 			s.pendingUser = true
 		}
 	case "assistant/attempt":
-		s.turnOpen = true
+		s.open(event.Time)
 		s.pendingUser = false
 		if assistantHasText(event) {
 			s.kind = ActivityResponding
@@ -77,7 +100,7 @@ func (s *classifyState) add(event Event) {
 		}
 		s.detail = ""
 	case "assistant/message":
-		s.turnOpen = true
+		s.open(event.Time)
 		s.pendingUser = false
 		if assistantHasText(event) {
 			s.kind = ActivityResponding
@@ -86,7 +109,7 @@ func (s *classifyState) add(event Event) {
 		}
 		s.detail = ""
 	case "tool/call", "command/run":
-		s.turnOpen = true
+		s.open(event.Time)
 		s.pendingUser = false
 		name := toolName(event)
 		if name == "ask_user_question" {
@@ -103,6 +126,7 @@ func (s *classifyState) add(event Event) {
 	case "turn/end":
 		s.turnOpen = false
 		s.pendingUser = false
+		s.openedAt = 0
 		endKind := turnEndKind(event)
 		if endKind == "aborted" {
 			s.kind = ActivityAborted
@@ -117,13 +141,33 @@ func (s *classifyState) add(event Event) {
 	}
 }
 
-func (s classifyState) finish(live, liveKnown bool) Activity {
+// open records that a turn is open at the log instant at, keeping the earliest
+// opening event of the current turn. A fold that started mid-turn can only place
+// the start later than the real one, which makes an older liveness answer abstain
+// more often rather than blame the session.
+func (s *classifyState) open(at int64) {
+	if !s.turnOpen || s.openedAt == 0 {
+		s.openedAt = at
+	}
+	s.turnOpen = true
+}
+
+// finish turns the folded log plus one liveness observation into the session's
+// phase.
+//
+// The two inputs are sampled at different instants: the log is as fresh as this
+// fold, the liveness answer can be a cached batch. A not-running answer therefore
+// only means "this open turn is dead" when it was sampled at or after the turn
+// started; an older answer cannot testify about this turn, and the log alone then
+// says what the session is doing. Suppressing a false alarm is the only possible
+// error here: an answer sampled after the start is never discarded.
+func (s classifyState) finish(live Live) Activity {
 	kind, detail := s.kind, s.detail
 	if kind == "" {
 		kind = ActivityIdle
 	}
 	if s.pendingUser && !s.turnOpen {
-		if live {
+		if live.Running {
 			kind = ActivityThinking
 			detail = ""
 		} else {
@@ -131,13 +175,27 @@ func (s classifyState) finish(live, liveKnown bool) Activity {
 			detail = ""
 		}
 	}
-	if liveKnown && s.turnOpen && !live {
-		kind = ActivityError
-		if detail == "" {
-			detail = "turn open but session is not live"
+	if live.Known && s.turnOpen && !live.Running {
+		if s.livenessAnsweredTurn(live.At) {
+			kind = ActivityError
+			if detail == "" {
+				detail = "turn open but session is not live"
+			}
+			return Activity{Kind: kind, Detail: detail, Live: live.Running}
 		}
+		return Activity{Kind: kind, Detail: detail, Live: live.Running, LiveStale: true}
 	}
-	return Activity{Kind: kind, Detail: detail, Live: live}
+	return Activity{Kind: kind, Detail: detail, Live: live.Running}
+}
+
+// livenessAnsweredTurn reports whether an answer sampled at at can testify about
+// the open turn. An unrecorded instant on either side keeps the historical
+// verdict: the log and the answer came from the same read, as before Live existed.
+func (s classifyState) livenessAnsweredTurn(at time.Time) bool {
+	if s.openedAt == 0 || at.IsZero() {
+		return true
+	}
+	return at.UnixMilli() >= s.openedAt
 }
 
 func assistantHasText(event Event) bool {

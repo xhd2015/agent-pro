@@ -87,8 +87,11 @@ func (s *Store) SyncTail(id string, prev *Tail) (*Tail, error) {
 	return t, nil
 }
 
-func (t *Tail) Activity(live, liveKnown bool) Activity {
-	return t.fold.finish(live, liveKnown)
+// Activity answers this cursor's phase for one liveness observation, which must
+// have been sampled after the last SyncTail so the fold it judges is not older
+// than the answer.
+func (t *Tail) Activity(live Live) Activity {
+	return t.fold.finish(live)
 }
 
 func (t *Tail) advance(a artifact, size int64) error {

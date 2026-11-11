@@ -137,26 +137,33 @@ type sessionStatusDoc struct {
 	StatusScope    string `json:"status_scope"`
 }
 
-func sessionStatus(inspection *sessions.Inspection) sessionStatusDoc {
-	live := false
-	liveKnown := true
+// sampleLive probes process liveness for one Session and stamps when the answer
+// was taken. It runs before the log is read: the classifier only trusts a
+// not-running answer about an open turn when the answer is at least as new as the
+// turn's start, so the order of the two reads is part of the answer.
+func sampleLive(sessionID string) sessions.Live {
+	at := time.Now()
 	rows, err := sessions.ListLive(nil)
 	if err != nil {
-		liveKnown = false
-	} else {
-		for _, row := range rows {
-			if row.ID == inspection.ID {
-				live = true
-				break
-			}
+		return sessions.Live{At: at}
+	}
+	live := sessions.Live{Known: true, At: at}
+	for _, row := range rows {
+		if row.ID == sessionID {
+			live.Running = true
+			break
 		}
 	}
+	return live
+}
+
+func sessionStatus(inspection *sessions.Inspection, live sessions.Live) sessionStatusDoc {
 	var act sessions.Activity
-	if liveKnown {
+	if live.Known {
 		act = sessions.Classify(inspection.Events, live)
 	} else {
 		act = sessions.ClassifyLog(inspection.Events)
-		act.Live = live
+		act.Live = live.Running
 	}
 	return sessionStatusDoc{
 		Summary:        inspection.Summary,

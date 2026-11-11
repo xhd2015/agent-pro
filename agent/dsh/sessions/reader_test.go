@@ -254,7 +254,7 @@ func TestReadV4TimelineAndActivity(t *testing.T) {
 	if got.Path != path || got.FormatVersion != 4 || got.Provider != "p" || got.Model != "m" || got.Outcome != "incomplete" || got.AgentPreset != "std-no-subagent" || len(got.Events) != 4 {
 		t.Fatalf("%+v", got)
 	}
-	act := Classify(got.Events, true)
+	act := Classify(got.Events, Live{Running: true, Known: true})
 	if act.Kind != ActivityToolCalling || act.Detail != "bash" || !act.Live {
 		t.Fatalf("activity=%+v", act)
 	}

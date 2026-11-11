@@ -51,6 +51,11 @@ type Snapshot struct {
 	Title     string `json:"title,omitempty"`
 	UpdatedAt int64  `json:"updated_at,omitempty"`
 	Outcome   string `json:"outcome,omitempty"`
+	// LiveStale marks a phase read from a log whose open turn is newer than the
+	// liveness answer: Live is false because the answer could not testify about
+	// that turn, not because the turn failed. A caller must not render a stale
+	// read as an error.
+	LiveStale bool `json:"live_stale,omitempty"`
 	// Unanswered marks a placeholder snapshot taken while the status source
 	// did not answer (RPC timeout, daemon still starting). Kind stays ErrorKind
 	// so every existing consumer keeps its fallback, but a caller that can show
@@ -123,13 +128,13 @@ func (p Probe) Read(runner, sessionID string) (Snapshot, error) {
 	return snap, nil
 }
 
-func snapshotFromDSH(inspection *dshsessions.Inspection, live bool, liveKnown bool) Snapshot {
+func snapshotFromDSH(inspection *dshsessions.Inspection, live dshsessions.Live) Snapshot {
 	var act dshsessions.Activity
-	if liveKnown {
+	if live.Known {
 		act = dshsessions.Classify(inspection.Events, live)
 	} else {
 		act = dshsessions.ClassifyLog(inspection.Events)
-		act.Live = live
+		act.Live = live.Running
 	}
 	return Snapshot{
 		Runner:    RunnerDSH,
@@ -137,6 +142,7 @@ func snapshotFromDSH(inspection *dshsessions.Inspection, live bool, liveKnown bo
 		Kind:      Kind(act.Kind),
 		Detail:    act.Detail,
 		Live:      act.Live,
+		LiveStale: act.LiveStale,
 		Workspace: inspection.Cwd,
 		Title:     inspection.Title,
 		UpdatedAt: inspection.UpdatedAt,

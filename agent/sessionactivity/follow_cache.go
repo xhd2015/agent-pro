@@ -67,6 +67,16 @@ func dshTail(sessionID string) (*dshsessions.Tail, error) {
 	return tail, nil
 }
 
+// liveFromLookup turns one session/status answer into the liveness observation a
+// tail fold takes, keeping the instant it was sampled.
+func liveFromLookup(look Lookup) dshsessions.Live {
+	return dshsessions.Live{
+		Running: look.Running,
+		Known:   look.Answered && look.Present,
+		At:      look.At,
+	}
+}
+
 // snapshotFromTail answers a session session/status lists. Its liveness is then
 // known either way, so the tail is classified with look.Running as the live
 // flag: a not-running session still carries its last turn/end in the log, and
@@ -91,11 +101,13 @@ func snapshotFromTail(tail *dshsessions.Tail, look Lookup) Snapshot {
 	}
 	// The session is present, so liveness is known: classify the tail either way.
 	// A not-running session still carries its last turn/end in the log, and that
-	// durable error or abort must not be flattened into idle.
-	act := tail.Activity(look.Running, true)
+	// durable error or abort must not be flattened into idle. look.At travels with
+	// the answer so an open turn this answer predates is not called dead.
+	act := tail.Activity(liveFromLookup(look))
 	snap.Kind = Kind(act.Kind)
 	snap.Detail = act.Detail
 	snap.Live = act.Live
+	snap.LiveStale = act.LiveStale
 	return snap
 }
 

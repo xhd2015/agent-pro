@@ -52,7 +52,7 @@ func TestProbeReadDSH(t *testing.T) {
 	}
 	p := Probe{
 		DSH: func(id string) (Snapshot, error) {
-			return snapshotFromDSH(inspection, true, true), nil
+			return snapshotFromDSH(inspection, dshsessions.Live{Running: true, Known: true}), nil
 		},
 	}
 	got, err := p.Read("dsh", "s1")

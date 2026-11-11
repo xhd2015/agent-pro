@@ -1,6 +1,9 @@
 package sessionactivity
 
-import "sync"
+import (
+	"sync"
+	"time"
+)
 
 // Lookup is one Session's answer from session/status.
 //
@@ -16,6 +19,10 @@ type Lookup struct {
 	Running  bool
 	Present  bool
 	Answered bool
+	// At is when the answer was sampled. A cached hook reports the batch's
+	// instant, so this can be older than the call: the readers compare it with an
+	// open turn's start instead of assuming both reads are simultaneous.
+	At time.Time
 }
 
 // RunStatus answers whether one Session is executing a turn right now, as the

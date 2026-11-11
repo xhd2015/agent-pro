@@ -127,7 +127,7 @@ func TestClassifyDSHActivity(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := Classify(tc.events, tc.live)
+			got := Classify(tc.events, Live{Running: tc.live, Known: true})
 			if got.Kind != tc.wantKind || got.Detail != tc.wantDet || got.Live != tc.live {
 				t.Fatalf("got %+v want kind=%s detail=%q live=%v", got, tc.wantKind, tc.wantDet, tc.live)
 			}

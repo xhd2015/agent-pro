@@ -152,6 +152,12 @@ func Run(args []string, stdout, stderr io.Writer) error {
 		})
 		return printMessages(stdout, last(all, tail), jsonMode)
 	}
+	// Status samples liveness before reading the log, because an answer older than
+	// the log cannot decide whether an open turn is dead.
+	var live sessions.Live
+	if action == "status" {
+		live = sampleLive(rest[0])
+	}
 	inspection, err := store.Inspect(rest[0])
 	if err != nil {
 		return err
@@ -163,7 +169,7 @@ func Run(args []string, stdout, stderr io.Writer) error {
 		}
 		return printInfo(stdout, inspection.Summary, false)
 	case "status":
-		status := sessionStatus(inspection)
+		status := sessionStatus(inspection, live)
 		if jsonMode {
 			return writeJSON(stdout, status)
 		}

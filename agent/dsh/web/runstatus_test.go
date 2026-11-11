@@ -104,8 +104,8 @@ func TestRunStatusCachesOneBatchPerTTL(t *testing.T) {
 	if got := atomic.LoadInt32(calls); got != 1 {
 		t.Fatalf("expected one RPC for two lookups in the window, got %d", got)
 	}
-	if live, present, answered := rs.Lookup("unloaded-session"); live || present || !answered {
-		t.Fatalf("absent id: live=%v present=%v answered=%v", live, present, answered)
+	if answer := rs.Lookup("unloaded-session"); answer.Running || answer.Present || !answer.Answered {
+		t.Fatalf("absent id: %+v", answer)
 	}
 	if _, known := rs.Running("unloaded-session"); known {
 		t.Fatal("Running treats an unnamed Session as not known")
