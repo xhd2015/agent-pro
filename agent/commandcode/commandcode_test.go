@@ -1007,3 +1007,161 @@ func usageFixture(now time.Time) *UsageData {
 		Errors: []string{},
 	}
 }
+
+// --- exceeded shapes and unknown balances ---
+
+// The credits endpoint answered windowLimits.exceeded with a bare bool for a
+// long time and now names the window ("weekly"). Decoding only the bool shape
+// dropped the whole credits response, so an account over one window looked
+// like an exhausted plan.
+func TestCreditsDecodeAcceptsEveryExceededShape(t *testing.T) {
+	cases := []struct {
+		name     string
+		payload  string
+		wantAny  bool
+		wantName string
+	}{
+		{"window name", `{"credits":{"monthlyCredits":34.998},"windowLimits":{"limited":true,"exceeded":"weekly"}}`, true, "weekly"},
+		{"fiveHour name", `{"credits":{"monthlyCredits":1},"windowLimits":{"limited":true,"exceeded":"fiveHour"}}`, true, "fiveHour"},
+		{"bool true", `{"credits":{"monthlyCredits":1},"windowLimits":{"limited":true,"exceeded":true}}`, true, ""},
+		{"bool false", `{"credits":{"monthlyCredits":1},"windowLimits":{"limited":false,"exceeded":false}}`, false, ""},
+		{"null", `{"credits":{"monthlyCredits":1},"windowLimits":{"limited":false,"exceeded":null}}`, false, ""},
+		{"absent", `{"credits":{"monthlyCredits":1},"windowLimits":{"limited":false}}`, false, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var credits Credits
+			if err := json.Unmarshal([]byte(tc.payload), &credits); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if credits.WindowLimits == nil {
+				t.Fatal("windowLimits=nil")
+			}
+			if got := credits.WindowLimits.Exceeded.Any; got != tc.wantAny {
+				t.Fatalf("Any=%v want %v", got, tc.wantAny)
+			}
+			if got := credits.WindowLimits.Exceeded.Window; got != tc.wantName {
+				t.Fatalf("Window=%q want %q", got, tc.wantName)
+			}
+			if tc.name == "window name" && credits.Credits.MonthlyCredits != 34.998 {
+				t.Fatalf("MonthlyCredits=%v want 34.998 (the balance must survive the shape change)",
+					credits.Credits.MonthlyCredits)
+			}
+		})
+	}
+}
+
+// --json output keeps the shape the endpoint sent, so existing parsers do not
+// see {"Any":true,"Window":"weekly"}.
+func TestWindowExceededMarshalKeepsWireShape(t *testing.T) {
+	cases := []struct {
+		value WindowExceeded
+		want  string
+	}{
+		{WindowExceeded{Any: true, Window: "weekly"}, `"weekly"`},
+		{WindowExceeded{Any: true}, `true`},
+		{WindowExceeded{}, `false`},
+	}
+	for _, tc := range cases {
+		raw, err := json.Marshal(tc.value)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		if string(raw) != tc.want {
+			t.Fatalf("marshal=%s want %s", raw, tc.want)
+		}
+	}
+}
+
+// A missing credits answer is unknown, not zero. The row must not claim a
+// percentage or "$0.00 left" for it.
+func TestProjectUsageViewWithoutCreditsIsUnknown(t *testing.T) {
+	now := time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC)
+	data := &UsageData{
+		Whoami:  &Whoami{User: User{UserName: "lukaz"}},
+		Credits: nil,
+		Subscription: &Subscription{
+			Status:             "active",
+			PlanID:             "individual-goat",
+			CurrentPeriodStart: "2026-11-10T06:52:02.000Z",
+			CurrentPeriodEnd:   "2026-12-10T06:52:02.000Z",
+		},
+		Summary: &UsageSummary{TotalCost: 35.0019520053},
+		Errors:  []string{"/alpha/billing/credits: decode response: boom"},
+	}
+	view := ProjectUsageView(data, now)
+	if !view.CreditsUnknown {
+		t.Fatal("CreditsUnknown=false")
+	}
+	if view.Credits.HasCreditsInfo {
+		t.Fatalf("HasCreditsInfo=true for a missing balance: %+v", view.Credits)
+	}
+	if view.Credits.UsagePercent != 0 {
+		t.Fatalf("UsagePercent=%v want 0/unknown", view.Credits.UsagePercent)
+	}
+	if view.Credits.TotalRemaining != 0 {
+		t.Fatalf("TotalRemaining=%v want 0", view.Credits.TotalRemaining)
+	}
+	if view.Credits.TotalPool != 70 {
+		t.Fatalf("TotalPool=%v want the plan allowance 70", view.Credits.TotalPool)
+	}
+}
+
+// The balance and the window list must both survive, so a plan that only hit
+// its weekly window still shows the credits it has left.
+func TestProjectUsageViewKeepsBalanceWhenAWindowIsExceeded(t *testing.T) {
+	now := time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC)
+	data := &UsageData{
+		Whoami: &Whoami{User: User{UserName: "lukaz"}},
+		Credits: &Credits{
+			Credits: CreditBalance{MonthlyCredits: 34.9980479947},
+			WindowLimits: &WindowLimits{
+				Limited:  true,
+				Exceeded: WindowExceeded{Any: true, Window: "weekly"},
+				FiveHour: &WindowSpan{Used: 2.2594684287, Cap: 14},
+				Weekly:   &WindowSpan{Used: 35.0019520053, Cap: 35, Exceeded: true},
+			},
+		},
+		Subscription: &Subscription{
+			Status:             "active",
+			PlanID:             "individual-goat",
+			CurrentPeriodStart: "2026-11-10T06:52:02.000Z",
+			CurrentPeriodEnd:   "2026-12-10T06:52:02.000Z",
+		},
+		Summary: &UsageSummary{TotalCost: 35.0019520053},
+		Errors:  []string{},
+	}
+	view := ProjectUsageView(data, now)
+	if view.CreditsUnknown {
+		t.Fatal("CreditsUnknown=true with a credits answer")
+	}
+	if !view.Credits.HasCreditsInfo {
+		t.Fatal("HasCreditsInfo=false")
+	}
+	if view.Credits.TotalRemaining != 34.9980479947 {
+		t.Fatalf("TotalRemaining=%v", view.Credits.TotalRemaining)
+	}
+	if view.Credits.TotalPool != 70 {
+		t.Fatalf("TotalPool=%v want 70", view.Credits.TotalPool)
+	}
+	if got := int(view.Credits.UsagePercent + 0.5); got != 50 {
+		t.Fatalf("UsagePercent=%v want 50 (half the month's credits left)", view.Credits.UsagePercent)
+	}
+	if view.WindowLimits == nil || view.WindowLimits.Weekly == nil || !view.WindowLimits.Weekly.Exceeded {
+		t.Fatalf("weekly window lost: %+v", view.WindowLimits)
+	}
+}
+
+func TestFormatUsageWithoutCreditsSaysBalanceUnavailable(t *testing.T) {
+	view := ProjectUsageView(&UsageData{
+		Subscription: &Subscription{Status: "active", PlanID: "individual-goat"},
+		Summary:      &UsageSummary{TotalCost: 12},
+	}, time.Now())
+	out := FormatUsage(view, FormatOptions{})
+	if strings.Contains(out, "$0.00 left") {
+		t.Fatalf("claims an exhausted balance:\n%s", out)
+	}
+	if !strings.Contains(out, "Balance unavailable") {
+		t.Fatalf("missing balance-unavailable notice:\n%s", out)
+	}
+}

@@ -1,7 +1,9 @@
 package commandcode
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 )
@@ -71,10 +73,52 @@ type WindowSpan struct {
 
 // WindowLimits is the windowLimits object of GET /alpha/billing/credits.
 type WindowLimits struct {
-	Limited  bool        `json:"limited"`
-	Exceeded *bool       `json:"exceeded"`
-	FiveHour *WindowSpan `json:"fiveHour"`
-	Weekly   *WindowSpan `json:"weekly"`
+	Limited  bool           `json:"limited"`
+	Exceeded WindowExceeded `json:"exceeded"`
+	FiveHour *WindowSpan    `json:"fiveHour"`
+	Weekly   *WindowSpan    `json:"weekly"`
+}
+
+// WindowExceeded is the windowLimits.exceeded field. The endpoint has answered
+// with three shapes over time: a window name ("weekly"), a bare bool, and null.
+// Decoding it as a pointer to bool failed the whole credits response as soon as
+// an account went over one window, which hid the balance and made a plan with
+// credits left look exhausted.
+type WindowExceeded struct {
+	// Any is true for the boolean shape (older payloads), and for the string
+	// shape as soon as it names a window.
+	Any bool
+	// Window is the named window ("weekly", "fiveHour"), empty otherwise.
+	Window string
+}
+
+// UnmarshalJSON accepts the window name, the boolean, and null.
+func (e *WindowExceeded) UnmarshalJSON(raw []byte) error {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		*e = WindowExceeded{}
+		return nil
+	}
+	var window string
+	if err := json.Unmarshal(trimmed, &window); err == nil {
+		*e = WindowExceeded{Any: true, Window: window}
+		return nil
+	}
+	var exceeded bool
+	if err := json.Unmarshal(trimmed, &exceeded); err != nil {
+		return fmt.Errorf("windowLimits.exceeded: %w", err)
+	}
+	*e = WindowExceeded{Any: exceeded}
+	return nil
+}
+
+// MarshalJSON round-trips whichever shape the endpoint sent, so --json output
+// stays the shape consumers already parse.
+func (e WindowExceeded) MarshalJSON() ([]byte, error) {
+	if e.Window != "" {
+		return json.Marshal(e.Window)
+	}
+	return json.Marshal(e.Any)
 }
 
 // Credits is the response of GET /alpha/billing/credits.

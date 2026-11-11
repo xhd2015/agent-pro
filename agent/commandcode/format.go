@@ -39,9 +39,13 @@ type CreditsView struct {
 
 // View is the projected usage view that FormatUsage renders.
 type View struct {
-	Subscription    *Subscription
-	Plan            *Plan
-	HasBillingData  bool
+	Subscription   *Subscription
+	Plan           *Plan
+	HasBillingData bool
+	// CreditsUnknown is set when /alpha/billing/credits did not answer, so the
+	// balance is unknown rather than zero. HasCreditsInfo stays false, and
+	// consumers must not print "$0.00 left" for it.
+	CreditsUnknown  bool
 	UsageURL        string
 	UsageURLDisplay string
 	Credits         CreditsView
@@ -75,6 +79,7 @@ func ProjectUsageView(data *UsageData, now time.Time) *View {
 	}
 	view.Summary = data.Summary
 	view.HasBillingData = data.Credits != nil || data.Subscription != nil
+	view.CreditsUnknown = data.Credits == nil
 
 	var monthly, purchased, free float64
 	if data.Credits != nil {
@@ -104,7 +109,10 @@ func ProjectUsageView(data *UsageData, now time.Time) *View {
 		totalPool = totalSpent + totalRemaining
 	}
 
-	hasCreditsInfo := totalRemaining > 0 || totalSpent > 0
+	// Without a credits answer the balance is unknown, not zero: computing a
+	// percentage from a missing balance reported an exhausted plan for an
+	// account that still had credits.
+	hasCreditsInfo := data.Credits != nil && (totalRemaining > 0 || totalSpent > 0)
 	var usagePercent float64
 	if hasCreditsInfo {
 		usagePercent = usagePercentOf(totalPool-totalRemaining, totalPool)
@@ -188,6 +196,9 @@ func FormatUsage(view *View, opts FormatOptions) string {
 		b.WriteString(paint.paint(code, bar.Filled))
 		b.WriteString(paint.paint(ansiGray, bar.Empty))
 		b.WriteString(paint.paint(ansiBold+code, fmt.Sprintf(" %d%% used", int(math.Round(credits.UsagePercent)))))
+		b.WriteString("\n")
+	} else if view.CreditsUnknown {
+		b.WriteString(paint.paint(ansiDim, "Balance unavailable"))
 		b.WriteString("\n")
 	} else {
 		b.WriteString(paint.paint(ansiDim, "Plan details unavailable"))
