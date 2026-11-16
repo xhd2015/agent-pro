@@ -80,6 +80,35 @@ func TestProjectAskExtractsQuestionsAndAnswers(t *testing.T) {
 	}
 }
 
+func TestProjectAskExtractsNestedV4ToolResult(t *testing.T) {
+	// Real DSH v4 tool/result nests callId and content under data.message;
+	// the flattened fixture in TestProjectAskExtractsQuestionsAndAnswers is
+	// not what the log writes.
+	events := []Event{
+		{Type: "tool/call", Seq: 104423, Time: 1, Data: json.RawMessage(`{"callId":"call_00_lkmfd8t9awzd5f1hc685e8gm","name":"ask_user_question","arguments":{"questions":[{"id":"resume-thread","question":"请确认要 resume 哪条：","options":[{"label":"开始实现 Task 4"}]}]}}`)},
+		{Type: "tool/result", Seq: 104426, Time: 2, Data: json.RawMessage(`{"turn":329,"step":10,"message":{"role":"tool","source":{"kind":"tool","callId":"call_00_lkmfd8t9awzd5f1hc685e8gm"},"toolCallId":"call_00_lkmfd8t9awzd5f1hc685e8gm","content":[{"type":"text","text":"{\"answers\":[{\"id\":\"resume-thread\",\"selected\":[],\"custom\":\"更新你的mockup: spec里面应该是tree\"}]}"}]}}`)},
+	}
+	got := Project(events)
+	var ask *Ask
+	for i := range got {
+		if got[i].Ask != nil {
+			ask = got[i].Ask
+			break
+		}
+	}
+	if ask == nil || ask.CallID != "call_00_lkmfd8t9awzd5f1hc685e8gm" {
+		t.Fatalf("ask: %+v rows=%+v", ask, got)
+	}
+	if len(ask.Answers) != 1 || ask.Answers[0].Custom != "更新你的mockup: spec里面应该是tree" || len(ask.Answers[0].Selected) != 0 {
+		t.Fatalf("answers: %+v", ask.Answers)
+	}
+	for _, message := range got {
+		if message.Kind == "tool" && message.Ask == nil && message.Tool == "ask_user_question" {
+			t.Fatalf("result leaked as tool row: %+v", message)
+		}
+	}
+}
+
 func TestProjectTurnEndError(t *testing.T) {
 	event := Event{Type: "turn/end", Seq: 9, Data: json.RawMessage(`{"turn":1,"reason":{"kind":"error","error":{"message":"502 status code (no body)","code":"SERVER"}}}`)}
 	rows := Project([]Event{event})

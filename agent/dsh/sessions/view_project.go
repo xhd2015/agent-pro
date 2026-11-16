@@ -225,28 +225,57 @@ func askResult(event Event) (string, []AskAnswer) {
 	if event.Type != "tool/result" {
 		return "", nil
 	}
-	var envelope struct {
-		CallID  string          `json:"callId"`
-		Name    string          `json:"name"`
-		Content json.RawMessage `json:"content"`
-	}
-	if json.Unmarshal(event.Data, &envelope) != nil {
+	callID, name, content := askResultEnvelope(event.Data)
+	if strings.TrimSpace(name) != "" && name != "ask_user_question" {
 		return "", nil
 	}
-	if strings.TrimSpace(envelope.Name) != "" && envelope.Name != "ask_user_question" {
-		return "", nil
-	}
-	text := toolResultText(envelope.Content)
+	text := toolResultText(content)
 	if text == "" {
-		return strings.TrimSpace(envelope.CallID), nil
+		return callID, nil
 	}
 	var payload struct {
 		Answers []AskAnswer `json:"answers"`
 	}
 	if json.Unmarshal([]byte(text), &payload) != nil || len(payload.Answers) == 0 {
-		return strings.TrimSpace(envelope.CallID), nil
+		return callID, nil
 	}
-	return strings.TrimSpace(envelope.CallID), payload.Answers
+	return callID, payload.Answers
+}
+
+// askResultEnvelope reads both the flattened tool/result fixture and the DSH
+// v4 envelope, which nests callId and content under data.message.
+func askResultEnvelope(raw json.RawMessage) (callID, name string, content json.RawMessage) {
+	var envelope struct {
+		CallID  string          `json:"callId"`
+		Name    string          `json:"name"`
+		Content json.RawMessage `json:"content"`
+		Message *struct {
+			ToolCallID string          `json:"toolCallId"`
+			Content    json.RawMessage `json:"content"`
+			Source     struct {
+				CallID string `json:"callId"`
+			} `json:"source"`
+		} `json:"message"`
+	}
+	if json.Unmarshal(raw, &envelope) != nil {
+		return "", "", nil
+	}
+	callID = strings.TrimSpace(envelope.CallID)
+	name = strings.TrimSpace(envelope.Name)
+	content = envelope.Content
+	if envelope.Message == nil {
+		return callID, name, content
+	}
+	if callID == "" {
+		callID = strings.TrimSpace(envelope.Message.ToolCallID)
+	}
+	if callID == "" {
+		callID = strings.TrimSpace(envelope.Message.Source.CallID)
+	}
+	if len(bytes.TrimSpace(content)) == 0 {
+		content = envelope.Message.Content
+	}
+	return callID, name, content
 }
 
 func toolResultText(raw json.RawMessage) string {
