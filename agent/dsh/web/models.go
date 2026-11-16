@@ -64,6 +64,20 @@ func (c Client) ModelCatalog(ctx context.Context) (ModelCatalog, error) {
 	if err := c.rpc(ctx, "session/modelCatalog", map[string]any{}, &catalog); err != nil {
 		return ModelCatalog{}, err
 	}
+	return validateModelCatalog(catalog)
+}
+
+// RefreshModelCatalog re-probes live listings on the Host, then returns the
+// same catalog document as ModelCatalog.
+func (c Client) RefreshModelCatalog(ctx context.Context) (ModelCatalog, error) {
+	var catalog ModelCatalog
+	if err := c.rpc(ctx, "session/refreshModelCatalog", map[string]any{}, &catalog); err != nil {
+		return ModelCatalog{}, err
+	}
+	return validateModelCatalog(catalog)
+}
+
+func validateModelCatalog(catalog ModelCatalog) (ModelCatalog, error) {
 	if _, err := normalizeModelSelection(&catalog.Default); err != nil || catalog.Groups == nil {
 		return ModelCatalog{}, fmt.Errorf("DSH returned an invalid model catalog")
 	}

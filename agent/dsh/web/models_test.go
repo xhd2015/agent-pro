@@ -209,7 +209,25 @@ func sessionModelClient(t *testing.T, value any, wantSession string) Client {
 	return Client{ReadListen: func() (Listen, error) { return Listen{Origin: server.URL, Token: "tok"}, nil }}
 }
 
+func TestRefreshModelCatalogRPC(t *testing.T) {
+	t.Parallel()
+	value := map[string]any{
+		"default":  map[string]any{"provider": "gw", "model": "m"},
+		"groups":   []any{map[string]any{"id": "gw", "name": "gw", "models": []any{map[string]any{"id": "m", "name": "M"}}}},
+		"failures": []any{},
+	}
+	client := catalogClientFor(t, "session/refreshModelCatalog", value)
+	got, err := client.RefreshModelCatalog(context.Background())
+	if err != nil || got.Default.Model != "m" || len(got.Groups) != 1 {
+		t.Fatalf("%+v %v", got, err)
+	}
+}
+
 func catalogClient(t *testing.T, value any) Client {
+	return catalogClientFor(t, "session/modelCatalog", value)
+}
+
+func catalogClientFor(t *testing.T, method string, value any) Client {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request struct {
@@ -222,7 +240,7 @@ func catalogClient(t *testing.T, value any) Client {
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			t.Error(err)
 		}
-		if request.Method != "session/modelCatalog" || r.URL.Path != "/api/session/modelCatalog" || r.Header.Get("Authorization") != "Bearer catalog-token" || len(request.Payload.Args) != 0 {
+		if request.Method != method || r.URL.Path != "/api/"+method || r.Header.Get("Authorization") != "Bearer catalog-token" || len(request.Payload.Args) != 0 {
 			t.Errorf("unexpected catalog RPC: %+v", request)
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"type": "server-response", "rpcId": request.RPCID, "result": map[string]any{"ok": true, "value": value}})
