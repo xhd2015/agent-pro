@@ -13,7 +13,16 @@ import (
 func Project(events []Event) []Message {
 	out := make([]Message, 0, len(events))
 	runAt := map[string]int{}
+	compact := &compactionFold{}
 	for _, event := range events {
+		// Compaction owns its own rows: the checkpoint that carries the
+		// metering is an event the transcript projection rejects, and /compact
+		// must not fold into one row at the run's seq, because a reader polling
+		// afterSeq would never be handed the settled form.
+		if rows := compact.rows(event); len(rows) > 0 {
+			out = append(out, rows...)
+			continue
+		}
 		switch event.Type {
 		case "command/run":
 			id := commandID(event)

@@ -13,12 +13,16 @@ type View struct {
 
 // Message is one display line of a session preview.
 type Message struct {
-	Seq     int64    `json:"seq"`
-	Time    int64    `json:"time"`
-	Kind    string   `json:"kind"` // user | assistant | tool | thinking | error | aborted | command
-	Text    string   `json:"text,omitempty"`
-	Sum     string   `json:"sum,omitempty"`
-	Tool    string   `json:"tool,omitempty"`
+	Seq  int64  `json:"seq"`
+	Time int64  `json:"time"`
+	Kind string `json:"kind"` // user | assistant | tool | thinking | error | aborted | command
+	Text string `json:"text,omitempty"`
+	Sum  string `json:"sum,omitempty"`
+	Tool string `json:"tool,omitempty"`
+	// Ref is the identity a row shares with the row that supersedes it, so a
+	// live reader can replace the pending form with the settled one instead of
+	// showing both. Empty for rows that arrive once and never change.
+	Ref     string   `json:"ref,omitempty"`
 	Present *Present `json:"present,omitempty"`
 	Ask     *Ask     `json:"ask,omitempty"`
 	Images  []Image  `json:"images,omitempty"`

@@ -161,40 +161,168 @@ func TestViewCachesProjection(t *testing.T) {
 	}
 }
 
-func TestProjectCommandRunFoldsDone(t *testing.T) {
+// A /compact keeps its pending row and gains a settled one at the done event's
+// seq: a reader polling afterSeq has already seen the run's seq, so a settled
+// row that kept it would never be delivered. The two rows share a Ref so the
+// reader replaces the first with the second instead of stacking both.
+func TestProjectCompactRunAndDoneShareRef(t *testing.T) {
 	events := []Event{
 		{Type: "user/message", Seq: 1, Time: 1, Data: json.RawMessage(`{"source":{"kind":"user"},"content":[{"type":"text","text":"hi"}]}`)},
 		{Type: "command/run", Seq: 2, Time: 2, Data: json.RawMessage(`{"commandId":"c1","name":"compact","source":{"kind":"user"}}`)},
 		{Type: "command/done", Seq: 3, Time: 3, Data: json.RawMessage(`{"commandId":"c1","kind":"success","text":"Compacted 42 history items (~12k tokens)."}`)},
 	}
 	got := Project(events)
-	if len(got) != 2 || got[0].Kind != "user" || got[1].Kind != TranscriptCommand {
+	if len(got) != 3 || got[0].Kind != "user" || got[1].Kind != TranscriptCommand || got[2].Kind != TranscriptCommand {
 		t.Fatalf("kinds=%v", kindsOf(got))
 	}
-	row := got[1]
-	if row.Tool != "compact" || row.Sum != "success" || row.Text != "Compacted 42 history items (~12k tokens)." {
-		t.Fatalf("command=%+v", row)
+	pending, settled := got[1], got[2]
+	if pending.Seq != 2 || pending.Tool != "compact" || pending.Ref != "c1" || pending.Text != "" || pending.Sum != "" {
+		t.Fatalf("pending=%+v", pending)
 	}
-	if row.Seq != 2 {
-		t.Fatalf("seq=%d want run seq", row.Seq)
+	if settled.Seq != 3 || settled.Tool != "compact" || settled.Ref != "c1" {
+		t.Fatalf("settled=%+v", settled)
+	}
+	if settled.Sum != "success" || settled.Text != "Compacted 42 history items (~12k tokens)." {
+		t.Fatalf("settled text=%+v", settled)
 	}
 }
 
-func TestProjectCommandRunAloneIsPending(t *testing.T) {
+func TestProjectCompactRunAloneIsPending(t *testing.T) {
 	got := Project([]Event{
 		{Type: "command/run", Seq: 8, Time: 8, Data: json.RawMessage(`{"commandId":"c2","name":"compact","source":{"kind":"user"}}`)},
 	})
-	if len(got) != 1 || got[0].Kind != TranscriptCommand || got[0].Tool != "compact" || got[0].Text != "" || got[0].Sum != "" {
+	if len(got) != 1 || got[0].Kind != TranscriptCommand || got[0].Tool != "compact" || got[0].Text != "" || got[0].Sum != "" || got[0].Ref != "c2" {
 		t.Fatalf("pending=%+v", got)
 	}
 }
 
-func TestProjectCommandDoneError(t *testing.T) {
+func TestProjectCompactDoneError(t *testing.T) {
 	got := Project([]Event{
 		{Type: "command/run", Seq: 1, Time: 1, Data: json.RawMessage(`{"commandId":"c3","name":"compact"}`)},
 		{Type: "command/done", Seq: 2, Time: 2, Data: json.RawMessage(`{"commandId":"c3","kind":"error","text":"No compactable history yet."}`)},
 	})
-	if len(got) != 1 || got[0].Sum != "error" || got[0].Text != "No compactable history yet." {
-		t.Fatalf("error=%+v", got)
+	if len(got) != 2 {
+		t.Fatalf("kinds=%v", kindsOf(got))
+	}
+	settled := got[1]
+	if settled.Sum != "error" || settled.Text != "No compactable history yet." || settled.Seq != 2 || settled.Tool != "compact" {
+		t.Fatalf("error=%+v", settled)
+	}
+}
+
+// The Messages tab reads the cached cursor, not Project: this is the path the
+// compaction rows must actually reach.
+func TestViewTailCompactionRows(t *testing.T) {
+	cursor := &viewTailCursor{}
+	feed := func(typ string, seq int64, data string) {
+		cursor.applyEvent(Event{Type: typ, Seq: seq, Time: seq, Data: json.RawMessage(data)})
+	}
+
+	// A command other than /compact has no transcript row: the Messages tab
+	// shows history folds, not every slash command.
+	feed("command/run", 1, `{"commandId":"g1","name":"goal","source":{"kind":"user"}}`)
+	feed("command/done", 2, `{"commandId":"g1","kind":"success","text":"Goal set."}`)
+	if len(cursor.rows) != 0 {
+		t.Fatalf("non-compact command rows=%+v", cursor.rows)
+	}
+
+	// A manual /compact shows a pending card and then a settled one sharing its
+	// ref, so a live reader replaces the first instead of stacking both.
+	feed("command/run", 3, `{"commandId":"c1","name":"compact","source":{"kind":"user"}}`)
+	if len(cursor.rows) != 1 || cursor.rows[0].Sum != "" || cursor.rows[0].Ref != "c1" {
+		t.Fatalf("pending=%+v", cursor.rows)
+	}
+	feed("command/done", 4, `{"commandId":"c1","kind":"success","text":"Compacted 42 history items (~12k tokens)."}`)
+	if len(cursor.rows) != 2 {
+		t.Fatalf("rows=%+v", cursor.rows)
+	}
+	settled := cursor.rows[1]
+	if settled.Seq != 4 || settled.Sum != "success" || settled.Ref != "c1" || settled.Tool != "compact" {
+		t.Fatalf("settled=%+v", settled)
+	}
+	if settled.Text != "Compacted 42 history items (~12k tokens)." {
+		t.Fatalf("settled text=%q", settled.Text)
+	}
+
+	// An automatic compaction surfaces once, at its checkpoint, priced by the
+	// summary that preceded it.
+	feed("compaction/start", 5, `{"compactionId":"k1","turn":2}`)
+	feed("compaction/summary", 6, `{"compactionId":"k1","shadowedSeqs":[1,2,3],"shadowedTokenCount":4242}`)
+	if len(cursor.rows) != 2 {
+		t.Fatalf("summary row=%+v", cursor.rows)
+	}
+	feed("user/message", 7, `{"source":{"kind":"compact-checkpoint","compactionId":"k1"},"content":[]}`)
+	feed("compaction/end", 8, `{"compactionId":"k1","turn":2}`)
+	if len(cursor.rows) != 3 {
+		t.Fatalf("rows=%+v", cursor.rows)
+	}
+	auto := cursor.rows[2]
+	if auto.Seq != 7 || auto.Kind != TranscriptCommand || auto.Sum != "success" || auto.Ref != "k1" || auto.Tool != "" {
+		t.Fatalf("auto=%+v", auto)
+	}
+	if auto.Text != "3 history items folded · ~4242 tokens" {
+		t.Fatalf("auto text=%q", auto.Text)
+	}
+}
+
+// An automatic compaction has no command and no summary text on screen: the
+// checkpoint is its only visible surface, and the metering comes from the
+// summary event that preceded it.
+func TestProjectAutoCompactionCheckpoint(t *testing.T) {
+	got := Project([]Event{
+		{Type: "compaction/start", Seq: 1, Time: 1, Data: json.RawMessage(`{"compactionId":"k1","turn":1}`)},
+		{Type: "compaction/summary", Seq: 2, Time: 2, Data: json.RawMessage(`{"compactionId":"k1","shadowedSeqs":[1,2,3],"shadowedTokenCount":4242,"summary":[{"type":"text","text":"model facing"}]}`)},
+		{Type: "user/message", Seq: 3, Time: 3, Data: json.RawMessage(`{"source":{"kind":"compact-checkpoint","compactionId":"k1"},"content":[{"type":"text","text":"model facing"}]}`)},
+		{Type: "compaction/end", Seq: 4, Time: 4, Data: json.RawMessage(`{"compactionId":"k1","turn":1}`)},
+	})
+	if len(got) != 1 {
+		t.Fatalf("rows=%+v", got)
+	}
+	row := got[0]
+	if row.Kind != TranscriptCommand || row.Seq != 3 || row.Sum != "success" || row.Ref != "k1" {
+		t.Fatalf("row=%+v", row)
+	}
+	if row.Text != "3 history items folded · ~4242 tokens" {
+		t.Fatalf("text=%q", row.Text)
+	}
+}
+
+// A manual /compact appends the same kind of checkpoint. The command row speaks
+// for it, so the checkpoint must not add a second card.
+func TestProjectManualCheckpointStaysHidden(t *testing.T) {
+	got := Project([]Event{
+		{Type: "command/run", Seq: 1, Time: 1, Data: json.RawMessage(`{"commandId":"c4","name":"compact"}`)},
+		{Type: "compaction/start", Seq: 2, Time: 2, Data: json.RawMessage(`{"compactionId":"k2","sourceCommandId":"c4"}`)},
+		{Type: "compaction/summary", Seq: 3, Time: 3, Data: json.RawMessage(`{"compactionId":"k2","shadowedSeqs":[1,2],"shadowedTokenCount":900}`)},
+		{Type: "user/message", Seq: 4, Time: 4, Data: json.RawMessage(`{"source":{"kind":"compact-checkpoint","compactionId":"k2","sourceCommandId":"c4"},"content":[]}`)},
+		{Type: "command/done", Seq: 5, Time: 5, Data: json.RawMessage(`{"commandId":"c4","kind":"success","text":"Compacted 2 history items (~900 tokens)."}`)},
+	})
+	if len(got) != 2 {
+		t.Fatalf("rows=%+v", got)
+	}
+	if got[1].Seq != 5 || got[1].Text != "Compacted 2 history items (~900 tokens)." || got[1].Ref != "c4" {
+		t.Fatalf("settled=%+v", got[1])
+	}
+}
+
+// A window that opens after the summary keeps the checkpoint but cannot price
+// it. The row stays text-free rather than inventing a count.
+func TestProjectCheckpointWithoutSummaryKeepsQuiet(t *testing.T) {
+	got := Project([]Event{
+		{Type: "user/message", Seq: 9, Time: 9, Data: json.RawMessage(`{"source":{"kind":"compact-checkpoint","compactionId":"k3"},"content":[]}`)},
+	})
+	if len(got) != 1 || got[0].Text != "" || got[0].Sum != "success" || got[0].Ref != "k3" {
+		t.Fatalf("rows=%+v", got)
+	}
+}
+
+// compaction/prune has no surface of its own: its replacement is an ordinary
+// tool/result that already projects.
+func TestProjectCompactionPruneIsInvisible(t *testing.T) {
+	got := Project([]Event{
+		{Type: "compaction/prune", Seq: 1, Time: 1, Data: json.RawMessage(`{"shadowedSeqs":[1,2],"shadowedTokenCount":10}`)},
+	})
+	if len(got) != 0 {
+		t.Fatalf("rows=%+v", got)
 	}
 }

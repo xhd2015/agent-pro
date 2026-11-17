@@ -33,12 +33,16 @@ type viewTailCursor struct {
 	lastUsed  int64
 	// rows holds the projection folded in event by event; rebuild only
 	// assembles a View from it, so an append never re-projects the window.
-	rows       []Message
-	byCall     map[string]*Ask
-	byCallAt   map[string]int
-	answers    map[string][]AskAnswer
-	todos      []Todo
-	effort     string
+	rows     []Message
+	byCall   map[string]*Ask
+	byCallAt map[string]int
+	answers  map[string][]AskAnswer
+	todos    []Todo
+	effort   string
+	// compact carries the compaction fold across events: a summary's metering
+	// arrives before the checkpoint that explains it, and a /compact run's name
+	// before the done event that settles it. nil until the window holds one.
+	compact    *compactionFold
 	sawOutcome bool // this window holds a turn event, so its Outcome is final
 	pinned     bool // rows backing array is referenced by a published View
 }
@@ -485,6 +489,15 @@ func (c *viewTailCursor) applyEvent(event Event) {
 	}
 	if callID, answers := askResult(event); callID != "" && len(answers) > 0 {
 		c.applyAnswer(callID, answers)
+	}
+	if c.compact == nil {
+		c.compact = &compactionFold{}
+	}
+	if rows := c.compact.rows(event); len(rows) > 0 {
+		// Compacted rows are appended like any other, in event order. The
+		// pending and the settled form of one /compact both stay in the window:
+		// they share a Ref so a reader replaces the first with the second.
+		c.rows = append(c.rows, rows...)
 	}
 	for _, row := range projectEvent(event) {
 		if row.Ask != nil && row.Ask.CallID != "" {
