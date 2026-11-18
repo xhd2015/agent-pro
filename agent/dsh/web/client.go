@@ -175,6 +175,65 @@ func (c Client) Send(ctx context.Context, sessionID, requestID, text string, noS
 	return c.rpc(ctx, "session/prompt", map[string]any{"request": request}, nil)
 }
 
+// InjectedMessage is one transcript entry of an injected batch, in authored
+// order: a user message, or an assistant message carrying reasoning (thinking)
+// or text.
+type InjectedMessage struct {
+	// Kind selects the transcript role: "user", "thinking" or "assistant".
+	Kind string
+	// Text is the message body; blank text is rejected before it reaches DSH.
+	Text string
+}
+
+// InjectResult reports what an injected batch committed.
+type InjectResult struct {
+	// Seqs are the committed event sequence numbers, in batch order.
+	Seqs []int64
+	// Started reports whether the agent runs on the batch without another call.
+	Started bool
+}
+
+// injectableKinds is the closed set DSH accepts, kept here so a typo fails
+// before the round trip instead of surfacing as a server-side validation error.
+var injectableKinds = map[string]bool{"user": true, "thinking": true, "assistant": true}
+
+// InjectMessages commits one batch of transcript messages in a single DSH
+// transaction: the whole batch lands or none of it does, and DSH then lets the
+// agent act on it — continuing the running turn, or opening one when idle.
+//
+// The caller supplies requestID so an ambiguous transport failure can be
+// retried without committing the batch twice.
+func (c Client) InjectMessages(ctx context.Context, sessionID, requestID string, messages []InjectedMessage) (InjectResult, error) {
+	if strings.TrimSpace(sessionID) == "" {
+		return InjectResult{}, fmt.Errorf("DSH session is required")
+	}
+	if strings.TrimSpace(requestID) == "" {
+		return InjectResult{}, fmt.Errorf("DSH request ID is required")
+	}
+	if len(messages) == 0 {
+		return InjectResult{}, fmt.Errorf("at least one injected message is required")
+	}
+	wire := make([]map[string]string, 0, len(messages))
+	for _, message := range messages {
+		if !injectableKinds[message.Kind] {
+			return InjectResult{}, fmt.Errorf("injected message kind must be user, thinking or assistant; got %q", message.Kind)
+		}
+		if strings.TrimSpace(message.Text) == "" {
+			return InjectResult{}, fmt.Errorf("injected %s message has no text", message.Kind)
+		}
+		wire = append(wire, map[string]string{"kind": message.Kind, "text": message.Text})
+	}
+	request := map[string]any{"sessionId": sessionID, "requestId": requestID, "messages": wire}
+	var value struct {
+		Seqs    []int64 `json:"seqs"`
+		Started bool    `json:"started"`
+	}
+	if err := c.rpc(ctx, "session/inject", map[string]any{"request": request}, &value); err != nil {
+		return InjectResult{}, err
+	}
+	return InjectResult{Seqs: value.Seqs, Started: value.Started}, nil
+}
+
 // SetDraft stores text in the session composer without submitting a turn, so a
 // caller can hand a prepared prompt to the operator for review. It is the
 // transport behind Send(noSubmit) and the seeding step of a fork.
