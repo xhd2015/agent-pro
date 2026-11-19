@@ -124,6 +124,38 @@ func TestClassifyDSHActivity(t *testing.T) {
 			live:     false,
 			wantKind: ActivityIdle,
 		},
+		// A slash command is not a turn: it runs inline, `command/done` closes it,
+		// and no turn/end ever arrives. Folding command/run as a turn opener left
+		// turnOpen true forever, so the next idle read reported a failure the
+		// session never had -- `/compact` did exactly this after it succeeded.
+		{
+			name:     "command done with no turn is idle, not an open turn",
+			events:   []Event{ev("command/run", `{"name":"compact"}`), ev("command/done", `{"kind":"success"}`)},
+			live:     false,
+			wantKind: ActivityIdle,
+		},
+		{
+			name:     "command done while live is still idle",
+			events:   []Event{ev("command/run", `{"name":"compact"}`), ev("command/done", `{"kind":"success"}`)},
+			live:     true,
+			wantKind: ActivityIdle,
+		},
+		{
+			name:     "a command in flight reads as work, not as a dead turn",
+			events:   []Event{ev("command/run", `{"name":"compact"}`)},
+			live:     false,
+			wantKind: ActivityToolCalling,
+			wantDet:  "compact",
+		},
+		{
+			name: "command done inside an open turn leaves the turn working",
+			events: []Event{
+				ev("turn/start", turnStart), ev("command/run", `{"name":"goal"}`),
+				ev("command/done", `{"kind":"success"}`),
+			},
+			live:     true,
+			wantKind: ActivityThinking,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

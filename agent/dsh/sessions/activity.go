@@ -70,6 +70,10 @@ type classifyState struct {
 	kind        ActivityKind
 	detail      string
 	turnOpen    bool
+	// commandOpen marks a slash command between command/run and command/done.
+	// It is deliberately not a turn: commands run inline, emit no turn/end, and
+	// must not make the log look like a session that died mid-turn.
+	commandOpen bool
 	pendingUser bool
 	// openedAt is when the open turn started, in the log's epoch ms, taken from
 	// the earliest event that opened it. Zero means the log does not say.
@@ -113,7 +117,7 @@ func (s *classifyState) add(event Event) {
 			s.kind = ActivityThinking
 		}
 		s.detail = ""
-	case "tool/call", "command/run":
+	case "tool/call":
 		s.open(event.Time)
 		s.pendingUser = false
 		name := toolName(event)
@@ -123,9 +127,32 @@ func (s *classifyState) add(event Event) {
 			s.kind = ActivityToolCalling
 		}
 		s.detail = name
-	case "tool/result", "command/done":
+	case "command/run":
+		// A slash command is not a turn. It runs inline and `command/done` closes
+		// it, and commands never emit `turn/end` -- so opening a turn here left
+		// turnOpen true forever. The session is idle again once the command
+		// settles, and every later read then reported the open-turn error
+		// ("turn open but session is not live") for a failure that never
+		// happened: `/compact` did exactly this.
+		s.commandOpen = true
+		s.pendingUser = false
+		s.kind = ActivityToolCalling
+		s.detail = toolName(event)
+	case "tool/result":
 		if s.turnOpen {
 			s.kind = ActivityThinking
+			s.detail = ""
+		}
+	case "command/done":
+		if s.commandOpen {
+			s.commandOpen = false
+			// The command scope is over. A real turn that is still open owns the
+			// phase, so fall back to what a turn would show instead of idle.
+			if s.turnOpen {
+				s.kind = ActivityThinking
+			} else {
+				s.kind = ActivityIdle
+			}
 			s.detail = ""
 		}
 	case "turn/end":
