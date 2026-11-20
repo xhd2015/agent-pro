@@ -346,6 +346,48 @@ func (c Client) EditMessages(ctx context.Context, sessionID, requestID string, c
 	return EditResult{Seq: value.Seq, Started: value.Started}, nil
 }
 
+// SelectModel switches one Session's route without launching anything.
+//
+// It is the runtime counterpart of CreateOptions.ModelSelection: that one seeds a
+// brand new Session, this one changes a Session that already exists, including
+// one that is running right now. A running Session picks the new route up at its
+// next step rather than mid-step, because a model swap inside one request would
+// cut the reasoning and tool-call semantics it already committed to.
+//
+// The change is durable: DSH records it as a model/selection event, so closing
+// and reopening the Session keeps it.
+func (c Client) SelectModel(ctx context.Context, sessionID, provider, model, reasoningEffort string) (ModelSelection, error) {
+	if strings.TrimSpace(sessionID) == "" {
+		return ModelSelection{}, fmt.Errorf("DSH session is required")
+	}
+	next, err := normalizeModelSelection(&ModelSelection{
+		Provider: provider, Model: model, ReasoningEffort: reasoningEffort,
+	})
+	if err != nil {
+		return ModelSelection{}, err
+	}
+	request := map[string]any{
+		"sessionId": sessionID,
+		"provider":  next.Provider,
+		"model":     next.Model,
+	}
+	if next.ReasoningEffort != "" {
+		request["reasoningEffort"] = next.ReasoningEffort
+	}
+	var value struct {
+		Selected *ModelSelection `json:"selected"`
+	}
+	if err := c.rpc(ctx, "session/selectModel", map[string]any{"request": request}, &value); err != nil {
+		return ModelSelection{}, err
+	}
+	if value.Selected == nil {
+		// An older Host may accept the switch without echoing it; the request we
+		// sent is then the best available statement of what is now in force.
+		return *next, nil
+	}
+	return *value.Selected, nil
+}
+
 // SetDraft stores text in the session composer without submitting a turn, so a
 // caller can hand a prepared prompt to the operator for review. It is the
 // transport behind Send(noSubmit) and the seeding step of a fork.

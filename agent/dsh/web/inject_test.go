@@ -224,3 +224,89 @@ func TestEditMessagesReportsRefusalCode(t *testing.T) {
 		t.Fatalf("rpc = %+v", rpc)
 	}
 }
+
+// SelectModel is the runtime counterpart of CreateOptions.ModelSelection: it
+// switches a session that already exists and echoes what the host recorded.
+func TestSelectModelSwitchesExistingSession(t *testing.T) {
+	t.Parallel()
+	var seen []map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Method  string
+			RPCID   string `json:"rpcId"`
+			Payload struct {
+				Args map[string]any `json:"args"`
+			} `json:"payload"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Error(err)
+			return
+		}
+		if req.Method != "session/selectModel" {
+			t.Errorf("unexpected method %q", req.Method)
+		}
+		seen = append(seen, req.Payload.Args["request"].(map[string]any))
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"type":  "server-response",
+			"rpcId": req.RPCID,
+			"result": map[string]any{"ok": true, "value": map[string]any{
+				"selected": map[string]any{"provider": "p", "model": "m1", "reasoningEffort": "high"},
+			}},
+		})
+	}))
+	defer srv.Close()
+
+	c := Client{ReadListen: func() (Listen, error) { return Listen{Origin: srv.URL}, nil }}
+	got, err := c.SelectModel(context.Background(), "s-1", "p", "m1", "high")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Provider != "p" || got.Model != "m1" || got.ReasoningEffort != "high" {
+		t.Fatalf("selected=%+v", got)
+	}
+	if len(seen) != 1 {
+		t.Fatalf("expected one RPC, got %d", len(seen))
+	}
+	if seen[0]["sessionId"] != "s-1" || seen[0]["model"] != "m1" || seen[0]["reasoningEffort"] != "high" {
+		t.Fatalf("request=%+v", seen[0])
+	}
+}
+
+// A host that accepts the switch without echoing it still leaves the caller with
+// a usable statement of what is in force.
+func TestSelectModelToleratesSilentHost(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			RPCID string `json:"rpcId"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"type":   "server-response",
+			"rpcId":  req.RPCID,
+			"result": map[string]any{"ok": true, "value": map[string]any{}},
+		})
+	}))
+	defer srv.Close()
+
+	c := Client{ReadListen: func() (Listen, error) { return Listen{Origin: srv.URL}, nil }}
+	got, err := c.SelectModel(context.Background(), "s-1", "p", "m2", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Provider != "p" || got.Model != "m2" {
+		t.Fatalf("selected=%+v", got)
+	}
+}
+
+// A triple without a provider or model addresses nothing, and no request is sent.
+func TestSelectModelRejectsIncompleteTriple(t *testing.T) {
+	t.Parallel()
+	c := Client{ReadListen: func() (Listen, error) { return Listen{Origin: "http://127.0.0.1:1"}, nil }}
+	if _, err := c.SelectModel(context.Background(), "s-1", "", "m", ""); err == nil {
+		t.Fatal("expected a refusal for a missing provider")
+	}
+	if _, err := c.SelectModel(context.Background(), "", "p", "m", ""); err == nil {
+		t.Fatal("expected a refusal for a missing session")
+	}
+}
