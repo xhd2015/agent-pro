@@ -179,23 +179,53 @@ func (c Client) Send(ctx context.Context, sessionID, requestID, text string, noS
 // order: a user message, or an assistant message carrying reasoning (thinking)
 // or text.
 type InjectedMessage struct {
-	// Kind selects the transcript role: "user", "thinking" or "assistant".
+	// Kind selects the transcript role: "user", "thinking", "assistant",
+	// "tool-call" or "tool-result".
 	Kind string
-	// Text is the message body; blank text is rejected before it reaches DSH.
+	// Text is the message body. Blank text is rejected for the text kinds and
+	// for tool-result; a tool-call carries Arguments instead.
 	Text string
+	// Tool is the tool name for a tool-call.
+	Tool string
+	// Arguments is the raw JSON argument object for a tool-call.
+	Arguments string
+	// Call is the call seq a tool-result answers.
+	Call int64
+	// IsError marks a failed tool-result.
+	IsError bool
 }
 
 // InjectResult reports what an injected batch committed.
 type InjectResult struct {
 	// Seqs are the committed event sequence numbers, in batch order.
 	Seqs []int64
+	// CallSeqs are the committed tool/call sequence numbers, in batch order. A
+	// call is a log event, so it appears here and not on the model-visible surface.
+	CallSeqs []int64
+	// ResultSeqs are the committed tool/result sequence numbers, in batch order.
+	ResultSeqs []int64
 	// Started reports whether the agent runs on the batch without another call.
 	Started bool
 }
 
 // injectableKinds is the closed set DSH accepts, kept here so a typo fails
 // before the round trip instead of surfacing as a server-side validation error.
-var injectableKinds = map[string]bool{"user": true, "thinking": true, "assistant": true}
+var injectableKinds = map[string]bool{"user": true, "thinking": true, "assistant": true, "tool-call": true, "tool-result": true}
+
+// RPCError is a refusal DSH itself produced, as opposed to a transport failure.
+//
+// Only the code is carried: the server's message can quote request content, and
+// callers log what this renders.
+type RPCError struct {
+	// Method is the RPC that was refused, e.g. "session/edit".
+	Method string
+	// Code is DSH's own error code, e.g. "session/edit-rejected".
+	Code string
+}
+
+func (e *RPCError) Error() string {
+	return fmt.Sprintf("DSH RPC %s failed (%s)", e.Method, e.Code)
+}
 
 // InjectMessages commits one batch of transcript messages in a single DSH
 // transaction: the whole batch lands or none of it does, and DSH then lets the
@@ -213,25 +243,107 @@ func (c Client) InjectMessages(ctx context.Context, sessionID, requestID string,
 	if len(messages) == 0 {
 		return InjectResult{}, fmt.Errorf("at least one injected message is required")
 	}
-	wire := make([]map[string]string, 0, len(messages))
+	wire := make([]map[string]any, 0, len(messages))
 	for _, message := range messages {
 		if !injectableKinds[message.Kind] {
-			return InjectResult{}, fmt.Errorf("injected message kind must be user, thinking or assistant; got %q", message.Kind)
+			return InjectResult{}, fmt.Errorf("injected message kind must be user, thinking, assistant, tool-call or tool-result; got %q", message.Kind)
 		}
-		if strings.TrimSpace(message.Text) == "" {
-			return InjectResult{}, fmt.Errorf("injected %s message has no text", message.Kind)
+		switch message.Kind {
+		case "tool-call":
+			if strings.TrimSpace(message.Tool) == "" {
+				return InjectResult{}, fmt.Errorf("injected tool-call has no tool name")
+			}
+			if strings.TrimSpace(message.Arguments) == "" {
+				return InjectResult{}, fmt.Errorf("injected tool-call for %q has no arguments", message.Tool)
+			}
+			wire = append(wire, map[string]any{"kind": message.Kind, "tool": message.Tool, "arguments": message.Arguments})
+		case "tool-result":
+			if strings.TrimSpace(message.Text) == "" {
+				return InjectResult{}, fmt.Errorf("injected tool-result has no text")
+			}
+			entry := map[string]any{"kind": message.Kind, "call": message.Call, "text": message.Text}
+			if message.IsError {
+				entry["isError"] = true
+			}
+			wire = append(wire, entry)
+		default:
+			if strings.TrimSpace(message.Text) == "" {
+				return InjectResult{}, fmt.Errorf("injected %s message has no text", message.Kind)
+			}
+			wire = append(wire, map[string]any{"kind": message.Kind, "text": message.Text})
 		}
-		wire = append(wire, map[string]string{"kind": message.Kind, "text": message.Text})
 	}
 	request := map[string]any{"sessionId": sessionID, "requestId": requestID, "messages": wire}
 	var value struct {
-		Seqs    []int64 `json:"seqs"`
-		Started bool    `json:"started"`
+		Seqs       []int64 `json:"seqs"`
+		CallSeqs   []int64 `json:"callSeqs"`
+		ResultSeqs []int64 `json:"resultSeqs"`
+		Started    bool    `json:"started"`
 	}
 	if err := c.rpc(ctx, "session/inject", map[string]any{"request": request}, &value); err != nil {
 		return InjectResult{}, err
 	}
-	return InjectResult{Seqs: value.Seqs, Started: value.Started}, nil
+	return InjectResult{Seqs: value.Seqs, CallSeqs: value.CallSeqs, ResultSeqs: value.ResultSeqs, Started: value.Started}, nil
+}
+
+// EditedMessageChange is one change to an already-produced message.
+type EditedMessageChange struct {
+	// Seq names the message by its original surface seq; it is preserved.
+	Seq int64
+	// Text replaces the message content. Ignored when Delete is set.
+	Text string
+	// Delete removes the message from the model-visible history.
+	Delete bool
+}
+
+// EditResult reports what one edit batch committed.
+type EditResult struct {
+	// Seq is the committed edit record.
+	Seq int64
+	// Started reports whether the agent runs on the edited history without
+	// another call.
+	Started bool
+}
+
+// EditMessages rewrites or removes messages the session already produced.
+//
+// Unlike injection this targets existing history, so every change must name a
+// current message; the batch is one DSH transaction and an invalid change
+// rejects the whole batch. A running agent picks the change up at its next step
+// rather than mid-step, and an idle one is woken.
+func (c Client) EditMessages(ctx context.Context, sessionID, requestID string, changes []EditedMessageChange) (EditResult, error) {
+	if strings.TrimSpace(sessionID) == "" {
+		return EditResult{}, fmt.Errorf("DSH session is required")
+	}
+	if strings.TrimSpace(requestID) == "" {
+		return EditResult{}, fmt.Errorf("DSH request ID is required")
+	}
+	if len(changes) == 0 {
+		return EditResult{}, fmt.Errorf("at least one edit is required")
+	}
+	wire := make([]map[string]any, 0, len(changes))
+	for _, change := range changes {
+		if change.Seq < 0 {
+			return EditResult{}, fmt.Errorf("edit seq must be non-negative")
+		}
+		if change.Delete {
+			wire = append(wire, map[string]any{"seq": change.Seq, "deleted": true})
+			continue
+		}
+		if strings.TrimSpace(change.Text) == "" {
+			return EditResult{}, fmt.Errorf("edit of seq %d has no text", change.Seq)
+		}
+		wire = append(wire, map[string]any{"seq": change.Seq, "text": change.Text})
+	}
+	request := map[string]any{"sessionId": sessionID, "requestId": requestID, "edits": wire}
+	var value struct {
+		Seq     int64 `json:"seq"`
+		Started bool  `json:"started"`
+	}
+	if err := c.rpc(ctx, "session/edit", map[string]any{"request": request}, &value); err != nil {
+		return EditResult{}, err
+	}
+	return EditResult{Seq: value.Seq, Started: value.Started}, nil
 }
 
 // SetDraft stores text in the session composer without submitting a turn, so a
@@ -334,9 +446,12 @@ func (c Client) rpc(ctx context.Context, method string, args any, result any) er
 		return fmt.Errorf("DSH RPC %s returned an invalid envelope", method)
 	}
 	if !envelope.Result.OK {
-		// Do not echo arbitrary server text, which may carry credentials.
+		// The failure is returned as a typed error so a caller can tell a refusal
+		// it can explain (`edit-rejected`, `inject-failed`) from a transport
+		// failure, without parsing this sentence. The server's own message stays
+		// off the error string: it may echo request content, and callers log this.
 		if envelope.Result.Error != nil {
-			return fmt.Errorf("DSH RPC %s failed (%s)", method, envelope.Result.Error.Code)
+			return &RPCError{Method: method, Code: envelope.Result.Error.Code}
 		}
 		return fmt.Errorf("DSH RPC %s failed", method)
 	}

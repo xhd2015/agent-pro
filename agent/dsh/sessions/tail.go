@@ -56,6 +56,9 @@ type Tail struct {
 	resyncSeq bool
 	windowed  bool
 	sawAnchor bool
+	// seen keeps the parsed events so an edit can rebuild the rows it changes.
+	// Only populated when transcript rows are wanted.
+	seen []Event
 	// summaryOnly keeps only the newest turn event and drops transcript rows,
 	// so a listing reads a smaller suffix than a transcript poll.
 	summaryOnly bool
@@ -374,6 +377,17 @@ func (t *Tail) consumeLine(line []byte) error {
 	}
 	if t.summaryOnly {
 		return nil
+	}
+	// An edit changes a row the ring buffer may already have dropped, so it cannot
+	// be applied incrementally. Rebuild from every event this Tail has seen: the
+	// edit is rare, and a wrong row is worse than a rebuild.
+	if event.Type == "message/edit" && !t.summaryOnly {
+		t.seen = append(t.seen, event)
+		t.Rows = TranscriptRows(t.seen)
+		return nil
+	}
+	if !t.summaryOnly {
+		t.seen = append(t.seen, event)
 	}
 	if row, ok := transcriptRow(event); ok {
 		if len(t.Rows) >= tailKeep {
