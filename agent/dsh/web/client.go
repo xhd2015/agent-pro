@@ -434,6 +434,73 @@ func (c Client) Open(sessionID, browser string) error {
 	return nil
 }
 
+// ArchiveOptions tunes one archive request.
+type ArchiveOptions struct {
+	// StopActivity stops the Session's running work -- its turn, subagent
+	// descendants, owned background jobs and active schedules -- instead of
+	// letting DSH refuse the archive as `workspace/session-active`.
+	//
+	// It defaults to false on purpose: archiving is a grouping decision, and
+	// silently killing a working agent as a side effect of tidying a list is a
+	// worse surprise than a refusal the caller can explain and retry.
+	StopActivity bool
+}
+
+// ArchiveValue is DSH's complete archived-Session set after a mutation.
+//
+// It is the whole set, not the row just touched: DSH's archive is registry-wide,
+// so a caller that keeps its own mirror can replace it instead of guessing.
+type ArchiveValue struct {
+	ArchivedSessionIDs []string
+}
+
+// archiveSessionRequest is the wire shape of workspace/archiveSession.
+type archiveSessionRequest struct {
+	SessionID    string `json:"sessionId"`
+	StopActivity bool   `json:"stopActivity,omitempty"`
+}
+
+// Archive hides one Session from Workspace grouping surfaces.
+//
+// The Session stays readable; nothing on disk is deleted, and Unarchive brings it
+// back. DSH refuses a Session with running work as `workspace/session-active`
+// (returned here as *RPCError, whose Code names the refusal) unless
+// ArchiveOptions.StopActivity is set, so a caller can decide whether stopping
+// that work is part of its intent.
+//
+// One Session is one call. A thread that also has a verifier is two Sessions and
+// therefore two calls: the verifier is not mounted on the main session.
+func (c Client) Archive(ctx context.Context, sessionID string, opts ArchiveOptions) (ArchiveValue, error) {
+	if strings.TrimSpace(sessionID) == "" {
+		return ArchiveValue{}, fmt.Errorf("DSH session is required")
+	}
+	var value struct {
+		ArchivedSessionIDs []string `json:"archivedSessionIds"`
+	}
+	request := archiveSessionRequest{SessionID: sessionID, StopActivity: opts.StopActivity}
+	if err := c.rpc(ctx, "workspace/archiveSession", map[string]any{"request": request}, &value); err != nil {
+		return ArchiveValue{}, err
+	}
+	return ArchiveValue{ArchivedSessionIDs: value.ArchivedSessionIDs}, nil
+}
+
+// Unarchive restores one archived Session to Workspace grouping surfaces.
+//
+// Idempotent: a Session that is not archived is not an error, so a caller that
+// lost a race with another surface can simply retry.
+func (c Client) Unarchive(ctx context.Context, sessionID string) (ArchiveValue, error) {
+	if strings.TrimSpace(sessionID) == "" {
+		return ArchiveValue{}, fmt.Errorf("DSH session is required")
+	}
+	var value struct {
+		ArchivedSessionIDs []string `json:"archivedSessionIds"`
+	}
+	if err := c.rpc(ctx, "workspace/unarchiveSession", map[string]any{"request": map[string]any{"sessionId": sessionID}}, &value); err != nil {
+		return ArchiveValue{}, err
+	}
+	return ArchiveValue{ArchivedSessionIDs: value.ArchivedSessionIDs}, nil
+}
+
 func (c Client) rpc(ctx context.Context, method string, args any, result any) error {
 	rec, err := c.listen()
 	if err != nil {
