@@ -1,30 +1,23 @@
 # Brainstorm Skill — Usage Reference
 
-## When to use
-
-Brainstorming specialist. Use this before implementing any feature or fix when you need to:
-- Discuss the approach and trade-offs with the user before writing code
-- Plan data models, storage layouts, and architecture
-- Define test scenarios and expected outputs
-- Plan CLI output examples when designing commands or sub-commands
-- Include an ASCII-art UI mockup when a web, app, desktop, mobile, or TUI layout is in scope
-- Get explicit user confirmation before proceeding to implementation
-
 ## When NOT to use
 
-- If the task is trivial and the approach is already clear from the codebase
-- If the user explicitly asked to skip planning and go straight to implementation
-- If the task is purely about reading or searching the codebase — use the explore agent
-- If the task is about reproducing a bug — use the reproduce agent
+- Trivial task with an approach already clear from the codebase
+- User explicitly asked to skip planning and go straight to implementation
+- Purely reading or searching the codebase — use the explore agent
+- Reproducing a bug — use the reproduce agent
 - Light clarification on an existing thread — use followup
 
 ## Usage notes
 
 - Skill-only: load via `agent-pro skill brainstorm --show` or install to `.agents/skills/`
 - The parent agent follows the embedded prompt inline — no standalone binary
-- Every brainstorm reply ends with a **context-relevant decisions section**: open
-  items each have a **most sound default**; when everything is confirmed, show
-  **Locked decisions** instead of inventing open choices
-- **"go ahead"** accepts the plan plus all defaults / locked decisions unless the
-  user overrode specific items — then add implementation tasks to the todo list
+- Verify incrementally: the touched file or package, never the full suite — see
+  `SKILL.md` §Verification
+- For an HTML mockup, present the first renderable draft and judge one screenshot;
+  no geometry measurement or pixel-by-pixel rounds — see `SKILL.md` §UI mockups
+- Every reply ends with a context-relevant decisions section: open items each carry a
+  most sound default; confirmed work shows **Locked decisions** instead
+- **"go ahead"** accepts the plan plus all defaults / locked decisions unless the user
+  overrode specific items — then add implementation tasks to the todo list
 - For Go projects, always consider tests (doctests or unit tests) to verify correctness

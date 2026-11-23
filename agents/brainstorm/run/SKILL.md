@@ -17,7 +17,8 @@ During brainstorming, do not write code, edit files, or run implementation comma
 until the user says **"go ahead"**. The only exception is the requested review artifact
 in **UI mockups**; it does not authorize application implementation or unrelated edits.
 Approval adopts all listed defaults and Locked decisions unless the user overrides them.
-For approved implementation, add running tests to the todo list when applicable.
+For approved implementation, add the tests that prove the change to the todo list, and
+run them targeted (see **Verification**).
 
 # Response workflow
 
@@ -36,7 +37,7 @@ For approved implementation, add running tests to the todo list when applicable.
 - **Core mechanism** — what runs, what it touches, and why that control flow delivers the change.
 - **Data models and storage layout** — what is stored, where, and what is ephemeral.
 - **Test scenarios** — cases and expected outputs; always consider adding correctness tests.
-- **How to test** — prefer rerunnable tests.
+- **How to test** — the one command that proves this change, at file or package scope (see **Verification**).
 
 # Issue investigation
 
@@ -47,6 +48,24 @@ Do not stop at the first search hit or a mid-level label such as "the updater".
 Start the reply with a **Root Cause** section: first prose sentence = one-line cause,
 then short evidence (path + why that surface). Follow with **Plan fields**; the fix's
 core mechanism must explain the remedy, not restate the cause.
+
+**Budget.** Read to the mechanism, not to completeness: the evidence, the spec, and the
+few files that own the behavior — usually fewer than ten. When the plan stops changing,
+stop reading and write it. When a fact only the user can settle would change the plan,
+ask in **Decisions** instead of reading further.
+
+# Verification
+
+Verify the change, not the repository: a check answers one question in seconds, and the
+full suite is CI's job — it runs there, not in the middle of an iteration.
+
+- Run the tests for the touched file or package (`node --test tests/x.test.mjs`,
+  `go test ./internal/x -run TestY`). Never the full suite "to be safe".
+- Never compare a full-suite run before and after; when the checkout was already red,
+  name those failures once and work around them.
+- Re-run only after a change, and only the command that failed. A run that takes
+  minutes or hangs is a signal: kill it, narrow it, say why.
+- Stop when the change is proven, not when the repository is green.
 
 # Output-change layers
 
@@ -71,10 +90,18 @@ labels on stdout. No ANSI in JSON or other machine-readable output.
 
 # UI mockups
 
-For an **HTML mockup request**, immediately create an initial self-contained HTML file
-and present the actual file in the **first response** (file-presentation tool if
-available, otherwise a file link). Do not wait for approval or preliminary design
-answers: use reasonable defaults, label assumptions, and let the user review the draft.
+For an **HTML mockup request**, immediately create a small self-contained HTML file and
+present the actual file in the **first response** (file-presentation tool if available,
+otherwise a file link). Do not wait for approval or preliminary design answers: use
+reasonable defaults, label assumptions, and let the user review the draft — a draft the
+user cannot see yet is not a draft. Keep the states under discussion (collapsed and
+expanded at one narrow width), edit it in place, and never rewrite the file whole.
+
+Review it from one screenshot as a reader would — layout, hierarchy, copy, and the
+states you claimed. Do not measure geometry with Playwright or DOM eval, do not adjust
+pixel by pixel, and do not re-shoot for a copy tweak. Fix only what the screenshot
+shows is wrong, in at most two rounds, then stop and ask.
+
 For other web, app, desktop, mobile, or TUI layout requests, include an ASCII-art
 mockup of the primary screen.
 
