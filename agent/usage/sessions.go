@@ -30,6 +30,9 @@ func countSessions(id ProviderID, opts CollectOptions) SessionsBlock {
 		block, err = CountCodexSessions(opts.CodexHome)
 	case CommandCode:
 		block, err = CountCommandCodeSessions(opts.CommandCodeHome)
+	case OpenCode:
+		// OpenCode Go has no local session tree to count.
+		return SessionsBlock{}
 	default:
 		err = fmt.Errorf("unknown usage provider %q", id)
 	}

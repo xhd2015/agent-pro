@@ -36,14 +36,15 @@ AssertExitCode(t, resp, 0)
 
 AssertStderrContains(t, resp, "warning: grok: ")
 AssertStderrContains(t, resp, "warning: codex: ")
+AssertStderrContains(t, resp, "warning: opencode: ")
 if strings.Contains(resp.Stderr, "warning: commandcode: ") {
 t.Fatalf("commandcode warned on a healthy fetch:\n%s", resp.Stderr)
 }
 
-if len(resp.Files) != 3 {
+if len(resp.Files) != 4 {
 t.Fatalf("snapshot files = %v, want one per provider", resp.Files)
 }
-AssertStdoutContains(t, resp, "3 snapshots appended under ")
+AssertStdoutContains(t, resp, "4 snapshots appended under ")
 failedRow := regexp.MustCompile(`^(\w+)\s+\(failed\)\s+1\s+\S+$`)
 for _, provider := range []usage.ProviderID{usage.Grok, usage.Codex} {
 line := tableRow(t, resp, string(provider))

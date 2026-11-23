@@ -18,6 +18,8 @@ const (
 	// CommandCode is fetched over the Command Code HTTP API by Collect; the
 	// TTY facade in FetchWithOptions does not serve it.
 	CommandCode ProviderID = "commandcode"
+	// OpenCode is OpenCode Go subscription usage, fetched by Collect over HTTP.
+	OpenCode ProviderID = "opencode"
 )
 
 // Snapshot is the normalized usage payload returned by Fetch.

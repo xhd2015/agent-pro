@@ -2,6 +2,7 @@ package usage
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -13,22 +14,34 @@ import (
 	codexmodels "github.com/xhd2015/agent-pro/agent/codex/models"
 	"github.com/xhd2015/agent-pro/agent/commandcode"
 	grokmodels "github.com/xhd2015/agent-pro/agent/grok/models"
+	"github.com/xhd2015/agent-pro/agent/opencodego"
 	codexapi "github.com/xhd2015/dot-pkgs/go-pkgs/shell/codex/api"
 	codexusage "github.com/xhd2015/dot-pkgs/go-pkgs/shell/codex/usage"
 	grokapi "github.com/xhd2015/dot-pkgs/go-pkgs/shell/grok/api"
 	grokusage "github.com/xhd2015/dot-pkgs/go-pkgs/shell/grok/usage"
 )
 
-// EnvFixtureDir points grok and codex fetches at JSON fixtures instead of
-// their HTTP endpoints. Tests only; unset in normal runs.
+// EnvFixtureDir points grok, codex, and OpenCode fetches at JSON fixtures
+// instead of their HTTP endpoints. Tests only; unset in normal runs.
 const EnvFixtureDir = "AGENT_PRO_USAGE_FIXTURE_DIR"
+
+// EnvOpenCodeTokenFile overrides the Go API key file for collect.
+const EnvOpenCodeTokenFile = "OPENCODE_GO_TOKEN_FILE"
+
+// EnvOpenCodeAPIURL overrides the Go usage API root (tests / sandbox).
+const EnvOpenCodeAPIURL = "OPENCODE_GO_API_URL"
+
+// EndpointOpenCodeUsage labels the Go usage GET.
+const EndpointOpenCodeUsage = opencodego.PathUsage
+
+const openCodeUsageFixture = "opencode-usage.json"
 
 // DefaultTimeout bounds one provider's usage fetch.
 const DefaultTimeout = 30 * time.Second
 
 // AllProviders is the provider set every collect covers, in output order.
 func AllProviders() []ProviderID {
-	return []ProviderID{Grok, Codex, CommandCode}
+	return []ProviderID{Grok, Codex, CommandCode, OpenCode}
 }
 
 // CollectOptions configures Collect. Home fields empty mean the provider
@@ -47,8 +60,14 @@ type CollectOptions struct {
 	// CommandCodeAPIURL overrides the Command Code API base URL; empty uses
 	// COMMANDCODE_API_URL when COMMANDCODE_SANDBOX=true, else the default.
 	CommandCodeAPIURL string
-	// FixtureDir serves grok and codex usage from JSON files in this directory
-	// instead of HTTP. Tests only.
+	// OpenCodeTokenFile is the plaintext Go API key. Empty uses
+	// OPENCODE_GO_TOKEN_FILE or opencodego.DefaultTokenFile.
+	OpenCodeTokenFile string
+	// OpenCodeBaseURL overrides the Go usage API root. Empty uses
+	// OPENCODE_GO_API_URL or the public inference root.
+	OpenCodeBaseURL string
+	// FixtureDir serves grok, codex, and OpenCode usage from JSON files in
+	// this directory instead of HTTP. Tests only.
 	FixtureDir string
 }
 
@@ -113,6 +132,8 @@ func fetchUsage(ctx context.Context, id ProviderID, opts CollectOptions) UsageBl
 		block, err = fetchCodexUsage(ctx, opts)
 	case CommandCode:
 		block, err = fetchCommandCodeUsage(ctx, opts)
+	case OpenCode:
+		block, err = fetchOpenCodeUsage(ctx, opts)
 	default:
 		err = fmt.Errorf("unknown usage provider %q", id)
 	}
@@ -351,6 +372,59 @@ func commandCodeHeadline(view *commandcode.View) string {
 		return "usage reported"
 	}
 	return strings.Join(parts, " · ")
+}
+
+func fetchOpenCodeUsage(ctx context.Context, opts CollectOptions) (UsageBlock, error) {
+	var usage *opencodego.Usage
+	if dir := strings.TrimSpace(opts.FixtureDir); dir != "" {
+		raw, err := readFixtureFile(dir, openCodeUsageFixture)
+		if err != nil {
+			return UsageBlock{}, err
+		}
+		var envelope struct {
+			Usage opencodego.Usage `json:"usage"`
+		}
+		if err := json.Unmarshal(raw, &envelope); err != nil {
+			return UsageBlock{}, fmt.Errorf("decode OpenCode usage fixture: %w", err)
+		}
+		usage = &envelope.Usage
+	} else {
+		tokenFile := strings.TrimSpace(opts.OpenCodeTokenFile)
+		if tokenFile == "" {
+			tokenFile = strings.TrimSpace(os.Getenv(EnvOpenCodeTokenFile))
+		}
+		baseURL := strings.TrimSpace(opts.OpenCodeBaseURL)
+		if baseURL == "" {
+			baseURL = strings.TrimSpace(os.Getenv(EnvOpenCodeAPIURL))
+		}
+		var err error
+		usage, err = opencodego.Fetch(ctx, opencodego.FetchOpts{TokenFile: tokenFile, BaseURL: baseURL})
+		if err != nil {
+			return UsageBlock{}, err
+		}
+	}
+	if usage == nil {
+		return UsageBlock{}, fmt.Errorf("no OpenCode usage returned")
+	}
+	block := UsageBlock{
+		OK:       true,
+		Endpoint: EndpointOpenCodeUsage,
+		Values:   map[string]float64{},
+		Display:  map[string]string{},
+	}
+	block.Values["rolling_percent"] = float64(usage.Rolling.Percent)
+	block.Values["weekly_percent"] = float64(usage.Weekly.Percent)
+	block.Values["monthly_percent"] = float64(usage.Monthly.Percent)
+	setTime(block.Values, "rolling_reset_at", usage.Rolling.ResetTime())
+	setTime(block.Values, "weekly_reset_at", usage.Weekly.ResetTime())
+	setTime(block.Values, "monthly_reset_at", usage.Monthly.ResetTime())
+	block.Display["usage"] = fmt.Sprintf("%d%% used", usage.Monthly.Percent)
+	block.Display["detail"] = openCodeDetail(usage)
+	return block, nil
+}
+
+func openCodeDetail(usage *opencodego.Usage) string {
+	return fmt.Sprintf("5h %d%% · weekly %d%% · monthly %d%%", usage.Rolling.Percent, usage.Weekly.Percent, usage.Monthly.Percent)
 }
 
 func commandCodeDetail(view *commandcode.View) string {

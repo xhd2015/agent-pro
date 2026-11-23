@@ -43,17 +43,19 @@ provider's sessions on disk (total, oldest, newest). A provider whose usage
 fetch fails still gets a snapshot: usage.ok is false with the error, while the
 session counts are unaffected because they only read local files.
 
-Providers (always all three):
+Providers (always all four):
 
   grok          grok billing API   ($GROK_HOME/auth.json)
   codex         Codex usage API    ($CODEX_HOME/auth.json)
   commandcode   Command Code API   (~/.commandcode/auth.json)
+  opencode      OpenCode Go API    (~/tmp/llm-token-opencode-go.txt)
 
 Options:
   --grok-home <dir>         grok home for auth and sessions (default: $GROK_HOME or ~/.grok)
   --codex-home <dir>        codex home for auth and sessions (default: $CODEX_HOME or ~/.codex)
-  --commandcode-home <dir>  Command Code home (default: ~/.commandcode)
-  --json                    print one JSON line per provider (no ANSI, no extra text)
+  --commandcode-home <dir>       Command Code home (default: ~/.commandcode)
+  --opencode-token-file <path>   OpenCode Go API key file (default: $OPENCODE_GO_TOKEN_FILE or ~/tmp/llm-token-opencode-go.txt)
+  --json                         print one JSON line per provider (no ANSI, no extra text)
   --cron <spec>             repeat on a schedule: 5-field cron (min hour dom mon dow),
                             @hourly|@daily|@midnight|@weekly|@monthly, or @every <dur>
   --max-runs <n>            stop after n cycles with --cron (0 = unlimited)
@@ -71,6 +73,8 @@ Environment:
   GROK_HOME / CODEX_HOME      provider homes when the flags are omitted
   COMMANDCODE_SANDBOX         when true, COMMANDCODE_API_URL overrides the API base
   COMMANDCODE_API_URL         Command Code API base (sandbox/tests)
+  OPENCODE_GO_TOKEN_FILE      OpenCode Go API key file when the flag is omitted
+  OPENCODE_GO_API_URL         OpenCode Go usage API root (tests / sandbox)
 `
 
 const usageListHelp = `
@@ -95,7 +99,7 @@ nothing is ever written back.
   (default root: ~/.agent-pro/usages)
 
 Charts:
-  primary_percent   grok/codex used_percent, commandcode usage_percent
+  primary_percent   grok/codex used_percent, commandcode usage_percent, opencode monthly_percent
   sessions_total    sessions found on disk per provider (cumulative)
   ...every other numeric key in the snapshots, from the metric menu
 
@@ -144,6 +148,7 @@ func handleUsageCollect(args []string) error {
 		grokHomeFlag        *string
 		codexHomeFlag       *string
 		commandCodeHomeFlag *string
+		openCodeTokenFlag   *string
 	)
 	remaining, err := flags.Bool("--json", &jsonFlag).
 		String("--cron", &cronFlag).
@@ -152,6 +157,7 @@ func handleUsageCollect(args []string) error {
 		String("--grok-home", &grokHomeFlag).
 		String("--codex-home", &codexHomeFlag).
 		String("--commandcode-home", &commandCodeHomeFlag).
+		String("--opencode-token-file", &openCodeTokenFlag).
 		Help("-h,--help", usageCollectHelp).
 		Parse(args)
 	if err != nil {
@@ -178,11 +184,13 @@ func handleUsageCollect(args []string) error {
 	}
 
 	collectOpts := usage.CollectOptions{
-		Timeout:         timeout,
-		GrokHome:        derefString(grokHomeFlag),
-		CodexHome:       derefString(codexHomeFlag),
-		CommandCodeHome: derefString(commandCodeHomeFlag),
-		FixtureDir:      strings.TrimSpace(os.Getenv(usage.EnvFixtureDir)),
+		Timeout:           timeout,
+		GrokHome:          derefString(grokHomeFlag),
+		CodexHome:         derefString(codexHomeFlag),
+		CommandCodeHome:   derefString(commandCodeHomeFlag),
+		OpenCodeTokenFile: derefString(openCodeTokenFlag),
+		OpenCodeBaseURL:   strings.TrimSpace(os.Getenv(usage.EnvOpenCodeAPIURL)),
+		FixtureDir:        strings.TrimSpace(os.Getenv(usage.EnvFixtureDir)),
 	}
 	store := usage.NewStore(filepath.Join(resolveAgentProHome(), "usages"))
 

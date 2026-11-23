@@ -111,6 +111,9 @@ return map[string]string{
 "codex-wham.json": `{"plan_type":"business","email":"codex@example.com","rate_limit":null,` +
 `"spend_control":{"individual_limit":{"used_percent":62,"remaining_percent":38,` +
 `"reset_at":1788220800}}}`,
+"opencode-usage.json": `{"usage":{"rolling":{"status":"ok","percent":18,"resetsAt":"2026-11-23T15:00:00.000Z"},` +
+`"weekly":{"status":"ok","percent":41,"resetsAt":"2026-11-30T00:00:00.000Z"},` +
+`"monthly":{"status":"ok","percent":32,"resetsAt":"2026-12-22T13:51:41.000Z"}}}`,
 }
 }
 

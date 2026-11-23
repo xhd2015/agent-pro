@@ -25,10 +25,12 @@ var DefaultMetrics = []string{MetricPrimaryPercent, MetricSessionsTotal}
 // timeMetricKeys hold a unix timestamp rather than a magnitude, so they are
 // shown as dates and left out of the chart menu.
 var timeMetricKeys = map[string]bool{
-	"reset_at":        true,
-	"period_start":    true,
-	"period_end":      true,
-	"weekly_reset_at": true,
+	"reset_at":         true,
+	"period_start":     true,
+	"period_end":       true,
+	"weekly_reset_at":  true,
+	"rolling_reset_at": true,
+	"monthly_reset_at": true,
 }
 
 // primaryPercentKey maps a provider to the snapshot key holding its quota
@@ -37,6 +39,7 @@ var primaryPercentKey = map[usage.ProviderID]string{
 	usage.Grok:        "used_percent",
 	usage.Codex:       "used_percent",
 	usage.CommandCode: "usage_percent",
+	usage.OpenCode:    "monthly_percent",
 }
 
 // MetricInfo describes one metric the dashboard can chart.

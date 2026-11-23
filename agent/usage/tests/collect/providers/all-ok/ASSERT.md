@@ -33,7 +33,7 @@ if err != nil {
 t.Fatal(err)
 }
 
-if got, want := resp.Providers(), []string{"grok", "codex", "commandcode"}; !reflect.DeepEqual(got, want) {
+if got, want := resp.Providers(), []string{"grok", "codex", "commandcode", "opencode"}; !reflect.DeepEqual(got, want) {
 t.Fatalf("providers = %v, want %v", got, want)
 }
 
@@ -100,5 +100,23 @@ t.Fatalf("commandcode endpoint = %q, want %q", got, want)
 }
 AssertSessions(t, cc, 1, "2026-09-10T09:00:00Z",
 req.Now.Add(-24*time.Hour).UTC().Format(time.RFC3339))
+
+oc := resp.Record(t, usage.OpenCode)
+AssertUsageOK(t, oc)
+if got, want := oc.Usage.Endpoint, usage.EndpointOpenCodeUsage; got != want {
+t.Fatalf("opencode endpoint = %q, want %q", got, want)
+}
+AssertValues(t, oc, map[string]float64{
+"rolling_percent": 18,
+"weekly_percent":  41,
+"monthly_percent": 32,
+"rolling_reset_at": float64(time.Date(2026, 11, 23, 15, 0, 0, 0, time.UTC).Unix()),
+"weekly_reset_at":  float64(time.Date(2026, 11, 30, 0, 0, 0, 0, time.UTC).Unix()),
+"monthly_reset_at": float64(time.Date(2026, 12, 22, 13, 51, 41, 0, time.UTC).Unix()),
+})
+if got, want := Display(t, oc, "usage"), "32% used"; got != want {
+t.Fatalf("opencode usage headline = %q, want %q", got, want)
+}
+AssertSessions(t, oc, 0, "", "")
 }
 ```

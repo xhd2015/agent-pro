@@ -39,6 +39,8 @@ codex := resp.Record(t, usage.Codex)
 AssertUsageFailed(t, codex, "fixture codex-wham.json")
 cc := resp.Record(t, usage.CommandCode)
 AssertUsageFailed(t, cc, "not authenticated")
+oc := resp.Record(t, usage.OpenCode)
+AssertUsageFailed(t, oc, "fixture opencode-usage.json")
 
 for _, rec := range resp.Records {
 if len(rec.Usage.Values) != 0 {

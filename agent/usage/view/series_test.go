@@ -50,13 +50,14 @@ func TestBuildSeriesPrimaryPercentAlias(t *testing.T) {
 		stored(usage.CommandCode, now, map[string]float64{"usage_percent": 29, "cost_usd": 12.25}, 190),
 		stored(usage.Codex, now, map[string]float64{"used_percent": 61}, 180),
 		stored(usage.Grok, now, map[string]float64{"used_percent": 42}, 178),
+		stored(usage.OpenCode, now, map[string]float64{"monthly_percent": 32, "weekly_percent": 41, "rolling_percent": 18}, 0),
 	}
 
 	series := BuildSeries(records, MetricPrimaryPercent, time.Time{})
-	if len(series) != 3 {
-		t.Fatalf("primary_percent covers %d providers, want 3", len(series))
+	if len(series) != 4 {
+		t.Fatalf("primary_percent covers %d providers, want 4", len(series))
 	}
-	want := map[string]float64{"codex": 61, "commandcode": 29, "grok": 42}
+	want := map[string]float64{"codex": 61, "commandcode": 29, "grok": 42, "opencode": 32}
 	for _, item := range series {
 		if got := item.Latest; got != want[item.Provider] {
 			t.Fatalf("%s primary_percent = %v, want %v", item.Provider, got, want[item.Provider])

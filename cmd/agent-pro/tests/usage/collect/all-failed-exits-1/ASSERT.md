@@ -35,7 +35,7 @@ t.Fatal(err)
 AssertExitCode(t, resp, 1)
 
 AssertStderrContains(t, resp, "agent-pro: no usage collected: every provider failed")
-for _, provider := range []string{"grok", "codex", "commandcode"} {
+for _, provider := range []string{"grok", "codex", "commandcode", "opencode"} {
 AssertStderrContains(t, resp, "warning: "+provider+": ")
 }
 
@@ -43,8 +43,8 @@ if strings.TrimSpace(resp.Stdout) == "" {
 t.Fatal("stdout is empty, want one record per provider even when every fetch failed")
 }
 printed := DecodeJSONLines(t, resp.Stdout)
-if len(printed) != 3 {
-t.Fatalf("stdout has %d records, want 3:\n%s", len(printed), resp.Stdout)
+if len(printed) != 4 {
+t.Fatalf("stdout has %d records, want 4:\n%s", len(printed), resp.Stdout)
 }
 for _, record := range printed {
 if record.Usage.OK {
@@ -52,10 +52,10 @@ t.Fatalf("%s printed a successful record", record.Provider)
 }
 }
 
-if len(resp.Files) != 3 {
+if len(resp.Files) != 4 {
 t.Fatalf("snapshot files = %v, want one per provider even on failure", resp.Files)
 }
-for _, provider := range []usage.ProviderID{usage.Grok, usage.Codex, usage.CommandCode} {
+for _, provider := range usage.AllProviders() {
 records := resp.RecordsFor(t, provider)
 if len(records) != 1 {
 t.Fatalf("%s wrote %d records, want 1", provider, len(records))

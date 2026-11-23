@@ -1,8 +1,8 @@
 ## Expected
 
 - Exit 0: at least one provider answered.
-- stdout is exactly three JSON lines in provider order `grok`, `codex`,
-  `commandcode`, so a pipeline can consume the records without parsing a table.
+- stdout is exactly four JSON lines in provider order `grok`, `codex`,
+  `commandcode`, `opencode`, so a pipeline can consume the records without parsing a table.
 - There is no warning on stderr: nothing failed, so nothing competes with the
   records on the machine-readable stream.
 - Every record carries schema `agent-pro/usage-snapshot/v1` and the run's
@@ -41,7 +41,7 @@ t.Fatal(err)
 AssertExitCode(t, resp, 0)
 
 printed := DecodeJSONLines(t, resp.Stdout)
-if got, want := providersOf(printed), []string{"grok", "codex", "commandcode"}; !reflect.DeepEqual(got, want) {
+if got, want := providersOf(printed), []string{"grok", "codex", "commandcode", "opencode"}; !reflect.DeepEqual(got, want) {
 t.Fatalf("printed providers = %v, want %v", got, want)
 }
 for _, record := range printed {
@@ -87,7 +87,15 @@ if resp.Stderr != "" {
 t.Fatalf("stderr = %q, want empty on a clean run", resp.Stderr)
 }
 
-if len(resp.Files) != 3 {
+oc := findPrinted(t, printed, usage.OpenCode)
+if got, want := oc.Usage.Endpoint, usage.EndpointOpenCodeUsage; got != want {
+t.Fatalf("opencode endpoint = %q, want %q", got, want)
+}
+if got, want := oc.Usage.Values["monthly_percent"], float64(32); got != want {
+t.Fatalf("opencode monthly_percent = %v, want %v", got, want)
+}
+
+if len(resp.Files) != 4 {
 t.Fatalf("snapshot files = %v, want one per provider", resp.Files)
 }
 name := regexp.MustCompile(`^\d{2}-\d{2}-\d{2}-snapshot\.jsonl$`)

@@ -36,11 +36,12 @@ t.Fatal(err)
 AssertExitCode(t, resp, 0)
 
 printed := DecodeJSONLines(t, resp.Stdout)
-if len(printed) != 9 {
-t.Fatalf("printed %d records, want 9 (3 cycles x 3 providers)", len(printed))
+n := len(usage.AllProviders())
+if len(printed) != 3*n {
+t.Fatalf("printed %d records, want %d (3 cycles x %d providers)", len(printed), 3*n, n)
 }
 for i, record := range printed {
-if want := usage.AllProviders()[i%3]; record.Provider != want {
+if want := usage.AllProviders()[i%n]; record.Provider != want {
 t.Fatalf("record %d provider = %s, want %s (cycle order)", i, record.Provider, want)
 }
 if !record.Usage.OK {
