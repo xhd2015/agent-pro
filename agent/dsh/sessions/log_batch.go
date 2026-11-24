@@ -252,11 +252,17 @@ func decodeJSONLWindow(batch LogBatch, ref LogRef, buf []byte, from int64, atEnd
 	if err != nil {
 		return batch, err
 	}
+	// The event budget must also bound the cursor. Truncating the slice while
+	// advancing Next past the whole window drops every row beyond the budget: the
+	// caller resumes after them and their seqs are never folded, which the stream
+	// then reports as a gap and answers by starting over — a log read this way
+	// never finishes, and re-reads from the beginning every time.
+	//
+	// So the cursor follows the rows actually returned: re-walk the same buffer by
+	// line so Next lands after the last event kept.
 	if len(events) > maxEvents && maxEvents > 0 {
-		// JSONL rows are not frame aligned; stopping mid-file is still safe
-		// because the caller resumes from a line boundary, but keep the whole
-		// window so a batch never straddles a row.
 		events = events[:maxEvents]
+		consumed = lineEndAfterEvents(buf, len(events), from == 0)
 	}
 	batch.Events = append(batch.Events, events...)
 	batch.Next = from + int64(consumed)
@@ -264,6 +270,39 @@ func decodeJSONLWindow(batch LogBatch, ref LogRef, buf []byte, from int64, atEnd
 	batch.Torn = atEnd && consumed < len(buf) && batch.Next == ref.Size
 	batch.Done = batch.Next == ref.Size && !batch.Torn
 	return batch, nil
+}
+
+// lineEndAfterEvents returns the byte offset just past the given number of event
+// rows, honouring the header row that only the first window carries.
+//
+// It exists so a budget-limited batch can move its cursor to exactly where its
+// events end: the window is read in one piece for speed, but a cursor past rows
+// that were not returned loses them.
+func lineEndAfterEvents(buf []byte, want int, skipHeader bool) int {
+	consumed := 0
+	seen := 0
+	for consumed < len(buf) {
+		idx := bytes.IndexByte(buf[consumed:], '\n')
+		if idx < 0 {
+			break
+		}
+		lineEnd := consumed + idx + 1
+		line := bytes.TrimSpace(buf[consumed:lineEnd])
+		consumed = lineEnd
+		if len(line) == 0 {
+			continue
+		}
+		if skipHeader {
+			// The header has no seq and is not one of the events counted.
+			skipHeader = false
+			continue
+		}
+		seen++
+		if seen >= want {
+			return consumed
+		}
+	}
+	return consumed
 }
 
 // skipHeaderLine drops the first row of an artifact, which carries identity and
