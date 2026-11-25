@@ -13,7 +13,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,8 +21,12 @@ import (
 	"github.com/xhd2015/agent-pro/agent/dsh/web"
 )
 
-// DefaultTimeout bounds one attempt: a long transcript can take a while to seed,
-// and the Host composes the child Agent before it answers.
+// DefaultTimeout is a suggested bound for callers that want one: a long
+// transcript can take a while to seed, and the Host composes the child Agent
+// before it answers.
+//
+// It is not applied for them. Seeding a very long transcript can legitimately
+// outlast it, so a caller that caps the attempt says so through Options.Timeout.
 const DefaultTimeout = 2 * time.Minute
 
 // SessionInfo is the durable or live fact a fork needs about one session. Cwd is
@@ -71,7 +74,8 @@ type Options struct {
 	Browser string
 	// Open launches the child's browser window after the draft is seeded.
 	Open bool
-	// Timeout bounds the attempt; 0 uses DefaultTimeout.
+	// Timeout bounds the attempt. Zero leaves the bound to the caller's ctx;
+	// DefaultTimeout is available for callers that want the old behavior.
 	Timeout time.Duration
 }
 
@@ -106,14 +110,21 @@ func Run(ctx context.Context, opts Options) (Result, error) {
 		ctx = context.Background()
 	}
 	timeout := opts.Timeout
-	if timeout <= 0 {
-		timeout = DefaultTimeout
+	// Timeout is the caller's bound on this attempt, not a default this package
+	// imposes. Zero means the caller's ctx decides: a long transcript can take as
+	// long as it takes, and a 2-minute cap on it reported a fork that was still
+	// seeding as a failure.
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
 	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 	client := opts.Client
 	if client.HTTPClient == nil {
-		client.HTTPClient = &http.Client{Timeout: timeout}
+		// Same contract as web.Client's own default: connection setup is bounded,
+		// the call itself is not. A caller that passed no client has already said
+		// it wants the shared transport.
+		client.HTTPClient = web.NewHTTPClient()
 	}
 
 	source, err := opts.ReadSession(sourceID)

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -34,12 +35,22 @@ type Listen struct {
 }
 
 // Client has injectable transport/discovery/opener boundaries for in-process tests.
-// Its zero value uses DSH_HOME (or ~/.dsh), a bounded HTTP client, and the OS opener.
+// Its zero value uses DSH_HOME (or ~/.dsh), an HTTP client that puts no deadline
+// on the call, and the OS opener.
+//
+// Timeouts belong to the caller. The zero value never gives up on a slow answer:
+// the Host may take minutes to reply to a create or a prompt, and cancelling that
+// wait turned "still working" into a reported failure. A caller that wants a
+// bound passes Timeout (which bounds this call only) or a deadline on the ctx it
+// already hands to every method.
 type Client struct {
 	Home        string
 	ReadListen  func() (Listen, error)
 	HTTPClient  *http.Client
 	OpenBrowser func(rawURL, browser string) error
+	// Timeout bounds one RPC. Zero means "no deadline": the call runs until it
+	// answers or the caller's ctx is done.
+	Timeout time.Duration
 }
 
 func NormalizeBrowser(raw string) (string, error) {
@@ -501,7 +512,62 @@ func (c Client) Unarchive(ctx context.Context, sessionID string) (ArchiveValue, 
 	return ArchiveValue{ArchivedSessionIDs: value.ArchivedSessionIDs}, nil
 }
 
+// defaultHTTPClient is the transport used when a caller supplies no client.
+//
+// It carries no overall deadline on purpose. The Host answers a create or a
+// prompt only once the Agent has done the work, so a wall-clock cap on the whole
+// call reports "failed" for requests that are still being served -- the exact
+// failure this package exists to avoid. What is bounded is connection setup,
+// which is the only part where waiting cannot end in an answer.
+//
+// Redirects are not followed, exactly as before: these endpoints answer in place,
+// and a followed redirect would carry the request somewhere it does not belong.
+func defaultHTTPClient() *http.Client {
+	return &http.Client{
+		Transport: defaultTransport(),
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+}
+
+// NewHTTPClient builds a client with the same transport contract the default
+// one has: no overall deadline, bounded connection setup, and redirects refused
+// rather than followed.
+//
+// A consumer that injects its own client and gets one of these keeps the
+// behavior it had before it started injecting -- the point of this function is
+// that injecting a client must not silently change how redirects or dialing
+// behave.
+func NewHTTPClient() *http.Client {
+	return defaultHTTPClient()
+}
+
+// defaultTransport mirrors defaultHTTPClient's dial bounds for callers that
+// build their own client and want the same connection behavior.
+func defaultTransport() http.RoundTripper {
+	return &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   10 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: time.Second,
+	}
+}
+
 func (c Client) rpc(ctx context.Context, method string, args any, result any) error {
+	// The caller's ctx is the deadline. A client-level Timeout is an extra bound
+	// for callers that have no ctx of their own to shape.
+	if c.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, c.Timeout)
+		defer cancel()
+	}
 	rec, err := c.listen()
 	if err != nil {
 		return err
@@ -523,11 +589,16 @@ func (c Client) rpc(ctx context.Context, method string, args any, result any) er
 	}
 	client := c.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		client = defaultHTTPClient()
 	}
 	res, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("DSH web request failed; ensure dsh web is running (delivery may have been accepted; retry with the same request ID)")
+		// The underlying error is kept: "the daemon is not listening" and "the
+		// daemon is still working on the answer" are the two cases a caller must
+		// tell apart, and only the transport error names which one happened.
+		// Without it the sentence below claims a possible delivery for a request
+		// that never left this process.
+		return fmt.Errorf("DSH web request failed; ensure dsh web is running (delivery may have been accepted; retry with the same request ID): %w", err)
 	}
 	defer res.Body.Close()
 	if res.StatusCode == 401 || res.StatusCode == 403 {
