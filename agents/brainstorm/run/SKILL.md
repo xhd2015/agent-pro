@@ -90,20 +90,28 @@ labels on stdout. No ANSI in JSON or other machine-readable output.
 
 # UI mockups
 
-For an **HTML mockup request**, immediately create a small self-contained HTML file and
-present the actual file in the **first response** (file-presentation tool if available,
-otherwise a file link). Do not wait for approval or preliminary design answers: use
-reasonable defaults, label assumptions, and let the user review the draft — a draft the
-user cannot see yet is not a draft. Keep the states under discussion (collapsed and
-expanded at one narrow width), edit it in place, and never rewrite the file whole.
+**Deliver before/after pairs, not after-only designs.** One artifact, in the first
+response; edit it in place, never rewrite it whole.
 
-Review it from one screenshot as a reader would — layout, hierarchy, copy, and the
-states you claimed. Do not measure geometry with Playwright or DOM eval, do not adjust
-pixel by pixel, and do not re-shoot for a copy tweak. Fix only what the screenshot
-shows is wrong, in at most two rounds, then stop and ask.
+| Per pair | Rule |
+|---|---|
+| Both halves | Copy the real shell (header, tabs, chips, labels) from the product into both; only the marked region differs. |
+| One difference | A dashed outline around exactly what changed. Two outlines means split the pair. |
+| `变化:` line | One sentence naming only the difference. |
+| Verbatim labels | Every before label exists in the product today. |
+| Responsive, mobile-first | Author at the narrow width first; wider is an adaptation, not a second layout. No fixed width that overflows a phone, and the marked region must survive the reflow. |
 
-For other web, app, desktop, mobile, or TUI layout requests, include an ASCII-art
-mockup of the primary screen.
+Self-check before presenting: strip the marked region — both halves must read identical;
+every marked region must *look* fully inside the frame at the narrow width.
+
+**The screenshot is the judge.** Read it as a reader would — layout, hierarchy, copy, and
+the states you claimed. Measure (DOM eval, a clipped capture) only to settle what the
+picture genuinely cannot, one number per geometric claim (e.g. "is the hit target 44px").
+Never sweep the artifact, and never let a number overrule what the screenshot shows is
+fine. No re-shooting for a copy tweak, no changing values the screenshot does not show to
+be wrong. At most two rounds, then stop and ask.
+
+For other web/app/desktop/mobile/TUI layout requests, an ASCII-art mockup of the screen.
 
 # Decisions
 

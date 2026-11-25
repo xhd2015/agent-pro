@@ -14,8 +14,8 @@
 - The parent agent follows the embedded prompt inline — no standalone binary
 - Verify incrementally: the touched file or package, never the full suite — see
   `SKILL.md` §Verification
-- For an HTML mockup, present the first renderable draft and judge one screenshot;
-  no geometry measurement or pixel-by-pixel rounds — see `SKILL.md` §UI mockups
+- For an HTML mockup see `SKILL.md` §UI mockups — before/after pairs, screenshot as
+  the judge
 - Every reply ends with a context-relevant decisions section: open items each carry a
   most sound default; confirmed work shows **Locked decisions** instead
 - **"go ahead"** accepts the plan plus all defaults / locked decisions unless the user
