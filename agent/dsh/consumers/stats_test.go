@@ -109,3 +109,43 @@ func TestStatsFoldEmptyWithoutMessages(t *testing.T) {
 		t.Fatalf("stats = %+v, want empty", got)
 	}
 }
+
+// A compacted reset seeds the replacement with the tail of another log. Those
+// rows are inherited history, not this session's own turns: without the marker a
+// fresh session opens on "12 turns" and on the cost of the session it replaced.
+func TestStatsFoldForgetsTheInheritedSeed(t *testing.T) {
+	got := statsOf(t, headerAt("session-stats", 4)+
+		row("user/message", 1, `{"content":[{"type":"text","text":"inherited question"}]}`)+
+		row("assistant/message", 2, usageReadHeavy)+
+		row("user/message", 3, `{"content":[{"type":"text","text":"inherited follow-up"}]}`)+
+		row("session/end-seed", 4, `{"inherited":true}`)+
+		row("user/message", 5, `{"content":[{"type":"text","text":"asked here"}]}`)+
+		row("assistant/message", 6, usageReadAgain))
+
+	if got.Turns != 1 {
+		t.Fatalf("turns = %d, want only the turn asked in this session", got.Turns)
+	}
+	if got.BilledInput != 10257 || got.Tokens != 10398 || got.CacheRead != 9984 {
+		t.Fatalf("tally = %+v, want only the message after the seed cut", got)
+	}
+	if got.LastPromptTokens != 10257 {
+		t.Fatalf("lastPromptTokens = %d, want the post-seed message", got.LastPromptTokens)
+	}
+}
+
+// A resumed log writes the same marker with no flag. That one is not a cut
+// between sessions, so the tally before it stays.
+func TestStatsFoldKeepsAResumedTail(t *testing.T) {
+	got := statsOf(t, headerAt("session-stats", 4)+
+		row("user/message", 1, `{"content":[{"type":"text","text":"before"}]}`)+
+		row("assistant/message", 2, usageReadHeavy)+
+		row("session/end-seed", 3, `{}`)+
+		row("user/message", 4, `{"content":[{"type":"text","text":"after"}]}`)+
+		row("assistant/message", 5, usageReadAgain))
+	if got.Turns != 2 {
+		t.Fatalf("turns = %d, want both user messages", got.Turns)
+	}
+	if got.BilledInput != 10028+10257 {
+		t.Fatalf("billedInput = %d, want both messages", got.BilledInput)
+	}
+}

@@ -1,5 +1,7 @@
 package consumers
 
+import "encoding/json"
+
 // StatsID is the consumer that accumulates the Messages bar's numbers.
 const StatsID = "stats"
 
@@ -37,13 +39,24 @@ type StatsState struct {
 // turns into "cache 0%".
 func SessionStats() Consumer {
 	return &Typed[StatsState]{
-		Name:  StatsID,
-		Ver:   1,
-		Watch: []string{"user/message", "assistant/message"},
+		Name: StatsID,
+		// Version 2 forgets the inherited seed (session/end-seed): a fold written
+		// by the previous build counts the copied turns as this session's own.
+		Ver:   2,
+		Watch: []string{"user/message", "assistant/message", "session/end-seed"},
 		Apply: func(state *StatsState, ev Event, _ Point) error {
 			switch ev.Type {
 			case "user/message":
 				state.Turns++
+				return nil
+			case "session/end-seed":
+				// A compacted reset seeds the new session with the tail of the one it
+				// replaces, so the rows before this marker were not asked for here.
+				// The footer starts counting after the cut: otherwise a fresh session
+				// opens on the turns and the cost of the session it replaced.
+				if seededInherited(ev.Data) {
+					*state = StatsState{}
+				}
 				return nil
 			case "assistant/message":
 				usage := messageUsage(ev.Data)
@@ -63,6 +76,16 @@ func SessionStats() Consumer {
 			return nil
 		},
 	}
+}
+
+// seededInherited reports whether an end-seed marker closes an inherited prefix.
+// A resumed log writes the same marker with no flag, and that one does not cut
+// two sessions apart, so it must not clear the tally.
+func seededInherited(raw []byte) bool {
+	var payload struct {
+		Inherited bool `json:"inherited"`
+	}
+	return json.Unmarshal(raw, &payload) == nil && payload.Inherited
 }
 
 // usageCounts is one assistant message's token report.
