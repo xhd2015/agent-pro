@@ -40,7 +40,9 @@ const (
 	Waiting     Kind = "waiting"
 	ErrorKind   Kind = "error"
 	Aborted     Kind = "aborted"
-	NotFound    Kind = "not_found"
+	// Paused is a suspended live turn that Continue can resume without a new message.
+	Paused   Kind = "paused"
+	NotFound Kind = "not_found"
 )
 
 // Snapshot is one session's current phase plus durable facts the caller

@@ -26,6 +26,9 @@ type Message struct {
 	Present *Present `json:"present,omitempty"`
 	Ask     *Ask     `json:"ask,omitempty"`
 	Images  []Image  `json:"images,omitempty"`
+	// ResumedAt is when a paused row was continued. Zero means the row is still
+	// the open pause; a later turn/start stamps it.
+	ResumedAt int64 `json:"resumedAt,omitempty"`
 }
 
 type Image struct {

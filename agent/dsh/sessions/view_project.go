@@ -23,6 +23,20 @@ func Project(events []Event) []Message {
 			out = append(out, rows...)
 			continue
 		}
+		// A turn that opens after a pause continues it: the same row becomes
+		// Resumed instead of leaving a second, separate record.
+		if event.Type == "turn/start" {
+			for i := len(out) - 1; i >= 0; i-- {
+				if out[i].Kind == "paused" && out[i].ResumedAt == 0 {
+					out[i].Kind = "resumed"
+					out[i].ResumedAt = event.Time
+					break
+				}
+				if out[i].Kind != "paused" && out[i].Kind != "resumed" {
+					break
+				}
+			}
+		}
 		switch event.Type {
 		case "command/run":
 			id := commandID(event)
@@ -187,8 +201,34 @@ func turnEndRows(event Event) []Message {
 	outKind := "error"
 	if kind == "aborted" {
 		outKind = "aborted"
+		if pauseReason(event) == PauseReason {
+			outKind = "paused"
+			if text == "aborted" {
+				text = ""
+			}
+		}
 	}
 	return []Message{{Seq: event.Seq, Time: event.Time, Kind: outKind, Text: text, Sum: code}}
+}
+
+// pauseReason reads the hook reason nested under an aborted turn ending.
+func pauseReason(event Event) string {
+	var data struct {
+		Reason struct {
+			Kind   string `json:"kind"`
+			Reason struct {
+				Kind   string `json:"kind"`
+				Reason string `json:"reason"`
+			} `json:"reason"`
+		} `json:"reason"`
+	}
+	if json.Unmarshal(event.Data, &data) != nil {
+		return ""
+	}
+	if data.Reason.Kind != "aborted" || data.Reason.Reason.Kind != "hook" {
+		return ""
+	}
+	return strings.TrimSpace(data.Reason.Reason.Reason)
 }
 
 func turnEndReason(raw json.RawMessage) (kind, message, code string) {

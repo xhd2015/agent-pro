@@ -18,7 +18,13 @@ const (
 	ActivityWaiting     ActivityKind = "waiting"
 	ActivityError       ActivityKind = "error"
 	ActivityAborted     ActivityKind = "aborted"
+	// ActivityPaused is a live turn somebody suspended: the stream was cut, no
+	// new message was admitted, and Continue can resume the same conversation.
+	ActivityPaused ActivityKind = "paused"
 )
+
+// PauseReason is the turn/end hook reason a pause writes.
+const PauseReason = "paused"
 
 // DetailTurnOpen is the detail of an error whose turn never ended because the
 // process that ran it is gone. It is not a provider failure: nobody answered the
@@ -161,8 +167,13 @@ func (s *classifyState) add(event Event) {
 		s.openedAt = 0
 		endKind := turnEndKind(event)
 		if endKind == "aborted" {
-			s.kind = ActivityAborted
-			s.detail = endKind
+			if turnEndPauseReason(event) == PauseReason {
+				s.kind = ActivityPaused
+				s.detail = PauseReason
+			} else {
+				s.kind = ActivityAborted
+				s.detail = endKind
+			}
 		} else if endKind != "" && endKind != "completed" {
 			s.kind = ActivityError
 			s.detail = endKind
@@ -306,4 +317,25 @@ func turnEndKind(event Event) string {
 		return ""
 	}
 	return strings.TrimSpace(kind)
+}
+
+// turnEndPauseReason reads turn/end.reason.reason.reason for an aborted turn:
+// the hook cause carries the string a pause writes.
+func turnEndPauseReason(event Event) string {
+	var data struct {
+		Reason struct {
+			Kind   string `json:"kind"`
+			Reason struct {
+				Kind   string `json:"kind"`
+				Reason string `json:"reason"`
+			} `json:"reason"`
+		} `json:"reason"`
+	}
+	if json.Unmarshal(event.Data, &data) != nil {
+		return ""
+	}
+	if data.Reason.Kind != "aborted" || data.Reason.Reason.Kind != "hook" {
+		return ""
+	}
+	return strings.TrimSpace(data.Reason.Reason.Reason)
 }
