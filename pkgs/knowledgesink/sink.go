@@ -76,6 +76,33 @@ type Opts struct {
 	Driver    agentdriver.Driver
 	StoreHome string // agent-run job store; empty → StateDir/knowledge-sink-jobs/<id>
 
+	// LockFn serialises the host-side git mutation with every other Marcus writer
+	// of the same checkout. Nil → no lock, which keeps library callers unchanged.
+	// The spl CLI injects repolock so a terminal `marcus kb sink` and a daemon sink
+	// cannot commit at the same time.
+	LockFn func(dir string) (release func(), err error)
+	// HonorHooks keeps the repository's git hooks enabled for the publish. Default
+	// false: an unattended sink must not fail because a developer's global hook
+	// wants git-lfs. Tests that induce a push race need them enabled.
+	HonorHooks bool
+	// PublishAttempts bounds the merge/publish rounds when a peer keeps publishing
+	// first. Zero → the library default.
+	PublishAttempts int
+	// SkipSync does not merge origin/<target> before publishing. A hub that is
+	// behind then fails the ship rather than being brought forward, which is only
+	// right when the caller manages that itself.
+	SkipSync bool
+	// ResolvePrompt is the conflict-resolution briefing (an embedded skill body)
+	// handed to the agent that repairs a merge conflict. Empty → no resolver, so a
+	// conflicted merge is aborted instead of being guessed at.
+	ResolvePrompt string
+
+	// SweepPlanFn classifies the hub's dirty paths so a ship can carry the
+	// committable ones. Nil → commit only the paths result.json named (the old
+	// behaviour). The spl CLI injects the shared classifier so the dirty predicate
+	// and the committer cannot disagree.
+	SweepPlanFn func(hubDir string) (*SweepPlan, error)
+
 	MessagesFn          MessagesFunc
 	AgentFn             AgentFunc
 	ResolveFn           ResolveRunnerFunc
@@ -117,18 +144,28 @@ type RunResult struct {
 	HubDir           string   `json:"hub_dir,omitempty"`
 	Prompt           string   `json:"prompt,omitempty"`
 	HubPaths         []string `json:"hub_paths,omitempty"` // proposed / committed hub paths
-	Branch           string   `json:"branch,omitempty"`
-	Commit           string   `json:"commit,omitempty"`
-	MRURL            string   `json:"mr_url,omitempty"`
-	Merged           bool     `json:"merged,omitempty"`
-	MergedAt         string   `json:"merged_at,omitempty"`
-	Warning          string   `json:"warning,omitempty"`
-	LastSinkAt       string   `json:"last_sink_at,omitempty"`
-	CursorTimestamp  string   `json:"cursor_timestamp,omitempty"`
-	CursorAdvanced   bool     `json:"cursor_advanced,omitempty"`
-	HasNewKnowledges *bool    `json:"has_new_knowledges,omitempty"`
-	SkipReason       string   `json:"skip_reason,omitempty"`
-	Error            string   `json:"error,omitempty"`
+	// Swept / Skipped report what the ship did besides the paths result.json named:
+	// the committable dirt it carried, and the dirt it deliberately left behind.
+	Swept   []string    `json:"swept,omitempty"`
+	Skipped []SweptPath `json:"skipped,omitempty"`
+	// Incoming / Resolved / Foreign describe the merge that preceded the publish.
+	Incoming int      `json:"incoming,omitempty"`
+	Resolved []string `json:"resolved,omitempty"`
+	Foreign  int      `json:"foreign,omitempty"`
+	// Tip is the commit both the feature branch and the target were published from.
+	Tip              string `json:"tip,omitempty"`
+	Branch           string `json:"branch,omitempty"`
+	Commit           string `json:"commit,omitempty"`
+	MRURL            string `json:"mr_url,omitempty"`
+	Merged           bool   `json:"merged,omitempty"`
+	MergedAt         string `json:"merged_at,omitempty"`
+	Warning          string `json:"warning,omitempty"`
+	LastSinkAt       string `json:"last_sink_at,omitempty"`
+	CursorTimestamp  string `json:"cursor_timestamp,omitempty"`
+	CursorAdvanced   bool   `json:"cursor_advanced,omitempty"`
+	HasNewKnowledges *bool  `json:"has_new_knowledges,omitempty"`
+	SkipReason       string `json:"skip_reason,omitempty"`
+	Error            string `json:"error,omitempty"`
 }
 
 type agentJSONResult struct {
@@ -596,6 +633,16 @@ func Run(ctx context.Context, opts Opts) (*RunResult, error) {
 		LastSinkAt:       manifest.LastSinkAt,
 		CursorTimestamp:  CheckedCursor(manifest),
 		CursorAdvanced:   cursorAdvanced,
+	}
+	if shipGit != nil {
+		// What the ship actually did, so the CLI can show the carried dirt and the
+		// merge without asking git again.
+		out.Swept = append([]string(nil), shipGit.Swept...)
+		out.Skipped = append([]SweptPath(nil), shipGit.Skipped...)
+		out.Incoming = shipGit.Incoming
+		out.Resolved = append([]string(nil), shipGit.Resolved...)
+		out.Foreign = shipGit.Foreign
+		out.Tip = shipGit.Tip
 	}
 	if shipResult != nil && shipResult.HasNewKnowledges != nil {
 		out.HasNewKnowledges = BoolPtr(*shipResult.HasNewKnowledges)
