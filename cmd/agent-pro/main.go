@@ -45,6 +45,7 @@ Commands:
   proc              resolve agent session from a process id
   commandcode       read Command Code account data (usage/whoami/credits/...)
   usage             collect usage snapshots and serve a local dashboard
+  consumers         drop cached fold state so the next read replays it
   skills            list available skills; skills update refreshes installs
   skill             show or install a skill (--show / --install)
   traces            view agent trace sessions (web viewer)
@@ -108,6 +109,8 @@ func handle(args []string) error {
 		return handleCommandCode(args[1:])
 	case "usage":
 		return handleUsage(args[1:])
+	case "consumers":
+		return handleConsumers(args[1:])
 	case "traces":
 		return handleTraces(args[1:])
 	case "show-agent-files":
@@ -1029,8 +1032,6 @@ Commands:
 
 Run agent-pro grok session <command> --help for command-specific options.
 `
-
-
 
 const grokSessionInfoHelp = `
 Usage: agent-pro grok session info <session-id> [OPTIONS]

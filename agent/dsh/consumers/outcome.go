@@ -37,6 +37,10 @@ type FailureState struct {
 	Code    string `json:"code,omitempty"`
 	// Seq is the row that reported it.
 	Seq int64 `json:"seq,omitempty"`
+	// At is that row's own timestamp. A caller that decides whether to retry
+	// needs it: the fingerprint of an attempt is the failure it answers, and a
+	// time stamped by the reader would make every poll look like a new one.
+	At int64 `json:"at,omitempty"`
 }
 
 // Outcome folds turn boundaries into a run state and the last failure.
@@ -46,8 +50,11 @@ type FailureState struct {
 // !Running when the snapshot is CaughtUp.
 func Outcome() Consumer {
 	return &Typed[OutcomeState]{
-		Name:  OutcomeID,
-		Ver:   1,
+		Name: OutcomeID,
+		// 2 added At to FailureState. Without the bump a record cached by the
+		// previous build answers every failure with At==0, which reads as "no
+		// time" for the retry decision that uses it.
+		Ver:   2,
 		Watch: []string{"turn/start", "turn/end", "llm/retry"},
 		Apply: func(state *OutcomeState, ev Event, _ Point) error {
 			fields := decodeObject(ev.Data)
@@ -77,9 +84,10 @@ func Outcome() Consumer {
 						Message: text(failure, "message"),
 						Code:    text(failure, "code"),
 						Seq:     ev.Seq,
+						At:      ev.Time,
 					}
 				} else if state.Error == nil {
-					state.Error = &FailureState{Seq: ev.Seq}
+					state.Error = &FailureState{Seq: ev.Seq, At: ev.Time}
 				}
 			case "llm/retry":
 				// A retry that later succeeds still leaves the session usable,
@@ -94,6 +102,7 @@ func Outcome() Consumer {
 					Message: text(failure, "message"),
 					Code:    text(failure, "code"),
 					Seq:     ev.Seq,
+					At:      ev.Time,
 				}
 			}
 			return nil

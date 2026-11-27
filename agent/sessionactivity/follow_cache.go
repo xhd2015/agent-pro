@@ -35,7 +35,7 @@ type dshHeaderInfo struct {
 // honest stand-in for "when this session last did something": the header's own
 // updated_at is the creation time, not the last activity.
 func dshHeader(sessionID string) (dshHeaderInfo, error) {
-	store, err := dshsessions.NewStore(dshsessions.Options{})
+	store, err := dshsessions.NewStore(storeOptions())
 	if err != nil {
 		return dshHeaderInfo{}, err
 	}
@@ -57,7 +57,7 @@ func dshTail(sessionID string) (*dshsessions.Tail, error) {
 	g := raw.(*dshSession)
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	store, err := dshsessions.NewStore(dshsessions.Options{})
+	store, err := dshsessions.NewStore(storeOptions())
 	if err != nil {
 		return nil, err
 	}

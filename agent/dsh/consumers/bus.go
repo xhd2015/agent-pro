@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -32,8 +33,13 @@ const (
 
 // Options configure a Bus.
 type Options struct {
-	// Dir overrides where records are cached. Empty uses the user cache dir.
+	// Dir overrides where records are cached. Empty uses Home when it is set,
+	// and the user cache dir otherwise.
 	Dir string
+	// Home pins the DSH home whose sessions this bus folds. When set and Dir is
+	// empty, records live under <home>/consumers, so two backends never share a
+	// record keyed by a session id only one of them has.
+	Home string
 	// Consumers is the fold set. Version a consumer to replay its own state.
 	Consumers []Consumer
 	// Window is the compressed bytes read per attempt (default 1 MiB).
@@ -65,6 +71,14 @@ type Snapshot struct {
 	// should only trust an absent fact (no pending question, no running turn)
 	// when this is true.
 	CaughtUp bool
+	// Fresh reports that the artifact has not changed since this snapshot's
+	// fold: the fold reached the end of the file and neither the size nor the
+	// last write moved afterwards. CaughtUp alone is not freshness, because a
+	// caught-up record can be behind rows appended since.
+	Fresh bool
+	// Modified is the artifact's last write, as this call observed it. It is the
+	// one time an answer about freshness can be compared against.
+	Modified time.Time
 	// ReadBytes is how many bytes this call advanced through.
 	ReadBytes int64
 	// Folded is how many events were handed to a consumer this call.
@@ -153,13 +167,13 @@ func New(store *sessions.Store, opts Options) (*Bus, error) {
 	if err := validate(opts.Consumers); err != nil {
 		return nil, fmt.Errorf("consumers: %w", err)
 	}
-	dir := opts.Dir
+	dir := strings.TrimSpace(opts.Dir)
 	if dir == "" {
-		base, err := os.UserCacheDir()
+		var err error
+		dir, err = CacheDirFor(opts.Home)
 		if err != nil {
-			return nil, fmt.Errorf("consumers: locate cache dir: %w", err)
+			return nil, err
 		}
-		dir = filepath.Join(base, filepath.FromSlash(CacheSuffix))
 	}
 	bus := &Bus{
 		sessions:   store,
@@ -209,6 +223,23 @@ func New(store *sessions.Store, opts Options) (*Bus, error) {
 	return bus, nil
 }
 
+// CacheDirFor is where the records for one DSH home live. An empty home is the
+// default backend, which keeps agent-pro's user-cache location.
+//
+// A record is keyed by session id, and two homes can hold the same id. Keeping
+// the record beside the home it describes is what stops one backend from reading
+// the other's fold.
+func CacheDirFor(home string) (string, error) {
+	if home = strings.TrimSpace(home); home != "" {
+		return filepath.Join(home, "consumers"), nil
+	}
+	base, err := os.UserCacheDir()
+	if err != nil {
+		return "", fmt.Errorf("consumers: locate cache dir: %w", err)
+	}
+	return filepath.Join(base, filepath.FromSlash(CacheSuffix)), nil
+}
+
 // Consumers lists the registered consumer IDs.
 func (b *Bus) Consumers() []string {
 	return sortedIDs(b.consumers)
@@ -245,27 +276,43 @@ func (b *Bus) Stats() Stats {
 // previous fold left, so a poll during a cold fold costs a map lookup instead of
 // the several seconds the fold holds its session lock for.
 //
-// The second result is false when nothing usable is cached, and also when the
-// record predates a registered consumer: its absent state would read as zero.
-// CaughtUp reports whether the rows behind the record were folded to the end of
-// the artifact; a caught-up record can still be behind the artifact's current
-// size, so a caller that needs fresh numbers compares Size with the log.
+// The second result is false when nothing usable is cached, when the record
+// predates a registered consumer (its absent state would read as zero), and when
+// the record describes an artifact this store does not resolve -- a record keyed
+// by a session id that also exists in another home.
+//
+// One stat answers both freshness and ownership: CaughtUp says the fold reached
+// the end of the file it read, and Fresh says that file is still the current one
+// at its current size and last write. Only Fresh may be read as "this is the
+// log's current state"; CaughtUp alone can be behind rows appended since.
 func (b *Bus) Peek(id string) (Snapshot, bool) {
 	if id == "" {
 		return Snapshot{}, false
 	}
+	var snap Snapshot
 	if cached, ok := b.latest.Load(id); ok {
-		return cached.(Snapshot), true
+		snap = cached.(Snapshot)
+	} else {
+		// The record file is written by rename, so reading it without the session
+		// lock cannot observe a half-written record. A miss here is not cached:
+		// the next caller retries, and a Sync in flight will publish its result.
+		rec, err := b.load(id)
+		if err != nil || !rec.covers(b.consumers) {
+			return Snapshot{}, false
+		}
+		b.remember(id, rec)
+		snap = rec.snapshot(0, 0, 0)
 	}
-	// The record file is written by rename, so reading it without the session
-	// lock cannot observe a half-written record. A miss here is not cached: the
-	// next caller retries, and a Sync in flight will publish its result.
-	rec, err := b.load(id)
-	if err != nil || !rec.covers(b.consumers) {
+	ref, err := b.sessions.StatLog(id)
+	if err != nil || ref.Path != snap.ArtifactPath || ref.FormatVersion != snap.FormatVersion {
 		return Snapshot{}, false
 	}
-	b.remember(id, rec)
-	return rec.snapshot(0, 0, 0), true
+	// The record's own modification time is what Fresh compares against; after
+	// that, Modified reports the artifact as this call found it.
+	foldedAt := snap.Modified
+	snap.Modified = time.Unix(0, ref.ModTimeUnixNano)
+	snap.Fresh = snap.CaughtUp && ref.Size == snap.Size && ref.ModTimeUnixNano == foldedAt.UnixNano()
+	return snap, true
 }
 
 // Sync brings one session up to date and returns its consumers' state.
@@ -322,7 +369,7 @@ func (b *Bus) sync(id string) (Snapshot, error) {
 	if rec.Next == ref.Size && rec.CaughtUp {
 		b.counters.cacheHits.Add(1)
 		b.remember(id, rec)
-		return rec.snapshot(0, 0, 0), nil
+		return b.finishSnapshot(rec, 0, 0, 0), nil
 	}
 
 	var (
@@ -423,7 +470,24 @@ func (b *Bus) sync(id string) (Snapshot, error) {
 	if readBytes > 0 {
 		b.counters.streams.Add(1)
 	}
-	return rec.snapshot(readBytes, folded, skipped), nil
+	return b.finishSnapshot(rec, readBytes, folded, skipped), nil
+}
+
+// finishSnapshot stamps a finished pass with the artifact's current identity.
+//
+// The pass started from a stat taken before it read, and the writer may have
+// appended while it folded. Fresh is only honest after one more stat: the fold
+// reached the end of the file it read, and the file is still that file at that
+// size and last write.
+func (b *Bus) finishSnapshot(rec *record, readBytes, folded, skipped int64) Snapshot {
+	snap := rec.snapshot(readBytes, folded, skipped)
+	ref, err := b.sessions.StatLog(rec.SessionID)
+	if err != nil {
+		return snap
+	}
+	snap.Modified = time.Unix(0, ref.ModTimeUnixNano)
+	snap.Fresh = rec.CaughtUp && ref.Size == rec.Size && ref.ModTimeUnixNano == rec.ModTimeUnixNano
+	return snap
 }
 
 // SyncAll syncs many sessions and returns the snapshots it completed. Failures

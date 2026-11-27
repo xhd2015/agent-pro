@@ -1,7 +1,9 @@
 package sessions
 
 import (
+	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,6 +24,13 @@ type LiveSession struct {
 type ListLiveOpts struct {
 	ListProcs func() []procresolve.Proc
 	Lsof      func(pid int) []string
+	// Root keeps only writers whose lease lives under this home. Empty reports
+	// every DSH writer on the machine, which is right for a process that owns
+	// the default backend and wrong for one pinned to another home: the pinned
+	// process would list sessions from a directory it cannot read. The filter is
+	// applied to the lease paths, so a caller does not have to compare file
+	// prefixes itself.
+	Root string
 }
 
 // listLiveCacheTTL bounds how often the process-table scan runs. The live
@@ -34,13 +43,14 @@ const listLiveCacheTTL = 4 * time.Second
 var listLiveCache struct {
 	sync.Mutex
 	rows    []LiveSession
+	root    string
 	expires time.Time
 }
 
-func cachedListLive(now time.Time) ([]LiveSession, bool) {
+func cachedListLive(now time.Time, root string) ([]LiveSession, bool) {
 	listLiveCache.Lock()
 	defer listLiveCache.Unlock()
-	if listLiveCache.rows == nil || now.After(listLiveCache.expires) {
+	if listLiveCache.rows == nil || now.After(listLiveCache.expires) || listLiveCache.root != root {
 		return nil, false
 	}
 	out := make([]LiveSession, len(listLiveCache.rows))
@@ -48,12 +58,13 @@ func cachedListLive(now time.Time) ([]LiveSession, bool) {
 	return out, true
 }
 
-func storeListLive(rows []LiveSession, now time.Time) {
+func storeListLive(rows []LiveSession, root string, now time.Time) {
 	kept := make([]LiveSession, len(rows))
 	copy(kept, rows)
 	listLiveCache.Lock()
 	defer listLiveCache.Unlock()
 	listLiveCache.rows = kept
+	listLiveCache.root = root
 	listLiveCache.expires = now.Add(listLiveCacheTTL)
 }
 
@@ -74,23 +85,24 @@ func ListLive(opts *ListLiveOpts) ([]LiveSession, error) {
 	if opts == nil {
 		opts = &ListLiveOpts{}
 	}
+	root := strings.TrimSpace(opts.Root)
 	cacheable := opts.ListProcs == nil && opts.Lsof == nil
 	if cacheable {
-		if rows, ok := cachedListLive(time.Now()); ok {
+		if rows, ok := cachedListLive(time.Now(), root); ok {
 			return rows, nil
 		}
 	}
-	rows, err := scanListLive(opts)
+	rows, err := scanListLive(opts, root)
 	if err != nil {
 		return nil, err
 	}
 	if cacheable {
-		storeListLive(rows, time.Now())
+		storeListLive(rows, root, time.Now())
 	}
 	return rows, nil
 }
 
-func scanListLive(opts *ListLiveOpts) ([]LiveSession, error) {
+func scanListLive(opts *ListLiveOpts, root string) ([]LiveSession, error) {
 	listProcs := opts.ListProcs
 	if listProcs == nil {
 		listProcs = procresolve.ListLiveProcs
@@ -124,6 +136,12 @@ func scanListLive(opts *ListLiveOpts) ([]LiveSession, error) {
 	var ids []string
 	for _, pid := range pids {
 		for _, path := range filesByPID[pid] {
+			// A writer outside the pinned home holds a lease for a session this
+			// store cannot read; reporting it would make the board list a row
+			// whose log is somewhere else.
+			if root != "" && !pathWithinRoot(root, path) {
+				continue
+			}
 			kind, sid, ok := procresolve.ParseSessionFromPath(path)
 			if !ok || kind != "dsh" || sid == "" {
 				continue
@@ -141,4 +159,11 @@ func scanListLive(opts *ListLiveOpts) ([]LiveSession, error) {
 		out = append(out, LiveSession{ID: id, PID: seen[id]})
 	}
 	return out, nil
+}
+
+// pathWithinRoot reports whether a lease path belongs to one pinned home.
+func pathWithinRoot(root, path string) bool {
+	cleanRoot := strings.TrimRight(filepath.Clean(root), string(filepath.Separator))
+	cleaned := filepath.Clean(path)
+	return cleaned == cleanRoot || strings.HasPrefix(cleaned, cleanRoot+string(filepath.Separator))
 }

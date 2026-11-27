@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"os"
+	"time"
 
 	"github.com/xhd2015/agent-pro/agent/dsh/sessions"
 )
@@ -149,6 +150,7 @@ func (r *record) snapshot(readBytes, folded, skipped int64) Snapshot {
 		Size:          r.Size,
 		LastSeq:       r.LastSeq,
 		CaughtUp:      r.CaughtUp,
+		Modified:      time.Unix(0, r.ModTimeUnixNano),
 		ReadBytes:     readBytes,
 		Folded:        folded,
 		Skipped:       skipped,
