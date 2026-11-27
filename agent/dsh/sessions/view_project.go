@@ -83,6 +83,21 @@ func projectEvent(event Event) []Message {
 	if event.Type == "assistant/message" {
 		return assistantRows(event)
 	}
+	// Injected context is a user-role message whose source is not the human.
+	// It is projected before the transcript switch, which only knows the human
+	// prompt, so the two never contend for one event.
+	if event.Type == "user/message" {
+		if injection, ok := messageInjection(event); ok {
+			text, _ := messageText(event)
+			return []Message{{
+				Seq:       event.Seq,
+				Time:      event.Time,
+				Kind:      TranscriptContext,
+				Text:      text,
+				Injection: injection,
+			}}
+		}
+	}
 	rows := Transcript([]Event{event}, 0, 0)
 	if len(rows) == 0 {
 		return nil

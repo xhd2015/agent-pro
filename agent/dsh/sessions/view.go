@@ -15,20 +15,38 @@ type View struct {
 type Message struct {
 	Seq  int64  `json:"seq"`
 	Time int64  `json:"time"`
-	Kind string `json:"kind"` // user | assistant | tool | thinking | error | aborted | command
+	Kind string `json:"kind"` // user | assistant | tool | thinking | error | aborted | command | context
 	Text string `json:"text,omitempty"`
 	Sum  string `json:"sum,omitempty"`
 	Tool string `json:"tool,omitempty"`
 	// Ref is the identity a row shares with the row that supersedes it, so a
 	// live reader can replace the pending form with the settled one instead of
 	// showing both. Empty for rows that arrive once and never change.
-	Ref     string   `json:"ref,omitempty"`
-	Present *Present `json:"present,omitempty"`
-	Ask     *Ask     `json:"ask,omitempty"`
-	Images  []Image  `json:"images,omitempty"`
+	Ref string `json:"ref,omitempty"`
+	// Injection is set on a context row: the durable source a non-user
+	// `user/message` carried (a skill's instructions, the catalog, workspace
+	// instructions, a runtime snapshot, a notice, a recall). It is nil for
+	// every other kind.
+	Injection *Injection `json:"injection,omitempty"`
+	Present   *Present   `json:"present,omitempty"`
+	Ask       *Ask       `json:"ask,omitempty"`
+	Images    []Image    `json:"images,omitempty"`
 	// ResumedAt is when a paused row was continued. Zero means the row is still
 	// the open pause; a later turn/start stamps it.
 	ResumedAt int64 `json:"resumedAt,omitempty"`
+}
+
+// Injection names the context a user-role request carried besides the human
+// prompt. Label is what a reader recognises the producer by (a skill name, the
+// instruction files, recalled session labels); Source and Form are the durable
+// `source.kind` and `source.form`, kept for the row's icon and for a body the
+// client wants to present structurally. A reader that does not know a source
+// still shows its kind, so a newer DSH producer never disappears.
+type Injection struct {
+	Source  string `json:"source"`
+	Form    string `json:"form,omitempty"`
+	Label   string `json:"label,omitempty"`
+	Summary string `json:"summary,omitempty"`
 }
 
 type Image struct {
